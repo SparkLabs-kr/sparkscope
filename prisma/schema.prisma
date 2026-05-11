@@ -1,0 +1,122 @@
+// SparkScope DB 스키마
+// 개발: SQLite, 프로덕션: Postgres (Vercel Postgres)
+// provider만 바꾸면 둘 다 호환
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ===== NextAuth =====
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  createdAt     DateTime  @default(now())
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  @@unique([identifier, token])
+}
+
+// ===== SparkScope 핵심 =====
+model MonitoringTarget {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  englishName     String?
+  category        String   // sparklabs_self / portfolio_company / industry_trend / executive / competitor
+  status          String   @default("ACTIVE") // ACTIVE / PAUSED / EXIT
+  primaryKeyword  String
+  helperKeywords  String?  // 쉼표 구분, 동음이의어 대응 (e.g. "PlayKeyboard, 비트바이트앱")
+  excludeWords    String?  // 쉼표 구분, 노이즈 차단
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@index([category, status])
+}
+
+model Article {
+  id                String   @id @default(cuid())
+  title             String
+  link              String   @unique
+  source            String
+  pubDate           DateTime
+  matchedKeyword    String
+  category          String   // sparklabs_self / portfolio_company / industry_trend / etc
+  // 분석 결과
+  importance        String?  // CRITICAL / HIGH / MEDIUM / LOW
+  tone              String?  // POSITIVE / NEUTRAL / NEGATIVE / MIXED
+  oneLiner          String?
+  ourTake           String?  // 본부 관점 한 줄
+  relatedCompanies  String?  // JSON 배열
+  pitchScore        Int?     // 0-100, 기획기사 피칭 기회 점수
+  pitchTopic        String?
+  riskFlag          String?
+  isNoise           Boolean  @default(false)
+  noiseReason       String?
+  priorityScore     Int      @default(0)
+  // 메타
+  collectedAt       DateTime @default(now())
+  analyzedAt        DateTime?
+  @@index([pubDate])
+  @@index([category, importance])
+  @@index([matchedKeyword])
+}
+
+model Digest {
+  id          String   @id @default(cuid())
+  date        DateTime @unique
+  subject     String
+  htmlBody    String
+  recipients  Int      @default(0)
+  sentAt      DateTime?
+  errorMsg    String?
+  createdAt   DateTime @default(now())
+}
+
+model RunLog {
+  id          String   @id @default(cuid())
+  runType     String   // daily / manual / test
+  startedAt   DateTime @default(now())
+  finishedAt  DateTime?
+  status      String   // RUNNING / SUCCESS / FAILED
+  collected   Int      @default(0)
+  analyzed    Int      @default(0)
+  errors      String?
+}

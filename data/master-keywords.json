@@ -1,0 +1,2352 @@
+[
+  {
+    "name": "스파크랩",
+    "englishName": "SparkLabs",
+    "category": "sparklabs_self",
+    "status": "ACTIVE",
+    "primaryKeyword": "스파크랩",
+    "helperKeywords": "스파크랩, SparkLabs, SparkLabs Korea",
+    "excludeWords": null,
+    "notes": "한국 본사 / 액셀러레이터"
+  },
+  {
+    "name": "스파크랩 그룹",
+    "englishName": "SparkLabs Group",
+    "category": "sparklabs_self",
+    "status": "ACTIVE",
+    "primaryKeyword": "스파크랩 그룹",
+    "helperKeywords": "스파크랩 그룹, SparkLabs Group",
+    "excludeWords": null,
+    "notes": "글로벌 그룹"
+  },
+  {
+    "name": "스파크랩 글로벌",
+    "englishName": "SparkLabs Global Ventures",
+    "category": "sparklabs_self",
+    "status": "ACTIVE",
+    "primaryKeyword": "스파크랩 글로벌",
+    "helperKeywords": "스파크랩 글로벌, SparkLabs Global, SparkLabs Global Ventures",
+    "excludeWords": null,
+    "notes": "글로벌 벤처 투자"
+  },
+  {
+    "name": "스파크랩 파트너스",
+    "englishName": "SparkLabs Partners",
+    "category": "sparklabs_self",
+    "status": "ACTIVE",
+    "primaryKeyword": "스파크랩 파트너스",
+    "helperKeywords": "스파크랩 파트너스, SparkLabs Partners",
+    "excludeWords": null,
+    "notes": "후속 투자"
+  },
+  {
+    "name": "스파크랩 타이완",
+    "englishName": "SparkLabs Taiwan",
+    "category": "sparklabs_self",
+    "status": "ACTIVE",
+    "primaryKeyword": "스파크랩 타이완",
+    "helperKeywords": "스파크랩 타이완, SparkLabs Taiwan",
+    "excludeWords": null,
+    "notes": "대만 액셀러레이터"
+  },
+  {
+    "name": "스파크랩 컬티베이트",
+    "englishName": "SparkLabs Cultiv8",
+    "category": "sparklabs_self",
+    "status": "ACTIVE",
+    "primaryKeyword": "스파크랩 컬티베이트",
+    "helperKeywords": "스파크랩 컬티베이트, SparkLabs Cultiv8",
+    "excludeWords": null,
+    "notes": "푸드테크/애그리테크"
+  },
+  {
+    "name": "스파크 바이오랩스",
+    "englishName": "SparkBioLabs",
+    "category": "sparklabs_self",
+    "status": "ACTIVE",
+    "primaryKeyword": "스파크 바이오랩스",
+    "helperKeywords": "스파크바이오랩스, 스파크 바이오랩스, SparkBioLabs",
+    "excludeWords": null,
+    "notes": "바이오/헬스케어"
+  },
+  {
+    "name": "그레이스 메디컬",
+    "englishName": "GRACE Medical Institute",
+    "category": "sparklabs_self",
+    "status": "ACTIVE",
+    "primaryKeyword": "그레이스 메디컬",
+    "helperKeywords": "그레이스 메디컬, GRACE Medical, GRACE Medical Institute",
+    "excludeWords": null,
+    "notes": "의료 R&D"
+  },
+  {
+    "name": "스파크클로",
+    "englishName": "Spark Claw",
+    "category": "sparklabs_self",
+    "status": "ACTIVE",
+    "primaryKeyword": "스파크클로",
+    "helperKeywords": "스파크클로, Spark Claw, SparkClaw",
+    "excludeWords": null,
+    "notes": "별도 사이트 운영 중인 프로그램/브랜드"
+  },
+  {
+    "name": "원티드랩",
+    "englishName": "WantedLab",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "원티드랩",
+    "helperKeywords": "WantedLab",
+    "excludeWords": null,
+    "notes": "HRtech"
+  },
+  {
+    "name": "쿼드메디슨",
+    "englishName": "QuadMedicine",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "쿼드메디슨",
+    "helperKeywords": "QuadMedicine, 마이크로니들 플랫폼",
+    "excludeWords": null,
+    "notes": "마이크로니들 플랫폼 | Bio"
+  },
+  {
+    "name": "페스카로",
+    "englishName": "Fescaro",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "페스카로",
+    "helperKeywords": "Fescaro, 자동차 보안",
+    "excludeWords": null,
+    "notes": "자동차 보안 | Cybersecurity"
+  },
+  {
+    "name": "비마이프렌즈",
+    "englishName": "bemyfriends",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "비마이프렌즈",
+    "helperKeywords": "bemyfriends, 비스테이지",
+    "excludeWords": null,
+    "notes": "비스테이지 (b.stage) | Commerce/IP/SaaS"
+  },
+  {
+    "name": "비트센싱",
+    "englishName": "Bitsensing",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "비트센싱",
+    "helperKeywords": "Bitsensing, RADAR 기술",
+    "excludeWords": null,
+    "notes": "RADAR 기술 | AI"
+  },
+  {
+    "name": "긴트",
+    "englishName": "Gint",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "긴트",
+    "helperKeywords": "Gint, PLUVA auto",
+    "excludeWords": null,
+    "notes": "PLUVA auto | Hardware/AgriTech"
+  },
+  {
+    "name": "이퀄테이블",
+    "englishName": "Equal Table",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "이퀄테이블",
+    "helperKeywords": "Equal Table, 커피 MRV 자동화",
+    "excludeWords": null,
+    "notes": "커피 MRV 자동화 | AI/Foodtech"
+  },
+  {
+    "name": "댄스트럭트",
+    "englishName": "Danstruct",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "댄스트럭트",
+    "helperKeywords": "Danstruct, XSTAGE",
+    "excludeWords": null,
+    "notes": "XSTAGE | Entertainment/Media"
+  },
+  {
+    "name": "스프링어게인",
+    "englishName": "Spring Again",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "스프링어게인",
+    "helperKeywords": "Spring Again, 나나스",
+    "excludeWords": null,
+    "notes": "나나스 | Platform/Medicaltech"
+  },
+  {
+    "name": "부에노컴퍼니",
+    "englishName": "Bueno Company",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "부에노컴퍼니",
+    "helperKeywords": "Bueno Company, 템플리",
+    "excludeWords": null,
+    "notes": "템플리 (temply) | AI/Distribution/SaaS"
+  },
+  {
+    "name": "폴리머라이즈코리아",
+    "englishName": "Polymerize Korea",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "폴리머라이즈코리아",
+    "helperKeywords": "Polymerize Korea, R&D 플랫폼",
+    "excludeWords": null,
+    "notes": "R&D 플랫폼 | Deep tech/AI"
+  },
+  {
+    "name": "스카이랩스",
+    "englishName": "SkyLabs",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "스카이랩스",
+    "helperKeywords": "SkyLabs, 건강 모니터링",
+    "excludeWords": null,
+    "notes": "건강 모니터링 | AI/Healthcare"
+  },
+  {
+    "name": "스파크플러스",
+    "englishName": "Sparkplus",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "스파크플러스",
+    "helperKeywords": "Sparkplus, 공유 오피스",
+    "excludeWords": null,
+    "notes": "공유 오피스 | Proptech"
+  },
+  {
+    "name": "뮤즈라이브",
+    "englishName": "Muzlive",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "뮤즈라이브",
+    "helperKeywords": "Muzlive, 키트",
+    "excludeWords": null,
+    "notes": "키트 (KiT) | Entertainment"
+  },
+  {
+    "name": "퀸라이브",
+    "englishName": "Queen Live",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "퀸라이브",
+    "helperKeywords": "Queen Live, 쇼핑의 여왕",
+    "excludeWords": null,
+    "notes": "쇼핑의 여왕 | E-commerce"
+  },
+  {
+    "name": "센스톤",
+    "englishName": "Ssenstone",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "센스톤",
+    "helperKeywords": "Ssenstone, OTAC Token",
+    "excludeWords": null,
+    "notes": "OTAC Token | Cybersecurity"
+  },
+  {
+    "name": "리코",
+    "englishName": "RECO",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "리코",
+    "helperKeywords": "RECO, 업박스",
+    "excludeWords": null,
+    "notes": "업박스 (UpBox) | Sustainability"
+  },
+  {
+    "name": "웨이브코퍼레이션",
+    "englishName": "WAVE Corp.",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "웨이브코퍼레이션",
+    "helperKeywords": "WAVE Corp.",
+    "excludeWords": null,
+    "notes": "Entertainment"
+  },
+  {
+    "name": "더블미",
+    "englishName": "DoubleMe",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "더블미",
+    "helperKeywords": "DoubleMe",
+    "excludeWords": null,
+    "notes": "AR/VR"
+  },
+  {
+    "name": "H2O호스피탈리티",
+    "englishName": "H2O Hospitality",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "H2O호스피탈리티",
+    "helperKeywords": "H2O Hospitality, 와홈",
+    "excludeWords": null,
+    "notes": "와홈 | Proptech"
+  },
+  {
+    "name": "임팩터스",
+    "englishName": "IMPACTUS",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "임팩터스",
+    "helperKeywords": "IMPACTUS, 임팩트 스페이스",
+    "excludeWords": null,
+    "notes": "임팩트 스페이스 | Edu-Tech"
+  },
+  {
+    "name": "피에로컴퍼니",
+    "englishName": "Pierrot Company",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "피에로컴퍼니",
+    "helperKeywords": "Pierrot Company, phoneGO, reGO",
+    "excludeWords": null,
+    "notes": "phoneGO, reGO | AI/ESG/Platform"
+  },
+  {
+    "name": "캥스터즈",
+    "englishName": "Kangsters",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "캥스터즈",
+    "helperKeywords": "Kangsters, 휠리엑스",
+    "excludeWords": null,
+    "notes": "휠리엑스 | Digital Health/Able-Tech"
+  },
+  {
+    "name": "제스트",
+    "englishName": "ZEST",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "제스트",
+    "helperKeywords": "ZEST, 그린북",
+    "excludeWords": null,
+    "notes": "그린북 (Greenbook) | AI/ESG/기후테크"
+  },
+  {
+    "name": "제노플랜",
+    "englishName": "Genoplan",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "제노플랜",
+    "helperKeywords": "Genoplan, 유전자 분석",
+    "excludeWords": null,
+    "notes": "유전자 분석 | Healthcare"
+  },
+  {
+    "name": "미미박스",
+    "englishName": "MBX",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "미미박스",
+    "helperKeywords": "MBX, 아임미미",
+    "excludeWords": null,
+    "notes": "아임미미 (I'M MEME) | E-commerce/Beauty"
+  },
+  {
+    "name": "해브해드",
+    "englishName": "havehad",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "해브해드",
+    "helperKeywords": "havehad",
+    "excludeWords": null,
+    "notes": "Fashion"
+  },
+  {
+    "name": "오브젠",
+    "englishName": "obzen",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "오브젠",
+    "helperKeywords": "obzen, AI CRM 솔루션",
+    "excludeWords": null,
+    "notes": "AI CRM 솔루션 | AI"
+  },
+  {
+    "name": "코코지",
+    "englishName": "kokozi",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "코코지",
+    "helperKeywords": "kokozi, 코코지 하우스, 아띠",
+    "excludeWords": null,
+    "notes": "코코지 하우스, 아띠 | Entertainment/Kids"
+  },
+  {
+    "name": "올거나이즈",
+    "englishName": "Allganize",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "올거나이즈",
+    "helperKeywords": "Allganize, Alli",
+    "excludeWords": null,
+    "notes": "Alli | AI"
+  },
+  {
+    "name": "갭텍",
+    "englishName": "GAPT",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "갭텍",
+    "helperKeywords": "GAPT, 탄소중립 CCUS",
+    "excludeWords": null,
+    "notes": "탄소중립 CCUS | AI/ESG"
+  },
+  {
+    "name": "슈타겐",
+    "englishName": "Shutagen",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "슈타겐",
+    "helperKeywords": "Shutagen, 제조 디지털 전환",
+    "excludeWords": null,
+    "notes": "제조 디지털 전환 | Manufacturing"
+  },
+  {
+    "name": "젤코",
+    "englishName": "GELKO",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "젤코",
+    "helperKeywords": "GELKO, 연질캡슐 생산장비",
+    "excludeWords": null,
+    "notes": "연질캡슐 생산장비 | AI/Hardware"
+  },
+  {
+    "name": "슬로웨이브",
+    "englishName": "Slowave",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "슬로웨이브",
+    "helperKeywords": "Slowave, 뇌파 분석 기기",
+    "excludeWords": null,
+    "notes": "뇌파 분석 기기 | AI/Healthcare"
+  },
+  {
+    "name": "르호사",
+    "englishName": "LEHOSAH",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "르호사",
+    "helperKeywords": "LEHOSAH, CHROMAKEY",
+    "excludeWords": null,
+    "notes": "CHROMAKEY | AI/Fashion"
+  },
+  {
+    "name": "빔스튜디오",
+    "englishName": "Beamstudio",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "빔스튜디오",
+    "helperKeywords": "Beamstudio, BeamRealSolution",
+    "excludeWords": null,
+    "notes": "BeamRealSolution | AI/Entertainment"
+  },
+  {
+    "name": "로지스팟",
+    "englishName": "logispot",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "로지스팟",
+    "helperKeywords": "logispot, 디지털 물류",
+    "excludeWords": null,
+    "notes": "디지털 물류 | Logistics/Platform"
+  },
+  {
+    "name": "엔씽",
+    "englishName": "N.Thing",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "엔씽",
+    "helperKeywords": "N.Thing, Agri-food Tech",
+    "excludeWords": null,
+    "notes": "Agri-food Tech | Agriculture"
+  },
+  {
+    "name": "센트비",
+    "englishName": "Sentbe",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "센트비",
+    "helperKeywords": "Sentbe, 해외송금",
+    "excludeWords": null,
+    "notes": "해외송금 | Fintech"
+  },
+  {
+    "name": "큐비트시큐리티",
+    "englishName": "Qubit Security",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "큐비트시큐리티",
+    "helperKeywords": "Qubit Security, 프루라 WAF, EDR, SIEM",
+    "excludeWords": null,
+    "notes": "프루라 WAF, EDR, SIEM | Cybersecurity"
+  },
+  {
+    "name": "페이워크",
+    "englishName": "Paywork",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "페이워크",
+    "helperKeywords": "Paywork, 긱 워커 정산",
+    "excludeWords": null,
+    "notes": "긱 워커 정산 | Fintech"
+  },
+  {
+    "name": "리체",
+    "englishName": "LICHE",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "리체",
+    "helperKeywords": "LICHE, BNPL",
+    "excludeWords": null,
+    "notes": "BNPL | Fintech"
+  },
+  {
+    "name": "쿠파",
+    "englishName": "KUPA",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "쿠파",
+    "helperKeywords": "KUPA, DDM",
+    "excludeWords": null,
+    "notes": "DDM | Financials/투자"
+  },
+  {
+    "name": "드래프타입",
+    "englishName": "Draftype",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "드래프타입",
+    "helperKeywords": "Draftype, 광고 모델",
+    "excludeWords": null,
+    "notes": "광고 모델 | AI"
+  },
+  {
+    "name": "데이터빈",
+    "englishName": "DataBean",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "데이터빈",
+    "helperKeywords": "DataBean, 이머전 쿨링 데이터센터",
+    "excludeWords": null,
+    "notes": "이머전 쿨링 데이터센터 | ESG"
+  },
+  {
+    "name": "스타일메이트",
+    "englishName": "Stylemate",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "스타일메이트",
+    "helperKeywords": "Stylemate, 룩태그",
+    "excludeWords": null,
+    "notes": "룩태그 | AI/Fashion"
+  },
+  {
+    "name": "펄스애드",
+    "englishName": "PulseAd",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "펄스애드",
+    "helperKeywords": "PulseAd, 이커머스 광고",
+    "excludeWords": null,
+    "notes": "이커머스 광고 | AD Tech"
+  },
+  {
+    "name": "잇그린",
+    "englishName": "Itgreen",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "잇그린",
+    "helperKeywords": "Itgreen, 리턴잇",
+    "excludeWords": null,
+    "notes": "리턴잇 | Sustainability"
+  },
+  {
+    "name": "와탭랩스",
+    "englishName": "WhaTap Labs",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "와탭랩스",
+    "helperKeywords": "WhaTap Labs, 와탭",
+    "excludeWords": null,
+    "notes": "와탭 (IT 모니터링) | Data Analytics"
+  },
+  {
+    "name": "유유유유유",
+    "englishName": "UUUUU",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "유유유유유",
+    "helperKeywords": "UUUUU, 젤네일",
+    "excludeWords": null,
+    "notes": "젤네일 | Beauty"
+  },
+  {
+    "name": "엣지크로스",
+    "englishName": "EDGECROSS",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "엣지크로스",
+    "helperKeywords": "EDGECROSS, MODLINK",
+    "excludeWords": null,
+    "notes": "MODLINK | Software/H/W"
+  },
+  {
+    "name": "카머스",
+    "englishName": "CARMERCE",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "카머스",
+    "helperKeywords": "CARMERCE, 중고차 이커머스",
+    "excludeWords": null,
+    "notes": "중고차 이커머스 | E-commerce/Mobility"
+  },
+  {
+    "name": "스파크펫",
+    "englishName": "Sparkpet",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "스파크펫",
+    "helperKeywords": "Sparkpet, 놀로",
+    "excludeWords": null,
+    "notes": "놀로 (KNOLLO) | Pet"
+  },
+  {
+    "name": "지아이빌리언스",
+    "englishName": "투스노트 (toothnote)",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "지아이빌리언스",
+    "helperKeywords": "투스노트 (toothnote), 투스노트",
+    "excludeWords": null,
+    "notes": "투스노트 | Beauty/Life Style"
+  },
+  {
+    "name": "잇마플",
+    "englishName": "Eatmapl",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "잇마플",
+    "helperKeywords": "Eatmapl, 맛있저염",
+    "excludeWords": null,
+    "notes": "맛있저염 | Healthcare/Medifood"
+  },
+  {
+    "name": "바닐라브레인",
+    "englishName": "Vanilabrain",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "바닐라브레인",
+    "helperKeywords": "Vanilabrain, 장사왕",
+    "excludeWords": null,
+    "notes": "장사왕 | E-commerce/SaaS"
+  },
+  {
+    "name": "아스타",
+    "englishName": "Astar",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "아스타",
+    "helperKeywords": "Astar, 카피클",
+    "excludeWords": null,
+    "notes": "카피클 (COPYKLE) | AI/Copywriting"
+  },
+  {
+    "name": "마인이스",
+    "englishName": "Mine.is",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "마인이스",
+    "helperKeywords": "Mine.is, 차란",
+    "excludeWords": null,
+    "notes": "차란 (Charan) | Commerce"
+  },
+  {
+    "name": "도시곳간",
+    "englishName": "Dosigotgan",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "도시곳간",
+    "helperKeywords": "Dosigotgan",
+    "excludeWords": null,
+    "notes": "Commerce/F&B"
+  },
+  {
+    "name": "메디띵스",
+    "englishName": "MEDiThings",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "메디띵스",
+    "helperKeywords": "MEDiThings, 웨어러블 방광모니터링",
+    "excludeWords": null,
+    "notes": "웨어러블 방광모니터링 | Digital Health"
+  },
+  {
+    "name": "배젠",
+    "englishName": "Baegen",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "배젠",
+    "helperKeywords": "Baegen, BG-519",
+    "excludeWords": null,
+    "notes": "BG-519 (COPD 치료제) | Bio/Pharmaceuticals"
+  },
+  {
+    "name": "담화컴퍼니",
+    "englishName": "Damhwa Company",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "담화컴퍼니",
+    "helperKeywords": "Damhwa Company, 술담화",
+    "excludeWords": null,
+    "notes": "술담화 | Commerce/F&B"
+  },
+  {
+    "name": "미드바르",
+    "englishName": "Midbar",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "미드바르",
+    "helperKeywords": "Midbar, 에어팜",
+    "excludeWords": null,
+    "notes": "에어팜 | Smart Farm"
+  },
+  {
+    "name": "랭코드",
+    "englishName": "Langcode",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "랭코드",
+    "helperKeywords": "Langcode, 랭코드 CXP",
+    "excludeWords": null,
+    "notes": "랭코드 CXP | AI"
+  },
+  {
+    "name": "리빗",
+    "englishName": "LIVIT",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "리빗",
+    "helperKeywords": "LIVIT, 탄솔루션",
+    "excludeWords": null,
+    "notes": "탄솔루션 (TANSOLUTION) | ESG"
+  },
+  {
+    "name": "에큐리바이오",
+    "englishName": "Accurie Biosciences",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "에큐리바이오",
+    "helperKeywords": "Accurie Biosciences, enPhaG",
+    "excludeWords": null,
+    "notes": "enPhaG | Bio"
+  },
+  {
+    "name": "이노제닉스",
+    "englishName": "INOGENIX",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "이노제닉스",
+    "helperKeywords": "INOGENIX, 온코체크",
+    "excludeWords": null,
+    "notes": "온코체크 (ONCOCHECK) | Bio"
+  },
+  {
+    "name": "앰버로드",
+    "englishName": "AMBER ROAD",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "앰버로드",
+    "helperKeywords": "AMBER ROAD, 마이너리포트",
+    "excludeWords": null,
+    "notes": "마이너리포트 | AI"
+  },
+  {
+    "name": "루센트블록",
+    "englishName": "LUCENTBLOCK",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "루센트블록",
+    "helperKeywords": "LUCENTBLOCK, 소유",
+    "excludeWords": null,
+    "notes": "소유 (SOU) | Proptech"
+  },
+  {
+    "name": "본작",
+    "englishName": "BONJAC",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "본작",
+    "helperKeywords": "BONJAC, 셀바티코",
+    "excludeWords": null,
+    "notes": "셀바티코 (Selvatico) | Cosmetic"
+  },
+  {
+    "name": "모티브인텔리전스",
+    "englishName": "Motiv Intelligence",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "모티브인텔리전스",
+    "helperKeywords": "Motiv Intelligence, 온누리DMC",
+    "excludeWords": null,
+    "notes": "온누리DMC | Advertisement/SW"
+  },
+  {
+    "name": "나인하이어",
+    "englishName": "Ninehire",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "나인하이어",
+    "helperKeywords": "Ninehire, Hackit",
+    "excludeWords": null,
+    "notes": "Hackit | HR tech"
+  },
+  {
+    "name": "이어가다",
+    "englishName": "Eargada",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "이어가다",
+    "helperKeywords": "Eargada, 나디오",
+    "excludeWords": null,
+    "notes": "나디오 (Nadio) | Entertainment"
+  },
+  {
+    "name": "메타파스",
+    "englishName": "Metarpas",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "메타파스",
+    "helperKeywords": "Metarpas, SOLVIT",
+    "excludeWords": null,
+    "notes": "SOLVIT (솔빛) | Data Analytics"
+  },
+  {
+    "name": "베러먼데이코리아",
+    "englishName": "Better Monday Korea",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "베러먼데이코리아",
+    "helperKeywords": "Better Monday Korea",
+    "excludeWords": null,
+    "notes": "Community"
+  },
+  {
+    "name": "엘로이랩",
+    "englishName": "elroilab",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "엘로이랩",
+    "helperKeywords": "elroilab, Spectral AI",
+    "excludeWords": null,
+    "notes": "Spectral AI | AI"
+  },
+  {
+    "name": "브이아이코리아",
+    "englishName": "VI Korea",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "브이아이코리아",
+    "helperKeywords": "VI Korea, 케이즈",
+    "excludeWords": null,
+    "notes": "케이즈 (Cays) | Supply Chain/Logistics"
+  },
+  {
+    "name": "욜카고",
+    "englishName": "YOL CARGO",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "욜카고",
+    "helperKeywords": "YOL CARGO, 와이오엘",
+    "excludeWords": null,
+    "notes": "와이오엘 | Supply Chain/Logistics"
+  },
+  {
+    "name": "튜터링",
+    "englishName": "Tutoring",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "튜터링",
+    "helperKeywords": "Tutoring, 온디맨드 영어",
+    "excludeWords": null,
+    "notes": "온디맨드 영어 | Education"
+  },
+  {
+    "name": "브로츠",
+    "englishName": "Brots",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "브로츠",
+    "helperKeywords": "Brots",
+    "excludeWords": null,
+    "notes": "Blockchain/Music"
+  },
+  {
+    "name": "틴고랜드",
+    "englishName": "Thinggo",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "틴고랜드",
+    "helperKeywords": "Thinggo, 띵고",
+    "excludeWords": null,
+    "notes": "띵고 (Tingoland) | E-commerce"
+  },
+  {
+    "name": "원소프트다임",
+    "englishName": "Onesoftdigm",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "원소프트다임",
+    "helperKeywords": "Onesoftdigm",
+    "excludeWords": null,
+    "notes": "Healthcare/Medicaltech"
+  },
+  {
+    "name": "스펙터",
+    "englishName": "Specter",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "스펙터",
+    "helperKeywords": "Specter, 평판 조회",
+    "excludeWords": null,
+    "notes": "평판 조회 | HR tech"
+  },
+  {
+    "name": "소프트랜더스",
+    "englishName": "SoftLanders",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "소프트랜더스",
+    "helperKeywords": "SoftLanders",
+    "excludeWords": null,
+    "notes": "Software/리로케이션"
+  },
+  {
+    "name": "무버스",
+    "englishName": "Moverse",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "무버스",
+    "helperKeywords": "Moverse, 3D 모션",
+    "excludeWords": null,
+    "notes": "3D 모션 | Entertainment/메타버스"
+  },
+  {
+    "name": "로그스택",
+    "englishName": "Logstack",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "로그스택",
+    "helperKeywords": "Logstack, 회계부정 탐지",
+    "excludeWords": null,
+    "notes": "회계부정 탐지 | Data Analytics"
+  },
+  {
+    "name": "엑스크루",
+    "englishName": "Xcrew",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "엑스크루",
+    "helperKeywords": "Xcrew, 액티비티 플랫폼",
+    "excludeWords": null,
+    "notes": "액티비티 플랫폼 | Travel/Hospitality"
+  },
+  {
+    "name": "빌리지베이비",
+    "englishName": "Villagebaby",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "빌리지베이비",
+    "helperKeywords": "Villagebaby, 베이비빌리",
+    "excludeWords": null,
+    "notes": "베이비빌리 | E-Commerce"
+  },
+  {
+    "name": "리하베스트",
+    "englishName": "Re:harvest",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "리하베스트",
+    "helperKeywords": "Re:harvest, 푸드 업사이클",
+    "excludeWords": null,
+    "notes": "푸드 업사이클 | Sustainability/Energy"
+  },
+  {
+    "name": "키친인더랩",
+    "englishName": "Kitchen in the Lab",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "키친인더랩",
+    "helperKeywords": "Kitchen in the Lab",
+    "excludeWords": null,
+    "notes": "Food"
+  },
+  {
+    "name": "온도",
+    "englishName": "Ondo",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "온도",
+    "helperKeywords": "Ondo, 북미타겟 윤리적 패션",
+    "excludeWords": null,
+    "notes": "북미타겟 윤리적 패션 | Design Fashion"
+  },
+  {
+    "name": "퍼스널에이아이",
+    "englishName": "Personal AI",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "퍼스널에이아이",
+    "helperKeywords": "Personal AI, On-Device 개인데이터",
+    "excludeWords": null,
+    "notes": "On-Device 개인데이터 | Data Analytics"
+  },
+  {
+    "name": "캐스팅",
+    "englishName": "Casting",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "캐스팅",
+    "helperKeywords": "Casting",
+    "excludeWords": null,
+    "notes": "Marketing/인플루언서"
+  },
+  {
+    "name": "소프트먼트",
+    "englishName": "Softment",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "소프트먼트",
+    "helperKeywords": "Softment, F&B 가맹 창업 플랫폼",
+    "excludeWords": null,
+    "notes": "F&B 가맹 창업 플랫폼 | HR tech/Proptech"
+  },
+  {
+    "name": "클로아",
+    "englishName": "Cloa",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "클로아",
+    "helperKeywords": "Cloa, 데이터 파이프라인",
+    "excludeWords": null,
+    "notes": "데이터 파이프라인 | Data Analytics"
+  },
+  {
+    "name": "옥타코",
+    "englishName": "Octatco",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "옥타코",
+    "helperKeywords": "Octatco, EzFinger",
+    "excludeWords": null,
+    "notes": "EzFinger | Cybersecurity"
+  },
+  {
+    "name": "로랩스",
+    "englishName": "Rawlabs",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "로랩스",
+    "helperKeywords": "Rawlabs, 에어서플라이",
+    "excludeWords": null,
+    "notes": "에어서플라이 | E-commerce"
+  },
+  {
+    "name": "페오펫",
+    "englishName": "Peopet",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "페오펫",
+    "helperKeywords": "Peopet, 반려동물 등록",
+    "excludeWords": null,
+    "notes": "반려동물 등록 | E-commerce/Pet"
+  },
+  {
+    "name": "크레파스솔루션",
+    "englishName": "CrePass Solution",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "크레파스솔루션",
+    "helperKeywords": "CrePass Solution, 신용평가",
+    "excludeWords": null,
+    "notes": "신용평가 | Fintech"
+  },
+  {
+    "name": "엣지크로스(빛컨)",
+    "englishName": "Edgecross",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "엣지크로스(빛컨)",
+    "helperKeywords": "Edgecross, IOT-Modlink",
+    "excludeWords": null,
+    "notes": "IOT-Modlink | IoT"
+  },
+  {
+    "name": "벨루가",
+    "englishName": "Veluga",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "벨루가",
+    "helperKeywords": "Veluga, 크래프트 맥주 멤버십",
+    "excludeWords": null,
+    "notes": "크래프트 맥주 멤버십 | Food"
+  },
+  {
+    "name": "펄핏",
+    "englishName": "Perfitt",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "펄핏",
+    "helperKeywords": "Perfitt, 신발 사이즈 추천",
+    "excludeWords": null,
+    "notes": "신발 사이즈 추천 | Data Analytics"
+  },
+  {
+    "name": "피치스",
+    "englishName": "Peaches",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "피치스",
+    "helperKeywords": "Peaches, 스트릿 패션",
+    "excludeWords": null,
+    "notes": "스트릿 패션 | Entertainment/Sports"
+  },
+  {
+    "name": "노리",
+    "englishName": "KnowRe",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "노리",
+    "helperKeywords": "KnowRe, 수학 교육",
+    "excludeWords": null,
+    "notes": "수학 교육 | Education"
+  },
+  {
+    "name": "위플래닛",
+    "englishName": "WePlanet",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "위플래닛",
+    "helperKeywords": "WePlanet, 라이프로그",
+    "excludeWords": null,
+    "notes": "라이프로그 | Data Analytics"
+  },
+  {
+    "name": "탭조이",
+    "englishName": "Tapjoy",
+    "category": "portfolio_company",
+    "status": "EXIT",
+    "primaryKeyword": "탭조이",
+    "helperKeywords": "Tapjoy, 파이브락스",
+    "excludeWords": null,
+    "notes": "파이브락스 (5Rocks) | Data Analytics"
+  },
+  {
+    "name": "조이코퍼레이션",
+    "englishName": "Zoyi",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "조이코퍼레이션",
+    "helperKeywords": "Zoyi, 오프라인 리테일 분석",
+    "excludeWords": null,
+    "notes": "오프라인 리테일 분석 | Data Analytics"
+  },
+  {
+    "name": "랜딩인터내셔널",
+    "englishName": "Landing International",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "랜딩인터내셔널",
+    "helperKeywords": "Landing International",
+    "excludeWords": null,
+    "notes": "E-commerce"
+  },
+  {
+    "name": "차트메트릭",
+    "englishName": "Chartmetric",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "차트메트릭",
+    "helperKeywords": "Chartmetric, 음악 산업 데이터",
+    "excludeWords": null,
+    "notes": "음악 산업 데이터 | Data Analytics"
+  },
+  {
+    "name": "트리플래닛",
+    "englishName": "TreePlanet",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "트리플래닛",
+    "helperKeywords": "TreePlanet, 숲 조성",
+    "excludeWords": null,
+    "notes": "숲 조성 | Agriculture"
+  },
+  {
+    "name": "파이퀀트",
+    "englishName": "Piquant",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "파이퀀트",
+    "helperKeywords": "Piquant, 분광학 성분 분석",
+    "excludeWords": null,
+    "notes": "분광학 성분 분석 | Healthcare/Medicaltech"
+  },
+  {
+    "name": "락인컴퍼니",
+    "englishName": "Lockin Company",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "락인컴퍼니",
+    "helperKeywords": "Lockin Company, LIAPP",
+    "excludeWords": null,
+    "notes": "LIAPP | Cybersecurity"
+  },
+  {
+    "name": "스테이즈",
+    "englishName": "Stayes",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "스테이즈",
+    "helperKeywords": "Stayes, 외국인 부동산",
+    "excludeWords": null,
+    "notes": "외국인 부동산 | Proptech"
+  },
+  {
+    "name": "펜타프레스",
+    "englishName": "PentaPress",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "펜타프레스",
+    "helperKeywords": "PentaPress, 사진 통신사",
+    "excludeWords": null,
+    "notes": "사진 통신사 | Advertising & Media"
+  },
+  {
+    "name": "에크네",
+    "englishName": "EKNE",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "에크네",
+    "helperKeywords": "EKNE, 투고하다",
+    "excludeWords": null,
+    "notes": "투고하다 | Platform"
+  },
+  {
+    "name": "토폴로그",
+    "englishName": "Topolog",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "토폴로그",
+    "helperKeywords": "Topolog, B2B 파트너 매칭",
+    "excludeWords": null,
+    "notes": "B2B 파트너 매칭 | Platform/Sales Tech"
+  },
+  {
+    "name": "히릿소프트",
+    "englishName": "Hiritsoft",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "히릿소프트",
+    "helperKeywords": "Hiritsoft, 메이더",
+    "excludeWords": null,
+    "notes": "메이더 (앱 노코드) | E-commerce"
+  },
+  {
+    "name": "망고플레이트",
+    "englishName": "MangoPlate",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "망고플레이트",
+    "helperKeywords": "MangoPlate, 맛집 추천",
+    "excludeWords": null,
+    "notes": "맛집 추천 | Food"
+  },
+  {
+    "name": "스플랩",
+    "englishName": "Splab",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "스플랩",
+    "helperKeywords": "Splab, 스페이스",
+    "excludeWords": null,
+    "notes": "스페이스 (스케줄링) | B2B Software"
+  },
+  {
+    "name": "룩인사이트",
+    "englishName": "Look Insight",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "룩인사이트",
+    "helperKeywords": "Look Insight, 약올려",
+    "excludeWords": null,
+    "notes": "약올려 (YAKOLLYEO) | E-commerce"
+  },
+  {
+    "name": "케이존",
+    "englishName": "KZONE",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "케이존",
+    "helperKeywords": "KZONE, 리맥스",
+    "excludeWords": null,
+    "notes": "리맥스 | Supply Chain/Logistics"
+  },
+  {
+    "name": "플루언트",
+    "englishName": "FluentT",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "플루언트",
+    "helperKeywords": "FluentT",
+    "excludeWords": null,
+    "notes": "AI/모션캡쳐"
+  },
+  {
+    "name": "벳플럭스",
+    "englishName": "Vetflux",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "벳플럭스",
+    "helperKeywords": "Vetflux, 늘펫플러스",
+    "excludeWords": null,
+    "notes": "늘펫플러스 | B2B Software/Vet"
+  },
+  {
+    "name": "지지큐",
+    "englishName": "GGQ",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "지지큐",
+    "helperKeywords": "GGQ, 지지큐컴퍼니",
+    "excludeWords": null,
+    "notes": "지지큐컴퍼니 | Gaming/eSports"
+  },
+  {
+    "name": "빌리오",
+    "englishName": "Billyo",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "빌리오",
+    "helperKeywords": "Billyo, 공간 예약",
+    "excludeWords": null,
+    "notes": "공간 예약 | Entertainment"
+  },
+  {
+    "name": "아몬디",
+    "englishName": "amondy",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "아몬디",
+    "helperKeywords": "amondy, 아몬디케어",
+    "excludeWords": null,
+    "notes": "아몬디케어 | Healthcare"
+  },
+  {
+    "name": "그로스핏",
+    "englishName": "Growth Fit",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "그로스핏",
+    "helperKeywords": "Growth Fit, 프로젝트 협업",
+    "excludeWords": null,
+    "notes": "프로젝트 협업 | Data Analytics"
+  },
+  {
+    "name": "아이클레이브",
+    "englishName": "iClave",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "아이클레이브",
+    "helperKeywords": "iClave, 로보MD",
+    "excludeWords": null,
+    "notes": "로보MD | Fashion/AI"
+  },
+  {
+    "name": "마스크모먼트",
+    "englishName": "Mask Moments",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "마스크모먼트",
+    "helperKeywords": "Mask Moments",
+    "excludeWords": null,
+    "notes": "E-commerce/Beauty"
+  },
+  {
+    "name": "문리버",
+    "englishName": "Moonriver",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "문리버",
+    "helperKeywords": "Moonriver, 아이템스카우트",
+    "excludeWords": null,
+    "notes": "아이템스카우트 | Data Analytics/E-Commerce"
+  },
+  {
+    "name": "서울번드",
+    "englishName": "Seoul Bund",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "서울번드",
+    "helperKeywords": "Seoul Bund, 동아시아 리빙",
+    "excludeWords": null,
+    "notes": "동아시아 리빙 | E-commerce"
+  },
+  {
+    "name": "샤크마켓",
+    "englishName": "Shark Market",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "샤크마켓",
+    "helperKeywords": "Shark Market, 신선식품 배송",
+    "excludeWords": null,
+    "notes": "신선식품 배송 | E-commerce/베트남"
+  },
+  {
+    "name": "지엠지",
+    "englishName": "GMG",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "지엠지",
+    "helperKeywords": "GMG, 해외 부동산",
+    "excludeWords": null,
+    "notes": "해외 부동산 | Proptech"
+  },
+  {
+    "name": "라블라코",
+    "englishName": "Lablaco",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "라블라코",
+    "helperKeywords": "Lablaco, 옴니채널 솔루션",
+    "excludeWords": null,
+    "notes": "옴니채널 솔루션 | Blockchain/Fashion"
+  },
+  {
+    "name": "오닝",
+    "englishName": "OINNG",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "오닝",
+    "helperKeywords": "OINNG, 픽잇",
+    "excludeWords": null,
+    "notes": "픽잇 (PICKIT) | E-Commerce/Entertainment"
+  },
+  {
+    "name": "티킷",
+    "englishName": "Tkit",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "티킷",
+    "helperKeywords": "Tkit, 티켓 플랫폼",
+    "excludeWords": null,
+    "notes": "티켓 플랫폼 (UMF) | Entertainment"
+  },
+  {
+    "name": "에이임팩트",
+    "englishName": "A-Impact",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "에이임팩트",
+    "helperKeywords": "A-Impact, 어레인지",
+    "excludeWords": null,
+    "notes": "어레인지 (Arrange) | Agriculture"
+  },
+  {
+    "name": "큐리오칩스",
+    "englishName": "CurioChips",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "큐리오칩스",
+    "helperKeywords": "CurioChips, 장기칩 플랫폼",
+    "excludeWords": null,
+    "notes": "장기칩 플랫폼 | Healthcare/Medicaltech"
+  },
+  {
+    "name": "아부하킴",
+    "englishName": "Abuhakim",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "아부하킴",
+    "helperKeywords": "Abuhakim",
+    "excludeWords": null,
+    "notes": "E-commerce/중동"
+  },
+  {
+    "name": "인포크",
+    "englishName": "Inpock",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "인포크",
+    "helperKeywords": "Inpock, 인플루언서 마켓",
+    "excludeWords": null,
+    "notes": "인플루언서 마켓 | E-commerce"
+  },
+  {
+    "name": "브이로거",
+    "englishName": "Vlogr",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "브이로거",
+    "helperKeywords": "Vlogr, 영상 편집 앱",
+    "excludeWords": null,
+    "notes": "영상 편집 앱 | Entertainment"
+  },
+  {
+    "name": "플루이드",
+    "englishName": "Fluid",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "플루이드",
+    "helperKeywords": "Fluid, 보상형 마케팅",
+    "excludeWords": null,
+    "notes": "보상형 마케팅 | Advertising & Media"
+  },
+  {
+    "name": "젠허브",
+    "englishName": "ZhenHub",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "젠허브",
+    "helperKeywords": "ZhenHub, 글로벌 풀필먼트",
+    "excludeWords": null,
+    "notes": "글로벌 풀필먼트 | Supply Chain/Logistics"
+  },
+  {
+    "name": "진캐스트",
+    "englishName": "Genecast",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "진캐스트",
+    "helperKeywords": "Genecast, IDPS",
+    "excludeWords": null,
+    "notes": "IDPS (유전 변이 검출) | Healthcare/Medicaltech"
+  },
+  {
+    "name": "프로파운드",
+    "englishName": "Profound",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "프로파운드",
+    "helperKeywords": "Profound, 비즈니스 컨설팅 마켓",
+    "excludeWords": null,
+    "notes": "비즈니스 컨설팅 마켓 | HRtech"
+  },
+  {
+    "name": "스윙비",
+    "englishName": "Swingvy",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "스윙비",
+    "helperKeywords": "Swingvy, 동남아 인사관리",
+    "excludeWords": null,
+    "notes": "동남아 인사관리 | HRtech"
+  },
+  {
+    "name": "쿠딩",
+    "englishName": "KOODING",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "쿠딩",
+    "helperKeywords": "KOODING, 글로벌 패션 마켓플레이스",
+    "excludeWords": null,
+    "notes": "글로벌 패션 마켓플레이스 | Design Fashion"
+  },
+  {
+    "name": "요쿠스",
+    "englishName": "Jocoos",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "요쿠스",
+    "helperKeywords": "Jocoos, 동영상 트랜스코딩",
+    "excludeWords": null,
+    "notes": "동영상 트랜스코딩 | Advertising & Media"
+  },
+  {
+    "name": "블로코",
+    "englishName": "Blocko",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "블로코",
+    "helperKeywords": "Blocko, 기업용 블록체인",
+    "excludeWords": null,
+    "notes": "기업용 블록체인 | Blockchain"
+  },
+  {
+    "name": "워터스트라이더",
+    "englishName": "Water Strider",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "워터스트라이더",
+    "helperKeywords": "Water Strider, 3D 근접 공간 감지",
+    "excludeWords": null,
+    "notes": "3D 근접 공간 감지 | Hardware"
+  },
+  {
+    "name": "에스랩아시아",
+    "englishName": "S.Lab Asia",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "에스랩아시아",
+    "helperKeywords": "S.Lab Asia, 의약품 콜드체인",
+    "excludeWords": null,
+    "notes": "의약품 콜드체인 | Logistics"
+  },
+  {
+    "name": "스와치온",
+    "englishName": "SwatchOn",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "스와치온",
+    "helperKeywords": "SwatchOn, 패션 소재 소싱",
+    "excludeWords": null,
+    "notes": "패션 소재 소싱 | E-commerce/Fashion"
+  },
+  {
+    "name": "브링코",
+    "englishName": "Bringko",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "브링코",
+    "helperKeywords": "Bringko, 역직구 메타",
+    "excludeWords": null,
+    "notes": "역직구 메타 | E-commerce"
+  },
+  {
+    "name": "엑씽크",
+    "englishName": "xSync",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "엑씽크",
+    "helperKeywords": "xSync, 이벤트 플랫폼",
+    "excludeWords": null,
+    "notes": "이벤트 플랫폼 | Entertainment"
+  },
+  {
+    "name": "발란",
+    "englishName": "Balaan",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "발란",
+    "helperKeywords": "Balaan, 명품 커머스",
+    "excludeWords": null,
+    "notes": "명품 커머스 | E-commerce"
+  },
+  {
+    "name": "엑스브레인",
+    "englishName": "XBrain",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "엑스브레인",
+    "helperKeywords": "XBrain, 머신러닝",
+    "excludeWords": null,
+    "notes": "머신러닝 | AI"
+  },
+  {
+    "name": "패스켓",
+    "englishName": "FASKET",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "패스켓",
+    "helperKeywords": "FASKET, 퀵커머스",
+    "excludeWords": null,
+    "notes": "퀵커머스 | E-commerce"
+  },
+  {
+    "name": "컬리지니에이아이",
+    "englishName": "Collegenie AI",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "컬리지니에이아이",
+    "helperKeywords": "Collegenie AI, EssayFit AI",
+    "excludeWords": null,
+    "notes": "EssayFit AI | AI/SaaS"
+  },
+  {
+    "name": "노다랩",
+    "englishName": "Noda Labs",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "노다랩",
+    "helperKeywords": "Noda Labs, KFoodBuyers",
+    "excludeWords": null,
+    "notes": "KFoodBuyers | Data Analytics/F&B"
+  },
+  {
+    "name": "부톡",
+    "englishName": "Bootalk",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "부톡",
+    "helperKeywords": "Bootalk, Uiti",
+    "excludeWords": null,
+    "notes": "Uiti (부동산 추천) | Proptech"
+  },
+  {
+    "name": "커리어데이",
+    "englishName": "Careerday",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "커리어데이",
+    "helperKeywords": "Careerday",
+    "excludeWords": null,
+    "notes": "HR tech"
+  },
+  {
+    "name": "스탠딩톨",
+    "englishName": "StandingTall",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "스탠딩톨",
+    "helperKeywords": "StandingTall, 플렉스파인",
+    "excludeWords": null,
+    "notes": "플렉스파인 (척추보조기) | Healthcare"
+  },
+  {
+    "name": "인스턴트타투",
+    "englishName": "Instant Tattoo",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "인스턴트타투",
+    "helperKeywords": "Instant Tattoo, 건식 템포러리 타투",
+    "excludeWords": null,
+    "notes": "건식 템포러리 타투 | Fashion"
+  },
+  {
+    "name": "별별선생",
+    "englishName": "StarTeacher",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "별별선생",
+    "helperKeywords": "StarTeacher, TEvalueWise",
+    "excludeWords": null,
+    "notes": "TEvalueWise | Education"
+  },
+  {
+    "name": "텔라",
+    "englishName": "Tella",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "텔라",
+    "helperKeywords": "Tella, 온디맨드 영어 채팅",
+    "excludeWords": null,
+    "notes": "온디맨드 영어 채팅 | Education/Edutech"
+  },
+  {
+    "name": "세린",
+    "englishName": "Xelin",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "세린",
+    "helperKeywords": "Xelin, Micro-Dicing 레이저",
+    "excludeWords": null,
+    "notes": "Micro-Dicing 레이저 | Hardware"
+  },
+  {
+    "name": "스파이스웨어",
+    "englishName": "Spiceware",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "스파이스웨어",
+    "helperKeywords": "Spiceware, 클라우드 보안",
+    "excludeWords": null,
+    "notes": "클라우드 보안 | Cybersecurity"
+  },
+  {
+    "name": "웰프",
+    "englishName": "Whelp",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "웰프",
+    "helperKeywords": "Whelp, 고객 소통 채널",
+    "excludeWords": null,
+    "notes": "고객 소통 채널 | AI"
+  },
+  {
+    "name": "페이워치",
+    "englishName": "Paywatch",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "페이워치",
+    "helperKeywords": "Paywatch, 원스톱 HR/급여",
+    "excludeWords": null,
+    "notes": "원스톱 HR/급여 | Fintech"
+  },
+  {
+    "name": "케어닥",
+    "englishName": "Caredoc",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "케어닥",
+    "helperKeywords": "Caredoc, 노인 돌봄",
+    "excludeWords": null,
+    "notes": "노인 돌봄 | Healthcare/Medicaltech"
+  },
+  {
+    "name": "비트바이트",
+    "englishName": "Bitbyte",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "비트바이트",
+    "helperKeywords": "Bitbyte, 플레이키보드",
+    "excludeWords": null,
+    "notes": "플레이키보드 (PlayKeyboard) | Entertainment"
+  },
+  {
+    "name": "피처링",
+    "englishName": "Featuring",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "피처링",
+    "helperKeywords": "Featuring, 인플루언서 분석",
+    "excludeWords": null,
+    "notes": "인플루언서 분석 | Data Analytics"
+  },
+  {
+    "name": "스마트잭",
+    "englishName": "SmartJack",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "스마트잭",
+    "helperKeywords": "SmartJack, 랩매니저",
+    "excludeWords": null,
+    "notes": "랩매니저 | Data Analytics"
+  },
+  {
+    "name": "액스",
+    "englishName": "AX (Activity Exchange)",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "액스",
+    "helperKeywords": "AX (Activity Exchange), 여행 상품 퍼블리싱",
+    "excludeWords": null,
+    "notes": "여행 상품 퍼블리싱 | Travel/Hospitality"
+  },
+  {
+    "name": "글로벌브릿지",
+    "englishName": "Global Bridge",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "글로벌브릿지",
+    "helperKeywords": "Global Bridge, 바이너리 CDMA",
+    "excludeWords": null,
+    "notes": "바이너리 CDMA | Cybersecurity"
+  },
+  {
+    "name": "서틴스플로어",
+    "englishName": "Thirteenth Floor",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "서틴스플로어",
+    "helperKeywords": "Thirteenth Floor, VR 콘텐츠",
+    "excludeWords": null,
+    "notes": "VR 콘텐츠 | AR/VR"
+  },
+  {
+    "name": "심플키친",
+    "englishName": "Simple Kitchen",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "심플키친",
+    "helperKeywords": "Simple Kitchen, 공유주방",
+    "excludeWords": null,
+    "notes": "공유주방 | Proptech"
+  },
+  {
+    "name": "플리팝",
+    "englishName": "Fleapop",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "플리팝",
+    "helperKeywords": "Fleapop, Experience Commerce",
+    "excludeWords": null,
+    "notes": "Experience Commerce | E-commerce"
+  },
+  {
+    "name": "에몰라이즈",
+    "englishName": "Emolize",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "에몰라이즈",
+    "helperKeywords": "Emolize, Payvil",
+    "excludeWords": null,
+    "notes": "Payvil (국제결제) | Fintech"
+  },
+  {
+    "name": "캐드호",
+    "englishName": "Kadho",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "캐드호",
+    "helperKeywords": "Kadho, 두뇌 훈련",
+    "excludeWords": null,
+    "notes": "두뇌 훈련 | Edutech"
+  },
+  {
+    "name": "더클로젯컴퍼니",
+    "englishName": "The Clozet",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "더클로젯컴퍼니",
+    "helperKeywords": "The Clozet, 패션 공유",
+    "excludeWords": null,
+    "notes": "패션 공유 | Design Fashion"
+  },
+  {
+    "name": "아시안보스",
+    "englishName": "Asian Boss",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "아시안보스",
+    "helperKeywords": "Asian Boss, 뉴미디어",
+    "excludeWords": null,
+    "notes": "뉴미디어 | Advertising & Media"
+  },
+  {
+    "name": "클로저",
+    "englishName": "Kloser",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "클로저",
+    "helperKeywords": "Kloser, 고객채널 관리",
+    "excludeWords": null,
+    "notes": "고객채널 관리 | Marketing"
+  },
+  {
+    "name": "쿠엔즈버킷",
+    "englishName": "QueensBucket",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "쿠엔즈버킷",
+    "helperKeywords": "QueensBucket, 참기름/들기름",
+    "excludeWords": null,
+    "notes": "참기름/들기름 | Food"
+  },
+  {
+    "name": "페이먼스",
+    "englishName": "Paymonths",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "페이먼스",
+    "helperKeywords": "Paymonths, BNPL",
+    "excludeWords": null,
+    "notes": "BNPL (파이노버스랩) | Fintech"
+  },
+  {
+    "name": "어반베이스",
+    "englishName": "Urbanbase",
+    "category": "portfolio_company",
+    "status": "ACTIVE",
+    "primaryKeyword": "어반베이스",
+    "helperKeywords": "Urbanbase, 3D 공간 데이터",
+    "excludeWords": null,
+    "notes": "3D 공간 데이터 | AR/VR"
+  },
+  {
+    "name": "김호민",
+    "englishName": "Ho Min Kim",
+    "category": "executive",
+    "status": "ACTIVE",
+    "primaryKeyword": "김호민",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": "공동대표 / Founding Partner (스파크랩)"
+  },
+  {
+    "name": "이한주",
+    "englishName": "Han Joo Lee",
+    "category": "executive",
+    "status": "ACTIVE",
+    "primaryKeyword": "이한주",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": "공동대표 / Founding Partner (스파크랩)"
+  },
+  {
+    "name": "김유진",
+    "englishName": "Eugene Kim",
+    "category": "executive",
+    "status": "ACTIVE",
+    "primaryKeyword": "김유진",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": "공동대표 / Managing Partner (스파크랩)"
+  },
+  {
+    "name": "프라이머",
+    "englishName": "Primer",
+    "category": "competitor",
+    "status": "ACTIVE",
+    "primaryKeyword": "프라이머",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": "초기 스타트업 투자"
+  },
+  {
+    "name": "매쉬업엔젤스",
+    "englishName": "MashUp Angels",
+    "category": "competitor",
+    "status": "ACTIVE",
+    "primaryKeyword": "매쉬업엔젤스",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "본엔젤스벤처파트너스",
+    "englishName": "BonAngels Venture Partners",
+    "category": "competitor",
+    "status": "ACTIVE",
+    "primaryKeyword": "본엔젤스벤처파트너스",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "알토스벤처스",
+    "englishName": "Altos Ventures",
+    "category": "competitor",
+    "status": "ACTIVE",
+    "primaryKeyword": "알토스벤처스",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": "한국 스타트업 다수 투자"
+  },
+  {
+    "name": "소프트뱅크벤처스",
+    "englishName": "SoftBank Ventures Asia",
+    "category": "competitor",
+    "status": "ACTIVE",
+    "primaryKeyword": "소프트뱅크벤처스",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "카카오벤처스",
+    "englishName": "Kakao Ventures",
+    "category": "competitor",
+    "status": "ACTIVE",
+    "primaryKeyword": "카카오벤처스",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "네이버 D2SF",
+    "englishName": "Naver D2SF",
+    "category": "competitor",
+    "status": "ACTIVE",
+    "primaryKeyword": "네이버 D2SF",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "디캠프",
+    "englishName": "D.CAMP",
+    "category": "competitor",
+    "status": "ACTIVE",
+    "primaryKeyword": "디캠프",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": "은행권청년창업재단"
+  },
+  {
+    "name": "퓨처플레이",
+    "englishName": "FuturePlay",
+    "category": "competitor",
+    "status": "ACTIVE",
+    "primaryKeyword": "퓨처플레이",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "패스트벤처스",
+    "englishName": "FAST VENTURES",
+    "category": "competitor",
+    "status": "ACTIVE",
+    "primaryKeyword": "패스트벤처스",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "블루포인트파트너스",
+    "englishName": "Bluepoint Partners",
+    "category": "competitor",
+    "status": "ACTIVE",
+    "primaryKeyword": "블루포인트파트너스",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "롯데벤처스",
+    "englishName": "Lotte Ventures",
+    "category": "competitor",
+    "status": "ACTIVE",
+    "primaryKeyword": "롯데벤처스",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "KB인베스트먼트",
+    "englishName": "KB Investment",
+    "category": "competitor",
+    "status": "ACTIVE",
+    "primaryKeyword": "KB인베스트먼트",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "미래에셋벤처투자",
+    "englishName": "Mirae Asset Venture Investment",
+    "category": "competitor",
+    "status": "ACTIVE",
+    "primaryKeyword": "미래에셋벤처투자",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "한국투자파트너스",
+    "englishName": "Korea Investment Partners",
+    "category": "competitor",
+    "status": "ACTIVE",
+    "primaryKeyword": "한국투자파트너스",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "한화인베스트먼트",
+    "englishName": "Hanwha Investment",
+    "category": "competitor",
+    "status": "ACTIVE",
+    "primaryKeyword": "한화인베스트먼트",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "AI 스타트업",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "AI 스타트업",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": "지속 모니터링"
+  },
+  {
+    "name": "생성형 AI",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "생성형 AI",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": "Hot 트렌드"
+  },
+  {
+    "name": "AI 에이전트",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "AI 에이전트",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": "Hot 트렌드"
+  },
+  {
+    "name": "AI 헬스케어",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "AI 헬스케어",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": "포트폴리오사 다수 매칭 가능"
+  },
+  {
+    "name": "AI 핀테크",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "AI 핀테크",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "기후테크",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "기후테크",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": "Hot 트렌드"
+  },
+  {
+    "name": "탄소중립",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "탄소중립",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "푸드테크",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "푸드테크",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "로보틱스",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "로보틱스",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "바이오테크",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "바이오테크",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "스타트업 시드 투자",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "스타트업 시드 투자",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "시리즈 A 투자",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "시리즈 A 투자",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "시리즈 B 투자",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "시리즈 B 투자",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "스타트업 IPO",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "스타트업 IPO",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "스타트업 M&A",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "스타트업 M&A",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "스타트업 글로벌 진출",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "스타트업 글로벌 진출",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": "Global AI-First 포지셔닝과 연결"
+  },
+  {
+    "name": "유니콘",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "유니콘",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "액셀러레이터",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "액셀러레이터",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "벤처캐피탈",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "벤처캐피탈",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": null
+  },
+  {
+    "name": "데모데이",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "데모데이",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": "스파크랩 데모데이 포함"
+  },
+  {
+    "name": "팁스(TIPS)",
+    "englishName": null,
+    "category": "industry_trend",
+    "status": "ACTIVE",
+    "primaryKeyword": "팁스(TIPS)",
+    "helperKeywords": null,
+    "excludeWords": null,
+    "notes": "다수 포트폴리오사 선정 이력"
+  }
+]
