@@ -23,7 +23,7 @@ export async function GET(req: Request) {
       send: true,
       baseUrl,
     });
-    return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json(result);
   } catch (e: any) {
     console.error('[cron] daily-digest failed:', e);
     return NextResponse.json(
