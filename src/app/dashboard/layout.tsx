@@ -2,14 +2,14 @@ import { getServerSession } from 'next-auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { authOptions } from '@/lib/auth';
+import { OPEN_ACCESS } from '@/lib/flags';
 import { SignOutButton } from '@/components/SignOutButton';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  // 로컬 개발용 우회: DEV_AUTH_BYPASS=true 이면 로그인 없이 임시 세션 사용
-  const session =
-    process.env.DEV_AUTH_BYPASS === 'true'
-      ? ({ user: { email: 'dev@localhost', id: 'dev' } } as any)
-      : await getServerSession(authOptions);
+  // 협업 개발 단계(OPEN_ACCESS)면 로그인 없이 임시 세션 사용
+  const session = OPEN_ACCESS
+    ? ({ user: { email: 'dev@localhost', id: 'dev' } } as any)
+    : await getServerSession(authOptions);
   if (!session?.user?.email) redirect('/login');
 
   const initial = session.user.email[0].toUpperCase();
