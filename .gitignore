@@ -9,3 +9,6 @@ out/
 prisma/dev.db
 prisma/dev.db-journal
 .vercel
+next-env.d.ts
+Microsoft/
+tsconfig.tsbuildinfo

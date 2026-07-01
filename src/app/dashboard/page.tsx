@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { ArticlesTable } from '@/components/ArticlesTable';
 import { TrendChart } from '@/components/TrendChart';
 import { MediaChart } from '@/components/MediaChart';
+import { RoadmapPreview } from '@/components/RoadmapPreview';
 
 export const dynamic = 'force-dynamic';
 
@@ -146,6 +147,9 @@ export default async function DashboardPage() {
         </div>
         <ArticlesTable articles={data.articles as any} />
       </div>
+
+      {/* 발표용 고도화 미리보기 — 로컬 데모(DEV_AUTH_BYPASS)에서만 표시 */}
+      {process.env.DEV_AUTH_BYPASS === 'true' && <RoadmapPreview />}
     </>
   );
 }

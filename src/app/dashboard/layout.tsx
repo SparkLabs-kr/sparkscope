@@ -5,7 +5,11 @@ import { authOptions } from '@/lib/auth';
 import { SignOutButton } from '@/components/SignOutButton';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const session = await getServerSession(authOptions);
+  // 로컬 개발용 우회: DEV_AUTH_BYPASS=true 이면 로그인 없이 임시 세션 사용
+  const session =
+    process.env.DEV_AUTH_BYPASS === 'true'
+      ? ({ user: { email: 'dev@localhost', id: 'dev' } } as any)
+      : await getServerSession(authOptions);
   if (!session?.user?.email) redirect('/login');
 
   const initial = session.user.email[0].toUpperCase();
