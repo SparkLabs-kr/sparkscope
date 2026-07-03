@@ -12,3 +12,8 @@ prisma/dev.db-journal
 next-env.d.ts
 Microsoft/
 tsconfig.tsbuildinfo
+
+# 로컬 전용 파일 (커밋 금지)
+# - 이전 프로젝트 백업, 루트의 기획/안내 문서(비밀정보 포함 가능)
+_backup_before_clone/
+/*.html

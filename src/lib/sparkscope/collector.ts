@@ -8,6 +8,14 @@ import { parseStringPromise } from 'xml2js';
 import { prisma } from '@/lib/prisma';
 import type { RawArticle, Category } from './types';
 
+// 수집 소스가 반환하는 기사 형태 (카테고리·키워드 부여 전)
+type SourceItem = Omit<RawArticle, 'matchedKeyword' | 'category' | 'basePriority'>;
+
+// 네이버 API 키가 모두 설정된 경우에만 네이버 수집 활성화
+function naverEnabled(): boolean {
+  return !!(process.env.NAVER_CLIENT_ID && process.env.NAVER_CLIENT_SECRET);
+}
+
 // 자동생성·노이즈 매체 블랙리스트 (마스터 시트로 옮겨도 됨)
 const NOISE_SOURCES = new Set(['주달', '뉴스봇', 'Auto News', '주간시세', '시세분석']);
 
@@ -15,7 +23,6 @@ const MAX_DAYS_AGO = 7;
 
 const CATEGORY_PRIORITY: Record<string, number> = {
   sparklabs_self: 100,
-  sparklabs_executive: 95,
   portfolio_company: 70,
   competitor: 50,
   industry_trend: 40,
@@ -45,7 +52,7 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
     limited.push(...list.slice(0, max));
   }
 
-  console.log(`[collector] querying ${limited.length} targets across ${grouped.size} categories`);
+  console.log(`[collector] querying ${limited.length} targets across ${grouped.size} categories (Naver: ${naverEnabled() ? 'ON' : 'OFF'})`);
 
   const allArticles: RawArticle[] = [];
   // 동시 호출 제한 (네트워크 친화적)
@@ -54,18 +61,13 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
     const batch = limited.slice(i, i + CONCURRENCY);
     const results = await Promise.all(
       batch.map(async target => {
-        try {
-          const items = await fetchGoogleNews(target.primaryKeyword);
-          return items.map<RawArticle>(item => ({
-            ...item,
-            matchedKeyword: target.primaryKeyword,
-            category: target.category as Category,
-            basePriority: CATEGORY_PRIORITY[target.category] ?? 50,
-          }));
-        } catch (e) {
-          console.error(`[collector] failed for "${target.primaryKeyword}":`, e);
-          return [];
-        }
+        const items = await fetchForKeyword(target.primaryKeyword);
+        return items.map<RawArticle>(item => ({
+          ...item,
+          matchedKeyword: target.primaryKeyword,
+          category: target.category as Category,
+          basePriority: CATEGORY_PRIORITY[target.category] ?? 50,
+        }));
       }),
     );
     results.forEach(arr => allArticles.push(...arr));
@@ -117,6 +119,86 @@ async function fetchGoogleNews(keyword: string): Promise<Omit<RawArticle, 'match
     out.push({ title, link, source, pubDate });
   }
   return out;
+}
+
+// 한 키워드에 대해 구글 + (옵션)네이버를 함께 수집. 각 소스는 독립적으로 실패 격리.
+async function fetchForKeyword(keyword: string): Promise<SourceItem[]> {
+  const jobs = [safeSource(() => fetchGoogleNews(keyword), keyword, 'google')];
+  if (naverEnabled()) jobs.push(safeSource(() => fetchNaverNews(keyword), keyword, 'naver'));
+  const results = await Promise.all(jobs);
+  return results.flat();
+}
+
+async function safeSource(
+  fn: () => Promise<SourceItem[]>,
+  keyword: string,
+  label: string,
+): Promise<SourceItem[]> {
+  try {
+    return await fn();
+  } catch (e) {
+    console.error(`[collector] ${label} failed for "${keyword}":`, e);
+    return [];
+  }
+}
+
+async function fetchNaverNews(keyword: string): Promise<SourceItem[]> {
+  const url = `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(keyword)}&display=30&sort=date`;
+  const res = await fetch(url, {
+    headers: {
+      'X-Naver-Client-Id': process.env.NAVER_CLIENT_ID!,
+      'X-Naver-Client-Secret': process.env.NAVER_CLIENT_SECRET!,
+    },
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`Naver HTTP ${res.status}`);
+
+  const data = await res.json();
+  const items: any[] = data?.items ?? [];
+  const out: SourceItem[] = [];
+
+  for (const item of items) {
+    const title = stripHtml(item.title ?? '');
+    // originallink(원문 URL) 우선, 없으면 네이버 링크
+    const link = String(item.originallink || item.link || '').trim();
+    if (!title || !link) continue;
+
+    let pubDate: Date;
+    try {
+      pubDate = new Date(item.pubDate);
+      if (isNaN(pubDate.getTime())) continue;
+    } catch {
+      continue;
+    }
+
+    // 네이버는 매체명을 별도로 주지 않아 원문 도메인을 매체로 사용
+    const source = domainToSource(link);
+    if (NOISE_SOURCES.has(source)) continue;
+
+    out.push({ title, link, source, pubDate });
+  }
+  return out;
+}
+
+// 네이버 제목의 <b> 태그·HTML 엔티티 제거
+function stripHtml(s: string): string {
+  return s
+    .replace(/<[^>]+>/g, '')
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+    .trim();
+}
+
+function domainToSource(link: string): string {
+  try {
+    return new URL(link).hostname.replace(/^www\./, '');
+  } catch {
+    return 'naver';
+  }
 }
 
 function filterAndDedupe(articles: RawArticle[], daysBack: number): RawArticle[] {

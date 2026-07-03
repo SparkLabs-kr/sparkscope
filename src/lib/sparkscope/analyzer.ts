@@ -246,7 +246,7 @@ function extractJson(text: string): string {
 }
 
 interface ClassificationResult {
-  category: Category;
+  category: Category | 'unrelated';
   importance: Importance;
   isNoise: boolean;
   noiseReason?: string;

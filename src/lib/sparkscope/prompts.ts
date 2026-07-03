@@ -25,18 +25,24 @@ ${articles.map(a => JSON.stringify(a)).join('\n')}
 각 기사의 출력 스키마:
 {
   "id": "<입력 id>",
-  "category": "sparklabs_self" | "sparklabs_executive" | "portfolio_company" | "industry_trend" | "competitor" | "unrelated",
+  "category": "sparklabs_self" | "portfolio_company" | "competitor" | "industry_trend" | "unrelated",
   "importance": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
   "isNoise": true | false,
   "noiseReason": null | "auto_generated" | "homonym" | "ad_content" | "irrelevant",
   "needsDeepAnalysis": true | false
 }
 
+카테고리 정의:
+- sparklabs_self: 스파크랩 뉴스 — 스파크랩 그룹 법인(스파크랩/그룹/타이완/사우디 등) 및 임원진(김호민, 김유진 등) 관련
+- portfolio_company: 스파크랩이 투자한 포트폴리오사 관련
+- competitor: AC·VC 업계 동향 — 타 액셀러레이터·벤처캐피탈 등 동종업계·경쟁사 관련
+- industry_trend: 스타트업계 뉴스 — 스타트업 생태계·정부기관·정책 등 업계 전반
+
 판단 기준:
 - 매칭된 키워드가 "비트바이트"인데 기사가 암호화폐 거래소 "바이비트"에 대한 것이면 isNoise=true, noiseReason="homonym"
 - 자동생성된 시세·주가 분석은 isNoise=true, noiseReason="auto_generated"
 - 정부 정책 발표 같은 영향력 큰 기사는 importance="HIGH" 또는 "CRITICAL"
-- needsDeepAnalysis는 category가 sparklabs_*/portfolio_company이고 importance가 MEDIUM 이상일 때 true
+- needsDeepAnalysis는 category가 sparklabs_self/portfolio_company이고 importance가 MEDIUM 이상일 때 true
 
 JSON 배열만 반환:`;
 }

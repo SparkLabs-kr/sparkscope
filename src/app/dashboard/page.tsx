@@ -16,7 +16,7 @@ async function loadDashboardData() {
 
   const [total, sparklabsCount, portfolioCount, pitchCount, articles, sourceGroups, toneGroups, pitches] = await Promise.all([
     prisma.article.count({ where }),
-    prisma.article.count({ where: { ...where, category: { in: ['sparklabs_self', 'sparklabs_executive'] } } }),
+    prisma.article.count({ where: { ...where, category: 'sparklabs_self' } }),
     prisma.article.count({ where: { ...where, category: 'portfolio_company' } }),
     prisma.article.count({ where: { ...where, pitchScore: { gte: 75 } } }),
     prisma.article.findMany({ where, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], take: 30 }),

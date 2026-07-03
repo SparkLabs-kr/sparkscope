@@ -1,4 +1,4 @@
-// Vercel Cron이 매일 평일 23:30 UTC (= 08:30 KST)에 호출.
+// Vercel Cron이 매주 월·수·금 08:30 KST (= 일·화·목 23:30 UTC)에 호출.
 // 30분간 수집·분석을 마치고 발송이 09:00 KST에 떨어지도록 즉시 실행.
 import { NextResponse } from 'next/server';
 import { runDailyDigest } from '@/lib/sparkscope/runner';

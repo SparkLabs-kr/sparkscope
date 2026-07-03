@@ -40,7 +40,7 @@ export async function GET(req: Request) {
   // KPI 계산
   const total = await prisma.article.count({ where: { pubDate: { gte: since }, isNoise: false } });
   const sparklabsCount = await prisma.article.count({
-    where: { pubDate: { gte: since }, isNoise: false, category: { in: ['sparklabs_self', 'sparklabs_executive'] } },
+    where: { pubDate: { gte: since }, isNoise: false, category: 'sparklabs_self' },
   });
   const portfolioCount = await prisma.article.count({
     where: { pubDate: { gte: since }, isNoise: false, category: 'portfolio_company' },

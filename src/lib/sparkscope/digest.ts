@@ -7,6 +7,7 @@ import type { AnalyzedArticle, DigestData } from './types';
 const TOP_3_LIMIT = 3;
 const PORTFOLIO_LIMIT = 8;
 const SPARKLABS_LIMIT = 5;
+const COMPETITOR_LIMIT = 5;
 const INDUSTRY_LIMIT = 5;
 
 export function buildDigestData(
@@ -16,8 +17,9 @@ export function buildDigestData(
 ): DigestData {
   const sorted = [...articles].sort((a, b) => b.priorityScore - a.priorityScore);
 
-  const sparklabsArticles = sorted.filter(a => a.category === 'sparklabs_self' || a.category === 'sparklabs_executive').slice(0, SPARKLABS_LIMIT);
+  const sparklabsArticles = sorted.filter(a => a.category === 'sparklabs_self').slice(0, SPARKLABS_LIMIT);
   const portfolioArticles = sorted.filter(a => a.category === 'portfolio_company').slice(0, PORTFOLIO_LIMIT);
+  const competitorArticles = sorted.filter(a => a.category === 'competitor').slice(0, COMPETITOR_LIMIT);
   const industryArticles = sorted.filter(a => a.category === 'industry_trend').slice(0, INDUSTRY_LIMIT);
 
   const top3 = sorted.slice(0, TOP_3_LIMIT);
@@ -40,11 +42,13 @@ export function buildDigestData(
       total: articles.length,
       sparklabsSelf: sparklabsArticles.length,
       portfolio: portfolioArticles.length,
+      competitor: competitorArticles.length,
       industry: industryArticles.length,
     },
     top3,
     sparklabsArticles,
     portfolioArticles,
+    competitorArticles,
     industryArticles,
     insightTitle,
     insightText,
@@ -74,9 +78,10 @@ ${EMAIL_CSS}
       <span class="editor-byline">— SparkScope 편집부</span>
     </div>
     <div class="stats">
-      <div class="stat"><div class="stat-value">${data.stats.sparklabsSelf}</div><div class="stat-label">스파크랩 직접 언급</div></div>
-      <div class="stat"><div class="stat-value">${data.stats.portfolio}</div><div class="stat-label">포트폴리오사 노출</div></div>
-      <div class="stat"><div class="stat-value">${data.stats.industry}</div><div class="stat-label">업계 동향</div></div>
+      <div class="stat"><div class="stat-value">${data.stats.sparklabsSelf}</div><div class="stat-label">스파크랩 뉴스</div></div>
+      <div class="stat"><div class="stat-value">${data.stats.portfolio}</div><div class="stat-label">포트폴리오사</div></div>
+      <div class="stat"><div class="stat-value">${data.stats.competitor}</div><div class="stat-label">AC·VC 동향</div></div>
+      <div class="stat"><div class="stat-value">${data.stats.industry}</div><div class="stat-label">스타트업계</div></div>
     </div>
   </div>
 
@@ -102,18 +107,23 @@ ${EMAIL_CSS}
   </div>` : ''}
 
   <div class="section">
-    <div class="section-label">🏢 스파크랩 직접 언급</div>
+    <div class="section-label">🏢 스파크랩 뉴스</div>
     ${data.sparklabsArticles.length > 0 ? data.sparklabsArticles.map(renderArticle).join('\n') : '<div style="color:#6B7280; font-size:13px;">최근 영업일 내 직접 언급 없음</div>'}
   </div>
 
   <div class="section">
-    <div class="section-label">💼 포트폴리오 하이라이트</div>
+    <div class="section-label">💼 포트폴리오사</div>
     ${data.portfolioArticles.length > 0 ? data.portfolioArticles.map(renderArticle).join('\n') : '<div style="color:#6B7280; font-size:13px;">최근 영업일 내 포트폴리오 보도 없음</div>'}
   </div>
 
   <div class="section">
-    <div class="section-label">🌐 업계 동향</div>
-    ${data.industryArticles.length > 0 ? data.industryArticles.map(renderArticle).join('\n') : '<div style="color:#6B7280; font-size:13px;">최근 업계 동향 없음</div>'}
+    <div class="section-label">🤝 AC·VC 업계 동향</div>
+    ${data.competitorArticles.length > 0 ? data.competitorArticles.map(renderArticle).join('\n') : '<div style="color:#6B7280; font-size:13px;">최근 AC·VC 업계 동향 없음</div>'}
+  </div>
+
+  <div class="section">
+    <div class="section-label">🌐 스타트업계 뉴스</div>
+    ${data.industryArticles.length > 0 ? data.industryArticles.map(renderArticle).join('\n') : '<div style="color:#6B7280; font-size:13px;">최근 스타트업계 뉴스 없음</div>'}
   </div>
 
   <div class="cta-row">
@@ -123,7 +133,7 @@ ${EMAIL_CSS}
   </div>
 
   <div class="footer">
-    <div class="footer-text">SparkScope는 매일 평일 오전 9시에 자동 발송됩니다.</div>
+    <div class="footer-text">SparkScope는 매주 월·수·금 오전 9시에 자동 발송됩니다.</div>
     <div class="footer-meta">
       외부 공유 금지 · 문의: 커뮤니케이션 본부 (Eunbit)
     </div>
@@ -136,11 +146,10 @@ ${EMAIL_CSS}
 function renderTopCard(a: AnalyzedArticle, rank: number): string {
   const bg = rank === 1 ? '#5046E5' : rank === 2 ? '#1A1A1A' : '#475569';
   const catLabel: Record<string, string> = {
-    sparklabs_self: '스파크랩 미디어 노출',
-    sparklabs_executive: '임원진 미디어',
-    portfolio_company: '포트폴리오 마일스톤',
-    industry_trend: '업계 동향',
-    competitor: '경쟁사 동향',
+    sparklabs_self: '스파크랩 뉴스',
+    portfolio_company: '포트폴리오사',
+    competitor: 'AC·VC 업계 동향',
+    industry_trend: '스타트업계 뉴스',
   };
   return `
     <div class="top-card" style="background:${bg};">

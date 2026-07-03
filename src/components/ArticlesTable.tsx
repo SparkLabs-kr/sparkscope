@@ -12,11 +12,10 @@ interface Article {
 }
 
 const CATEGORY_BADGE: Record<string, { label: string; cls: string }> = {
-  sparklabs_self: { label: '자체', cls: 'bg-green-100 text-green-800' },
-  sparklabs_executive: { label: '임원', cls: 'bg-green-100 text-green-800' },
+  sparklabs_self: { label: '스파크랩', cls: 'bg-green-100 text-green-800' },
   portfolio_company: { label: '포트폴리오', cls: 'bg-spark-light-purple text-spark-purple' },
-  industry_trend: { label: '업계', cls: 'bg-amber-100 text-amber-800' },
-  competitor: { label: '경쟁사', cls: 'bg-red-100 text-red-800' },
+  competitor: { label: 'AC·VC', cls: 'bg-red-100 text-red-800' },
+  industry_trend: { label: '스타트업계', cls: 'bg-amber-100 text-amber-800' },
 };
 
 const TONE_EMOJI: Record<string, string> = { POSITIVE: '😊', NEGATIVE: '😟', NEUTRAL: '😐', MIXED: '😶' };
@@ -24,7 +23,7 @@ const IMP_STYLE: Record<string, string> = { HIGH: 'text-red-600 font-bold', CRIT
 
 export function ArticlesTable({ articles }: { articles: Article[] }) {
   if (articles.length === 0) {
-    return <p className="text-sm text-gray-400 py-8 text-center">최근 7일 내 기사가 없습니다. 매일 오전 9시 자동 업데이트됩니다.</p>;
+    return <p className="text-sm text-gray-400 py-8 text-center">최근 7일 내 기사가 없습니다. 매주 월·수·금 오전 9시 자동 업데이트됩니다.</p>;
   }
   return (
     <div className="overflow-x-auto">

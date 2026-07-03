@@ -1,11 +1,13 @@
 // SparkScope 공통 타입
 
+// 4개 카테고리 (화면 표시명):
+//  sparklabs_self=스파크랩 뉴스(임원진 포함) / portfolio_company=포트폴리오사
+//  competitor=AC·VC 업계 동향 / industry_trend=스타트업계 뉴스
 export type Category =
   | 'sparklabs_self'
-  | 'sparklabs_executive'
   | 'portfolio_company'
-  | 'industry_trend'
-  | 'competitor';
+  | 'competitor'
+  | 'industry_trend';
 
 export type Importance = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 export type Tone = 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' | 'MIXED';
@@ -44,6 +46,7 @@ export interface DigestData {
     total: number;
     sparklabsSelf: number;
     portfolio: number;
+    competitor: number;
     industry: number;
     portfolioTrend?: string;
     industryTrend?: string;
@@ -51,6 +54,7 @@ export interface DigestData {
   top3: AnalyzedArticle[];
   sparklabsArticles: AnalyzedArticle[];
   portfolioArticles: AnalyzedArticle[];
+  competitorArticles: AnalyzedArticle[];
   industryArticles: AnalyzedArticle[];
   insightTitle?: string;
   insightText?: string;

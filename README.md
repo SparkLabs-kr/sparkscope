@@ -3,7 +3,7 @@
 스파크랩 커뮤니케이션 본부 전용 뉴스 모니터링·인사이트 시스템입니다.
 외부 서비스(연 250만 원)를 대체하면서 본부 의사결정 인프라까지 함께 만듭니다.
 
-매일 평일 오전 9시 자동으로 다이제스트 메일이 임직원 전체(`all@sparklabs.co.kr`)에게 발송되고,
+매주 월·수·금 오전 9시 자동으로 다이제스트 메일이 임직원 전체(`all@sparklabs.co.kr`)에게 발송되고,
 본부 임직원은 `/dashboard`에서 인사이트 차트와 검색·필터를 사용할 수 있습니다.
 
 ---
@@ -85,7 +85,7 @@ npm run db:seed
    단, `Authorization: Bearer <CRON_SECRET>` 헤더가 필요합니다. 가장 쉬운 방법은 [reqbin.com](https://reqbin.com) 같은 도구로 호출하는 것입니다.
 5. 1~2분 후 본인 메일함에 다이제스트 도착 확인 → 대시보드에 데이터 표시 확인
 
-이후엔 Vercel Cron이 매일 평일 오전 9시(KST)에 자동 실행합니다.
+이후엔 Vercel Cron이 매주 월·수·금 오전 9시(KST)에 자동 실행합니다.
 
 ---
 
@@ -104,7 +104,7 @@ sparkscope/
 │   │   ├── login/page.tsx    # 매직 링크 로그인
 │   │   ├── dashboard/        # 본부 인사이트 대시보드
 │   │   └── api/
-│   │       ├── cron/daily-digest/  # 매일 자동 실행되는 파이프라인
+│   │       ├── cron/daily-digest/  # 정기(월·수·금) 자동 실행되는 파이프라인
 │   │       ├── articles/           # 대시보드용 데이터 API
 │   │       └── auth/[...nextauth]/ # NextAuth 매직 링크
 │   ├── lib/
@@ -121,7 +121,7 @@ sparkscope/
 │   └── components/           # 차트·테이블 React 컴포넌트
 ├── scripts/
 │   └── run-digest.ts         # npm run digest:run 으로 수동 실행
-├── vercel.json               # 매일 평일 23:30 UTC (= 08:30 KST) Cron
+├── vercel.json               # 매주 월·수·금 23:30 UTC (= 08:30 KST) Cron
 ├── package.json
 └── README.md
 ```
@@ -138,7 +138,7 @@ sparkscope/
 `src/lib/sparkscope/digest.ts`의 `EMAIL_CSS` 또는 렌더 함수 수정 → 재배포
 
 ### 발송 시각 변경
-`vercel.json`의 cron 스케줄 수정 (`30 23 * * 0-4` = UTC 23:30, 일~목 = KST 08:30, 월~금)
+`vercel.json`의 cron 스케줄 수정 (`30 23 * * 0,2,4` = UTC 23:30, 일·화·목 = KST 08:30, 월·수·금)
 
 ### 시범 운영 → 정식 운영 전환
 `DIGEST_TEST_RECIPIENT` 환경변수를 비우거나 삭제. 그러면 자동으로 `DIGEST_TO_GROUP`(`all@sparklabs.co.kr`)으로 발송됩니다.
@@ -148,7 +148,7 @@ sparkscope/
 ## 🔍 동작 원리 한눈에
 
 ```
-매일 23:30 UTC (08:30 KST)
+월·수·금 23:30 UTC (08:30 KST)
    ↓
 Vercel Cron → /api/cron/daily-digest
    ↓
