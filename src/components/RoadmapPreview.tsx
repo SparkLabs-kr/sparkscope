@@ -46,7 +46,7 @@ export function RoadmapPreview() {
           </div>
           <div className="space-y-2.5">
             <SourceRow name="구글 뉴스" status="연동 완료" done />
-            <SourceRow name="네이버 뉴스" status="구현 완료 · 키 발급 후 활성화" />
+            <SourceRow name="네이버 뉴스" status="연동 완료" done />
             <SourceRow name="링크드인" status="연동 예정" />
             <SourceRow name="페이스북" status="연동 예정" />
             <SourceRow name="인스타그램" status="연동 예정" />

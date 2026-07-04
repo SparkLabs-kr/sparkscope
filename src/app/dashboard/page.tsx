@@ -10,12 +10,14 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { OPEN_ACCESS } from '@/lib/flags';
 import { canScrap as canScrapEmail } from '@/lib/scrap';
-import { normalizeSource } from '@/lib/sparkscope/media';
+import { normalizeSource, isKnownMedia } from '@/lib/sparkscope/media';
 import { NEGATIVE_KEYWORDS, detectCrises, detectSpikes, type ArticleLite, type CrisisCard, type SpikeCard } from '@/lib/sparkscope/insights';
 
 export const dynamic = 'force-dynamic';
 
 const MIN_DATE = '2023-11-01';
+// 추이 차트 상위 N개사 — 색상으로 구분 가능한 최대치(가독성) 기준 6개.
+const TREND_TOP_N = 6;
 
 function fmt(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -99,10 +101,12 @@ async function loadDashboardData(from: string, to: string) {
   };
 }
 
-// 매체명 정규화 후 병합, 노출 많은 순 전체 정렬 (MediaPanel이 Top12/더보기 처리)
+// 확정 26개 매체만 표시 — 정규화 후 병합, 노출 많은 순 정렬 (MediaPanel이 Top12/더보기 처리).
+// 26개에 없는 매체(v.daum.net·유니콘팩토리 등)는 수집은 하되 이 차트에서는 제외.
 function normalizeSources(rows: { source: string; count: number }[]) {
   const merged = new Map<string, number>();
   for (const r of rows) {
+    if (!isKnownMedia(r.source)) continue;
     const name = normalizeSource(r.source);
     merged.set(name, (merged.get(name) ?? 0) + r.count);
   }
@@ -114,7 +118,8 @@ function normalizeSources(rows: { source: string; count: number }[]) {
 function buildTrendData(records: { matchedKeyword: string; pubDate: Date }[], since: Date, until: Date) {
   const counts = new Map<string, number>();
   records.forEach(r => counts.set(r.matchedKeyword, (counts.get(r.matchedKeyword) ?? 0) + 1));
-  const top6 = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k]) => k);
+  // 정렬 기준: 선택 기간 내 회사별 누적 기사(노출) 건수 내림차순 → 상위 TREND_TOP_N개사
+  const topN = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, TREND_TOP_N).map(([k]) => k);
 
   const dayCount = Math.round((until.getTime() - since.getTime()) / 86400000);
   const byMonth = dayCount > 92; // 긴 기간은 월 단위 버킷
@@ -132,7 +137,7 @@ function buildTrendData(records: { matchedKeyword: string; pubDate: Date }[], si
     guard++;
   }
 
-  const datasets = top6.map(name => {
+  const datasets = topN.map(name => {
     const bucket = new Map<string, number>();
     records.filter(r => r.matchedKeyword === name).forEach(r => {
       const k = key(new Date(r.pubDate));
@@ -187,10 +192,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         <KpiCard label="총 수집 기사" value={data.kpi.total} hint="선택한 기간 내 수집된 모든 기사 수 (노이즈 제외)" />
         <KpiCard label="스파크랩 직접 언급" value={data.kpi.sparklabsCount} hint="기사 제목에 '스파크랩'이 언급된 건수" />
-        <KpiCard label="포트폴리오사 노출" value={data.kpi.portfolioCount} hint="감시대상 포트폴리오사가 언급된 기사 건수" />
+        <KpiCard label="포트폴리오사 노출" value={data.kpi.portfolioCount} hint="스파크랩이 투자한 포트폴리오사가 언급된 기사 건수" />
         <KpiCard label="피칭 기회" value={data.kpi.pitchCount} hint="AI가 기획기사 피칭 가능성을 75점 이상으로 평가한 건수" highlight />
         <KpiCard
-          label="우리 언급률"
+          label="스파크랩 언급률"
           value={`${data.kpi.mentionRate}%`}
           hint="포트폴리오사 기사 중 '스파크랩'이 함께 언급된 비율"
           note="참고 지표 · 본문 미저장 기반"
@@ -204,7 +209,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           <div className="flex justify-between items-center mb-4">
             <div>
               <div className="font-bold">📈 포트폴리오사 노출 추이 ({range.label}) <InfoTip text="상위 6개 포트폴리오사의 일별 노출 추이" /></div>
-              <div className="text-xs text-gray-500 mt-0.5">상위 6개사</div>
+              <div className="text-xs text-gray-500 mt-0.5">구글·네이버 뉴스 기준 · 선택 기간 누적 언론 노출 건수 상위 6개사</div>
             </div>
           </div>
           <TrendChart {...data.trendData} />
@@ -233,7 +238,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       {/* 매체 + 톤 */}
       <div className="grid lg:grid-cols-2 gap-4 mb-6">
         <div className="bg-white p-5 rounded-xl border border-gray-200">
-          <div className="font-bold mb-4">📰 매체별 노출 분포 <InfoTip text="선택 기간 내 기사를 매체별로 집계 (26개 주요 매체명으로 정규화)" /></div>
+          <div className="font-bold mb-4">📰 매체별 노출 분포 <InfoTip text="선택 기간 동안 스타트업 주요 26개 핵심 매체별 집계" /></div>
           <MediaPanel data={data.sources} defaultCount={12} />
         </div>
         <div className="bg-white p-5 rounded-xl border border-gray-200">
