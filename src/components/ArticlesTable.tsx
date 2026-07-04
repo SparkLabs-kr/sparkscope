@@ -1,3 +1,5 @@
+import { ScrapStar } from '@/components/ScrapStar';
+
 interface Article {
   id: string;
   title: string;
@@ -9,6 +11,7 @@ interface Article {
   importance: string | null;
   tone: string | null;
   pitchScore: number | null;
+  isScrapped?: boolean;
 }
 
 const CATEGORY_BADGE: Record<string, { label: string; cls: string }> = {
@@ -21,15 +24,16 @@ const CATEGORY_BADGE: Record<string, { label: string; cls: string }> = {
 const TONE_EMOJI: Record<string, string> = { POSITIVE: '😊', NEGATIVE: '😟', NEUTRAL: '😐', MIXED: '😶' };
 const IMP_STYLE: Record<string, string> = { HIGH: 'text-red-600 font-bold', CRITICAL: 'text-red-700 font-bold', MEDIUM: 'text-amber-600 font-semibold', LOW: 'text-gray-400' };
 
-export function ArticlesTable({ articles }: { articles: Article[] }) {
+export function ArticlesTable({ articles, canScrap = false, emptyText }: { articles: Article[]; canScrap?: boolean; emptyText?: string }) {
   if (articles.length === 0) {
-    return <p className="text-sm text-gray-400 py-8 text-center">최근 7일 내 기사가 없습니다. 매주 월·수·금 오전 9시 자동 업데이트됩니다.</p>;
+    return <p className="text-sm text-gray-400 py-8 text-center">{emptyText ?? '선택 기간 내 기사가 없습니다.'}</p>;
   }
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-gray-50 text-gray-500 text-[10px] uppercase tracking-wider">
+            {canScrap && <th className="text-center px-2 py-2 w-8">★</th>}
             <th className="text-left px-3 py-2 w-20">날짜</th>
             <th className="text-left px-3 py-2 w-24">분류</th>
             <th className="text-left px-3 py-2">제목</th>
@@ -45,6 +49,7 @@ export function ArticlesTable({ articles }: { articles: Article[] }) {
             const date = new Date(a.pubDate);
             return (
               <tr key={a.id} className="border-b border-gray-100 hover:bg-gray-50">
+                {canScrap && <td className="px-2 py-3 text-center"><ScrapStar id={a.id} initial={!!a.isScrapped} /></td>}
                 <td className="px-3 py-3 text-xs text-gray-500">{date.getMonth() + 1}/{date.getDate()}</td>
                 <td className="px-3 py-3"><span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${cat.cls}`}>{cat.label}</span></td>
                 <td className="px-3 py-3"><a href={a.link} target="_blank" rel="noopener noreferrer" className="hover:text-spark-purple">{a.title}</a></td>

@@ -14,6 +14,7 @@ const config: Config = {
       },
       fontFamily: {
         sans: [
+          'Suit',
           '-apple-system',
           'BlinkMacSystemFont',
           '맑은 고딕',

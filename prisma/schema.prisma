@@ -92,12 +92,17 @@ model Article {
   isNoise           Boolean  @default(false)
   noiseReason       String?
   priorityScore     Int      @default(0)
+  // 스크랩 (본부 큐레이션)
+  isScrapped        Boolean  @default(false)
+  scrappedAt        DateTime?
+  scrappedBy        String?
   // 메타
   collectedAt       DateTime @default(now())
   analyzedAt        DateTime?
   @@index([pubDate])
   @@index([category, importance])
   @@index([matchedKeyword])
+  @@index([isScrapped])
 }
 
 model Digest {

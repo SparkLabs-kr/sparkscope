@@ -84,8 +84,10 @@ export async function runDailyDigest(opts: RunOptions = {}) {
     const sortedTop3 = [...analyzed].sort((a, b) => b.priorityScore - a.priorityScore).slice(0, 3);
     const editorIntro = await generateEditorIntro(sortedTop3);
 
-    // 6. 다이제스트 데이터 + HTML
-    const data = buildDigestData(analyzed, editorIntro);
+    // 6. 다이제스트 데이터 + HTML (본부 스크랩 기사 TOP3 우선 반영)
+    const scrapped = await prisma.article.findMany({ where: { isScrapped: true }, select: { link: true } });
+    const scrappedLinks = new Set(scrapped.map(s => s.link));
+    const data = buildDigestData(analyzed, editorIntro, undefined, scrappedLinks);
     const html = renderDigestHtml(data, opts.baseUrl);
     const subject = buildSubject(data.dateLabel, data.top3[0]?.oneLiner);
 

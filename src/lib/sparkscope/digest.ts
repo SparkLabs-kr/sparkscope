@@ -14,6 +14,7 @@ export function buildDigestData(
   articles: AnalyzedArticle[],
   editorIntro: string,
   weeklyFlow?: string,
+  scrappedLinks?: Set<string>,
 ): DigestData {
   const sorted = [...articles].sort((a, b) => b.priorityScore - a.priorityScore);
 
@@ -22,7 +23,15 @@ export function buildDigestData(
   const competitorArticles = sorted.filter(a => a.category === 'competitor').slice(0, COMPETITOR_LIMIT);
   const industryArticles = sorted.filter(a => a.category === 'industry_trend').slice(0, INDUSTRY_LIMIT);
 
-  const top3 = sorted.slice(0, TOP_3_LIMIT);
+  // TOP3는 본부가 스크랩한 기사를 우선 반영, 그다음 우선순위 점수 순
+  const top3 = [...articles]
+    .sort((a, b) => {
+      const sa = scrappedLinks?.has(a.link) ? 1 : 0;
+      const sb = scrappedLinks?.has(b.link) ? 1 : 0;
+      if (sa !== sb) return sb - sa;
+      return b.priorityScore - a.priorityScore;
+    })
+    .slice(0, TOP_3_LIMIT);
 
   const now = new Date();
   const dateLabel = formatDateKR(now);
