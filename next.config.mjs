@@ -7,5 +7,12 @@ const nextConfig = {
   // 미팅 후에 점진적으로 타입 정리.
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
+  // 지시하신 짧은 경로도 동작하도록: /scrap → 스크랩함, /digest/review는 실제 페이지로 존재.
+  async redirects() {
+    return [
+      { source: '/scrap', destination: '/dashboard/scraps', permanent: false },
+      { source: '/scraps', destination: '/dashboard/scraps', permanent: false },
+    ];
+  },
 };
 export default nextConfig;

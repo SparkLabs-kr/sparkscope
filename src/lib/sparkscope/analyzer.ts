@@ -192,6 +192,44 @@ export async function generateEditorIntro(top3: AnalyzedArticle[]): Promise<stri
   }
 }
 
+// ===== 위기 원인 요약 (대시보드 실시간 위기 감지 카드용) =====
+// 포트폴리오사별 부정 기사 제목들을 보고 "원인" 한 줄을 요약. 실패 시 null(호출부 fallback).
+const CRISIS_CAUSE_SYSTEM = `당신은 스파크랩 커뮤니케이션 본부의 PR 애널리스트입니다.
+특정 포트폴리오사에 대한 부정 논조 기사 제목들을 보고, 지금 무슨 일이 벌어지고 있는지 "원인"을 한 문장으로 요약합니다.
+원칙: 두괄식, 사실만(과장·추측 금지), 제목에 없는 내용 지어내지 않기.
+응답은 반드시 valid JSON 객체로, 추가 설명 없이.`;
+
+export async function summarizeCrisisCause(company: string, titles: string[]): Promise<string | null> {
+  if (titles.length === 0) return null;
+  try {
+    const resp = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      system: CRISIS_CAUSE_SYSTEM,
+      messages: [{
+        role: 'user',
+        content: `회사: ${company}
+부정 기사 제목들:
+${titles.map((t, i) => `${i + 1}. ${t}`).join('\n')}
+
+이 기사들의 공통 원인/이슈를 한국어 한 문장(70자 이내)으로 요약해주세요.
+"해당 원인은 ○○○, ○○○ 등으로 ~입니다." 형태의 자연스러운 서술을 권장합니다.
+출력 스키마: {"cause": "..."}
+JSON 객체만 반환:`,
+      }],
+    });
+    const text = resp.content.find(c => c.type === 'text')?.type === 'text'
+      ? (resp.content[0] as any).text
+      : '';
+    const parsed = JSON.parse(extractJson(text));
+    const cause = typeof parsed?.cause === 'string' ? parsed.cause.trim() : '';
+    return cause.length > 0 ? cause : null;
+  } catch (e) {
+    console.error('[analyzer] crisis cause summary failed, using fallback:', e);
+    return null;
+  }
+}
+
 // ===== 휴리스틱 fallback =====
 function heuristicClassify(article: RawArticle): ClassificationResult {
   return {

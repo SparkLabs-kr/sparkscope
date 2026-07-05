@@ -1,23 +1,28 @@
 // 메인 대시보드 — 기간 선택(달력) 기반. KPI/차트/위기감지/급증/스크랩 지표.
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
-import { ArticlesTable } from '@/components/ArticlesTable';
+import { RecentArticlesSearch } from '@/components/RecentArticlesSearch';
 import { TrendChart } from '@/components/TrendChart';
 import { MediaPanel } from '@/components/MediaPanel';
 import { DateRangePicker } from '@/components/DateRangePicker';
 import { RoadmapPreview } from '@/components/RoadmapPreview';
+import { NightReviewNotes } from '@/components/NightReviewNotes';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { OPEN_ACCESS } from '@/lib/flags';
 import { canScrap as canScrapEmail } from '@/lib/scrap';
 import { normalizeSource, isKnownMedia } from '@/lib/sparkscope/media';
-import { NEGATIVE_KEYWORDS, detectCrises, detectSpikes, type ArticleLite, type CrisisCard, type SpikeCard } from '@/lib/sparkscope/insights';
+import { matchesAsToken } from '@/lib/sparkscope/relevance';
+import { NEGATIVE_KEYWORDS, detectCrises, crisisFallbackCause, detectSpikes, type ArticleLite, type CrisisCard, type SpikeCard } from '@/lib/sparkscope/insights';
+import { summarizeCrisisCause } from '@/lib/sparkscope/analyzer';
 
 export const dynamic = 'force-dynamic';
 
 const MIN_DATE = '2023-11-01';
 // 추이 차트 상위 N개사 — 색상으로 구분 가능한 최대치(가독성) 기준 6개.
 const TREND_TOP_N = 6;
+// 실시간 위기 감지: "급증" 판단 시간 창(일). 수집 주기(월·수·금)를 고려한 최근 3일.
+const CRISIS_WINDOW_DAYS = 3;
 
 function fmt(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -65,8 +70,8 @@ async function loadDashboardData(from: string, to: string) {
   const [
     total, sparklabsCount, portfolioCount, pitchCount, mentionCount,
     prevPortfolioCount, prevMentionCount,
-    articles, sourceGroups, toneGroups, pitches, portfolioNeg, trendArticles,
-    spikeRecent, spikeBaseline,
+    articles, sourceGroups, toneGroups, pitches, trendArticles,
+    spikeRecent, spikeBaseline, crisisNeg, portfolioTargets, competitorTop,
   ] = await Promise.all([
     prisma.article.count({ where }),
     prisma.article.count({ where: { ...where, category: 'sparklabs_self' } }),
@@ -75,29 +80,64 @@ async function loadDashboardData(from: string, to: string) {
     prisma.article.count({ where: { ...portfolioWhere, title: { contains: '스파크랩' } } }),
     prisma.article.count({ where: prevPortfolioWhere }),
     prisma.article.count({ where: { ...prevPortfolioWhere, title: { contains: '스파크랩' } } }),
-    prisma.article.findMany({ where, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], take: 30 }),
+    prisma.article.findMany({ where, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], take: 90 }),
     prisma.article.groupBy({ by: ['source'], where, _count: { _all: true }, orderBy: { _count: { source: 'desc' } }, take: 120 }),
     prisma.article.groupBy({ by: ['tone'], where: portfolioWhere, _count: { _all: true } }),
     prisma.article.findMany({ where: { ...where, pitchScore: { gte: 60 } }, orderBy: { pitchScore: 'desc' }, take: 20 }),
-    prisma.article.findMany({ where: { ...portfolioWhere, OR: negOr }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true }, take: 1500 }),
     prisma.article.findMany({ where: portfolioWhere, select: { matchedKeyword: true, pubDate: true }, take: 20000 }),
     prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'portfolio_company' }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true } }),
     prisma.article.findMany({ where: { pubDate: { gte: bl, lt: rc }, isNoise: false, category: 'portfolio_company' }, select: { matchedKeyword: true } }),
+    // 실시간 위기 감지용: 기간 선택과 무관하게 "최근 3일" 포트폴리오 부정 기사
+    prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'portfolio_company', OR: negOr }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true }, take: 800 }),
+    // 표시 단계 관련성 가드용: 포트폴리오 감시대상 키워드맵 (primaryKeyword → [이름·영문·보조])
+    prisma.monitoringTarget.findMany({ where: { category: 'portfolio_company', status: 'ACTIVE' }, select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true } }),
+    // 포트폴리오 vs 타 하우스 비교용: competitor(타 AC·VC 하우스) 노출 상위 3개 (실제 이름)
+    prisma.article.groupBy({ by: ['matchedKeyword'], where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor' }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 3 }),
   ]);
+
+  // 기존 DB에 쌓인 부분일치 노이즈(예: '노리'→'노리지만', '리코'→'인실리코')를
+  // 표시 단계에서 토큰 매칭으로 제거. (DB는 수정하지 않음 — 아침 승인 후 cleanup 스크립트로 영구정리 예정)
+  const portfolioKeyMap = new Map<string, string[]>();
+  for (const t of portfolioTargets) {
+    const keys = [t.primaryKeyword, t.name, t.englishName, ...(t.helperKeywords ?? '').split(',')]
+      .map(k => (k ?? '').trim())
+      .filter(k => k.length >= 2);
+    portfolioKeyMap.set(t.primaryKeyword, Array.from(new Set(keys)));
+  }
+  const cleanedArticles = articles
+    .filter(a => {
+      if (a.category !== 'portfolio_company') return true; // 회사명 매칭은 포트폴리오에만
+      const keys = portfolioKeyMap.get(a.matchedKeyword) ?? [a.matchedKeyword];
+      return keys.some(k => matchesAsToken(a.title, k));
+    })
+    .slice(0, 30);
 
   const mentionRate = portfolioCount > 0 ? Math.round((mentionCount / portfolioCount) * 100) : 0;
   const prevMentionRate = prevPortfolioCount > 0 ? Math.round((prevMentionCount / prevPortfolioCount) * 100) : 0;
 
+  // 위기 카드: 최근 3일 부정 기사로 감지 후, 회사별 AI 원인요약 주입(실패 시 fallback).
+  const crisesRaw = detectCrises(crisisNeg as ArticleLite[]);
+  const crises = await Promise.all(
+    crisesRaw.map(async c => ({
+      ...c,
+      cause: (await summarizeCrisisCause(c.company, c.titles)) ?? crisisFallbackCause(c.reasonKeywords),
+    })),
+  );
+
   return {
     range: { from, to },
     kpi: { total, sparklabsCount, portfolioCount, pitchCount, mentionRate, mentionDelta: mentionRate - prevMentionRate },
-    articles,
+    articles: cleanedArticles,
     sources: normalizeSources(sourceGroups.map(s => ({ source: s.source, count: s._count._all }))),
     tones: toneGroups.map(t => ({ tone: t.tone ?? 'NEUTRAL', count: t._count._all })),
     pitches,
-    crises: detectCrises(portfolioNeg as ArticleLite[]),
+    crises,
     spikes: detectSpikes(spikeRecent as ArticleLite[], spikeBaseline, 3, 60),
     trendData: buildTrendData(trendArticles, since, until),
+    compare: {
+      sparkCount: portfolioCount,
+      houses: competitorTop.map(g => ({ name: g.matchedKeyword, count: g._count._all })),
+    },
   };
 }
 
@@ -170,16 +210,21 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         </div>
       </div>
 
-      {/* 위기 감지 */}
-      {data.crises.length > 0 && (
-        <div className="mb-6 space-y-3">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-bold text-red-700">🚨 실시간 위기 감지</span>
-            <InfoTip text="선택 기간 내 포트폴리오사별로 부정 논조 기사(부정 키워드·부정 톤)를 모아, 급증한 회사를 요약합니다." />
-          </div>
-          {data.crises.map(c => <CrisisCardView key={c.company} c={c} />)}
+      {/* 실시간 위기 감지 — 위기 없을 땐 '정상' 상태를 명시해 기능이 살아있음을 표시 */}
+      <div className="mb-6 space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold text-red-700">🚨 실시간 위기 감지</span>
+          <InfoTip text={`최근 ${CRISIS_WINDOW_DAYS}일간 포트폴리오사별 부정 논조 기사(부정 키워드·부정 톤)를 모아, 2건 이상 급증한 회사를 감지합니다.\n원인은 AI가 실제 기사 제목에서 요약합니다.`} />
         </div>
-      )}
+        {data.crises.length > 0 ? (
+          data.crises.map(c => <CrisisCardView key={c.company} c={c} />)
+        ) : (
+          <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+            🟢 최근 {CRISIS_WINDOW_DAYS}일 내 감지된 포트폴리오 위기가 없습니다.
+            <span className="text-green-600"> 부정 기사가 급증하면 이 자리에 회사별 위기 카드가 자동으로 표시됩니다.</span>
+          </div>
+        )}
+      </div>
 
       {/* 이슈 급증 배너 */}
       {data.spikes.length > 0 && (
@@ -247,31 +292,87 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         </div>
       </div>
 
-      {/* 기사 테이블 */}
+      {/* 포트폴리오 vs 타 하우스 노출 비교 (실데이터) */}
+      <div className="mb-6">
+        <CompareCard sparkCount={data.compare.sparkCount} houses={data.compare.houses} rangeLabel={range.label} />
+      </div>
+
+      {/* 기사 테이블 (실시간 검색 필터 포함) */}
       <div className="bg-white p-5 rounded-xl border border-gray-200">
         <div className="flex justify-between items-center mb-4">
           <div>
             <div className="font-bold">📋 최근 수집 기사</div>
-            <div className="text-xs text-gray-500 mt-0.5">{range.label} · 상위 30건</div>
+            <div className="text-xs text-gray-500 mt-0.5">{range.label} · 상위 30건 · 아래 검색창으로 제목·매체·회사·분류 필터</div>
           </div>
         </div>
-        <ArticlesTable articles={data.articles as any} canScrap={canScrap} emptyText={`${range.label} 내 기사가 없습니다.`} />
+        <RecentArticlesSearch articles={data.articles as any} canScrap={canScrap} emptyText={`${range.label} 내 기사가 없습니다.`} />
       </div>
 
       {OPEN_ACCESS && <RoadmapPreview />}
+      {OPEN_ACCESS && <NightReviewNotes />}
     </>
   );
 }
 
-function CrisisCardView({ c }: { c: CrisisCard }) {
+function CrisisCardView({ c }: { c: CrisisCard & { cause: string } }) {
   const d = new Date(c.article.pubDate);
   return (
     <div className="rounded-xl border-l-4 border-red-500 bg-gradient-to-r from-red-50 to-white p-4">
-      <div className="text-sm font-bold text-red-900">{c.summary}</div>
-      <a href={c.article.link} target="_blank" rel="noopener noreferrer" className="mt-2 block text-sm text-gray-700 hover:text-spark-purple">
-        {c.article.title}
-      </a>
-      <div className="text-xs text-gray-500 mt-1">{c.article.source} · {d.getMonth() + 1}/{d.getDate()} · 부정 기사 {c.negCount}건</div>
+      {/* 1줄: 급증 알림 (실제 회사명) */}
+      <div className="text-sm font-bold text-red-900">
+        {c.company} 관련 부정 기사가 최근 {CRISIS_WINDOW_DAYS}일 내 {c.negCount}건 급증했습니다.
+      </div>
+      {/* 2줄: AI 원인 요약 (두괄식) */}
+      <div className="text-sm text-gray-700 mt-1.5 leading-relaxed">{c.cause}</div>
+      {/* 대표 부정기사 1건 */}
+      <div className="mt-3 rounded-lg bg-white/70 border border-red-100 p-2.5">
+        <div className="text-[10px] font-semibold text-red-400 mb-1">대표 부정기사</div>
+        <a href={c.article.link} target="_blank" rel="noopener noreferrer" className="block text-sm text-gray-800 hover:text-spark-purple font-medium">
+          {c.article.title}
+        </a>
+        <div className="text-xs text-gray-500 mt-1">{c.article.source} · {d.getFullYear()}.{d.getMonth() + 1}.{d.getDate()}</div>
+      </div>
+    </div>
+  );
+}
+
+function CompareCard({ sparkCount, houses, rangeLabel }: { sparkCount: number; houses: { name: string; count: number }[]; rangeLabel: string }) {
+  const hasData = houses.length > 0 && (sparkCount > 0 || houses.some(h => h.count > 0));
+  const max = Math.max(sparkCount, ...houses.map(h => h.count), 1);
+  return (
+    <div className="bg-white p-5 rounded-xl border border-gray-200">
+      <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
+        <div className="font-bold">⚔️ 포트폴리오 VS 타 하우스 AC·VC 포트폴리오 노출 비교 <InfoTip text={`${rangeLabel} 동안 스파크랩 포트폴리오사 노출 건수와, 타 AC·VC 하우스(감시대상 competitor) 노출 상위 3곳을 비교합니다.\n· 수치 = 언론 노출 기사 수`} /></div>
+        <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-[10px] font-semibold whitespace-nowrap">예시 데이터 · 실제 하우스명 확장 예정</span>
+      </div>
+      {hasData ? (
+        <>
+          <div className="space-y-3">
+            <CompareRow label="스파크랩 포트폴리오" count={sparkCount} max={max} color="bg-spark-purple" strong />
+            {houses.map((h, i) => (
+              <CompareRow key={h.name} label={h.name} count={h.count} max={max} color={i === 0 ? 'bg-slate-500' : i === 1 ? 'bg-slate-400' : 'bg-slate-300'} />
+            ))}
+          </div>
+          <p className="text-xs text-gray-400 mt-4">{rangeLabel} 언론 노출 건수(기사 수) 기준 · 타 하우스는 노출 상위 3곳 실제 이름</p>
+        </>
+      ) : (
+        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+          데이터 준비 중 — 선택 기간에 비교할 타 하우스(AC·VC) 노출 데이터가 아직 없습니다.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CompareRow({ label, count, max, color, strong }: { label: string; count: number; max: number; color: string; strong?: boolean }) {
+  const pct = Math.round((count / max) * 100);
+  return (
+    <div className="flex items-center gap-3 text-sm">
+      <div className={`w-40 truncate ${strong ? 'font-bold text-spark-purple' : 'text-gray-600'}`}>{label}</div>
+      <div className="flex-1 h-5 bg-gray-100 rounded overflow-hidden">
+        <div className={`h-full rounded ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+      <div className="w-12 text-right font-semibold">{count}</div>
     </div>
   );
 }

@@ -39,6 +39,10 @@ ${articles.map(a => JSON.stringify(a)).join('\n')}
 - industry_trend: 스타트업계 뉴스 — 스타트업 생태계·정부기관·정책 등 업계 전반
 
 판단 기준:
+- ⭐ 가장 중요: 매칭된 키워드(회사명)가 기사의 "주어(주체)"여야 합니다. 단순 언급·스쳐 지나가는 인용, 또는 다른 단어의 일부(부분일치)면 해당 회사 기사가 아닙니다 → category="unrelated" 또는 isNoise=true, noiseReason="irrelevant".
+  · 예: 매칭 "노리"인데 기사가 "IPO를 노리다(동사)"에 대한 것 → unrelated
+  · 예: 매칭 "리코"인데 기사가 "인실리코(Insilico)"에 대한 것 → unrelated (부분일치)
+  · 예: 매칭 "노리"인데 실제 주어가 "KB증권/OpenAI" 등 우리와 무관한 회사 → unrelated
 - 매칭된 키워드가 "비트바이트"인데 기사가 암호화폐 거래소 "바이비트"에 대한 것이면 isNoise=true, noiseReason="homonym"
 - 자동생성된 시세·주가 분석은 isNoise=true, noiseReason="auto_generated"
 - 정부 정책 발표 같은 영향력 큰 기사는 importance="HIGH" 또는 "CRITICAL"

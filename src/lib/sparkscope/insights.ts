@@ -28,26 +28,25 @@ export function negativeInfo(a: { title: string; tone: string | null }): { neg: 
 export interface CrisisCard {
   company: string;
   negCount: number;
-  reasonKeyword?: string;
-  summary: string;
-  article: { title: string; source: string; pubDate: Date; link: string };
+  reasonKeywords: string[];   // 매칭된 부정 키워드 목록 (AI 실패 시 fallback 원인)
+  titles: string[];           // AI 원인요약 입력용 (대표 부정기사 제목들)
+  cause?: string;             // AI가 요약한 원인 한 줄 (대시보드에서 주입)
+  article: { title: string; source: string; pubDate: Date; link: string }; // 대표 부정기사 1건
 }
 
 /**
- * 위기 감지: 포트폴리오사별 부정 기사를 모아 두괄식 요약 + 대표 기사 1건.
- * threshold 이상 부정 기사가 있는 회사만 카드로.
+ * 위기 감지: 포트폴리오사별 부정 기사를 모아 대표 기사 1건 + 원인요약 재료 반환.
+ * threshold 이상 부정 기사가 있는 회사만 카드로. (감지 시간 창은 호출부에서 결정 — 최근 3일)
+ * AI 원인요약(cause)은 순수 함수로 계산 불가하므로 호출부(대시보드)에서 비동기 주입.
  */
 export function detectCrises(portfolioArticles: ArticleLite[], threshold = 2): CrisisCard[] {
   const byCompany = new Map<string, ArticleLite[]>();
-  const kwByCompany = new Map<string, string>();
 
   for (const a of portfolioArticles) {
-    const { neg, keyword } = negativeInfo(a);
-    if (!neg) continue;
+    if (!negativeInfo(a).neg) continue;
     const list = byCompany.get(a.matchedKeyword) ?? [];
     list.push(a);
     byCompany.set(a.matchedKeyword, list);
-    if (keyword && !kwByCompany.has(a.matchedKeyword)) kwByCompany.set(a.matchedKeyword, keyword);
   }
 
   const cards: CrisisCard[] = [];
@@ -55,19 +54,25 @@ export function detectCrises(portfolioArticles: ArticleLite[], threshold = 2): C
     if (list.length < threshold) continue;
     const sorted = [...list].sort((a, b) => b.pubDate.getTime() - a.pubDate.getTime());
     const rep = sorted[0];
-    const kw = kwByCompany.get(company);
-    const summary = kw
-      ? `${company}는 최근 '${kw}' 관련 부정 논조 기사가 늘고 있습니다.`
-      : `${company} 관련 부정 논조 기사가 ${list.length}건 감지됐습니다.`;
+    const reasonKeywords = Array.from(
+      new Set(list.map(a => negativeInfo(a).keyword).filter((k): k is string => !!k)),
+    );
     cards.push({
       company,
       negCount: list.length,
-      reasonKeyword: kw,
-      summary,
+      reasonKeywords,
+      titles: sorted.slice(0, 5).map(a => a.title),
       article: { title: rep.title, source: rep.source, pubDate: rep.pubDate, link: rep.link },
     });
   }
   return cards.sort((a, b) => b.negCount - a.negCount).slice(0, 5);
+}
+
+/** AI 원인요약 실패 시 fallback — 매칭된 부정 키워드로 간단 서술. */
+export function crisisFallbackCause(reasonKeywords: string[]): string {
+  if (reasonKeywords.length === 0) return '해당 원인은 부정 논조 보도가 짧은 기간에 집중된 데 따른 것으로 보입니다.';
+  const kws = reasonKeywords.slice(0, 3).map(k => `'${k}'`).join(', ');
+  return `해당 원인은 ${kws} 등 부정 이슈 관련 보도가 늘어난 데 따른 것으로 보입니다.`;
 }
 
 export interface SpikeCard {
