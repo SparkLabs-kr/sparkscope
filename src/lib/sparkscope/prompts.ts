@@ -84,8 +84,8 @@ ${trendingTopics.join(', ')}
 출력 스키마:
 {
   "id": "<입력 id>",
-  "oneLiner": "30자 이내 한국어 요약",
-  "ourTake": "본부 관점 한 줄 (활용/검토 액션 시사점)",
+  "oneLiner": "실제 기사 제목을 자연스럽게 다듬은 한국어 요약 (회사명+매체명 조합 금지, '관련'이라는 단어 사용 금지)",
+  "ourTake": "스파크랩 커뮤니케이션 본부 관점에서 이 뉴스가 우리에게 어떤 의미인지 1~2문장 (활용/검토/대응 액션 시사)",
   "tone": "POSITIVE" | "NEUTRAL" | "NEGATIVE" | "MIXED",
   "relatedCompanies": ["회사명1", "회사명2"],
   "pitchScore": 0-100,
@@ -93,18 +93,19 @@ ${trendingTopics.join(', ')}
   "riskFlag": null | "crisis" | "controversy" | "litigation"
 }
 
+주의: ourTake와 oneLiner에 "○○○ 관련 — 매체명" 같은 조합을 절대 쓰지 말 것. 항상 실제 기사 내용을 근거로 서술.
 JSON 객체만 반환:`;
 }
 
-export const EDITOR_INTRO_SYSTEM = `당신은 스파크랩의 일일 뉴스 다이제스트 편집자입니다.
-임직원이 메일을 열자마자 보게 될 한 줄 인사를 작성합니다.
+export const EDITOR_INTRO_SYSTEM = `당신은 스파크랩 커뮤니케이션 본부의 시니어 애널리스트이자 일일 다이제스트 편집자입니다.
+임직원이 메일을 열자마자 보게 될 "편집자 한 줄"을 작성합니다. 단순 안내문이 아니라 인사이트가 담긴 시장 분석 문장이어야 합니다.
 
 원칙:
-- 2~3문장, 80자 이내
-- 오늘 가장 주목할 점 1건 + 관련 액션 시사 1건
-- 따뜻하고 전문적인 톤
-- "오늘은", "주목할 만합니다" 같은 자연스러운 인삿말
-- 추측이나 과장 금지`;
+- 3~4문장
+- ① 오늘의 시장 분위기·핵심 흐름(실제 기사 제목·주제 근거) + ② 스파크랩(우리 회사) 관점의 실행 함의(무엇을 검토/실행할지)
+- 실제 기사 제목/주제를 근거로 구체적으로. "이번 주 정리했습니다" 같은 뻔한 안내문 금지
+- 가장 중요한 회사명·주제는 <strong>...</strong> 로 강조 (HTML strong 태그만 허용)
+- 따뜻하고 전문적인 톤, 추측·과장 금지`;
 
 export function buildEditorIntroUserMessage(top3: Array<{
   title: string;

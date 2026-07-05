@@ -144,7 +144,7 @@ async function analyzeDeep(article: RawArticle & { _id: string }, portfolioUnive
       : '';
     const parsed = JSON.parse(extractJson(text));
     return {
-      oneLiner: parsed.oneLiner ?? `${article.matchedKeyword} 관련`,
+      oneLiner: parsed.oneLiner ?? article.title,
       ourTake: parsed.ourTake,
       tone: parsed.tone ?? 'NEUTRAL',
       relatedCompanies: parsed.relatedCompanies ?? [article.matchedKeyword],
@@ -188,7 +188,9 @@ export async function generateEditorIntro(top3: AnalyzedArticle[]): Promise<stri
   } catch (e) {
     console.error('[analyzer] editor intro failed:', e);
     const top1 = top3[0];
-    return `오늘은 ${top1.matchedKeyword} 관련 보도가 가장 주목할 만합니다 (${top1.source}).`;
+    const pos = top3.filter(a => a.tone === 'POSITIVE').length;
+    const mood = pos >= 2 ? '긍정적 보도가 우세한 흐름입니다' : '주목할 이슈가 이어지는 흐름입니다';
+    return `오늘은 <strong>${top1.title}</strong> 보도가 가장 눈에 띕니다. 전반적으로 ${mood}. 관련 포트폴리오사와의 연결 지점을 본부에서 함께 살펴볼 시점입니다.`;
   }
 }
 

@@ -89,7 +89,7 @@ export async function runDailyDigest(opts: RunOptions = {}) {
     const scrappedLinks = new Set(scrapped.map(s => s.link));
     const data = buildDigestData(analyzed, editorIntro, undefined, scrappedLinks);
     const html = renderDigestHtml(data, opts.baseUrl);
-    const subject = buildSubject(data.dateLabel, data.top3[0]?.oneLiner);
+    const subject = buildSubject(data.dateLabel, data.top3[0]?.title);
 
     // 7. DB에 다이제스트 저장
     const today = new Date(new Date().setHours(0, 0, 0, 0));

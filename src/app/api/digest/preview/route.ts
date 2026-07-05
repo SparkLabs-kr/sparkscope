@@ -12,6 +12,6 @@ export async function POST(req: Request) {
   const data = buildReviewDigest(candidates, body);
   const baseUrl = process.env.NEXTAUTH_URL ?? new URL(req.url).origin;
   const html = renderDigestHtml(data, baseUrl);
-  const subject = buildSubject(data.dateLabel, data.top3[0]?.oneLiner);
+  const subject = buildSubject(data.dateLabel, data.top3[0]?.title);
   return NextResponse.json({ html, subject });
 }

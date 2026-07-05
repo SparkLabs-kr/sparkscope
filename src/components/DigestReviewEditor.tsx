@@ -110,7 +110,7 @@ export function DigestReviewEditor({
   }
 
   async function onSend() {
-    const chosen = top3Ids.map(id => byId.get(id)?.oneLiner || byId.get(id)?.title).filter(Boolean);
+    const chosen = top3Ids.map(id => byId.get(id)?.title).filter(Boolean);
     const msg = `실제로 다이제스트를 발송합니다.\n\n수신: ${recipient || '(환경변수 수신자)'}\nTOP 3:\n${chosen.map((t, i) => `  ${i + 1}. ${t}`).join('\n') || '  (자동 선정)'}\n\n발송하시겠습니까?`;
     if (!window.confirm(msg)) return;
     setSending(true);
@@ -159,7 +159,7 @@ export function DigestReviewEditor({
                 <div key={id} className="flex items-start gap-2 rounded-lg border border-spark-light-purple bg-spark-light-purple/20 p-2.5">
                   <div className="text-sm font-bold text-spark-purple w-6 text-center">#{idx + 1}</div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-gray-800 truncate">{a.isScrapped ? '⭐ ' : ''}{a.oneLiner || a.title}</div>
+                    <div className="text-sm font-semibold text-gray-800 truncate">{a.isScrapped ? '⭐ ' : ''}{a.title}</div>
                     <div className="text-xs text-gray-500">{CAT_LABEL[a.category] ?? a.category} · {a.source}</div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
@@ -196,7 +196,7 @@ export function DigestReviewEditor({
                     return (
                       <div key={a.id} className={`flex items-center gap-2 rounded-lg border p-2 text-sm ${isExcluded ? 'border-gray-100 bg-gray-50 opacity-50' : 'border-gray-100'}`}>
                         <div className="flex-1 min-w-0">
-                          <div className={`truncate ${isExcluded ? 'line-through text-gray-400' : 'text-gray-800'}`}>{a.isScrapped ? '⭐ ' : ''}{a.oneLiner || a.title}</div>
+                          <div className={`truncate ${isExcluded ? 'line-through text-gray-400' : 'text-gray-800'}`}>{a.isScrapped ? '⭐ ' : ''}{a.title}</div>
                           <div className="text-[11px] text-gray-400">{a.source} · {a.matchedKeyword}{a.pitchScore >= 60 ? ` · 피칭 ${a.pitchScore}` : ''}</div>
                         </div>
                         {!inTop3 && !isExcluded && (
