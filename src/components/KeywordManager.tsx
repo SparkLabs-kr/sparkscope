@@ -74,7 +74,7 @@ export function KeywordManager() {
   }
 
   async function remove(t: Target) {
-    if (!confirm(`'${t.name}'을(를) 감시대상에서 삭제할까요?\n(소프트 삭제 — 복구 가능, 수집에서 자동 제외됩니다)`)) return;
+    if (!confirm(`'${t.name}'을(를) 모니터링 대상에서 삭제할까요?\n(소프트 삭제 — 복구 가능, 수집에서 자동 제외됩니다)`)) return;
     const res = await fetch(`/api/keywords?id=${t.id}`, { method: 'DELETE' });
     if (res.ok) load();
   }
@@ -86,7 +86,7 @@ export function KeywordManager() {
     <div>
       {/* 추가 폼 */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 mb-4">
-        <div className="font-bold mb-3">+ 감시대상 추가</div>
+        <div className="font-bold mb-3">+ 모니터링 대상 추가</div>
         <div className="flex flex-wrap gap-2 items-center">
           <input className={inputCls} placeholder="기업/키워드명*" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
           <input className={inputCls} placeholder="영문명" value={form.englishName} onChange={e => setForm({ ...form, englishName: e.target.value })} />

@@ -21,8 +21,10 @@ export async function runDailyDigest(opts: RunOptions = {}) {
   });
 
   try {
-    // 1. 수집
-    const raw = await collectAllArticles({ maxKeywordsPerCategory: 30 });
+    // 1. 수집 (환경변수로 상한·기간 조절 가능 — 미설정 시 기존 기본값)
+    const maxPerCat = process.env.COLLECT_MAX_PER_CATEGORY ? Number(process.env.COLLECT_MAX_PER_CATEGORY) : 30;
+    const daysBack = process.env.COLLECT_DAYS_BACK ? Number(process.env.COLLECT_DAYS_BACK) : undefined;
+    const raw = await collectAllArticles({ maxKeywordsPerCategory: maxPerCat, daysBack });
 
     // 2. 분석에 필요한 컨텍스트
     const portfolioTargets = await prisma.monitoringTarget.findMany({
