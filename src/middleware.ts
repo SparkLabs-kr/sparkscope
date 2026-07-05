@@ -11,5 +11,5 @@ export default function middleware(req: NextRequest, ev: any) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*'],
+  matcher: ['/dashboard/:path*', '/digest/:path*'],
 };

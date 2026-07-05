@@ -59,4 +59,11 @@ export interface DigestData {
   insightTitle?: string;
   insightText?: string;
   insightActionUrl?: string;
+  // 검수 콘솔에서 편집자가 카테고리별로 붙이는 한 줄 요약 (있으면 섹션 상단에 렌더)
+  categorySummaries?: {
+    sparklabs_self?: string;
+    portfolio_company?: string;
+    competitor?: string;
+    industry_trend?: string;
+  };
 }

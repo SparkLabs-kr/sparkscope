@@ -117,21 +117,25 @@ ${EMAIL_CSS}
 
   <div class="section">
     <div class="section-label">🏢 스파크랩 뉴스</div>
+    ${catSummary(data.categorySummaries?.sparklabs_self)}
     ${data.sparklabsArticles.length > 0 ? data.sparklabsArticles.map(renderArticle).join('\n') : '<div style="color:#6B7280; font-size:13px;">최근 영업일 내 직접 언급 없음</div>'}
   </div>
 
   <div class="section">
     <div class="section-label">💼 포트폴리오사</div>
+    ${catSummary(data.categorySummaries?.portfolio_company)}
     ${data.portfolioArticles.length > 0 ? data.portfolioArticles.map(renderArticle).join('\n') : '<div style="color:#6B7280; font-size:13px;">최근 영업일 내 포트폴리오 보도 없음</div>'}
   </div>
 
   <div class="section">
     <div class="section-label">🤝 AC·VC 업계 동향</div>
+    ${catSummary(data.categorySummaries?.competitor)}
     ${data.competitorArticles.length > 0 ? data.competitorArticles.map(renderArticle).join('\n') : '<div style="color:#6B7280; font-size:13px;">최근 AC·VC 업계 동향 없음</div>'}
   </div>
 
   <div class="section">
     <div class="section-label">🌐 스타트업계 뉴스</div>
+    ${catSummary(data.categorySummaries?.industry_trend)}
     ${data.industryArticles.length > 0 ? data.industryArticles.map(renderArticle).join('\n') : '<div style="color:#6B7280; font-size:13px;">최근 스타트업계 뉴스 없음</div>'}
   </div>
 
@@ -150,6 +154,13 @@ ${EMAIL_CSS}
 </div>
 </body>
 </html>`;
+}
+
+// 카테고리 섹션 상단 편집자 요약 한 줄 (검수 콘솔에서 입력)
+function catSummary(text?: string): string {
+  const t = (text ?? '').trim();
+  if (!t) return '';
+  return `<div class="cat-summary">${escape(t)}</div>`;
 }
 
 function renderTopCard(a: AnalyzedArticle, rank: number): string {
@@ -219,6 +230,7 @@ body{margin:0;padding:0;background:#F5F3EF;font-family:-apple-system,BlinkMacSys
 .weekly-text{font-size:14px;color:#78350F;line-height:1.6}
 .section{padding:26px 28px;border-bottom:1px solid #EEEDFC}
 .section-label{font-size:11px;font-weight:700;letter-spacing:1.2px;color:#5046E5;text-transform:uppercase;margin-bottom:16px}
+.cat-summary{font-size:13px;color:#374151;line-height:1.6;margin:-8px 0 14px;padding:10px 12px;background:#F5F3EF;border-radius:8px}
 .top-card{color:#FFF;padding:22px 24px;border-radius:12px;margin-bottom:12px}
 .top-card .top-rank{font-size:11px;font-weight:700;letter-spacing:1.2px;opacity:.85}
 .top-card .top-headline{font-size:17px;font-weight:600;margin:8px 0;line-height:1.4}
