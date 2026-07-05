@@ -6,7 +6,8 @@
  */
 import { prisma } from '@/lib/prisma';
 import { buildDigestData } from './digest';
-import { matchesAsToken } from './relevance';
+import { matchesAsToken, isBlockedNoise, NAME_MATCH_CATEGORIES } from './relevance';
+import { isKnownMedia } from './media';
 import type { AnalyzedArticle, Category, Importance, Tone, DigestData } from './types';
 
 const CATEGORY_PRIORITY: Record<string, number> = {
@@ -72,24 +73,29 @@ export async function loadDigestCandidates(): Promise<ReviewArticle[]> {
     prisma.article.findMany({
       where: { pubDate: { gte: since }, isNoise: false },
       orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }],
-      take: 300,
+      take: 400,
     }),
     prisma.monitoringTarget.findMany({
-      where: { category: 'portfolio_company', status: 'ACTIVE' },
-      select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true },
+      where: { category: { in: ['portfolio_company', 'sparklabs_self'] }, status: 'ACTIVE' },
+      select: { primaryKeyword: true, name: true, englishName: true },
     }),
   ]);
 
+  // 강한 식별자(회사명·영문명·주키워드)만 — helperKeywords(대표자명 등)는 단독 통과 불가
   const keyMap = new Map<string, string[]>();
   for (const t of targets) {
-    const keys = [t.primaryKeyword, t.name, t.englishName, ...(t.helperKeywords ?? '').split(',')]
+    const keys = [t.primaryKeyword, t.name, t.englishName]
       .map(k => (k ?? '').trim()).filter(k => k.length >= 2);
     keyMap.set(t.primaryKeyword, Array.from(new Set(keys)));
   }
 
   return rows
+    // 확정 매체 26개만 + 스포츠·게임·연예·광고 강제 제외
+    .filter(a => isKnownMedia(a.source))
+    .filter(a => !isBlockedNoise({ title: a.title, link: a.link, source: a.source }))
+    // 회사/조직명(강한 식별자)이 제목에 등장해야 통과 (포트폴리오+스파크랩)
     .filter(a => {
-      if (a.category !== 'portfolio_company') return true; // 회사명 매칭은 포트폴리오에만
+      if (!NAME_MATCH_CATEGORIES.has(a.category)) return true;
       const keys = keyMap.get(a.matchedKeyword) ?? [a.matchedKeyword];
       return keys.some(k => matchesAsToken(a.title, k));
     })

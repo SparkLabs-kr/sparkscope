@@ -12,7 +12,7 @@ import { authOptions } from '@/lib/auth';
 import { OPEN_ACCESS } from '@/lib/flags';
 import { canScrap as canScrapEmail } from '@/lib/scrap';
 import { normalizeSource, isKnownMedia } from '@/lib/sparkscope/media';
-import { matchesAsToken } from '@/lib/sparkscope/relevance';
+import { matchesAsToken, isBlockedNoise } from '@/lib/sparkscope/relevance';
 import { NEGATIVE_KEYWORDS, detectCrises, crisisFallbackCause, detectSpikes, type ArticleLite, type CrisisCard, type SpikeCard } from '@/lib/sparkscope/insights';
 import { summarizeCrisisCause } from '@/lib/sparkscope/analyzer';
 
@@ -80,7 +80,7 @@ async function loadDashboardData(from: string, to: string) {
     prisma.article.count({ where: { ...portfolioWhere, title: { contains: '스파크랩' } } }),
     prisma.article.count({ where: prevPortfolioWhere }),
     prisma.article.count({ where: { ...prevPortfolioWhere, title: { contains: '스파크랩' } } }),
-    prisma.article.findMany({ where, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], take: 90 }),
+    prisma.article.findMany({ where, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], take: 220 }),
     prisma.article.groupBy({ by: ['source'], where, _count: { _all: true }, orderBy: { _count: { source: 'desc' } }, take: 120 }),
     prisma.article.groupBy({ by: ['tone'], where: portfolioWhere, _count: { _all: true } }),
     prisma.article.findMany({ where: { ...where, pitchScore: { gte: 60 } }, orderBy: { pitchScore: 'desc' }, take: 20 }),
@@ -89,26 +89,31 @@ async function loadDashboardData(from: string, to: string) {
     prisma.article.findMany({ where: { pubDate: { gte: bl, lt: rc }, isNoise: false, category: 'portfolio_company' }, select: { matchedKeyword: true } }),
     // 실시간 위기 감지용: 기간 선택과 무관하게 "최근 3일" 포트폴리오 부정 기사
     prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'portfolio_company', OR: negOr }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true }, take: 800 }),
-    // 표시 단계 관련성 가드용: 포트폴리오 감시대상 키워드맵 (primaryKeyword → [이름·영문·보조])
-    prisma.monitoringTarget.findMany({ where: { category: 'portfolio_company', status: 'ACTIVE' }, select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true } }),
+    // 표시 단계 관련성 가드용: 회사명 매칭 카테고리(포트폴리오+스파크랩) 강한 식별자 맵
+    prisma.monitoringTarget.findMany({ where: { category: { in: ['portfolio_company', 'sparklabs_self'] }, status: 'ACTIVE' }, select: { primaryKeyword: true, name: true, englishName: true } }),
     // 포트폴리오 vs 타 하우스 비교용: competitor(타 AC·VC 하우스) 노출 상위 3개 (실제 이름)
     prisma.article.groupBy({ by: ['matchedKeyword'], where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor' }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 3 }),
   ]);
 
   // 기존 DB에 쌓인 부분일치 노이즈(예: '노리'→'노리지만', '리코'→'인실리코')를
   // 표시 단계에서 토큰 매칭으로 제거. (DB는 수정하지 않음 — 아침 승인 후 cleanup 스크립트로 영구정리 예정)
+  // 강한 식별자(회사명·영문명·주키워드)만 저장 — helperKeywords(대표자명 등)는 단독 통과 불가
   const portfolioKeyMap = new Map<string, string[]>();
   for (const t of portfolioTargets) {
-    const keys = [t.primaryKeyword, t.name, t.englishName, ...(t.helperKeywords ?? '').split(',')]
+    const keys = [t.primaryKeyword, t.name, t.englishName]
       .map(k => (k ?? '').trim())
       .filter(k => k.length >= 2);
     portfolioKeyMap.set(t.primaryKeyword, Array.from(new Set(keys)));
   }
+  const NAME_MATCH_CATS = new Set(['portfolio_company', 'sparklabs_self']);
   const cleanedArticles = articles
     // 확정 매체 26개만 표시 (media.ts)
     .filter(a => isKnownMedia(a.source))
+    // 스포츠·게임·연예·광고 강제 제외 (제목·URL·매체)
+    .filter(a => !isBlockedNoise({ title: a.title, link: a.link, source: a.source }))
+    // 회사/조직명(강한 식별자)이 제목에 토큰으로 등장해야 통과 (포트폴리오+스파크랩)
     .filter(a => {
-      if (a.category !== 'portfolio_company') return true; // 회사명 매칭은 포트폴리오에만
+      if (!NAME_MATCH_CATS.has(a.category)) return true;
       const keys = portfolioKeyMap.get(a.matchedKeyword) ?? [a.matchedKeyword];
       return keys.some(k => matchesAsToken(a.title, k));
     })

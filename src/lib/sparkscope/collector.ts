@@ -80,12 +80,11 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
     const batch = limited.slice(i, i + CONCURRENCY);
     const results = await Promise.all(batch.map(async target => {
       const items = await fetchForTarget(target);
-      // 관련성/노이즈 필터: 제목에 회사명(주키워드·이름·영문·보조) 포함 + 제외어·광고 노이즈 배제
-      const relHelpers = [target.name, target.englishName, target.helperKeywords].filter(Boolean).join(',');
+      // 관련성/노이즈 필터: 강한 식별자(회사명·영문명·주키워드) 포함 + 스포츠/광고/제외어 배제
       return items
         // 확정 매체 26개(media.ts)만 수집 — 그 외 매체는 버림
         .filter(item => isKnownMedia(item.source))
-        .filter(item => isRelevant({ title: item.title, primaryKeyword: target.primaryKeyword, helperKeywords: relHelpers, excludeWords: target.excludeWords, category: target.category }))
+        .filter(item => isRelevant({ title: item.title, primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, excludeWords: target.excludeWords, category: target.category, link: item.link, source: item.source }))
         .map<RawArticle>(item => ({
           ...item,
           matchedKeyword: target.primaryKeyword,

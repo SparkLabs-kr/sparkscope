@@ -14,7 +14,41 @@ export const AD_NOISE_KEYWORDS = [
   '배롱나무', '벚꽃', '단풍',
 ];
 
-export type FilterReason = 'exclude_word' | 'ad_noise' | 'irrelevant';
+export type FilterReason = 'exclude_word' | 'ad_noise' | 'sports_ad' | 'irrelevant';
+
+// ── 스포츠·게임·연예·광고 강제 제외 ──────────────────────────────
+// helperKeywords의 사람 이름(대표자명 등)이 야구선수·연예인과 겹쳐 대량 오통과되는 문제 대응.
+const URL_EXCLUDE = ['/sports/', '/baseball/', '/soccer/', '/game/', '/entertain/', '/photo/', '/issue/'];
+// 스포츠 전문 매체 (26개 확정 매체엔 없지만 안전망)
+const SPORTS_MEDIA = ['스포츠서울', '스포츠경향', 'OSEN', '일간스포츠', '스포츠동아', '스포츠조선', '스포탈코리아', '엑스포츠뉴스', 'MHN스포츠'];
+// 야구/스포츠·체육 용어 (제목 포함 시 제외)
+const SPORTS_TERMS = [
+  '타점', '완벽투', '무실점', '홈런', '선발승', '이닝', 'KKKKK', '실점', '홀드', '세이브',
+  '병살', '도루', '타율', '방어율', '4안타', '멀티히트', '루타', '완봉', '역투', '쐐기타', '결승타',
+  'KBO', '프로야구', '올스타', '구단', '외인', '멀티포', '콩쿠르', '피겨', '금메달', '은메달', '동메달', '관중',
+];
+// 광고성 키워드
+const AD_BLOCK_KEYWORDS = ['무료여행', '노리세요', '다이어트', '몸매', '인정템', '완판', '핫딜', '최저가', '할인코드'];
+
+/** 스포츠·게임·연예·광고 등 강제 제외 대상인지 (제목·URL·매체 기준). 카테고리 무관 전역 적용. */
+export function isBlockedNoise(a: { title?: string | null; link?: string | null; source?: string | null }): boolean {
+  const title = a.title ?? '';
+  const link = (a.link ?? '').toLowerCase();
+  const source = a.source ?? '';
+
+  // 1) URL 섹션
+  if (URL_EXCLUDE.some(p => link.includes(p))) return true;
+  // 2) 스포츠 전문 매체 (부분일치 — "스포츠"가 매체명에 들어가면 제외)
+  if (source.includes('스포츠') || SPORTS_MEDIA.some(m => source.includes(m))) return true;
+  // 3) 야구/스포츠 용어
+  if (SPORTS_TERMS.some(t => title.includes(t))) return true;
+  // "안타"는 "안타깝다/안타까운"과 충돌 → 뒤에 까·깝이 오면 스포츠 아님
+  if (/안타(?!까|깝)/.test(title)) return true;
+  // 4) 광고 키워드
+  if (AD_BLOCK_KEYWORDS.some(w => title.includes(w))) return true;
+
+  return false;
+}
 
 // ── 토큰 경계 매칭 ───────────────────────────────────────────────
 // 문제: 짧은 회사명이 다른 단어 속에 우연히 포함돼 오통과.
@@ -67,28 +101,41 @@ export function matchesAsToken(title: string, name: string): boolean {
 }
 
 // 회사명 매칭(관련성)을 적용할 카테고리.
-// portfolio_company만 — 회사가 기사의 주어라 정밀도 높음.
-// competitor(투자사)는 기사 제목에 피투자 스타트업만 나오는 경우가 많고,
-// sparklabs_self(인터뷰 등)도 제목에 이름이 빠질 수 있어 오탐 방지 위해 제외.
-const NAME_MATCH_CATEGORIES = new Set(['portfolio_company']);
+// portfolio_company + sparklabs_self — 회사/조직명이 제목의 주어여야 정밀도 높음.
+// (sparklabs_self는 임원 동명이인·"스파크랩" 광역매칭 노이즈가 심해 매칭 필수)
+// competitor(투자사)는 제목에 피투자 스타트업만 나오는 경우가 많아 제외.
+export const NAME_MATCH_CATEGORIES = new Set(['portfolio_company', 'sparklabs_self']);
 
 export interface RelevanceInput {
   title: string;
   primaryKeyword: string;
-  helperKeywords?: string | null;
+  name?: string | null;         // 회사명 (강한 식별자)
+  englishName?: string | null;  // 영문 회사명 (강한 식별자)
+  helperKeywords?: string | null; // 별칭·서비스명·대표자명 (약한 식별자)
   excludeWords?: string | null;
   category?: string | null;
+  link?: string | null;
+  source?: string | null;
 }
 
 function splitCsv(s?: string | null): string[] {
   return (s ?? '').split(',').map(x => x.trim()).filter(Boolean);
 }
 
+/** 회사 "강한 식별자" 토큰 목록 (primaryKeyword·name·englishName). helperKeywords는 제외. */
+function strongKeys(a: RelevanceInput): string[] {
+  return [a.primaryKeyword, a.name, a.englishName]
+    .map(k => (k ?? '').trim())
+    .filter(k => k.length >= 2);
+}
+
 /**
  * 필터 위반 사유 반환 (통과 시 null).
- * 1) 대상별 제외어 포함 → exclude_word
- * 2) 광고/생활정보 노이즈 → ad_noise
- * 3) 제목에 회사명(주키워드/보조키워드) 미포함 → irrelevant
+ * 1) 대상별 제외어 → exclude_word
+ * 2) 스포츠·게임·연예·광고 강제 제외 → sports_ad
+ * 3) 광고/생활정보 노이즈 → ad_noise
+ * 4) 회사명(강한 식별자) 미포함 → irrelevant
+ *    ※ helperKeywords(대표자명 등)만으로는 통과 불가 — 회사명/영문명이 함께 등장해야 함.
  */
 export function filterReason(a: RelevanceInput): FilterReason | null {
   const title = a.title ?? '';
@@ -96,13 +143,16 @@ export function filterReason(a: RelevanceInput): FilterReason | null {
   const excl = splitCsv(a.excludeWords);
   if (excl.some(w => w.length >= 2 && title.includes(w))) return 'exclude_word';
 
+  if (isBlockedNoise({ title, link: a.link, source: a.source })) return 'sports_ad';
+
   if (AD_NOISE_KEYWORDS.some(w => title.includes(w))) return 'ad_noise';
 
   // 회사명 매칭은 지정 카테고리에만 적용 (그 외/미상은 스킵 — 오탐 방지)
-  // 부분 문자열이 아니라 "독립 토큰(주어)"으로 등장해야 통과 (matchesAsToken).
+  // 강한 식별자(회사명·영문명·주키워드)가 독립 토큰으로 등장해야 통과.
+  // helperKeywords(대표자명 등)만 있는 기사는 동명이인(야구선수 등) 오통과 방지를 위해 제외.
   const applyNameMatch = a.category != null && NAME_MATCH_CATEGORIES.has(a.category);
   if (applyNameMatch) {
-    const keys = [a.primaryKeyword, ...splitCsv(a.helperKeywords)].filter(k => k && k.length >= 2);
+    const keys = strongKeys(a);
     if (keys.length > 0 && !keys.some(k => matchesAsToken(title, k))) return 'irrelevant';
   }
 
