@@ -1,7 +1,7 @@
 // 메인 대시보드 — 기간 선택(달력) 기반. KPI/차트/위기감지/급증/스크랩 지표.
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
-import { RecentArticlesSearch } from '@/components/RecentArticlesSearch';
+import { DashboardSearchProvider, DashboardSearchBox, DashboardArticleList } from '@/components/DashboardSearch';
 import { TrendChart } from '@/components/TrendChart';
 import { MediaPanel } from '@/components/MediaPanel';
 import { DateRangePicker } from '@/components/DateRangePicker';
@@ -105,6 +105,8 @@ async function loadDashboardData(from: string, to: string) {
     portfolioKeyMap.set(t.primaryKeyword, Array.from(new Set(keys)));
   }
   const cleanedArticles = articles
+    // 확정 매체 26개만 표시 (media.ts)
+    .filter(a => isKnownMedia(a.source))
     .filter(a => {
       if (a.category !== 'portfolio_company') return true; // 회사명 매칭은 포트폴리오에만
       const keys = portfolioKeyMap.get(a.matchedKeyword) ?? [a.matchedKeyword];
@@ -197,8 +199,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const todayLabel = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
 
   return (
-    <>
-      <div className="flex flex-wrap justify-between items-end gap-4 mb-6">
+    <DashboardSearchProvider>
+      <div className="flex flex-wrap justify-between items-end gap-4 mb-4">
         <div>
           <h1 className="text-3xl font-bold">{todayLabel}</h1>
           <p className="text-sm text-gray-500 mt-1">{range.label} 데이터 기준</p>
@@ -208,6 +210,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           {canScrap && <Link href="/dashboard/scraps" className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 whitespace-nowrap">⭐ 스크랩함</Link>}
           <Link href="/dashboard/keywords" className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 whitespace-nowrap">⚙️ 키워드 관리</Link>
         </div>
+      </div>
+
+      {/* 검색창 — 달력 바로 아래. 하단 '최근 수집 기사' 목록을 실시간 필터 */}
+      <div className="mb-6">
+        <DashboardSearchBox />
       </div>
 
       {/* 실시간 위기 감지 — 위기 없을 땐 '정상' 상태를 명시해 기능이 살아있음을 표시 */}
@@ -302,15 +309,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         <div className="flex justify-between items-center mb-4">
           <div>
             <div className="font-bold">📋 최근 수집 기사</div>
-            <div className="text-xs text-gray-500 mt-0.5">{range.label} · 상위 30건 · 아래 검색창으로 제목·매체·회사·분류 필터</div>
+            <div className="text-xs text-gray-500 mt-0.5">{range.label} · 상위 30건 · 확정 매체 26개 · 위 검색창으로 필터</div>
           </div>
         </div>
-        <RecentArticlesSearch articles={data.articles as any} canScrap={canScrap} emptyText={`${range.label} 내 기사가 없습니다.`} />
+        <DashboardArticleList articles={data.articles as any} canScrap={canScrap} emptyText={`${range.label} 내 기사가 없습니다.`} />
       </div>
 
       {OPEN_ACCESS && <RoadmapPreview />}
       {OPEN_ACCESS && <NightReviewNotes />}
-    </>
+    </DashboardSearchProvider>
   );
 }
 
@@ -342,8 +349,7 @@ function CompareCard({ sparkCount, houses, rangeLabel }: { sparkCount: number; h
   return (
     <div className="bg-white p-5 rounded-xl border border-gray-200">
       <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
-        <div className="font-bold">⚔️ 포트폴리오 VS 타 하우스 AC·VC 포트폴리오 노출 비교 <InfoTip text={`${rangeLabel} 동안 스파크랩 포트폴리오사 노출 건수와, 타 AC·VC 하우스(감시대상 competitor) 노출 상위 3곳을 비교합니다.\n· 수치 = 언론 노출 기사 수`} /></div>
-        <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-[10px] font-semibold whitespace-nowrap">예시 데이터 · 실제 하우스명 확장 예정</span>
+        <div className="font-bold">⚔️ 포트폴리오 VS 타 하우스 AC·VC 포트폴리오 노출 비교 <InfoTip text={`${rangeLabel} 동안 스파크랩 포트폴리오사 노출 건수와, 타 AC·VC 하우스(감시대상 competitor) 노출 상위 3곳을 비교합니다.\n· 수치 = 언론 노출 기사 수 (확정 매체 26개 기준)`} /></div>
       </div>
       {hasData ? (
         <>

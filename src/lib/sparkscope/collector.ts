@@ -7,6 +7,7 @@ import { parseStringPromise } from 'xml2js';
 import { prisma } from '@/lib/prisma';
 import type { RawArticle, Category } from './types';
 import { isRelevant } from './relevance';
+import { isKnownMedia } from './media';
 
 type SourceItem = Omit<RawArticle, 'matchedKeyword' | 'category' | 'basePriority'>;
 type Target = Awaited<ReturnType<typeof prisma.monitoringTarget.findMany>>[number];
@@ -82,6 +83,8 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
       // 관련성/노이즈 필터: 제목에 회사명(주키워드·이름·영문·보조) 포함 + 제외어·광고 노이즈 배제
       const relHelpers = [target.name, target.englishName, target.helperKeywords].filter(Boolean).join(',');
       return items
+        // 확정 매체 26개(media.ts)만 수집 — 그 외 매체는 버림
+        .filter(item => isKnownMedia(item.source))
         .filter(item => isRelevant({ title: item.title, primaryKeyword: target.primaryKeyword, helperKeywords: relHelpers, excludeWords: target.excludeWords, category: target.category }))
         .map<RawArticle>(item => ({
           ...item,

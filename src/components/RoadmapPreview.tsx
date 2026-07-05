@@ -5,7 +5,7 @@
 function PreviewTag() {
   return (
     <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-[10px] font-bold tracking-wider whitespace-nowrap">
-      🔮 개발 예정 · 미리보기
+      🔧 진행 중
     </span>
   );
 }
@@ -19,7 +19,7 @@ export function RoadmapPreview() {
         <PreviewTag />
       </div>
       <p className="text-sm text-gray-500 mb-5">
-        아래는 다음 단계에서 추가될 기능의 <b>예시 화면(목업)</b>입니다. 실제 데이터가 아닌 발표용 참고 이미지입니다.
+        아래는 다음 단계에서 추가될 기능의 <b>예시 화면</b>입니다. 빠른 시일 내 개발하겠습니다.
       </p>
 
       <div className="grid lg:grid-cols-2 gap-4 mb-5">
