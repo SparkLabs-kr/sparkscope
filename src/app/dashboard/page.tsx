@@ -7,8 +7,6 @@ import { ToneBreakdown } from '@/components/ToneBreakdown';
 import { TrendChart } from '@/components/TrendChart';
 import { MediaPanel } from '@/components/MediaPanel';
 import { DateRangePicker } from '@/components/DateRangePicker';
-import { RoadmapPreview } from '@/components/RoadmapPreview';
-import { NightReviewNotes } from '@/components/NightReviewNotes';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { OPEN_ACCESS } from '@/lib/flags';
@@ -435,8 +433,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         )}
       </div>
 
-      {OPEN_ACCESS && <RoadmapPreview />}
-      {OPEN_ACCESS && <NightReviewNotes />}
     </>
   );
 }
