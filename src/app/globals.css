@@ -66,4 +66,29 @@
     font-display: swap;
 }
 
-html, body { background: #F5F3EF; color: #1A1A1A; }
+html, body {
+  background: #F5F3EF;
+  color: #1A1A1A;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  letter-spacing: -0.011em;
+}
+
+/* 표·지표의 숫자 정렬 */
+.tabular-nums { font-variant-numeric: tabular-nums; }
+
+/* 정갈한 커스텀 스크롤바 (긴 목록) */
+@layer utilities {
+  .scroll-slim { scrollbar-width: thin; scrollbar-color: #DAD5CB transparent; }
+  .scroll-slim::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scroll-slim::-webkit-scrollbar-thumb { background: #DAD5CB; border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
+  .scroll-slim::-webkit-scrollbar-thumb:hover { background: #C4BEB2; background-clip: content-box; }
+  .scroll-slim::-webkit-scrollbar-track { background: transparent; }
+}
+
+/* 은은한 진입 애니메이션 */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .animate-rise { animation: rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+}

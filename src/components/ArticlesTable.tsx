@@ -32,7 +32,7 @@ export function ArticlesTable({ articles, canScrap = false, emptyText }: { artic
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="bg-gray-50 text-gray-500 text-[10px] uppercase tracking-wider">
+          <tr className="bg-spark-subtle text-spark-muted text-[10px] uppercase tracking-wider border-b border-spark-border">
             {canScrap && <th className="text-center px-2 py-2 w-8">★</th>}
             <th className="text-left px-3 py-2 w-20">날짜</th>
             <th className="text-left px-3 py-2 w-24">분류</th>
@@ -48,7 +48,7 @@ export function ArticlesTable({ articles, canScrap = false, emptyText }: { artic
             const cat = CATEGORY_BADGE[a.category] ?? { label: a.category, cls: 'bg-gray-100' };
             const date = new Date(a.pubDate);
             return (
-              <tr key={a.id} className="border-b border-gray-100 hover:bg-gray-50">
+              <tr key={a.id} className="border-b border-spark-border/60 hover:bg-spark-subtle transition-colors">
                 {canScrap && <td className="px-2 py-3 text-center"><ScrapStar id={a.id} initial={!!a.isScrapped} /></td>}
                 <td className="px-3 py-3 text-xs text-gray-500">{date.getMonth() + 1}/{date.getDate()}</td>
                 <td className="px-3 py-3"><span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${cat.cls}`}>{cat.label}</span></td>
