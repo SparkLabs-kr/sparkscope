@@ -12,10 +12,10 @@ import { authOptions } from '@/lib/auth';
 import { OPEN_ACCESS } from '@/lib/flags';
 import { canScrap as canScrapEmail } from '@/lib/scrap';
 import { normalizeSource, isKnownMedia } from '@/lib/sparkscope/media';
-import { matchesAsToken, isBlockedNoise } from '@/lib/sparkscope/relevance';
+import { matchesAsToken, isBlockedNoise, normalizeTitleKey } from '@/lib/sparkscope/relevance';
 import { NEGATIVE_KEYWORDS, detectCrises, crisisFallbackCause, detectSpikes, type ArticleLite, type CrisisCard, type SpikeCard } from '@/lib/sparkscope/insights';
 import { summarizeCrisisCause } from '@/lib/sparkscope/analyzer';
-import { TIER1_COMPETITORS, matchCompetitor, type CompetitorStat } from '@/lib/sparkscope/competitors';
+import { TIER1_NAME_SET, tier1EnglishOf, type CompetitorStat } from '@/lib/sparkscope/competitors';
 
 export const dynamic = 'force-dynamic';
 
@@ -102,8 +102,8 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     prisma.monitoringTarget.findMany({ where: { category: 'portfolio_company', status: 'ACTIVE' }, select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true } }),
     // 포트폴리오 vs 타 하우스 비교용: competitor(타 AC·VC 하우스) 노출 상위 3개 (실제 이름)
     prisma.article.groupBy({ by: ['matchedKeyword'], where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor' }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 3 }),
-    // 경쟁사 모니터링 섹션용: 기간 내 competitor 기사 전체(제목에서 Tier1 경쟁사 식별)
-    prisma.article.findMany({ where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor' }, orderBy: { pubDate: 'desc' }, select: { title: true, source: true, pubDate: true, link: true, tone: true }, take: 1500 }),
+    // 경쟁사 모니터링 섹션용: 기간 내 competitor 기사 전체(matchedKeyword=실제 경쟁사명별 집계)
+    prisma.article.findMany({ where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor' }, orderBy: { pubDate: 'desc' }, select: { title: true, source: true, pubDate: true, link: true, tone: true, matchedKeyword: true }, take: 3000 }),
     // 경쟁사 비교 기준선: 기간 내 '스파크랩' 언급 기사 수 (엔티티 자체 + 제목 언급)
     prisma.article.count({ where: { pubDate: { gte: since, lte: until }, isNoise: false, OR: [{ category: 'sparklabs_self' }, { title: { contains: '스파크랩' } }] } }),
     // 가장 많이 언급된 포트폴리오사 TOP 15 (기간 내 노출 건수)
@@ -120,14 +120,18 @@ async function loadDashboardData(from: string, to: string, company?: string) {
   const notNoise = (a: { title: string; link: string; source: string }) =>
     !isBlockedNoise({ title: a.title, link: a.link, source: a.source });
 
-  // 경쟁사 모니터링 통계: Tier1 경쟁사별 언급량·TOP3 기사·부정 기사 전체.
+  // 경쟁사 모니터링 통계: DB에 실제 수집된 경쟁사(matchedKeyword)별 노출량·TOP3 기사·부정 기사.
+  // (주가 기사 등 competitor 카테고리 노이즈는 지금은 그대로 — 추후 프롬프트 튜닝에서 정리)
   const competitorStatMap = new Map<string, CompetitorStat>();
-  for (const c of TIER1_COMPETITORS) competitorStatMap.set(c.name, { name: c.name, english: c.english, count: 0, negCount: 0, top3: [], negatives: [] });
   for (const a of competitorArticles) {
     if (!notNoise(a)) continue;
-    const hit = matchCompetitor(a.title);
-    if (!hit) continue;
-    const s = competitorStatMap.get(hit.name)!;
+    const name = a.matchedKeyword;
+    if (!name) continue;
+    let s = competitorStatMap.get(name);
+    if (!s) {
+      s = { name, english: tier1EnglishOf(name), isTier1: TIER1_NAME_SET.has(name), count: 0, negCount: 0, top3: [], negatives: [] };
+      competitorStatMap.set(name, s);
+    }
     s.count++;
     const neg = a.tone === 'NEGATIVE' || NEGATIVE_KEYWORDS.some(k => a.title.includes(k));
     if (neg) s.negCount++;
@@ -135,7 +139,8 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     if (s.top3.length < 3) s.top3.push(art);
     if (neg) s.negatives.push(art);
   }
-  const competitors = Array.from(competitorStatMap.values()).sort((a, b) => b.count - a.count);
+  // 노출 건수 desc → 상위 10곳
+  const competitors = Array.from(competitorStatMap.values()).sort((a, b) => b.count - a.count).slice(0, 10);
 
   // 기존 DB에 쌓인 부분일치 노이즈(예: '노리'→'노리지만', '리코'→'인실리코')를
   // 표시 단계에서 토큰 매칭으로 제거. (DB는 수정하지 않음 — 아침 승인 후 cleanup 스크립트로 영구정리 예정)
@@ -165,9 +170,19 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     const keys = map.get(a.matchedKeyword) ?? [a.matchedKeyword];
     return keys.some(k => matchesAsToken(a.title, k));
   };
+  // 중복 기사 제거: 제목 정규화 키 또는 동일 URL 기준으로 대표 1건만 (articles는 우선순위 desc 정렬 → 대표=상위)
+  const dedupeSeen = new Set<string>();
   const cleanedArticles = articles
     .filter(notNoise)
     .filter(passesName)
+    .filter(a => {
+      const tk = normalizeTitleKey(a.title);
+      const lk = 'L:' + a.link;
+      if ((tk && dedupeSeen.has(tk)) || dedupeSeen.has(lk)) return false;
+      if (tk) dedupeSeen.add(tk);
+      dedupeSeen.add(lk);
+      return true;
+    })
     .slice(0, 120);
 
   const mentionRate = portfolioCount > 0 ? Math.round((mentionCount / portfolioCount) * 100) : 0;
@@ -203,34 +218,41 @@ async function loadDashboardData(from: string, to: string, company?: string) {
   // 포트폴리오 TOP 15 (표시명 매핑) + 부정 기사(관련성 가드 후 상위 15건)
   const portfolioNameOf = new Map(portfolioTargets.map(t => [t.primaryKeyword, t.name]));
   const portfolioTop = portfolioTop15.map(g => ({ name: portfolioNameOf.get(g.matchedKeyword) ?? g.matchedKeyword, count: g._count._all }));
-  const portfolioNegatives = portfolioNeg
-    .filter(notNoise)
-    .filter(a => {
+  // 긍정/부정 하이라이트: 회사(matchedKeyword)별로 묶어 "언급 매체 수" 많은 순 → 동률이면 최신순, TOP 3만.
+  // (Article에 검색노출도 필드가 없어 매체 다양성을 대리 지표로 사용)
+  const top3ByMedia = (rows: { matchedKeyword: string; title: string; source: string; pubDate: Date; link: string }[]) => {
+    const g = new Map<string, { company: string; sources: Set<string>; rep: (typeof rows)[number] }>();
+    for (const a of rows) {
+      if (!notNoise(a)) continue;
       const keys = portfolioKeyMap.get(a.matchedKeyword) ?? [a.matchedKeyword];
-      return keys.some(k => matchesAsToken(a.title, k));
-    })
-    .slice(0, 15)
-    .map(a => ({
-      company: portfolioNameOf.get(a.matchedKeyword) ?? a.matchedKeyword,
-      title: a.title,
-      source: normalizeSource(a.source),
-      pubDate: a.pubDate,
-      link: a.link,
-    }));
-  const portfolioPositives = portfolioPos
-    .filter(notNoise)
-    .filter(a => {
-      const keys = portfolioKeyMap.get(a.matchedKeyword) ?? [a.matchedKeyword];
-      return keys.some(k => matchesAsToken(a.title, k));
-    })
-    .slice(0, 12)
-    .map(a => ({
-      company: portfolioNameOf.get(a.matchedKeyword) ?? a.matchedKeyword,
-      title: a.title,
-      source: normalizeSource(a.source),
-      pubDate: a.pubDate,
-      link: a.link,
-    }));
+      if (!keys.some(k => matchesAsToken(a.title, k))) continue;
+      let e = g.get(a.matchedKeyword);
+      if (!e) { e = { company: portfolioNameOf.get(a.matchedKeyword) ?? a.matchedKeyword, sources: new Set(), rep: a }; g.set(a.matchedKeyword, e); }
+      e.sources.add(normalizeSource(a.source));
+      if (new Date(a.pubDate).getTime() > new Date(e.rep.pubDate).getTime()) e.rep = a;
+    }
+    return Array.from(g.values())
+      .sort((x, y) => y.sources.size - x.sources.size || new Date(y.rep.pubDate).getTime() - new Date(x.rep.pubDate).getTime())
+      .slice(0, 3)
+      .map(e => ({ company: e.company, title: e.rep.title, source: normalizeSource(e.rep.source), pubDate: e.rep.pubDate, link: e.rep.link, mediaCount: e.sources.size }));
+  };
+  const portfolioNegatives = top3ByMedia(portfolioNeg);
+  const portfolioPositives = top3ByMedia(portfolioPos);
+
+  // 기획 피칭 중복 제거: 다양성 우선(서로 다른 기업·다른 주제).
+  // 같은 기업(matchedKeyword) 1건, 같은 주제(pitchTopic 정규화) 1건만 — 나머지 접기.
+  // pitches는 pitchScore desc 정렬 → 먼저 등장한 대표(고득점)를 남김.
+  const seenPitchCompany = new Set<string>();
+  const seenPitchTopic = new Set<string>();
+  const dedupedPitches = pitches.filter(p => {
+    const c = (p.matchedKeyword ?? '').trim();
+    const t = normalizeTitleKey(p.pitchTopic ?? '');
+    if (c && seenPitchCompany.has(c)) return false;
+    if (t && seenPitchTopic.has(t)) return false;
+    if (c) seenPitchCompany.add(c);
+    if (t) seenPitchTopic.add(t);
+    return true;
+  });
 
   return {
     range: { from, to },
@@ -242,7 +264,7 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     companyArticles,
     sources: normalizeSources(sourceGroups.map(s => ({ source: s.source, count: s._count._all }))),
     tones: toneGroups.map(t => ({ tone: t.tone ?? 'NEUTRAL', count: t._count._all })),
-    pitches,
+    pitches: dedupedPitches,
     crises,
     spikes: detectSpikes(spikeRecent as ArticleLite[], spikeBaseline, 3, 60),
     trendData: buildTrendData(trendArticles, since, until),
@@ -383,9 +405,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
       {/* ── 포트폴리오사 ── */}
       <SectionTitle title="📊 포트폴리오사" sub="어느 포트폴리오사가 활발히 노출되고, 부정 이슈는 없는가" />
-      <div className="grid lg:grid-cols-3 gap-4 mb-4">
+      {/* 긍정·부정 나란히 (대비가 한눈에) */}
+      <div className="grid lg:grid-cols-2 gap-4 mb-4">
         <PortfolioPositives items={data.portfolioPositives} rangeLabel={range.label} />
+        <PortfolioNegatives items={data.portfolioNegatives} rangeLabel={range.label} />
+      </div>
 
+      {/* 포트폴리오 TOP15 + 기획기사 피칭 */}
+      <div className="grid lg:grid-cols-2 gap-4 mb-8">
+        <PortfolioTopList items={data.portfolioTop} rangeLabel={range.label} />
         <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
           <div className="font-bold mb-3">🎯 기획기사 피칭 <InfoTip text={`AI가 각 기사를 0~100점으로 평가한 '기획기사 피칭 점수'입니다.\n이 주제로 우리 포트폴리오사를 엮어 기획기사를 제안하면 성사 가능성이 높은 기사를 뜻합니다.\n· 60점 이상: 아래 목록에 표시\n· 75점 이상: 상단 '피칭 기회' 지표에 집계`} /></div>
           {data.pitches.length > 0 ? (
@@ -404,11 +432,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             <p className="text-sm text-gray-400">{range.label} 내 피칭 기회 (60점 이상) 없음</p>
           )}
         </div>
-      </div>
-
-      <div className="grid lg:grid-cols-2 gap-4 mb-8">
-        <PortfolioTopList items={data.portfolioTop} rangeLabel={range.label} />
-        <PortfolioNegatives items={data.portfolioNegatives} rangeLabel={range.label} />
       </div>
 
       {/* 경쟁사 모니터링 — Tier1 직접 경쟁 액셀러레이터 언급량·최근 이슈 */}
@@ -488,10 +511,10 @@ function CompetitorPanel({ competitors, sparklabsMentions, rangeLabel }: { compe
   return (
     <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
       <div className="flex flex-wrap justify-between items-center gap-2 mb-1">
-        <div className="font-bold">🏁 경쟁사 모니터링 — 직접 경쟁 액셀러레이터 <InfoTip text={`국내 직접 경쟁 액셀러레이터(Tier 1)의 ${rangeLabel} 언론 노출량과 최근 이슈를 스파크랩과 비교합니다.\n· 수치 = 언론 노출 기사 수\n· '프라이머'는 일반명사 오탐이 많아 투자·데모데이 등 활동 맥락일 때만 집계`} /></div>
-        <span className="px-2 py-0.5 bg-spark-light-purple/50 text-spark-purple rounded-full text-[10px] font-semibold whitespace-nowrap">Tier 1 · {rangeLabel}</span>
+        <div className="font-bold">🏁 경쟁사 모니터링 — 언론 노출 상위 <InfoTip text={`DB에 실제 수집된 경쟁 AC·VC별 ${rangeLabel} 언론 노출량 상위 10곳과 최근 이슈를 스파크랩과 비교합니다.\n· 수치 = 언론 노출 기사 수 (선택 기간 기준)\n· "Tier1" 뱃지 = 국내 직접 경쟁 액셀러레이터 9곳\n· 주가·티커 기사 등 노이즈는 아직 섞여 있을 수 있음(추후 정리 예정)`} /></div>
+        <span className="px-2 py-0.5 bg-spark-light-purple/50 text-spark-purple rounded-full text-[10px] font-semibold whitespace-nowrap">TOP {competitors.length} · {rangeLabel}</span>
       </div>
-      <p className="text-xs text-gray-500 mb-4">스파크랩과 국내 직접 경쟁 AC의 언론 노출량·최근 이슈를 한눈에 비교합니다.</p>
+      <p className="text-xs text-gray-500 mb-4">스파크랩과 실제 수집된 경쟁 하우스의 언론 노출량·최근 이슈를 한눈에 비교합니다.</p>
 
       {/* 스파크랩 기준선 */}
       <div className="mb-4 pb-4 border-b border-spark-border/60">
@@ -517,7 +540,8 @@ function CompetitorRow({ c, max }: { c: CompetitorStat; max: number }) {
     <div className="rounded-xl border border-spark-border p-3.5">
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="text-sm font-bold text-spark-ink truncate">
-          {c.name} <span className="text-xs font-normal text-spark-muted">{c.english}</span>
+          {c.isTier1 && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-spark-purple/10 text-spark-purple font-bold align-middle mr-1">Tier1</span>}
+          {c.name} {c.english && <span className="text-xs font-normal text-spark-muted">{c.english}</span>}
         </div>
         <div className="flex items-center gap-1.5 flex-none">
           {c.negCount > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 font-bold">부정 {c.negCount}</span>}
@@ -630,19 +654,20 @@ function PortfolioTopList({ items, rangeLabel }: { items: { name: string; count:
   );
 }
 
-function PortfolioPositives({ items, rangeLabel }: { items: { company: string; title: string; source: string; pubDate: Date; link: string }[]; rangeLabel: string }) {
+function PortfolioPositives({ items, rangeLabel }: { items: { company: string; title: string; source: string; pubDate: Date; link: string; mediaCount?: number }[]; rangeLabel: string }) {
   return (
-    <div className="lg:col-span-2 bg-white p-5 rounded-2xl border border-spark-border shadow-card">
-      <div className="font-bold mb-1">✨ 포트폴리오 긍정 하이라이트 <InfoTip text={`${rangeLabel} 동안 포트폴리오사의 긍정 논조(투자유치·상장·수상·파트너십 등) 기사입니다.\n홍보·증폭할 좋은 소식을 한눈에 봅니다.`} /></div>
-      <div className="text-xs text-spark-muted mb-4">{rangeLabel} · 좋은 소식 {items.length > 0 ? `${items.length}건` : ''}</div>
+    <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
+      <div className="font-bold mb-1">✨ 포트폴리오 긍정 하이라이트 <InfoTip text={`${rangeLabel} 동안 포트폴리오사의 긍정 논조(투자유치·상장·수상·파트너십 등) 기사 중, 여러 매체가 다룬 순으로 TOP 3.`} /></div>
+      <div className="text-xs text-spark-muted mb-4">{rangeLabel} · 매체 노출 많은 순 TOP {items.length}</div>
       {items.length > 0 ? (
-        <div className="grid sm:grid-cols-2 gap-2 max-h-[22rem] overflow-y-auto scroll-slim pr-1">
+        <div className="space-y-2 max-h-80 overflow-y-auto scroll-slim pr-1">
           {items.map((a, i) => {
             const d = new Date(a.pubDate);
             return (
               <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" className="block rounded-lg border border-emerald-100 bg-emerald-50/50 p-2.5 hover:bg-emerald-50 transition-colors">
-                <div className="flex items-center gap-2 mb-0.5">
+                <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold whitespace-nowrap">{a.company}</span>
+                  {a.mediaCount && a.mediaCount > 1 ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-600/10 text-emerald-700 font-semibold whitespace-nowrap">{a.mediaCount}개 매체</span> : null}
                   <span className="text-[10px] text-spark-muted">{a.source} · {d.getMonth() + 1}.{d.getDate()}</span>
                 </div>
                 <div className="text-xs text-spark-ink leading-snug line-clamp-2">{a.title}</div>
@@ -657,19 +682,20 @@ function PortfolioPositives({ items, rangeLabel }: { items: { company: string; t
   );
 }
 
-function PortfolioNegatives({ items, rangeLabel }: { items: { company: string; title: string; source: string; pubDate: Date; link: string }[]; rangeLabel: string }) {
+function PortfolioNegatives({ items, rangeLabel }: { items: { company: string; title: string; source: string; pubDate: Date; link: string; mediaCount?: number }[]; rangeLabel: string }) {
   return (
     <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
-      <div className="font-bold mb-1">⚠️ 포트폴리오 부정 기사 <InfoTip text={`${rangeLabel} 동안 포트폴리오사에 대한 부정 논조(부정 키워드·부정 톤) 기사입니다.\n어떤 회사가 어떤 이슈로 부정 보도됐는지 바로 확인하세요.`} /></div>
-      <div className="text-xs text-gray-500 mb-4">{rangeLabel} · 부정 논조 기사 {items.length > 0 ? `${items.length}건` : ''}</div>
+      <div className="font-bold mb-1">⚠️ 포트폴리오 부정 기사 <InfoTip text={`${rangeLabel} 동안 포트폴리오사 부정 논조 기사 중, 여러 매체가 다룬 순으로 TOP 3.`} /></div>
+      <div className="text-xs text-gray-500 mb-4">{rangeLabel} · 매체 노출 많은 순 TOP {items.length}</div>
       {items.length > 0 ? (
         <div className="space-y-2 max-h-80 overflow-y-auto pr-1 scroll-slim">
           {items.map((a, i) => {
             const d = new Date(a.pubDate);
             return (
               <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" className="block rounded-lg border border-red-100 bg-red-50/50 p-2.5 hover:bg-red-50">
-                <div className="flex items-center gap-2 mb-0.5">
+                <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold whitespace-nowrap">{a.company}</span>
+                  {a.mediaCount && a.mediaCount > 1 ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-600/10 text-red-700 font-semibold whitespace-nowrap">{a.mediaCount}개 매체</span> : null}
                   <span className="text-[10px] text-gray-400">{a.source} · {d.getMonth() + 1}.{d.getDate()}</span>
                 </div>
                 <div className="text-xs text-gray-800 leading-snug line-clamp-2">{a.title}</div>

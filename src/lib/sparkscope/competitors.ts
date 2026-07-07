@@ -65,8 +65,18 @@ export interface CompetitorArticle {
 export interface CompetitorStat {
   name: string;
   english: string;
+  isTier1: boolean;               // Tier1 직접 경쟁 9곳 여부 (뱃지 표시용)
   count: number;
   negCount: number;
   top3: CompetitorArticle[];      // 최근 기사 상위 3건
   negatives: CompetitorArticle[]; // 부정 기사 전체
+}
+
+// Tier1 식별용: 대표명 + 별칭 전체를 하나의 집합으로 (matchedKeyword 대조용)
+export const TIER1_NAME_SET: Set<string> = new Set(
+  TIER1_COMPETITORS.flatMap(c => [c.name, ...c.match]),
+);
+export function tier1EnglishOf(name: string): string {
+  const hit = TIER1_COMPETITORS.find(c => c.name === name || c.match.includes(name));
+  return hit?.english ?? '';
 }

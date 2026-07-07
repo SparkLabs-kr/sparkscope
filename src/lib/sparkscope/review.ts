@@ -77,21 +77,21 @@ export async function loadDigestCandidates(): Promise<ReviewArticle[]> {
     }),
     prisma.monitoringTarget.findMany({
       where: { category: { in: ['portfolio_company', 'sparklabs_self'] }, status: 'ACTIVE' },
-      select: { primaryKeyword: true, name: true, englishName: true },
+      select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true },
     }),
   ]);
 
-  // 강한 식별자(회사명·영문명·주키워드)만 — helperKeywords(대표자명 등)는 단독 통과 불가
+  // 강한 식별자(회사명·영문명·주키워드) + 큐레이션 서비스명(helperKeywords). 서비스명 '약올려'로도 포폴사 인정.
   const keyMap = new Map<string, string[]>();
   for (const t of targets) {
-    const keys = [t.primaryKeyword, t.name, t.englishName]
+    const keys = [t.primaryKeyword, t.name, t.englishName, ...(t.helperKeywords ?? '').split(',')]
       .map(k => (k ?? '').trim()).filter(k => k.length >= 2);
     keyMap.set(t.primaryKeyword, Array.from(new Set(keys)));
   }
 
   return rows
-    // 확정 매체 26개만 + 스포츠·게임·연예·광고 강제 제외
-    .filter(a => isKnownMedia(a.source))
+    // 포폴·자사는 매체 무관(전문지 부정기사 포착), 그 외 카테고리는 확정 매체 26개만 + 스포츠·광고 제외
+    .filter(a => NAME_MATCH_CATEGORIES.has(a.category) || isKnownMedia(a.source))
     .filter(a => !isBlockedNoise({ title: a.title, link: a.link, source: a.source }))
     // 회사/조직명(강한 식별자)이 제목에 등장해야 통과 (포트폴리오+스파크랩)
     .filter(a => {

@@ -7,6 +7,7 @@
  *  - 톤 배지 + 자체/인용 배지 + 피칭/키워드 태그
  */
 import type { AnalyzedArticle, DigestData } from './types';
+import { isPolitical, normalizeTitleKey } from './relevance';
 
 const TOP_3_LIMIT = 3;
 const PORTFOLIO_LIMIT = 8;
@@ -23,7 +24,19 @@ export function buildDigestData(
   weeklyFlow?: string,
   scrappedLinks?: Set<string>,
 ): DigestData {
-  const sorted = [...articles].sort((a, b) => b.priorityScore - a.priorityScore);
+  // 정치 기사 제외 + 중복 제거(제목 정규화/URL). 대표는 우선순위 상위 1건.
+  const seenKey = new Set<string>();
+  const sorted = [...articles]
+    .filter(a => !isPolitical(a.title))
+    .sort((a, b) => b.priorityScore - a.priorityScore)
+    .filter(a => {
+      const tk = normalizeTitleKey(a.title);
+      const lk = 'L:' + a.link;
+      if ((tk && seenKey.has(tk)) || seenKey.has(lk)) return false;
+      if (tk) seenKey.add(tk);
+      seenKey.add(lk);
+      return true;
+    });
 
   const sparklabsArticles = sorted.filter(a => a.category === 'sparklabs_self').slice(0, SPARKLABS_LIMIT);
   const portfolioArticles = dedupeByCompany(sorted.filter(a => a.category === 'portfolio_company')).slice(0, PORTFOLIO_LIMIT);
@@ -31,7 +44,7 @@ export function buildDigestData(
   const industryArticles = sorted.filter(a => a.category === 'industry_trend').slice(0, INDUSTRY_LIMIT);
 
   // TOP3는 본부 스크랩 우선, 그다음 우선순위 점수
-  const top3 = [...articles]
+  const top3 = [...sorted]
     .sort((a, b) => {
       const sa = scrappedLinks?.has(a.link) ? 1 : 0;
       const sb = scrappedLinks?.has(b.link) ? 1 : 0;

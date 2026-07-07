@@ -1,5 +1,6 @@
 // Claude 프롬프트 정의
 // 06_Claude_분석_프롬프트_v0.1.md 기반
+import { crisisKeywordsForPrompt } from './crisis-keywords';
 
 export const HAIKU_CLASSIFIER_SYSTEM = `당신은 스파크랩의 PR 분석 어시스턴트입니다.
 스파크랩은 한국 대표 액셀러레이터로, 200여 개 포트폴리오사를 보유하고 있습니다.
@@ -47,6 +48,7 @@ ${articles.map(a => JSON.stringify(a)).join('\n')}
 - 자동생성된 시세·주가 분석은 isNoise=true, noiseReason="auto_generated"
 - 정부 정책 발표 같은 영향력 큰 기사는 importance="HIGH" 또는 "CRITICAL"
 - needsDeepAnalysis는 category가 sparklabs_self/portfolio_company이고 importance가 MEDIUM 이상일 때 true
+- 🚨 위기·부정 신호 (매우 중요): 포폴사/스파크랩이 주어인 기사에 소송·고소·수사·검찰·공정위·과징금·리콜·결함·해킹·정보유출·논란·의혹·횡령·갑질·불매·파업·구조조정·적자·사망 등 부정·위기 신호가 있으면 importance="HIGH"(중대하면 "CRITICAL") + needsDeepAnalysis=true. 이런 기사는 절대 isNoise로 버리지 말 것(명백한 무관 도메인/동명이인만 예외).
 
 JSON 배열만 반환:`;
 }
@@ -80,6 +82,11 @@ ${portfolioUniverse.slice(0, 50).join(', ')} (외 ${Math.max(0, portfolioUnivers
 
 이번 주 트렌드 주제:
 ${trendingTopics.join(', ')}
+
+부정·위기 판정 가이드 (tone=NEGATIVE + riskFlag 지정):
+아래 신호가 포폴사/스파크랩과 연관되면 tone="NEGATIVE", riskFlag는 litigation(소송·수사·규제)/crisis(사고·재무·제품)/controversy(논란·평판) 중 택1.
+${crisisKeywordsForPrompt()}
+단 다음은 NEGATIVE 아님(오탐 방지): (a)이미 해소·무혐의·승소 등 긍정/중립 결말("의혹 벗었다","무혐의") (b)제품·서비스 기능·시장 명칭에 단어만 포함('사기 탐지' 솔루션 등) (c)정치·스포츠·연예 등 무관 기사.
 
 출력 스키마:
 {

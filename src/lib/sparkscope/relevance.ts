@@ -1,9 +1,22 @@
 /**
  * 규칙 기반 기사 관련성/노이즈 필터 (AI 불필요).
- * 3단계: (1) 제외어 (2) 광고·생활정보 노이즈 (3) 회사명 매칭(관련성)
+ * 3단계: (1) 제외어 (2) 광고·생활정보 노이즈 (3) 회사명 매칭(관련성) (4) 정치 차단
  *
  * 수집 시점(collector) + 기존 데이터 소급 정리(cleanup) 양쪽에서 동일하게 사용.
  */
+import { POLITICAL_KEYWORDS } from './political-blocklist';
+
+/** 제목이 정치 차단 키워드를 토큰 경계로 포함하는지 (오탐 최소화). */
+export function isPolitical(title?: string | null): boolean {
+  const t = title ?? '';
+  if (!t) return false;
+  return POLITICAL_KEYWORDS.some(k => matchesAsToken(t, k));
+}
+
+/** 중복 판정용 제목 정규화 키 — 공백·기호 제거, 문자/숫자만 소문자로. (한글 보존) */
+export function normalizeTitleKey(title?: string | null): string {
+  return (title ?? '').replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
+}
 
 // 광고·생활정보·자동생성 등 명백한 노이즈 키워드 (제목 포함 시 제외)
 // ※ 금융·창업 뉴스와 충돌하는 단어(청약·분양·입주 등)는 제외해 오탐 방지.
@@ -46,6 +59,8 @@ export function isBlockedNoise(a: { title?: string | null; link?: string | null;
   if (/안타(?!까|깝)/.test(title)) return true;
   // 4) 광고 키워드
   if (AD_BLOCK_KEYWORDS.some(w => title.includes(w))) return true;
+  // 5) 정치 키워드 (편집 가능 리스트, 제목 토큰 매칭)
+  if (isPolitical(title)) return true;
 
   return false;
 }
@@ -152,7 +167,10 @@ export function filterReason(a: RelevanceInput): FilterReason | null {
   // helperKeywords(대표자명 등)만 있는 기사는 동명이인(야구선수 등) 오통과 방지를 위해 제외.
   const applyNameMatch = a.category != null && NAME_MATCH_CATEGORIES.has(a.category);
   if (applyNameMatch) {
-    const keys = strongKeys(a);
+    // 강한 식별자(회사명·영문명·주키워드) + 팀이 큐레이션한 보조 식별자(서비스명·별칭 등 helperKeywords).
+    // 예: 서비스명 '약올려'만 제목에 있고 회사명 '룩인사이트'는 없는 기사도 포폴사로 인정.
+    // (대표자명 등 동명이인 위험은 이후 AI 재분류·isBlockedNoise 단계에서 정리)
+    const keys = [...strongKeys(a), ...splitCsv(a.helperKeywords)].filter(k => k.length >= 2);
     if (keys.length > 0 && !keys.some(k => matchesAsToken(title, k))) return 'irrelevant';
   }
 

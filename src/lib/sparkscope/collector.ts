@@ -80,10 +80,13 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
     const batch = limited.slice(i, i + CONCURRENCY);
     const results = await Promise.all(batch.map(async target => {
       const items = await fetchForTarget(target);
+      // 포폴사·자사는 회사명이 제목에 강하게 토큰 매칭되면(=isRelevant 통과) 매체 무관 수집.
+      // (약사공론·의학신문 등 업종 전문지의 포폴사 부정기사를 놓치지 않기 위함)
+      // 경쟁사·업계동향은 기존대로 확정 매체 26개(media.ts)만.
+      const strongCat = target.category === 'portfolio_company' || target.category === 'sparklabs_self';
       // 관련성/노이즈 필터: 강한 식별자(회사명·영문명·주키워드) 포함 + 스포츠/광고/제외어 배제
       return items
-        // 확정 매체 26개(media.ts)만 수집 — 그 외 매체는 버림
-        .filter(item => isKnownMedia(item.source))
+        .filter(item => strongCat || isKnownMedia(item.source))
         .filter(item => isRelevant({ title: item.title, primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, excludeWords: target.excludeWords, category: target.category, link: item.link, source: item.source }))
         .map<RawArticle>(item => ({
           ...item,

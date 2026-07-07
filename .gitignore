@@ -19,3 +19,6 @@ tsconfig.tsbuildinfo
 # - 이전 프로젝트 백업, 루트의 기획/안내 문서(비밀정보 포함 가능)
 _backup_before_clone/
 /*.html
+
+# reclassify 진행상황 파일
+.reclassify-progress.json
