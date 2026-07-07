@@ -6,11 +6,12 @@ import { prisma } from '@/lib/prisma';
 import { collectAllArticles } from './collector';
 import { analyzeArticles, generateEditorIntro } from './analyzer';
 import { buildDigestData, renderDigestHtml } from './digest';
-import { sendDigestEmail, buildSubject } from './mailer';
+import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } from './mailer';
 
 export interface RunOptions {
   send?: boolean;            // 실제 메일 발송 여부 (false면 DB 저장까지만)
-  testRecipient?: string;    // 명시 수신자
+  testRecipient?: string;    // 명시 수신자 (미지정 시 전사 그룹 DIGEST_TO_GROUP)
+  bcc?: string | string[];   // 숨은참조 (미지정 시 DIGEST_BCC → DIGEST_TEST_RECIPIENT)
   baseUrl?: string;          // 대시보드 링크 도메인
   dryRun?: boolean;          // 외부 호출 없이 시뮬레이션
 }
@@ -101,25 +102,32 @@ export async function runDailyDigest(opts: RunOptions = {}) {
       update: { subject, htmlBody: html, sentAt: null, errorMsg: null },
     });
 
-    // 8. 메일 발송
+    // 8. 메일 발송 — 발송 직전 발신 도메인 인증 여부 확인(미인증이면 전원 발송 스킵, 담당자 알림)
     let mailResult: any = null;
+    let skipped: string | undefined;
+    const bcc = opts.bcc ?? process.env.DIGEST_BCC ?? process.env.DIGEST_TEST_RECIPIENT;
     if (opts.send && !opts.dryRun) {
-      try {
-        mailResult = await sendDigestEmail({
-          subject,
-          html,
-          to: opts.testRecipient,
-        });
-        await prisma.digest.update({
-          where: { id: digestRecord.id },
-          data: { sentAt: new Date(), recipients: 1 },
-        });
-      } catch (e: any) {
-        await prisma.digest.update({
-          where: { id: digestRecord.id },
-          data: { errorMsg: String(e?.message ?? e) },
-        });
-        throw e;
+      const domain = await isSendDomainVerified();
+      if (!domain.verified) {
+        // 미인증: 전원 발송 스킵 + 담당자(BCC/테스트 수신자)에게 최선노력 알림
+        skipped = `domain_unverified(${domain.status})`;
+        const alertTo = (Array.isArray(bcc) ? bcc[0] : bcc) ?? process.env.DIGEST_TEST_RECIPIENT ?? '';
+        const notified = await sendOwnerAlert(
+          alertTo,
+          '[SparkScope] 다이제스트 발송 스킵 — 발신 도메인 미인증',
+          `발신 도메인(${domain.domain}) Resend 인증 상태: ${domain.status}\n\n전원 발송 실패를 막기 위해 이번 발송을 건너뛰었습니다.\nResend에서 도메인이 verified 되면 다음 스케줄에 정상 발송됩니다.`,
+        );
+        await prisma.digest.update({ where: { id: digestRecord.id }, data: { errorMsg: `발송 스킵: 도메인 미인증(${domain.status}) / 알림 ${notified ? '성공' : '실패'}` } });
+        console.warn(`[runner] 발신 도메인 미인증(${domain.status}) — 전원 발송 스킵, 알림 ${notified ? 'OK' : 'FAIL'}`);
+      } else {
+        const to = opts.testRecipient ?? process.env.DIGEST_TO_GROUP; // cron: 전사 그룹
+        try {
+          mailResult = await sendDigestEmail({ subject, html, to, bcc });
+          await prisma.digest.update({ where: { id: digestRecord.id }, data: { sentAt: new Date(), recipients: 1 } });
+        } catch (e: any) {
+          await prisma.digest.update({ where: { id: digestRecord.id }, data: { errorMsg: String(e?.message ?? e) } });
+          throw e;
+        }
       }
     }
 
@@ -127,9 +135,10 @@ export async function runDailyDigest(opts: RunOptions = {}) {
       where: { id: log.id },
       data: {
         finishedAt: new Date(),
-        status: 'SUCCESS',
+        status: skipped ? 'SKIPPED' : 'SUCCESS',
         collected: raw.length,
         analyzed: analyzed.length,
+        errors: skipped ? `발송 스킵: ${skipped}` : undefined,
       },
     });
 
@@ -139,6 +148,7 @@ export async function runDailyDigest(opts: RunOptions = {}) {
       analyzed: analyzed.length,
       digestId: digestRecord.id,
       mailResult,
+      skipped,
       subject,
     };
   } catch (e: any) {

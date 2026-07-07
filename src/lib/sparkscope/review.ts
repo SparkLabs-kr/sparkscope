@@ -18,7 +18,7 @@ const CATEGORY_PRIORITY: Record<string, number> = {
 };
 
 // 후보 기사 창(일). 발송 주기(월·수·금)를 고려한 최근 4일.
-const CANDIDATE_WINDOW_DAYS = 4;
+const CANDIDATE_WINDOW_DAYS = 7; // 첫 발송: 최근 7일(예: 7/1~7/8). 이후 주간 발송 기준.
 
 export interface ReviewArticle extends AnalyzedArticle {
   id: string;
@@ -68,6 +68,7 @@ function toReviewArticle(a: ArticleRow): ReviewArticle {
 export async function loadDigestCandidates(): Promise<ReviewArticle[]> {
   const since = new Date();
   since.setDate(since.getDate() - CANDIDATE_WINDOW_DAYS);
+  since.setHours(0, 0, 0, 0); // 구간 시작일 00:00부터 포함 (7/1 전체 포함)
 
   const [rows, targets] = await Promise.all([
     prisma.article.findMany({

@@ -1,5 +1,6 @@
-// Vercel Cron이 매주 월·수·금 08:30 KST (= 일·화·목 23:30 UTC)에 호출.
-// 30분간 수집·분석을 마치고 발송이 09:00 KST에 떨어지도록 즉시 실행.
+// Vercel Cron이 매주 월·수·금 09:00 KST (= 00:00 UTC)에 호출.
+// 수집·분석 후 다이제스트를 전사 그룹(DIGEST_TO_GROUP)에 발송, 담당자는 BCC.
+// 발송 직전 발신 도메인 인증 여부를 확인해 미인증이면 전원 발송을 스킵한다(runner 내부).
 import { NextResponse } from 'next/server';
 import { runDailyDigest } from '@/lib/sparkscope/runner';
 
