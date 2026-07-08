@@ -105,7 +105,8 @@ export async function runDailyDigest(opts: RunOptions = {}) {
     // 8. 메일 발송 — 발송 직전 발신 도메인 인증 여부 확인(미인증이면 전원 발송 스킵, 담당자 알림)
     let mailResult: any = null;
     let skipped: string | undefined;
-    const bcc = opts.bcc ?? process.env.DIGEST_BCC ?? process.env.DIGEST_TEST_RECIPIENT;
+    // BCC는 DIGEST_BCC가 명시적으로 설정된 경우에만. (TEST_RECIPIENT로 폴백하면 중복 수신 위험)
+    const bcc = opts.bcc ?? process.env.DIGEST_BCC ?? undefined;
     if (opts.send && !opts.dryRun) {
       const domain = await isSendDomainVerified();
       if (!domain.verified) {

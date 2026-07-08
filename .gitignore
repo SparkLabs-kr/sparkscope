@@ -22,3 +22,4 @@ _backup_before_clone/
 
 # reclassify 진행상황 파일
 .reclassify-progress.json
+.env*
