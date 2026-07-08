@@ -164,6 +164,23 @@ async function analyzeDeep(article: RawArticle & { _id: string }, portfolioUnive
 }
 
 // ===== 편집자 한 줄 인사 =====
+// 공백 포함 280자 이내로, 문장이 중간에 잘리지 않게 완결된 문장 단위로 마무리하는 하드 가드.
+const EDITOR_INTRO_MAX = 280;
+export function clampEditorIntro(text: string, max = EDITOR_INTRO_MAX): string {
+  const t = (text ?? '').trim();
+  if (t.length <= max) return t;
+  const head = t.slice(0, max);
+  // 마지막 문장 종결부(. ! ? 또는 '다.' 등) 기준으로 자름 — <strong> 태그가 열린 채 끝나지 않게 보정
+  const lastEnd = Math.max(head.lastIndexOf('. '), head.lastIndexOf('! '), head.lastIndexOf('? '),
+    head.lastIndexOf('.'), head.lastIndexOf('!'), head.lastIndexOf('?'));
+  let out = lastEnd > 40 ? head.slice(0, lastEnd + 1) : head.trim();
+  // 닫히지 않은 <strong> 태그가 있으면 닫아줌
+  const opens = (out.match(/<strong>/g) || []).length;
+  const closes = (out.match(/<\/strong>/g) || []).length;
+  if (opens > closes) out += '</strong>';
+  return out.trim();
+}
+
 export async function generateEditorIntro(top3: AnalyzedArticle[]): Promise<string> {
   if (top3.length === 0) return '오늘은 주목할 만한 보도가 적은 날입니다. 업계 동향만 가볍게 확인해보세요.';
   try {
@@ -184,13 +201,13 @@ export async function generateEditorIntro(top3: AnalyzedArticle[]): Promise<stri
     const text = resp.content.find(c => c.type === 'text')?.type === 'text'
       ? (resp.content[0] as any).text
       : '';
-    return text.trim();
+    return clampEditorIntro(text);
   } catch (e) {
     console.error('[analyzer] editor intro failed:', e);
     const top1 = top3[0];
     const pos = top3.filter(a => a.tone === 'POSITIVE').length;
     const mood = pos >= 2 ? '긍정적 보도가 우세한 흐름입니다' : '주목할 이슈가 이어지는 흐름입니다';
-    return `오늘은 <strong>${top1.title}</strong> 보도가 가장 눈에 띕니다. 전반적으로 ${mood}. 관련 포트폴리오사와의 연결 지점을 본부에서 함께 살펴볼 시점입니다.`;
+    return clampEditorIntro(`오늘은 <strong>${top1.title}</strong> 보도가 가장 눈에 띕니다. 전반적으로 ${mood}. 관련 포트폴리오사와의 연결 지점을 본부에서 함께 살펴볼 시점입니다.`);
   }
 }
 

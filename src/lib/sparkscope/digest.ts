@@ -97,9 +97,6 @@ function dedupeByCompany(list: AnalyzedArticle[]): AnalyzedArticle[] {
 }
 
 export function renderDigestHtml(data: DigestData, baseUrl?: string): string {
-  const base = baseUrl || DEFAULT_BASE_URL;
-  const dashboardUrl = `${base}/dashboard`;
-
   const pStat = data.stats;
 
   return `<!DOCTYPE html>
@@ -145,7 +142,6 @@ ${EMAIL_CSS}
       <div class="insight-label">💡 커뮤니케이션본부 TIP!</div>
       <div class="insight-title">${escape(data.insightTitle)}</div>
       <div class="insight-text">${data.insightText ?? ''}</div>
-      <a href="${dashboardUrl}" class="insight-action">SparkScope 대시보드 바로가기 →</a>
     </div>
   </div>` : ''}
 
@@ -169,13 +165,9 @@ ${EMAIL_CSS}
     ${data.competitorArticles.map(a => renderArticle(a, {})).join('\n')}
   </div>` : ''}
 
-  <div class="cta-row">
-    <div class="cta-title">한 발 더 들어가시려면</div>
-    <a href="${dashboardUrl}" class="cta-button">📊 본부 대시보드 열기</a>
-  </div>
-
   <div class="footer">
-    <div class="footer-text">SparkScope는 매주 월·수·금 오전 9시에 자동 발송됩니다.</div>
+    <div class="footer-cta-text">더 많은 기사와 업계 동향은 대시보드에서 확인하실 수 있습니다.</div>
+    <a href="https://sparkscope.vercel.app/dashboard?from=2026-04-09&amp;to=2026-07-08" class="footer-cta-button">SparkScope 대시보드 바로가기</a>
   </div>
 </div>
 </body>
@@ -345,13 +337,10 @@ body{margin:0;padding:0;background:#F5F3EF;font-family:-apple-system,BlinkMacSys
 .insight-title{font-size:15px;font-weight:700;color:#78350F;margin-bottom:8px}
 .insight-text{font-size:13px;color:#78350F;line-height:1.6}
 .insight-text strong{color:#92400E}
-.insight-action{display:inline-block;margin-top:10px;padding:8px 14px;background:#F59E0B;color:#FFF;text-decoration:none;border-radius:6px;font-size:12px;font-weight:600}
-.cta-row{padding:24px 28px;background:#FAFAFA;border-bottom:1px solid #F3F4F6}
-.cta-title{font-size:13px;font-weight:600;margin-bottom:12px}
-.cta-button{display:inline-block;padding:10px 18px;background:#5046E5;color:#FFF !important;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;margin-right:8px;margin-bottom:6px}
-.cta-button.outline{background:#FFF;color:#5046E5 !important;border:1.5px solid #5046E5}
 .footer{padding:24px 28px 32px;background:#F5F3EF;text-align:center}
 .footer-text{font-size:12px;color:#6B7280}
+.footer-cta-text{font-size:13px;color:#374151;margin-bottom:14px}
+.footer-cta-button{display:block;width:100%;box-sizing:border-box;padding:15px 20px;background:#5046E5;color:#FFF !important;text-decoration:none;border-radius:8px;font-size:14px;font-weight:700;text-align:center}
 .footer-link{font-size:12px;color:#5046E5;text-decoration:none;font-weight:600}
 .footer-meta{margin-top:12px;font-size:11px;color:#9CA3AF;line-height:1.6}
 `;
