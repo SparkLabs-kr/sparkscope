@@ -94,8 +94,9 @@ export async function runDailyDigest(opts: RunOptions = {}) {
     const html = renderDigestHtml(data, opts.baseUrl);
     const subject = buildSubject(data.dateLabel, data.top3[0]?.title);
 
-    // 7. DB에 다이제스트 저장
-    const today = new Date(new Date().setHours(0, 0, 0, 0));
+    // 7. DB에 다이제스트 저장 — KST 기준 오늘
+    const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    const today = new Date(kstNow.getFullYear(), kstNow.getMonth(), kstNow.getDate(), 0, 0, 0, 0);
     const digestRecord = await prisma.digest.upsert({
       where: { date: today },
       create: { date: today, subject, htmlBody: html },

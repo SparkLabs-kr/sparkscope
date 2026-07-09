@@ -17,7 +17,7 @@ function naverEnabled(): boolean {
 }
 
 const NOISE_SOURCES = new Set(['주달', '뉴스봇', 'Auto News', '주간시세', '시세분석']);
-const MAX_DAYS_AGO = 7;
+const MAX_DAYS_AGO = 3; // 월·수·금 발송 시 최근 3일 수집 (공휴일 대응용 백업 없음)
 const NAVER_DELAY_MS = 150; // 전역 직렬 간격 (병렬 대상이 동시에 때려 429 나는 것 방지)
 
 // 네이버 호출 전역 직렬 스로틀 — 병렬 수집이어도 네이버는 150ms 간격으로 순차 처리.
