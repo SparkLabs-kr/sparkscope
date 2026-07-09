@@ -68,8 +68,8 @@ async function loadDashboardData(from: string, to: string, company?: string) {
   const prevSince = new Date(prevUntil.getTime() - spanMs);
   const prevPortfolioWhere = { pubDate: { gte: prevSince, lte: prevUntil }, isNoise: false, category: 'portfolio_company' };
 
-  // 급증 배너: 기간 선택과 무관하게 "최근 3일 vs 직전 60일(백필 포함)"
-  const now = new Date();
+  // 급증 배너: 기간 선택과 무관하게 "최근 3일 vs 직전 60일(백필 포함)" — KST 기준
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
   const rc = new Date(now); rc.setDate(rc.getDate() - 3); rc.setHours(0, 0, 0, 0);
   const bl = new Date(now); bl.setDate(bl.getDate() - 63); bl.setHours(0, 0, 0, 0);
 
