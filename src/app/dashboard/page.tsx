@@ -34,10 +34,13 @@ function isValidYmd(s?: string): s is string {
 function clamp(s: string, lo: string, hi: string) {
   return s < lo ? lo : s > hi ? hi : s;
 }
+function getKstNow() {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+}
 
 function resolveRange(searchParams: { from?: string; to?: string }) {
-  const todayStr = fmt(new Date());
-  const def = new Date();
+  const todayStr = fmt(getKstNow());
+  const def = getKstNow();
   def.setMonth(def.getMonth() - 3); // 기본 기간: 최근 3개월 (유의미한 흐름 파악)
   let from = isValidYmd(searchParams.from) ? clamp(searchParams.from, MIN_DATE, todayStr) : fmt(def);
   let to = isValidYmd(searchParams.to) ? clamp(searchParams.to, MIN_DATE, todayStr) : todayStr;
@@ -69,7 +72,7 @@ async function loadDashboardData(from: string, to: string, company?: string) {
   const prevPortfolioWhere = { pubDate: { gte: prevSince, lte: prevUntil }, isNoise: false, category: 'portfolio_company' };
 
   // 급증 배너: 기간 선택과 무관하게 "최근 3일 vs 직전 60일(백필 포함)" — KST 기준
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+  const now = getKstNow();
   const rc = new Date(now); rc.setDate(rc.getDate() - 3); rc.setHours(0, 0, 0, 0);
   const bl = new Date(now); bl.setDate(bl.getDate() - 63); bl.setHours(0, 0, 0, 0);
 
@@ -348,7 +351,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const data = await loadDashboardData(range.from, range.to, company);
   const session = await getServerSession(authOptions);
   const canScrap = canScrapEmail(session?.user?.email ?? null);
-  const todayLabel = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+  const todayLabel = getKstNow().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
 
   return (
     <>
@@ -359,7 +362,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           <p className="text-[13px] text-spark-muted mt-2">{range.label} 데이터 기준</p>
         </div>
         <div className="flex items-center gap-2">
-          <DateRangePicker key={`${range.from}_${range.to}`} from={range.from} to={range.to} min={MIN_DATE} max={fmt(new Date())} company={data.selectedCompany} />
+          <DateRangePicker key={`${range.from}_${range.to}`} from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())} company={data.selectedCompany} />
           {canScrap && <Link href="/dashboard/scraps" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⭐ 스크랩함</Link>}
           <Link href="/dashboard/keywords" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⚙️ 키워드 관리</Link>
         </div>

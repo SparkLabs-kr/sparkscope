@@ -53,7 +53,7 @@ export function buildDigestData(
     })
     .slice(0, TOP_3_LIMIT);
 
-  const now = new Date();
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
   const dateLabel = formatDateKR(now);
 
   // 💡 본부에 한 줄: 가장 점수 높은 피칭 기회를 실제 제목 기반 액션으로
