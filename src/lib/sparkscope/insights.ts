@@ -6,6 +6,9 @@
 // 위기 감지용 부정 키워드 (data/뉴스 모니터링 DB - 부정_키워드.csv)
 export const NEGATIVE_KEYWORDS = ['논란', '고소', '사기', '철회', '무산', '구속', '적자', '유출', '사고'];
 
+// 부정 키워드 오분류 방지: 센터/기관/정부기관 등은 보도자료/협력 뉴스이므로 제외
+const INSTITUTION_KEYWORDS = ['센터', '기관', '부', '청', '위원회', '연구소', '교육청', '공사', '공단'];
+
 export interface ArticleLite {
   id: string;
   title: string;
@@ -19,6 +22,10 @@ export interface ArticleLite {
 
 /** 부정 기사 여부 + (있으면) 매칭된 부정 키워드 */
 export function negativeInfo(a: { title: string; tone: string | null }): { neg: boolean; keyword?: string } {
+  // 센터/기관 명칭이 있으면 부정으로 판정 안 함 (MOU/협력 등 긍정적 뉴스이기 때문)
+  const hasInstitution = INSTITUTION_KEYWORDS.some(k => a.title.includes(k));
+  if (hasInstitution) return { neg: false };
+
   const kw = NEGATIVE_KEYWORDS.find(k => a.title.includes(k));
   if (kw) return { neg: true, keyword: kw };
   if (a.tone === 'NEGATIVE') return { neg: true };
