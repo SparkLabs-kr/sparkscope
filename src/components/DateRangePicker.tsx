@@ -31,12 +31,17 @@ export function DateRangePicker({ from, to, min, max, company }: { from: string;
   const presetCls = 'rounded-lg px-2.5 py-1 text-xs font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50';
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <input type="date" value={f} min={min} max={max} onChange={e => setF(e.target.value)} className={inputCls} />
-      <span className="text-gray-400">~</span>
-      <input type="date" value={t} min={min} max={max} onChange={e => setT(e.target.value)} className={inputCls} />
-      <button onClick={() => go(f, t)} className="rounded-lg bg-spark-purple px-3 py-1 text-sm font-semibold text-white hover:opacity-90">조회</button>
-      <div className="flex gap-1">
+    <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2">
+      {/* 모바일: 세로 스택, 타블릿 이상: 가로 배치 */}
+      <div className="flex w-full sm:w-auto items-center gap-1 sm:gap-2">
+        <input type="date" value={f} min={min} max={max} onChange={e => setF(e.target.value)} className={`${inputCls} flex-1 sm:flex-none text-xs sm:text-sm`} />
+        <span className="text-gray-400">~</span>
+        <input type="date" value={t} min={min} max={max} onChange={e => setT(e.target.value)} className={`${inputCls} flex-1 sm:flex-none text-xs sm:text-sm`} />
+        <button onClick={() => go(f, t)} className="rounded-lg bg-spark-purple px-2 sm:px-3 py-1 text-xs sm:text-sm font-semibold text-white hover:opacity-90 whitespace-nowrap flex-shrink-0">조회</button>
+      </div>
+
+      {/* 프리셋 버튼: 모바일에서도 가로 유지 */}
+      <div className="flex gap-1 flex-wrap">
         <button onClick={() => preset(7)} className={presetCls}>7일</button>
         <button onClick={() => preset(30)} className={presetCls}>1개월</button>
         <button onClick={() => preset(90)} className={presetCls}>3개월</button>

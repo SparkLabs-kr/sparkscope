@@ -383,7 +383,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       )}
 
       {/* KPI ROW */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <KpiCard label="총 수집 기사" value={data.kpi.total} hint="선택한 기간 내 수집된 모든 기사 수 (노이즈 제외)" />
         <KpiCard label="스파크랩 직접 언급" value={data.kpi.sparklabsCount} hint="기사 제목에 '스파크랩'이 언급된 건수" />
         <KpiCard label="포트폴리오사 노출" value={data.kpi.portfolioCount} hint="스파크랩이 투자한 포트폴리오사가 언급된 기사 건수" />
@@ -392,7 +392,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
       {/* ── 스파크랩 (가장 궁금한 정보) ── */}
       <SectionTitle title="🏢 스파크랩" sub="우리 자사가 어디에, 어떤 논조로 보도되는가" />
-      <div className="grid lg:grid-cols-2 gap-4 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
         <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
           <div className="font-bold mb-4">📰 매체별 노출 분포 (스파크랩) <InfoTip text="선택 기간 동안 '스파크랩' 기사를 다룬 매체 분포입니다(주요 26개 매체 기준).\n어느 매체가 우리를 가장 많이 써주는지 보여줍니다." /></div>
           <MediaPanel data={data.sources} defaultCount={12} />
@@ -406,13 +406,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       {/* ── 포트폴리오사 ── */}
       <SectionTitle title="📊 포트폴리오사" sub="어느 포트폴리오사가 활발히 노출되고, 부정 이슈는 없는가" />
       {/* 긍정·부정 나란히 (대비가 한눈에) */}
-      <div className="grid lg:grid-cols-2 gap-4 mb-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <PortfolioPositives items={data.portfolioPositives} rangeLabel={range.label} />
         <PortfolioNegatives items={data.portfolioNegatives} rangeLabel={range.label} />
       </div>
 
       {/* 포트폴리오 TOP15 + 기획기사 피칭 */}
-      <div className="grid lg:grid-cols-2 gap-4 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
         <PortfolioTopList items={data.portfolioTop} rangeLabel={range.label} />
         <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
           <div className="font-bold mb-3">🎯 기획기사 피칭 <InfoTip text={`AI가 각 기사를 0~100점으로 평가한 '기획기사 피칭 점수'입니다.\n이 주제로 우리 포트폴리오사를 엮어 기획기사를 제안하면 성사 가능성이 높은 기사를 뜻합니다.\n· 60점 이상: 아래 목록에 표시\n· 75점 이상: 상단 '피칭 기회' 지표에 집계`} /></div>
@@ -420,9 +420,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             <div className="space-y-3">
               {data.pitches.slice(0, 5).map(p => (
                 <div key={p.id} className="p-3 bg-gradient-to-br from-amber-50 to-amber-100 border-l-4 border-amber-500 rounded-r-lg">
-                  <div className="flex justify-between items-center mb-1">
-                    <div className="text-sm font-bold text-amber-900">{p.pitchTopic ?? p.matchedKeyword}</div>
-                    <div className="text-xs px-2 py-0.5 bg-amber-500 text-white rounded-full font-bold">{p.pitchScore}점</div>
+                  <div className="flex items-center gap-2 mb-1 min-w-0">
+                    <div className="text-sm font-bold text-amber-900 flex-1 min-w-0 truncate">{p.pitchTopic ?? p.matchedKeyword}</div>
+                    <div className="text-xs px-2 py-0.5 bg-amber-500 text-white rounded-full font-bold flex-shrink-0 whitespace-nowrap">{p.pitchScore}점</div>
                   </div>
                   <div className="text-xs text-amber-800 truncate">{p.title}</div>
                 </div>
@@ -522,7 +522,7 @@ function CompetitorPanel({ competitors, sparklabsMentions, rangeLabel }: { compe
       </div>
 
       {totalComp > 0 ? (
-        <div className="grid md:grid-cols-2 gap-3 items-start">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
           {competitors.map(c => <CompetitorRow key={c.name} c={c} max={max} />)}
         </div>
       ) : (
@@ -538,12 +538,12 @@ function CompetitorRow({ c, max }: { c: CompetitorStat; max: number }) {
   const pct = Math.round((c.count / max) * 100);
   return (
     <div className="rounded-xl border border-spark-border p-3.5">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="text-sm font-bold text-spark-ink truncate">
+      <div className="flex items-center gap-2 mb-2 min-w-0">
+        <div className="text-sm font-bold text-spark-ink flex-1 min-w-0 truncate">
           {c.isTier1 && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-spark-purple/10 text-spark-purple font-bold align-middle mr-1">Tier1</span>}
           {c.name} {c.english && <span className="text-xs font-normal text-spark-muted">{c.english}</span>}
         </div>
-        <div className="flex items-center gap-1.5 flex-none">
+        <div className="flex items-center gap-1.5 flex-shrink-0 whitespace-nowrap">
           {c.negCount > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 font-bold">부정 {c.negCount}</span>}
           <span className="text-sm font-bold text-spark-ink tabular-nums">{c.count}<span className="text-xs text-spark-muted font-normal">건</span></span>
         </div>
@@ -596,12 +596,12 @@ function CompetitorRow({ c, max }: { c: CompetitorStat; max: number }) {
 function CompareRow({ label, count, max, color, strong }: { label: string; count: number; max: number; color: string; strong?: boolean }) {
   const pct = Math.round((count / max) * 100);
   return (
-    <div className="flex items-center gap-3 text-sm">
-      <div className={`w-40 truncate ${strong ? 'font-bold text-spark-purple' : 'text-gray-600'}`}>{label}</div>
-      <div className="flex-1 h-5 bg-gray-100 rounded overflow-hidden">
+    <div className="flex items-center gap-2 text-sm min-w-0">
+      <div className={`flex-shrink-0 w-20 sm:w-40 truncate ${strong ? 'font-bold text-spark-purple' : 'text-gray-600'}`}>{label}</div>
+      <div className="flex-1 h-5 bg-gray-100 rounded overflow-hidden min-w-0">
         <div className={`h-full rounded ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <div className="w-12 text-right font-semibold">{count}</div>
+      <div className="flex-shrink-0 w-10 text-right font-semibold tabular-nums">{count}</div>
     </div>
   );
 }
