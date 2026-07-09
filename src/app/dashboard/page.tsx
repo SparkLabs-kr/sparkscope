@@ -189,7 +189,13 @@ async function loadDashboardData(from: string, to: string, company?: string) {
   const prevMentionRate = prevPortfolioCount > 0 ? Math.round((prevMentionCount / prevPortfolioCount) * 100) : 0;
 
   // 위기 카드: 최근 3일 부정 기사로 감지 후, 회사별 AI 원인요약 주입(실패 시 fallback).
-  const crisesRaw = detectCrises(crisisNeg.filter(notNoise) as ArticleLite[]);
+  // 센터/기관 명칭이 있는 기사는 MOU/협력 뉴스이므로 제외
+  const INSTITUTION_KEYWORDS = ['센터', '기관', '부', '청', '위원회', '연구소', '교육청', '공사', '공단'];
+  const crisesRaw = detectCrises(
+    crisisNeg
+      .filter(notNoise)
+      .filter(a => !INSTITUTION_KEYWORDS.some(k => a.title.includes(k))) as ArticleLite[]
+  );
   const crises = await Promise.all(
     crisesRaw.map(async c => ({
       ...c,
