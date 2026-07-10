@@ -43,12 +43,28 @@ export function buildDigestData(
   const competitorArticles = sorted.filter(a => a.category === 'competitor').slice(0, COMPETITOR_LIMIT);
   const industryArticles = sorted.filter(a => a.category === 'industry_trend').slice(0, INDUSTRY_LIMIT);
 
-  // TOP3는 본부 스크랩 우선, 그다음 우선순위 점수
+  // TOP3는 연관성 우선순위: 스파크랩 > 포트폴리오 > 업계동향
+  // 본부 스크랩이 있으면 최우선, 없으면 카테고리와 priorityScore로 정렬
   const top3 = [...sorted]
     .sort((a, b) => {
+      // [1] 본부 스크랩 우선
       const sa = scrappedLinks?.has(a.link) ? 1 : 0;
       const sb = scrappedLinks?.has(b.link) ? 1 : 0;
       if (sa !== sb) return sb - sa;
+
+      // [2] 카테고리 우선순위 (스파크랩 > 포트폴리오 > 경쟁사 > 업계동향)
+      const catPriority: Record<string, number> = {
+        'sparklabs_self': 4,
+        'portfolio_company': 3,
+        'competitor': 2,
+        'industry_trend': 1,
+        'unrelated': 0,
+      };
+      const aPri = catPriority[a.category] ?? 0;
+      const bPri = catPriority[b.category] ?? 0;
+      if (aPri !== bPri) return bPri - aPri;
+
+      // [3] 같은 카테고리면 priorityScore
       return b.priorityScore - a.priorityScore;
     })
     .slice(0, TOP_3_LIMIT);

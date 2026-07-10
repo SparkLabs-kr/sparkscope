@@ -1,0 +1,46 @@
+name: Daily Digest Send (Schedule)
+
+# 매주 월·수·금 KST 09:00 (UTC 00:00) 실행
+# Vercel cron 백업용
+on:
+  schedule:
+    - cron: '0 0 * * 1,3,5'  # UTC 0시 = KST 09시 (월·수·금)
+  workflow_dispatch:  # 수동 트리거
+
+jobs:
+  send-digest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Call digest send endpoint
+        run: |
+          CRON_SECRET="${{ secrets.CRON_SECRET }}"
+          VERCEL_URL="${{ secrets.VERCEL_URL }}"
+
+          if [ -z "$CRON_SECRET" ] || [ -z "$VERCEL_URL" ]; then
+            echo "❌ CRON_SECRET or VERCEL_URL not set"
+            exit 1
+          fi
+
+          echo "📧 Sending digest to $VERCEL_URL/api/cron/daily-send-only"
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "https://$VERCEL_URL/api/cron/daily-send-only")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Response code: $HTTP_CODE"
+          echo "Response body: $BODY"
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Digest sent successfully"
+            exit 0
+          else
+            echo "❌ Failed to send digest"
+            exit 1
+          fi

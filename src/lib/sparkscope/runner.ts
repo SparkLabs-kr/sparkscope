@@ -14,6 +14,7 @@ export interface RunOptions {
   bcc?: string | string[];   // 숨은참조 (미지정 시 DIGEST_BCC → DIGEST_TEST_RECIPIENT)
   baseUrl?: string;          // 대시보드 링크 도메인
   dryRun?: boolean;          // 외부 호출 없이 시뮬레이션
+  skipCollect?: boolean;     // true면 수집 건너뛰고 기존 데이터로 발송만 (발송 전용 모드)
 }
 
 export async function runDailyDigest(opts: RunOptions = {}) {
@@ -22,10 +23,50 @@ export async function runDailyDigest(opts: RunOptions = {}) {
   });
 
   try {
-    // 1. 수집 (환경변수로 상한·기간 조절 가능 — 미설정 시 기존 기본값)
-    const maxPerCat = process.env.COLLECT_MAX_PER_CATEGORY ? Number(process.env.COLLECT_MAX_PER_CATEGORY) : 30;
-    const daysBack = process.env.COLLECT_DAYS_BACK ? Number(process.env.COLLECT_DAYS_BACK) : undefined;
-    const raw = await collectAllArticles({ maxKeywordsPerCategory: maxPerCat, daysBack });
+    // 1. 수집 (skipCollect=true면 건너뛰고 기존 데이터 사용 — 발송 전용 모드)
+    let raw: RawArticle[];
+    if (opts.skipCollect) {
+      // 기존 DB의 최근 3일 분석된 기사 사용 (수집 생략)
+      const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+      const threeDaysAgo = new Date(kstNow.getTime() - 3 * 24 * 60 * 60 * 1000);
+      const existing = await prisma.article.findMany({
+        where: {
+          pubDate: { gte: threeDaysAgo },
+          isNoise: false,
+          category: { not: 'unrelated' },
+          analyzedAt: { not: null },
+        },
+        select: {
+          id: true,
+          title: true,
+          link: true,
+          source: true,
+          pubDate: true,
+          matchedKeyword: true,
+          category: true,
+          importance: true,
+          tone: true,
+          oneLiner: true,
+          ourTake: true,
+          relatedCompanies: true,
+          pitchScore: true,
+          pitchTopic: true,
+          riskFlag: true,
+          isNoise: true,
+          noiseReason: true,
+          priorityScore: true,
+        },
+        orderBy: { priorityScore: 'desc' },
+        take: 500,
+      });
+      raw = existing as any;
+      console.log(`[runner] skip collect mode: using ${raw.length} existing articles`);
+    } else {
+      // 일반 수집 모드
+      const maxPerCat = process.env.COLLECT_MAX_PER_CATEGORY ? Number(process.env.COLLECT_MAX_PER_CATEGORY) : 30;
+      const daysBack = process.env.COLLECT_DAYS_BACK ? Number(process.env.COLLECT_DAYS_BACK) : undefined;
+      raw = await collectAllArticles({ maxKeywordsPerCategory: maxPerCat, daysBack });
+    }
 
     // 2. 분석에 필요한 컨텍스트
     const portfolioTargets = await prisma.monitoringTarget.findMany({

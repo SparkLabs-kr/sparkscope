@@ -1,0 +1,13 @@
+{
+  "startTime": "2026-07-09T23:52:26.854Z",
+  "totalArticles": 26049,
+  "dryRunDone": true,
+  "mainDone": true,
+  "dryRunApplied": 9,
+  "dryRunReview": 11,
+  "dryRunErrors": 0,
+  "mainApplied": 4,
+  "mainReview": 5,
+  "mainErrors": 26000,
+  "endTime": "2026-07-10T00:02:54.829Z"
+}
