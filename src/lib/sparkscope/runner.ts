@@ -85,43 +85,45 @@ export async function runDailyDigest(opts: RunOptions = {}) {
     const analyzed = await analyzeArticles(raw, portfolioUniverse, trendingTopics);
     console.log(`[runner] analyzed ${analyzed.length} articles`);
 
-    // 4. DB 저장 (upsert by link)
-    for (const a of analyzed) {
-      await prisma.article.upsert({
-        where: { link: a.link },
-        create: {
-          title: a.title,
-          link: a.link,
-          source: a.source,
-          pubDate: a.pubDate,
-          matchedKeyword: a.matchedKeyword,
-          category: a.category,
-          importance: a.importance,
-          tone: a.tone,
-          oneLiner: a.oneLiner,
-          ourTake: a.ourTake,
-          relatedCompanies: JSON.stringify(a.relatedCompanies),
-          pitchScore: a.pitchScore,
-          pitchTopic: a.pitchTopic,
-          riskFlag: a.riskFlag,
-          isNoise: a.isNoise,
-          noiseReason: a.noiseReason,
-          priorityScore: a.priorityScore,
-          analyzedAt: new Date(),
-        },
-        update: {
-          importance: a.importance,
-          tone: a.tone,
-          oneLiner: a.oneLiner,
-          ourTake: a.ourTake,
-          relatedCompanies: JSON.stringify(a.relatedCompanies),
-          pitchScore: a.pitchScore,
-          pitchTopic: a.pitchTopic,
-          riskFlag: a.riskFlag,
-          priorityScore: a.priorityScore,
-          analyzedAt: new Date(),
-        },
-      });
+    // 4. DB 저장 (upsert by link) — skipCollect 모드는 생략 (이미 저장된 데이터)
+    if (!opts.skipCollect) {
+      for (const a of analyzed) {
+        await prisma.article.upsert({
+          where: { link: a.link },
+          create: {
+            title: a.title,
+            link: a.link,
+            source: a.source,
+            pubDate: a.pubDate,
+            matchedKeyword: a.matchedKeyword,
+            category: a.category,
+            importance: a.importance,
+            tone: a.tone,
+            oneLiner: a.oneLiner,
+            ourTake: a.ourTake,
+            relatedCompanies: JSON.stringify(a.relatedCompanies),
+            pitchScore: a.pitchScore,
+            pitchTopic: a.pitchTopic,
+            riskFlag: a.riskFlag,
+            isNoise: a.isNoise,
+            noiseReason: a.noiseReason,
+            priorityScore: a.priorityScore,
+            analyzedAt: new Date(),
+          },
+          update: {
+            importance: a.importance,
+            tone: a.tone,
+            oneLiner: a.oneLiner,
+            ourTake: a.ourTake,
+            relatedCompanies: JSON.stringify(a.relatedCompanies),
+            pitchScore: a.pitchScore,
+            pitchTopic: a.pitchTopic,
+            riskFlag: a.riskFlag,
+            priorityScore: a.priorityScore,
+            analyzedAt: new Date(),
+          },
+        });
+      }
     }
 
     // 5. 편집자 인사
