@@ -23,7 +23,6 @@ export const NEGATIVE_KEYWORDS_DATA: NegativeKeyword[] = [
   { type: "부도/파산", keyword: "부도" },
   { type: "손실/손해", keyword: "손실" },
   { type: "손실/손해", keyword: "손해" },
-  { type: "손실/손해", keyword: "적자" },
   { type: "손실/손해", keyword: "적손" },
   { type: "분쟁/고소", keyword: "소송" },
   { type: "분쟁/고소", keyword: "고소" },

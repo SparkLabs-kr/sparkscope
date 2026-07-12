@@ -25,6 +25,67 @@ const TREND_TOP_N = 6;
 // 실시간 위기 감지: "급증" 판단 시간 창(일). 수집 주기(월·수·금)를 고려한 최근 3일.
 const CRISIS_WINDOW_DAYS = 3;
 
+// 대시보드 집계에서 제외할 업계 키워드 (industry_trend category)
+const INDUSTRY_TREND_KEYWORDS = [
+  'AI 스타트업',
+  'AI 에이전트',
+  'AI 핀테크',
+  'AI 헬스케어',
+  '과학기술정보통신부',
+  '기업주도 벤처캐피탈',
+  '기후테크',
+  '넥스트라이즈',
+  '데모데이',
+  '딥테크',
+  '로보틱스',
+  '모태펀드',
+  '바이오테크',
+  '벤처',
+  '벤처 투자',
+  '벤처캐피탈',
+  '벤처캐피털',
+  '부산',
+  '산업통상자원부',
+  '상장',
+  '생성형 AI',
+  '서울산업진흥원',
+  '스케일업',
+  '스타트업',
+  '스타트업 IPO',
+  '스타트업 M&A',
+  '스타트업 글로벌 진출',
+  '스타트업 시드 투자',
+  '시리즈 A 투자',
+  '시리즈 B 투자',
+  '씨이에스',
+  '아웃스탠딩',
+  '액셀러레이터',
+  '엑시트',
+  '오픈이노베이션',
+  '유니콘',
+  '인수합병',
+  '정부지원사업',
+  '중소벤처기업부',
+  '창업가',
+  '창업진흥원',
+  '창조경제혁신센터',
+  '컴업',
+  '케이글로벌',
+  '케이스타트업',
+  '코트라',
+  '콘텐츠진흥원',
+  '탄소중립',
+  '투자유치',
+  '트라이에브리씽',
+  '팁스',
+  '팁스(TIPS)',
+  '펀드결성',
+  '푸드테크',
+  '한국벤처투자',
+  '한국엔젤투자협회',
+  '한국초기투자기관협회',
+];
+
 function fmt(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -103,14 +164,14 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'portfolio_company', OR: negOr }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true }, take: 800 }),
     // 표시 단계 관련성 가드용: 포트폴리오 감시대상 키워드맵 (primaryKeyword → [이름·영문·보조])
     prisma.monitoringTarget.findMany({ where: { category: 'portfolio_company', status: 'ACTIVE' }, select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true } }),
-    // 포트폴리오 vs 타 하우스 비교용: competitor(타 AC·VC 하우스) 노출 상위 3개 (실제 이름)
-    prisma.article.groupBy({ by: ['matchedKeyword'], where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor' }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 3 }),
+    // 포트폴리오 vs 타 하우스 비교용: competitor(타 AC·VC 하우스) 노출 상위 3개 (실제 이름) — 업계 키워드 제외
+    prisma.article.groupBy({ by: ['matchedKeyword'], where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor', matchedKeyword: { notIn: INDUSTRY_TREND_KEYWORDS } }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 3 }),
     // 경쟁사 모니터링 섹션용: 기간 내 competitor 기사 전체(matchedKeyword=실제 경쟁사명별 집계)
     prisma.article.findMany({ where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor' }, orderBy: { pubDate: 'desc' }, select: { title: true, source: true, pubDate: true, link: true, tone: true, matchedKeyword: true }, take: 3000 }),
     // 경쟁사 비교 기준선: 기간 내 '스파크랩' 언급 기사 수 (엔티티 자체 + 제목 언급)
     prisma.article.count({ where: { pubDate: { gte: since, lte: until }, isNoise: false, OR: [{ category: 'sparklabs_self' }, { title: { contains: '스파크랩' } }] } }),
-    // 가장 많이 언급된 포트폴리오사 TOP 15 (기간 내 노출 건수)
-    prisma.article.groupBy({ by: ['matchedKeyword'], where: portfolioWhere, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 15 }),
+    // 가장 많이 언급된 포트폴리오사 TOP 15 (기간 내 노출 건수) — 업계 키워드 제외
+    prisma.article.groupBy({ by: ['matchedKeyword'], where: { ...portfolioWhere, matchedKeyword: { notIn: INDUSTRY_TREND_KEYWORDS } }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 15 }),
     // 포트폴리오 부정 기사 (기간 내 부정 논조 — 회사·제목 확인용)
     prisma.article.findMany({ where: { ...portfolioWhere, OR: negOr }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true }, take: 80 }),
     // 스파크랩 자사 기사 (톤 분석 클릭 시 펼쳐볼 목록)
