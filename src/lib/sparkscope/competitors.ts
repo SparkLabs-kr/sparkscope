@@ -1,10 +1,11 @@
 /**
- * 경쟁사 모니터링 — data/monitoring-targets.csv 기준
+ * 경쟁사 모니터링 — monitoring-targets.csv 기준
  *
  * [1] category='competitor'인 기업만 필터링
+ * 주의: 클라이언트 번들에서는 파일 I/O 불가능
+ * → 필요시에만 server component에서 호출
  */
 import { matchesAsToken } from './relevance';
-import { getCompetitorTargets, type MonitoringTarget } from './monitoring-targets-loader';
 
 export interface CompetitorDef {
   name: string;
@@ -14,17 +15,27 @@ export interface CompetitorDef {
 
 let competitorsCache: CompetitorDef[] | null = null;
 
-/** monitoring-targets.csv에서 competitor만 로드 */
+/** monitoring-targets.csv에서 competitor만 로드 (server-only) */
 function loadCompetitors(): CompetitorDef[] {
   if (competitorsCache) return competitorsCache;
 
-  const targets = getCompetitorTargets();
-  competitorsCache = targets.map(t => ({
-    name: t.name,
-    english: t.englishName || t.name,
-    keywords: [t.primaryKeyword, ...t.helperKeywords],
-  }));
-  return competitorsCache;
+  try {
+    // Server Component에서만 실행
+    if (typeof window === 'undefined') {
+      const { getCompetitorTargets } = require('./monitoring-targets-loader');
+      const targets = getCompetitorTargets();
+      competitorsCache = targets.map((t: any) => ({
+        name: t.name,
+        english: t.englishName || t.name,
+        keywords: [t.primaryKeyword, ...t.helperKeywords],
+      }));
+    }
+  } catch (e) {
+    console.warn('[competitors] loadCompetitors failed:', e);
+    competitorsCache = [];
+  }
+
+  return competitorsCache || [];
 }
 
 export function matchCompetitor(title: string): CompetitorDef | null {
@@ -62,16 +73,25 @@ export function tier1EnglishOf(name: string): string {
   return hit?.english ?? '';
 }
 
-/** Lazy initialization - 첫 접근 시점에 생성 */
+/** Tier1 이름 집합 (캐시) */
 let tier1NameSetCache: Set<string> | null = null;
-export const TIER1_NAME_SET = new Proxy(new Set<string>(), {
-  get(target, prop) {
-    if (tier1NameSetCache === null) {
-      tier1NameSetCache = buildTier1NameSet();
-    }
-    return tier1NameSetCache[prop as keyof Set<string>];
+
+function getTier1NameSet(): Set<string> {
+  if (!tier1NameSetCache) {
+    tier1NameSetCache = buildTier1NameSet();
+  }
+  return tier1NameSetCache;
+}
+
+/** dashboard/page.tsx 호환성용 getter */
+export const TIER1_NAME_SET = {
+  has(name: string): boolean {
+    return getTier1NameSet().has(name);
   },
-}) as Set<string>;
+  [Symbol.iterator]() {
+    return getTier1NameSet()[Symbol.iterator]();
+  },
+} as Set<string>;
 
 export interface CompetitorArticle {
   title: string;
