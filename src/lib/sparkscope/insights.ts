@@ -2,9 +2,13 @@
  * 대시보드 인사이트 계산 — 위기 감지 / 이슈 급증.
  * 본문 미저장 상태이므로 제목 + 톤(tone) 기반 휴리스틱. 데이터 보강 시 정확도 자동 상향.
  */
+import { NEGATIVE_KEYWORDS_DATA, CRISIS_KEYWORDS_DATA } from './keywords-data';
 
-// 위기 감지용 부정 키워드 (data/뉴스 모니터링 DB - 부정_키워드.csv)
-export const NEGATIVE_KEYWORDS = ['논란', '고소', '사기', '철회', '무산', '구속', '적자', '유출', '사고'];
+// data/negative-keywords.csv에서 키워드만 추출
+export const NEGATIVE_KEYWORDS = NEGATIVE_KEYWORDS_DATA.map(k => k.keyword);
+
+// data/crisis-keywords.csv에서 키워드만 추출
+export const CRISIS_KEYWORDS = CRISIS_KEYWORDS_DATA.map(k => k.keyword);
 
 // 부정 키워드 오분류 방지: 센터/기관/정부기관 등은 보도자료/협력 뉴스이므로 제외
 const INSTITUTION_KEYWORDS = ['센터', '기관', '부', '청', '위원회', '연구소', '교육청', '공사', '공단'];
