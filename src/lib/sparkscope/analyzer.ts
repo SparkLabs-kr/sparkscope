@@ -15,7 +15,7 @@ import {
   EDITOR_INTRO_SYSTEM,
   buildEditorIntroUserMessage,
 } from './prompts';
-import { hasNegativeKeyword, hasCrisisKeyword } from './keywords-loader';
+import { hasNegativeKeyword, hasCrisisKeyword } from './keywords-data';
 import type { RawArticle, AnalyzedArticle, Importance, Tone, Category } from './types';
 
 const anthropic = new Anthropic({
