@@ -15,6 +15,7 @@ import {
   EDITOR_INTRO_SYSTEM,
   buildEditorIntroUserMessage,
 } from './prompts';
+import { hasNegativeKeyword, hasCrisisKeyword } from './keywords-loader';
 import type { RawArticle, AnalyzedArticle, Importance, Tone, Category } from './types';
 
 const anthropic = new Anthropic({
@@ -22,8 +23,7 @@ const anthropic = new Anthropic({
 });
 
 const HAIKU_BATCH_SIZE = 10;
-const POSITIVE_HINTS = ['투자 유치', '상장', '협업', '계약', '돌파', '선정', '수상', 'MOU', '런칭', '개시', '진출'];
-const NEGATIVE_HINTS = ['논란', '소송', '하락', '폐업', '철수', '리콜', '비판', '의혹'];
+const POSITIVE_HINTS = ['투자 유치', '상장', '협업', '계약', '돌파', '선정', '수상', 'MOU', '런칭', '개시', '진출', '기록', '성장', '확대'];
 
 export async function analyzeArticles(raw: RawArticle[], portfolioUniverse: string[], trendingTopics: string[]): Promise<AnalyzedArticle[]> {
   // 1단계: Haiku 1차 분류 (배치)
@@ -260,10 +260,12 @@ function heuristicClassify(article: RawArticle): ClassificationResult {
 }
 
 function heuristicTone(title: string): Tone {
+  // [5] data 폴더 키워드 규칙 우선
+  if (hasNegativeKeyword(title)) return 'NEGATIVE';
+
   const isPos = POSITIVE_HINTS.some(k => title.includes(k));
-  const isNeg = NEGATIVE_HINTS.some(k => title.includes(k));
-  if (isPos && !isNeg) return 'POSITIVE';
-  if (isNeg) return 'NEGATIVE';
+  if (isPos) return 'POSITIVE';
+
   return 'NEUTRAL';
 }
 
