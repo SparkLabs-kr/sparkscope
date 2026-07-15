@@ -45,7 +45,7 @@ git push -u origin main
 
 | 변수명 | 값 | 어디서 |
 |-------|-----|--------|
-| `DATABASE_URL` | `postgres://...` | Vercel Storage → 만든 Postgres → Connection String |
+| `DATABASE_URL` | `postgresql://user:password@host/db` | Vercel Storage → 만든 Postgres → Connection String |
 | `ANTHROPIC_API_KEY` | `sk-ant-...` | Anthropic Console |
 | `RESEND_API_KEY` | `re_...` | Resend Dashboard |
 | `DIGEST_FROM_EMAIL` | `sparkscope@sparklabs.co.kr` | (직접 입력) |
@@ -125,6 +125,58 @@ sparkscope/
 ├── package.json
 └── README.md
 ```
+
+---
+
+## 🔐 보안: Pre-commit 훅 (Gitleaks)
+
+### 개요
+이 저장소는 API 키, 토큰, 비밀번호 같은 민감한 정보가 실수로 커밋되는 것을 방지하기 위해 **gitleaks** pre-commit 훅을 사용합니다.
+
+### 인턴들이 클론 후 해야 할 일
+
+```bash
+cd sparkscope
+npm install    # → prepare 스크립트가 자동으로 husky를 활성화합니다
+```
+
+**그게 전부입니다.** 이제 커밋할 때마다 자동으로 시크릿 검사가 실행됩니다.
+
+### 커밋할 때 어떻게 되는가
+
+```bash
+git commit -m "메시지"
+
+# 자동으로 실행됨 ↓
+# 🔐 API 키·토큰·시크릿 검사 중...
+# ✅ 보안 검사 통과
+
+# 만약 민감한 정보가 포함되면:
+# ❌ 검사 실패: 커밋에 민감한 정보가 포함되어 있습니다.
+#    - 파일에서 API 키, 토큰, 비밀번호를 제거한 후 다시 시도하세요.
+```
+
+### 거짓 양성 (False Positive) 처리
+
+테스트나 예시 데이터에서 실수로 패턴이 감지된 경우:
+
+1. 거짓 양성을 발견했으면, 커밋 시 오류 메시지에서 hash를 확인합니다
+2. `.gitleaksignore` 파일에 그 hash를 추가합니다:
+
+```
+# .gitleaksignore
+sha256:abcd1234...
+```
+
+3. 다시 커밋하면 통과합니다
+
+### 긴급: 훅 우회가 필요한 경우 (권장하지 않음)
+
+```bash
+git commit --no-verify -m "메시지"  # ⚠️ 가능한 피하세요
+```
+
+검사를 우회하지 않고 파일을 수정하는 것이 안전합니다.
 
 ---
 

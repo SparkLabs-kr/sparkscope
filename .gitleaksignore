@@ -1,0 +1,13 @@
+# Gitleaks ignore file
+# 예시나 테스트 데이터에서 거짓 양성(false positive)을 무시하려면 아래에 추가하세요
+#
+# 사용법:
+# 1. 거짓 양성 라인의 hash를 구하세요:
+#    gitleaks detect -v 또는 커밋 시 오류 메시지 확인
+# 2. 아래에 hash를 추가하세요:
+#
+# Example:
+# sha256:abcd1234...
+# sha256:ef567890...
+
+# (인턴들이 추가할 거짓 양성 hash들이 여기 들어갑니다)
