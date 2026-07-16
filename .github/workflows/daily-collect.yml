@@ -1,0 +1,52 @@
+name: Daily Collect (Schedule)
+
+# 매일 오전 7시 KST (UTC 22:00 전날) 실행
+# 뉴스 수집 → 분석 → DB 저장 (발송 제외)
+on:
+  schedule:
+    - cron: '0 22 * * *'  # UTC 22시 = KST 07시 (매일)
+  workflow_dispatch:  # 수동 트리거
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Call daily collect endpoint
+        run: |
+          CRON_SECRET="${{ secrets.CRON_SECRET }}"
+          VERCEL_URL="${{ secrets.VERCEL_URL }}"
+
+          if [ -z "$CRON_SECRET" ] || [ -z "$VERCEL_URL" ]; then
+            echo "❌ CRON_SECRET or VERCEL_URL not set"
+            exit 1
+          fi
+
+          echo "📰 Starting daily collection at $(date '+%Y-%m-%d %H:%M:%S')"
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "https://$VERCEL_URL/api/cron/daily-collect")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Response code: $HTTP_CODE"
+          echo "Response body: $BODY"
+
+          if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "202" ]; then
+            echo "✅ Collection completed successfully"
+            exit 0
+          else
+            echo "❌ Collection failed (HTTP $HTTP_CODE)"
+            exit 1
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "⚠️ Daily collection failed at $(date '+%Y-%m-%d %H:%M:%S')"
+          echo "Check the logs above for details"
