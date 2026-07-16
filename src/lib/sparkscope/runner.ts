@@ -151,7 +151,13 @@ export async function runDailyDigest(opts: RunOptions = {}) {
     let skipped: string | undefined;
     // BCC는 DIGEST_BCC가 명시적으로 설정된 경우에만. (TEST_RECIPIENT로 폴백하면 중복 수신 위험)
     const bcc = opts.bcc ?? process.env.DIGEST_BCC ?? undefined;
-    if (opts.send && !opts.dryRun) {
+    // 2026-07-17은 발송 중단
+    const isBlockDate = kstNow.getFullYear() === 2026 && kstNow.getMonth() === 6 && kstNow.getDate() === 17;
+    if (isBlockDate) {
+      skipped = 'scheduled_pause_2026_07_17';
+      await prisma.digest.update({ where: { id: digestRecord.id }, data: { errorMsg: '2026-07-17 발송 중단' } });
+      console.log('[runner] 2026-07-17 발송 중단');
+    } else if (opts.send && !opts.dryRun) {
       const domain = await isSendDomainVerified();
       if (!domain.verified) {
         // 미인증: 전원 발송 스킵 + 담당자(BCC/테스트 수신자)에게 최선노력 알림
