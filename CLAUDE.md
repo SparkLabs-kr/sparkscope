@@ -38,6 +38,31 @@
 
 ---
 
+## ⏰ 크론 구조 (건드리기 전에 반드시 읽을 것)
+
+### 현재 설정
+
+**수집:**
+- GitHub Actions: `.github/workflows/daily-collect.yml`
+- 일정: 매일 07:00 KST (UTC 22:00)
+- 작업: 수집 → 분석 → DB 저장
+- 엔드포인트: `GET /api/cron/daily-collect`
+
+**발송:**
+- Vercel Cron: `vercel.json`
+- 일정: 월·수·금 09:00 KST (UTC 00:00)
+- 작업: DB에 있는 것만 발송, 수집 안 함 (`skipCollect=true`)
+- 엔드포인트: `GET /api/cron/daily-send-only`
+
+### 규칙
+
+- ✅ 발송 크론은 **수집하지 않는다**. 수집은 반드시 별도 크론이 담당한다.
+- ✅ 같은 작업을 **Vercel과 GitHub Actions 양쪽에 만들지 않는다**.
+  > 과거 `daily-digest-send.yml`이 Vercel 발송과 중복으로 돌다가 실패만 반복했고, 2026-07-16에 삭제함.
+- ✅ 크론 작동 여부를 물을 땐 **추측하지 말고** `vercel.json`과 `.github/workflows/` 파일을 직접 읽고 답한다.
+
+---
+
 ## 🚨 Pre-commit 보안 훅
 
 이 저장소는 API 키, 토큰, 시크릿이 커밋되는 것을 자동으로 차단합니다.
