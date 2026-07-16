@@ -18,10 +18,9 @@ jobs:
       - name: Call daily collect endpoint
         run: |
           CRON_SECRET="${{ secrets.CRON_SECRET }}"
-          VERCEL_URL="${{ secrets.VERCEL_URL }}"
 
-          if [ -z "$CRON_SECRET" ] || [ -z "$VERCEL_URL" ]; then
-            echo "❌ CRON_SECRET or VERCEL_URL not set"
+          if [ -z "$CRON_SECRET" ]; then
+            echo "❌ CRON_SECRET not set"
             exit 1
           fi
 
@@ -29,7 +28,7 @@ jobs:
 
           RESPONSE=$(curl -s -w "\n%{http_code}" \
             -H "Authorization: Bearer $CRON_SECRET" \
-            "https://$VERCEL_URL/api/cron/daily-collect")
+            "https://sparkscope.vercel.app/api/cron/daily-collect")
 
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
           BODY=$(echo "$RESPONSE" | head -n -1)
