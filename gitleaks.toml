@@ -1,67 +1,53 @@
-# Gitleaks configuration
-# 레포지토리에 푸시되는 API 키, 토큰, 시크릿을 차단합니다.
-
 title = "SparkScope Secret Detection"
 
-# 검사 규칙
-# 기본 규칙에 추가로 프로젝트별 패턴도 검사합니다
-
-# 이미 알려진 false-positive 제외
 [[rules]]
-id = "anthropic-key"
+id = "sparkscope-anthropic-key"
 description = "Anthropic API Key"
-regex = '''sk-ant-[a-zA-Z0-9_]{48,}'''
-keywords = ["sk-ant"]
+regex = '''sk-ant-[a-zA-Z0-9_-]{48,}'''
 
 [[rules]]
-id = "supabase-key"
-description = "Supabase API Key or URL"
-regex = '''(https?://[a-z0-9]+\.supabase\.co)|supabase_[a-z0-9]{20,}'''
-keywords = ["supabase"]
+id = "sparkscope-aws-access-key"
+description = "AWS Access Key"
+regex = '''AKIA[0-9A-Z]{16}'''
 
 [[rules]]
-id = "database-url"
-description = "Database Connection String"
-regex = '''(?i)(postgres://|mongodb://|mysql://)[a-z0-9:@\.\-/]+'''
-keywords = ["database", "postgres", "mongodb"]
+id = "sparkscope-github-token"
+description = "GitHub Token"
+regex = '''gh[pousr]_[a-zA-Z0-9]{36,}'''
 
 [[rules]]
-id = "resend-api"
+id = "sparkscope-supabase-key"
+description = "Supabase API Key"
+regex = '''supabase_[a-z0-9]{20,}'''
+
+[[rules]]
+id = "sparkscope-database-url"
+description = "Database Connection String with credentials"
+regex = '''(?i)(postgres|mysql|mongodb)://[^\s:@/]+:[^\s:@/]+@'''
+
+[[rules]]
+id = "sparkscope-resend-key"
 description = "Resend API Key"
 regex = '''re_[a-zA-Z0-9]{20,}'''
-keywords = ["re_"]
 
 [[rules]]
-id = "nextauth-secret"
+id = "sparkscope-nextauth-secret"
 description = "NextAuth Secret"
-regex = '''(?i)nextauth_secret\s*=\s*[a-zA-Z0-9]{32,}'''
-keywords = ["nextauth_secret"]
+regex = '''(?i)nextauth_secret\s*=\s*[a-zA-Z0-9+/=]{32,}'''
 
 [[rules]]
-id = "bearer-token"
-description = "Bearer Token"
-regex = '''(?i)bearer\s+[a-zA-Z0-9\.\-_]+'''
-keywords = ["bearer"]
+id = "sparkscope-private-key"
+description = "Private Key"
+regex = '''-----BEGIN [A-Z ]+ PRIVATE KEY-----'''
 
-# 검사할 파일 확장자
-extensions = [
-    "ts",
-    "tsx",
-    "js",
-    "jsx",
-    "json",
-    "env",
-    "txt"
-]
-
-# 제외할 경로
 [allowlist]
 paths = [
-    "node_modules/",
-    ".next/",
-    ".git/",
-    "out/",
-    "\.vercel/",
-    "gitleaks\.toml",
-    "\.gitleaksignore"
+    '''node_modules''',
+    '''\.next''',
+    '''\.git''',
+    '''out''',
+    '''\.vercel''',
+    '''gitleaks\.toml''',
+    '''\.gitleaksignore''',
+    '''package-lock\.json''',
 ]

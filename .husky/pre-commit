@@ -1,5 +1,24 @@
 #!/bin/sh
-. "$(dirname "$0")/_/husky.sh"
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-node scripts/check-secrets.js
-exit $?
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "⚠️  gitleaks가 설치되어 있지 않아 검사를 건너뜁니다."
+  echo "    설치: brew install gitleaks"
+  exit 0
+fi
+
+echo "🔐 API 키·토큰·비밀번호 검사 중..."
+
+gitleaks git --staged --redact --no-banner -c gitleaks.toml
+status=$?
+
+if [ "$status" -ne 0 ]; then
+  echo ""
+  echo "❌ 민감한 정보가 발견되어 커밋이 차단됩니다."
+  echo "   파일에서 API 키/비밀번호를 제거한 후 다시 커밋하세요."
+  echo "   (우회: git commit --no-verify — 권장하지 않음)"
+  exit 1
+fi
+
+echo "✅ 보안 검사 통과"
+exit 0
