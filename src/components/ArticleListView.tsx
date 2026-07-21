@@ -28,6 +28,14 @@ const CATEGORY_LABELS: Record<string, string> = {
   industry_trend: '스타트업계',
 };
 
+// 분류 필터 버튼 — 색은 기사 테이블의 분류 배지 색과 동일하게 맞춘다.
+const CATEGORY_BUTTONS = [
+  { id: 'sparklabs_self', label: '스파크랩', on: 'bg-green-600 border-green-600 text-white', off: 'bg-green-50 border-green-200 text-green-800 hover:border-green-500' },
+  { id: 'portfolio_company', label: '포트폴리오', on: 'bg-spark-purple border-spark-purple text-white', off: 'bg-spark-light-purple/40 border-spark-purple/30 text-spark-purple hover:border-spark-purple' },
+  { id: 'industry_trend', label: '스타트업계', on: 'bg-amber-500 border-amber-500 text-white', off: 'bg-amber-50 border-amber-200 text-amber-800 hover:border-amber-500' },
+  { id: 'competitor', label: 'AC·VC', on: 'bg-red-600 border-red-600 text-white', off: 'bg-red-50 border-red-200 text-red-800 hover:border-red-500' },
+] as const;
+
 function ymd(d: Date | string): string {
   const x = new Date(d);
   return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
@@ -96,6 +104,34 @@ export function ArticleListView({ articles, canScrap = false, emptyText, showSea
 
   return (
     <div>
+      {/* 분류 필터 버튼 — 드롭다운 대신 한눈에 보이는 색상 버튼. 선택 시 그 분류만 보여주고 행의 분류 태그는 감춘다. */}
+      {showCategory && (
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <button
+            onClick={() => { setCat(''); setSort('recent'); }}
+            className={`rounded-lg border px-3.5 py-1.5 text-sm font-bold whitespace-nowrap transition-colors ${
+              cat === '' ? 'bg-spark-ink border-spark-ink text-white' : 'bg-white border-spark-border text-spark-ink-soft hover:border-spark-ink'
+            }`}
+          >
+            📅 날짜순 전체보기
+          </button>
+          <span className="h-5 w-px bg-spark-border" aria-hidden />
+          {CATEGORY_BUTTONS.filter(b => (catCounts.get(b.id) ?? 0) > 0).map(b => {
+            const active = cat === b.id;
+            return (
+              <button
+                key={b.id}
+                onClick={() => setCat(active ? '' : b.id)}
+                aria-pressed={active}
+                className={`rounded-lg border px-3.5 py-1.5 text-sm font-bold whitespace-nowrap transition-colors ${active ? b.on : b.off}`}
+              >
+                {b.label} <span className="font-semibold opacity-70">{catCounts.get(b.id)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2 mb-3">
         {showSearch && (
           <div className="relative flex-1 min-w-[200px]">
@@ -111,16 +147,6 @@ export function ArticleListView({ articles, canScrap = false, emptyText, showSea
               <button onClick={() => setQ('')} className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-0.5 text-xs text-gray-400 hover:bg-gray-100" aria-label="검색어 지우기">✕</button>
             )}
           </div>
-        )}
-        {showCategory && (
-          <select value={cat} onChange={e => setCat(e.target.value)} className={selCls} aria-label="분류">
-            <option value="">전체 분류</option>
-            {['sparklabs_self', 'portfolio_company', 'competitor', 'industry_trend']
-              .filter(c => (catCounts.get(c) ?? 0) > 0)
-              .map(c => (
-                <option key={c} value={c}>{CATEGORY_LABELS[c] ?? c} ({catCounts.get(c)})</option>
-              ))}
-          </select>
         )}
         <select value={sort} onChange={e => setSort(e.target.value as SortKey)} className={selCls} aria-label="정렬">
           <option value="recent">최신순</option>
@@ -145,6 +171,7 @@ export function ArticleListView({ articles, canScrap = false, emptyText, showSea
       <ArticlesTable
         articles={view as any}
         canScrap={canScrap}
+        showCategoryColumn={!cat}
         emptyText={showSearch && q.trim() ? `‘${q.trim()}’에 맞는 기사가 없습니다.` : emptyText}
       />
     </div>
