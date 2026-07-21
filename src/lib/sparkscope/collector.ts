@@ -35,6 +35,9 @@ const CATEGORY_PRIORITY: Record<string, number> = {
   industry_trend: 40,
 };
 
+// 포트폴리오사 tier(A/B/C) 가산점 — 핵심 포트폴리오사(A) 기사가 다이제스트·대시보드에서 더 상위로.
+const TIER_BONUS: Record<string, number> = { A: 15, B: 5, C: 0 };
+
 interface CollectOptions {
   maxKeywordsPerCategory?: number;
   daysBack?: number;
@@ -87,12 +90,12 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
       // 관련성/노이즈 필터: 강한 식별자(회사명·영문명·주키워드) 포함 + 스포츠/광고/제외어 배제
       return items
         .filter(item => strongCat || isKnownMedia(item.source))
-        .filter(item => isRelevant({ title: item.title, primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, excludeWords: target.excludeWords, category: target.category, link: item.link, source: item.source }))
+        .filter(item => isRelevant({ title: item.title, primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, excludeWords: target.excludeWords, contextWords: target.contextWords, category: target.category, link: item.link, source: item.source }))
         .map<RawArticle>(item => ({
           ...item,
           matchedKeyword: target.primaryKeyword,
           category: target.category as Category,
-          basePriority: CATEGORY_PRIORITY[target.category] ?? 50,
+          basePriority: (CATEGORY_PRIORITY[target.category] ?? 50) + (TIER_BONUS[target.tier ?? ''] ?? 0),
         }));
     }));
     results.forEach(arr => allArticles.push(...arr));

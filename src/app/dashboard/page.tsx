@@ -176,7 +176,7 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     // 실시간 위기 감지용: 기간 선택과 무관하게 "최근 3일" 포트폴리오 부정 기사
     prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'portfolio_company', OR: negOr }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true }, take: 800 }),
     // 표시 단계 관련성 가드용: 포트폴리오 감시대상 키워드맵 (primaryKeyword → [이름·영문·보조])
-    prisma.monitoringTarget.findMany({ where: { category: 'portfolio_company', status: 'ACTIVE' }, select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true } }),
+    prisma.monitoringTarget.findMany({ where: { category: 'portfolio_company', status: 'ACTIVE' }, select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true, portfolioStatus: true } }),
     // 포트폴리오 vs 타 하우스 비교용: competitor(타 AC·VC 하우스) 노출 상위 3개 (실제 이름) — 업계 키워드 제외
     prisma.article.groupBy({ by: ['matchedKeyword'], where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor', matchedKeyword: { notIn: INDUSTRY_TREND_KEYWORDS } }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 3 }),
     // 경쟁사 모니터링 섹션용: 기간 내 competitor 기사 전체(matchedKeyword=실제 경쟁사명별 집계)
@@ -300,7 +300,8 @@ async function loadDashboardData(from: string, to: string, company?: string) {
 
   // 포트폴리오 TOP 15 (표시명 매핑) + 부정 기사(관련성 가드 후 상위 15건)
   const portfolioNameOf = new Map(portfolioTargets.map(t => [t.primaryKeyword, t.name]));
-  const portfolioTop = portfolioTop15.map(g => ({ name: portfolioNameOf.get(g.matchedKeyword) ?? g.matchedKeyword, count: g._count._all }));
+  const portfolioStatusOf = new Map(portfolioTargets.map(t => [t.primaryKeyword, t.portfolioStatus]));
+  const portfolioTop = portfolioTop15.map(g => ({ name: portfolioNameOf.get(g.matchedKeyword) ?? g.matchedKeyword, count: g._count._all, portfolioStatus: portfolioStatusOf.get(g.matchedKeyword) ?? null }));
   // 긍정/부정 하이라이트: 회사(matchedKeyword)별로 묶어 "언급 매체 수" 많은 순 → 동률이면 최신순, TOP 3만.
   // (Article에 검색노출도 필드가 없어 매체 다양성을 대리 지표로 사용)
   const top3ByMedia = (rows: { matchedKeyword: string; title: string; source: string; pubDate: Date; link: string }[]) => {
@@ -752,7 +753,16 @@ function SectionTitle({ title, sub }: { title: string; sub?: string }) {
   );
 }
 
-function PortfolioTopList({ items, rangeLabel }: { items: { name: string; count: number }[]; rangeLabel: string }) {
+// portfolioStatus(Live/Exit/Written-off) 라벨 — Live는 기본 상태라 배지 없이 생략, 그 외만 표시.
+function PortfolioStatusBadge({ status }: { status: string | null }) {
+  if (!status || status === 'Live') return null;
+  const cls = status === 'Exit'
+    ? 'bg-blue-50 text-blue-600 border-blue-200'
+    : 'bg-gray-100 text-gray-500 border-gray-200';
+  return <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold border ${cls}`}>{status}</span>;
+}
+
+function PortfolioTopList({ items, rangeLabel }: { items: { name: string; count: number; portfolioStatus?: string | null }[]; rangeLabel: string }) {
   const max = Math.max(...items.map(i => i.count), 1);
   return (
     <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
@@ -764,6 +774,7 @@ function PortfolioTopList({ items, rangeLabel }: { items: { name: string; count:
             <div key={it.name} className="flex items-center gap-2 text-sm">
               <span className="w-5 text-right text-xs font-bold text-gray-400 tabular-nums">{i + 1}</span>
               <span className="w-28 truncate font-semibold text-gray-700" title={it.name}>{it.name}</span>
+              <PortfolioStatusBadge status={it.portfolioStatus ?? null} />
               <div className="flex-1 h-4 bg-gray-100 rounded overflow-hidden">
                 <div className="h-full rounded bg-spark-purple/80" style={{ width: `${Math.round((it.count / max) * 100)}%` }} />
               </div>

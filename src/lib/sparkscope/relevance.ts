@@ -27,7 +27,7 @@ export const AD_NOISE_KEYWORDS = [
   '배롱나무', '벚꽃', '단풍',
 ];
 
-export type FilterReason = 'exclude_word' | 'ad_noise' | 'sports_ad' | 'irrelevant';
+export type FilterReason = 'exclude_word' | 'ad_noise' | 'sports_ad' | 'irrelevant' | 'missing_context';
 
 // ── 스포츠·게임·연예·광고 강제 제외 ──────────────────────────────
 // helperKeywords의 사람 이름(대표자명 등)이 야구선수·연예인과 겹쳐 대량 오통과되는 문제 대응.
@@ -128,6 +128,7 @@ export interface RelevanceInput {
   englishName?: string | null;  // 영문 회사명 (강한 식별자)
   helperKeywords?: string | null; // 별칭·서비스명·대표자명 (약한 식별자)
   excludeWords?: string | null;
+  contextWords?: string | null; // 문맥어 — 지정 시 하나라도 포함돼야 통과
   category?: string | null;
   link?: string | null;
   source?: string | null;
@@ -147,9 +148,10 @@ function strongKeys(a: RelevanceInput): string[] {
 /**
  * 필터 위반 사유 반환 (통과 시 null).
  * 1) 대상별 제외어 → exclude_word
- * 2) 스포츠·게임·연예·광고 강제 제외 → sports_ad
- * 3) 광고/생활정보 노이즈 → ad_noise
- * 4) 회사명(강한 식별자) 미포함 → irrelevant
+ * 2) 문맥어(contextWords) 미포함 → missing_context
+ * 3) 스포츠·게임·연예·광고 강제 제외 → sports_ad
+ * 4) 광고/생활정보 노이즈 → ad_noise
+ * 5) 회사명(강한 식별자) 미포함 → irrelevant
  *    ※ helperKeywords(대표자명 등)만으로는 통과 불가 — 회사명/영문명이 함께 등장해야 함.
  */
 export function filterReason(a: RelevanceInput): FilterReason | null {
@@ -157,6 +159,11 @@ export function filterReason(a: RelevanceInput): FilterReason | null {
 
   const excl = splitCsv(a.excludeWords);
   if (excl.some(w => w.length >= 2 && title.includes(w))) return 'exclude_word';
+
+  // 문맥어: 지정된 경우, 동명이의어 등 흔한 단어의 회사명을 걸러내기 위해
+  // 제목에 문맥어 중 하나가 반드시 등장해야 통과 (설정 안 하면 이 체크는 스킵).
+  const mustAny = splitCsv(a.contextWords);
+  if (mustAny.length > 0 && !mustAny.some(k => matchesAsToken(title, k))) return 'missing_context';
 
   if (isBlockedNoise({ title, link: a.link, source: a.source })) return 'sports_ad';
 

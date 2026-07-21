@@ -57,6 +57,7 @@ export async function POST(req: Request) {
     primaryKeyword: (b.primaryKeyword?.trim() || name),
     helperKeywords: b.helperKeywords?.trim() || null,
     excludeWords: b.excludeWords?.trim() || null,
+    contextWords: b.contextWords?.trim() || null,
     notes: b.notes?.trim() || null,
   };
   // 소프트 삭제됐던 이름이면 되살리며 갱신
@@ -73,7 +74,7 @@ export async function PATCH(req: Request) {
   if (b.category && !CATEGORIES.includes(b.category)) return bad('유효하지 않은 카테고리입니다.');
 
   const data: any = {};
-  for (const f of ['englishName', 'primaryKeyword', 'helperKeywords', 'excludeWords', 'notes'] as const) {
+  for (const f of ['englishName', 'primaryKeyword', 'helperKeywords', 'excludeWords', 'contextWords', 'notes'] as const) {
     if (f in b) data[f] = b[f]?.trim() || null;
   }
   if (b.name?.trim()) data.name = b.name.trim();

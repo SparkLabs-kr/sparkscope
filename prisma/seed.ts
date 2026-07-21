@@ -27,6 +27,9 @@ async function main() {
         primaryKeyword: t.primaryKeyword,
         helperKeywords: t.helperKeywords,
         excludeWords: t.excludeWords,
+        contextWords: t.contextWords ?? null,
+        portfolioStatus: t.portfolioStatus ?? null,
+        tier: t.tier ?? null,
         notes: t.notes,
       },
     });

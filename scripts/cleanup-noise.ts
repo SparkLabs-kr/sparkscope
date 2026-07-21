@@ -12,7 +12,7 @@ const prisma = new PrismaClient();
 const APPLY = process.env.CLEANUP_APPLY === '1';
 
 async function main() {
-  const targets = await prisma.monitoringTarget.findMany({ select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true, excludeWords: true, category: true } });
+  const targets = await prisma.monitoringTarget.findMany({ select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true, excludeWords: true, contextWords: true, category: true } });
   const byKw = new Map(targets.map(t => [t.primaryKeyword, t]));
 
   const articles = await prisma.article.findMany({
@@ -21,8 +21,9 @@ async function main() {
   });
   console.log(`검사 대상(수집분, isNoise=false): ${articles.length}건`);
 
-  const byReason: Record<string, string[]> = { exclude_word: [], ad_noise: [], irrelevant: [] };
-  const violatorIds: Record<string, string[]> = { exclude_word: [], ad_noise: [], irrelevant: [] };
+  const REASONS = ['exclude_word', 'missing_context', 'sports_ad', 'ad_noise', 'irrelevant'] as const;
+  const byReason: Record<string, string[]> = { exclude_word: [], missing_context: [], sports_ad: [], ad_noise: [], irrelevant: [] };
+  const violatorIds: Record<string, string[]> = { exclude_word: [], missing_context: [], sports_ad: [], ad_noise: [], irrelevant: [] };
 
   for (const a of articles) {
     const t = byKw.get(a.matchedKeyword);
@@ -32,6 +33,7 @@ async function main() {
       primaryKeyword: a.matchedKeyword,
       helperKeywords: relHelpers,
       excludeWords: t?.excludeWords ?? null,
+      contextWords: t?.contextWords ?? null,
       category: t?.category ?? null,
     });
     if (reason) {
@@ -42,7 +44,7 @@ async function main() {
 
   const totalViol = Object.values(violatorIds).reduce((s, arr) => s + arr.length, 0);
   console.log(`\n=== 위반(숨김 대상): ${totalViol}건 ===`);
-  for (const r of ['irrelevant', 'ad_noise', 'exclude_word']) {
+  for (const r of REASONS) {
     console.log(`\n· ${r}: ${violatorIds[r].length}건`);
     byReason[r].forEach(s => console.log(`    - ${s}`));
   }
@@ -54,8 +56,8 @@ async function main() {
   }
 
   let applied = 0;
-  // exclude_word는 사용자 설정 의존적이라 소급 정리에서 제외 (수집 시점에만 적용)
-  for (const r of ['irrelevant', 'ad_noise']) {
+  // exclude_word/contextWords 변경분도 기존 수집분에 소급 적용 (요청에 따라 전체 사유 포함).
+  for (const r of REASONS) {
     const ids = violatorIds[r];
     for (let i = 0; i < ids.length; i += 500) {
       const chunk = ids.slice(i, i + 500);

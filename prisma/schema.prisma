@@ -66,6 +66,9 @@ model MonitoringTarget {
   primaryKeyword  String
   helperKeywords  String?  // 쉼표 구분, 동음이의어 대응 (e.g. "PlayKeyboard, 비트바이트앱")
   excludeWords    String?  // 쉼표 구분, 노이즈 차단
+  contextWords    String?  // 쉼표 구분, 문맥어 — 지정 시 제목에 하나라도 포함돼야 통과 (예: "교통안전, AI, 스마트교통")
+  portfolioStatus String?  // 포트폴리오 CSV 원본 상태값 (Live/Exit/Written-off) — status(ACTIVE)와 별개, 표시용 라벨
+  tier            String?  // 포트폴리오 CSV 원본 티어 (A/B/C)
   notes           String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

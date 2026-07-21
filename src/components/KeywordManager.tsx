@@ -10,6 +10,7 @@ interface Target {
   primaryKeyword: string;
   helperKeywords: string | null;
   excludeWords: string | null;
+  contextWords: string | null;
 }
 
 const CATS = [
@@ -20,7 +21,7 @@ const CATS = [
 ];
 const CAT_LABEL: Record<string, string> = Object.fromEntries(CATS.map(c => [c.key, c.label]));
 
-const emptyForm = { name: '', englishName: '', category: 'portfolio_company', helperKeywords: '', excludeWords: '' };
+const emptyForm = { name: '', englishName: '', category: 'portfolio_company', helperKeywords: '', excludeWords: '', contextWords: '' };
 
 export function KeywordManager() {
   const [targets, setTargets] = useState<Target[]>([]);
@@ -95,6 +96,7 @@ export function KeywordManager() {
           </select>
           <input className={`${inputCls} min-w-52`} placeholder="보조키워드(쉼표구분)" value={form.helperKeywords} onChange={e => setForm({ ...form, helperKeywords: e.target.value })} />
           <input className={`${inputCls} min-w-40`} placeholder="제외키워드(쉼표구분)" value={form.excludeWords} onChange={e => setForm({ ...form, excludeWords: e.target.value })} />
+          <input className={`${inputCls} min-w-40`} placeholder="문맥어(쉼표구분, 하나라도 포함돼야 통과)" value={form.contextWords} onChange={e => setForm({ ...form, contextWords: e.target.value })} />
           <button onClick={add} className="rounded-lg bg-spark-purple px-4 py-1.5 text-sm font-semibold text-white hover:opacity-90">추가</button>
         </div>
         {err && <div className="text-xs text-red-600 mt-2">{err}</div>}
@@ -116,14 +118,15 @@ export function KeywordManager() {
               <th className="text-left px-3 py-2">영문명</th>
               <th className="text-left px-3 py-2 w-40">카테고리</th>
               <th className="text-left px-3 py-2">보조키워드</th>
+              <th className="text-left px-3 py-2">문맥어</th>
               <th className="text-right px-3 py-2 w-28">관리</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} className="text-center text-gray-400 py-8">불러오는 중…</td></tr>
+              <tr><td colSpan={6} className="text-center text-gray-400 py-8">불러오는 중…</td></tr>
             ) : shown.length === 0 ? (
-              <tr><td colSpan={5} className="text-center text-gray-400 py-8">결과 없음</td></tr>
+              <tr><td colSpan={6} className="text-center text-gray-400 py-8">결과 없음</td></tr>
             ) : shown.map(t => editId === t.id ? (
               <tr key={t.id} className="border-b border-gray-100 bg-amber-50">
                 <td className="px-3 py-2"><input className={inputCls} defaultValue={t.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} /></td>
@@ -134,6 +137,7 @@ export function KeywordManager() {
                   </select>
                 </td>
                 <td className="px-3 py-2"><input className={`${inputCls} w-full`} defaultValue={t.helperKeywords ?? ''} onChange={e => setEditForm(f => ({ ...f, helperKeywords: e.target.value }))} /></td>
+                <td className="px-3 py-2"><input className={`${inputCls} w-full`} defaultValue={t.contextWords ?? ''} onChange={e => setEditForm(f => ({ ...f, contextWords: e.target.value }))} /></td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">
                   <button onClick={saveEdit} className="text-xs font-semibold text-spark-purple mr-2">저장</button>
                   <button onClick={() => { setEditId(null); setEditForm({}); }} className="text-xs text-gray-400">취소</button>
@@ -145,6 +149,7 @@ export function KeywordManager() {
                 <td className="px-3 py-2 text-gray-500">{t.englishName}</td>
                 <td className="px-3 py-2"><span className="text-xs text-gray-600">{CAT_LABEL[t.category] ?? t.category}</span></td>
                 <td className="px-3 py-2 text-xs text-gray-500 max-w-xs truncate">{t.helperKeywords}</td>
+                <td className="px-3 py-2 text-xs text-gray-500 max-w-xs truncate">{t.contextWords}</td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">
                   <button onClick={() => { setEditId(t.id); setEditForm({}); }} className="text-xs font-semibold text-gray-600 mr-2">편집</button>
                   <button onClick={() => remove(t)} className="text-xs text-red-500">삭제</button>
