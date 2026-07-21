@@ -6,8 +6,8 @@ const config: Config = {
     extend: {
       colors: {
         spark: {
-          purple: '#2563EB',
-          'purple-soft': '#3B82F6',
+          purple: '#5046E5',
+          'purple-soft': '#6E66EA',
           ink: '#1A1A1A',
           'ink-soft': '#514E5C',
           muted: '#8B8894',
