@@ -144,27 +144,15 @@ function strongKeys(a: RelevanceInput): string[] {
     .filter(k => k.length >= 2);
 }
 
-// ── 대표자명 동명이인 방지 ───────────────────────────────────────
-// "김유진" 등 흔한 이름은 매칭이 이 이름 하나뿐이면(회사명·문맥어 동반 없음)
-// 동명이인(다른 김유진) 기사가 스파크랩 기사로 오통과함.
-// 이런 사람 이름은 문맥어(스파크랩 등)가 제목에 같이 있어야만 인정.
-const PERSON_NAME_KEYWORDS = new Set([
-  '김유진', 'Eugene Kim',
-  '김호민', 'Ho Min Kim',
-  '이한주', 'Han Joo Lee',
-]);
-const PERSON_CONTEXT_WORDS = [
-  '스파크랩', 'SparkLabs', '액셀러레이터', '공동대표', '대표',
-  'Managing Partner', 'Founding Partner', '파트너',
-];
-
 /**
  * 필터 위반 사유 반환 (통과 시 null).
  * 1) 대상별 제외어 → exclude_word
  * 2) 스포츠·게임·연예·광고 강제 제외 → sports_ad
  * 3) 광고/생활정보 노이즈 → ad_noise
  * 4) 회사명(강한 식별자) 미포함 → irrelevant
- * 5) 대표자명(PERSON_NAME_KEYWORDS)으로만 매칭되고 문맥어 미동반 → irrelevant (동명이인 방지)
+ *    ※ helperKeywords(대표자명 등)만으로는 통과 불가 — 회사명/영문명이 함께 등장해야 함.
+ *    ※ 대표자명 동명이인 판별은 여기서 하지 않음 — 제목만으로는 오판 위험이 커서
+ *      AI 분류 단계(prompts.ts의 HAIKU_CLASSIFIER)에서 문맥어를 참고해 종합 판단함.
  */
 export function filterReason(a: RelevanceInput): FilterReason | null {
   const title = a.title ?? '';
@@ -177,17 +165,13 @@ export function filterReason(a: RelevanceInput): FilterReason | null {
   if (AD_NOISE_KEYWORDS.some(w => title.includes(w))) return 'ad_noise';
 
   // 회사명 매칭은 지정 카테고리에만 적용 (그 외/미상은 스킵 — 오탐 방지)
+  // 강한 식별자(회사명·영문명·주키워드)가 독립 토큰으로 등장해야 통과.
   const applyNameMatch = a.category != null && NAME_MATCH_CATEGORIES.has(a.category);
   if (applyNameMatch) {
     // 강한 식별자(회사명·영문명·주키워드) + 팀이 큐레이션한 보조 식별자(서비스명·별칭·대표자명 등 helperKeywords).
     // 예: 서비스명 '약올려'만 제목에 있고 회사명 '룩인사이트'는 없는 기사도 포폴사로 인정.
     const keys = [...strongKeys(a), ...splitCsv(a.helperKeywords)].filter(k => k.length >= 2);
-    const matched = keys.filter(k => matchesAsToken(title, k));
-    if (matched.length === 0) return 'irrelevant';
-
-    // 매칭된 식별자가 전부 동명이인 위험 있는 대표자명뿐이면, 문맥어 동반 여부 확인.
-    const onlyPersonNames = matched.every(k => PERSON_NAME_KEYWORDS.has(k));
-    if (onlyPersonNames && !PERSON_CONTEXT_WORDS.some(w => matchesAsToken(title, w))) return 'irrelevant';
+    if (keys.length > 0 && !keys.some(k => matchesAsToken(title, k))) return 'irrelevant';
   }
 
   return null;
