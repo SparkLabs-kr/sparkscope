@@ -19,7 +19,16 @@ async function main() {
 
     await prisma.monitoringTarget.upsert({
       where: { name: t.name },
-      create: t,
+      create: {
+        name: t.name,
+        englishName: t.englishName,
+        category: t.category,
+        status: t.status,
+        primaryKeyword: t.primaryKeyword,
+        helperKeywords: t.helperKeywords,
+        excludeWords: t.excludeWords,
+        notes: t.notes,
+      },
       update: {
         englishName: t.englishName,
         category: t.category,
