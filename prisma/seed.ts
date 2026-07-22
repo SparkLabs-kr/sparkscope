@@ -28,6 +28,8 @@ async function main() {
         helperKeywords: t.helperKeywords,
         excludeWords: t.excludeWords,
         notes: t.notes,
+        tier: t.tier ?? null,
+        contextWords: t.contextWords ?? null,
       },
     });
 

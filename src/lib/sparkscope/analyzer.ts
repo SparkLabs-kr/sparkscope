@@ -93,6 +93,7 @@ async function classifyBatch(articles: Array<RawArticle & { _id: string }>): Pro
       source: a.source,
       matchedKeyword: a.matchedKeyword,
       matchedKeywordKind: a.category,
+      ...(a.companyDesc ? { companyDesc: a.companyDesc } : {}),
     }));
 
     try {

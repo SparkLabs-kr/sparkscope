@@ -67,6 +67,8 @@ model MonitoringTarget {
   helperKeywords  String?  // 쉼표 구분, 동음이의어 대응 (e.g. "PlayKeyboard, 비트바이트앱")
   excludeWords    String?  // 쉼표 구분, 노이즈 차단
   notes           String?
+  tier            String?  // A / B / C — 검색 정확도 등급
+  contextWords    String?  // 쉼표 구분, 반드시 하나 포함돼야 해당 회사 기사로 인정 (B/C 티어)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   @@index([category, status])
