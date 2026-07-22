@@ -16,6 +16,7 @@ export function buildHaikuClassifierUserMessage(articles: Array<{
   source: string;
   matchedKeyword: string;
   matchedKeywordKind: string;
+  companyDesc?: string;
 }>) {
   return `다음 ${articles.length}개의 기사를 분류해주세요.
 각 기사에 대해 JSON 객체를 반환하고, 전체를 배열로 묶어주세요.
@@ -40,6 +41,7 @@ ${articles.map(a => JSON.stringify(a)).join('\n')}
 - industry_trend: 스타트업계 뉴스 — 스타트업 생태계·정부기관·정책 등 업계 전반
 
 판단 기준:
+- companyDesc(회사 사업설명)가 있으면, 기사 내용이 그 사업과 전혀 무관한 다른 대상(다른 회사, 다른 고유명사)에 대한 것이면 unrelated로 판단하세요. 같은 이름이 전혀 다른 도메인을 가리키는 경우가 핵심 판단 기준입니다.
 - ⭐ 가장 중요: 매칭된 키워드(회사명)가 기사의 "주어(주체)"여야 합니다. 단순 언급·스쳐 지나가는 인용, 또는 다른 단어의 일부(부분일치)면 해당 회사 기사가 아닙니다 → category="unrelated" 또는 isNoise=true, noiseReason="irrelevant".
   · 예: 매칭 "노리"인데 기사가 "IPO를 노리다(동사)"에 대한 것 → unrelated
   · 예: 매칭 "리코"인데 기사가 "인실리코(Insilico)"에 대한 것 → unrelated (부분일치)
