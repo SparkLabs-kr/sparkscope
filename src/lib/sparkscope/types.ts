@@ -20,6 +20,7 @@ export interface RawArticle {
   matchedKeyword: string;
   category: Category;
   basePriority: number;
+  companyDesc?: string; // MonitoringTarget.notes — Haiku 분류 시 회사 맥락 제공
 }
 
 export interface AnalyzedArticle extends RawArticle {

@@ -8,6 +8,18 @@ import { prisma } from '@/lib/prisma';
 import type { RawArticle, Category } from './types';
 import { isRelevant } from './relevance';
 import { isKnownMedia } from './media';
+import { NEGATIVE_KEYWORDS_DATA, CRISIS_KEYWORDS_DATA } from './keywords-data';
+
+// C 티어 폴백: 문맥어 없어도 이 키워드가 제목에 있으면 수집 (이벤트·부정 기사 누락 방지)
+const C_TIER_FALLBACK_KEYWORDS: string[] = [
+  '투자', '유치', '수상', '선정', 'MOU', '협약', '계약', '출시', '런칭', '오픈', '개시',
+  '상장', '인수', '합병', '설립', '창업', '서비스', '기술', '제품', '파트너십',
+  '진출', '확대', '성장', '돌파', '기록', '협력', '수주', '납품', '글로벌',
+  ...NEGATIVE_KEYWORDS_DATA.map(k => k.keyword),
+  ...CRISIS_KEYWORDS_DATA.map(k => k.keyword),
+  '의혹', '수사', '검찰', '공정위', '과징금', '리콜', '결함', '해킹', '정보유출',
+  '횡령', '갑질', '불매', '파업', '구조조정', '사기', '폐업', '위기', '부실',
+];
 
 type SourceItem = Omit<RawArticle, 'matchedKeyword' | 'category' | 'basePriority'>;
 type Target = Awaited<ReturnType<typeof prisma.monitoringTarget.findMany>>[number];
@@ -87,15 +99,25 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
       // (약사공론·의학신문 등 업종 전문지의 포폴사 부정기사를 놓치지 않기 위함)
       // 경쟁사·업계동향은 기존대로 확정 매체 26개(media.ts)만.
       const strongCat = target.category === 'portfolio_company' || target.category === 'sparklabs_self';
-      // 관련성/노이즈 필터: 강한 식별자(회사명·영문명·주키워드) 포함 + 스포츠/광고/제외어 배제
+      const excludeList = splitCsv((target as any).excludeWords);
+      const contextList = splitCsv((target as any).contextWords);
+      const tier = (target as any).tier as string | null | undefined;
+      const isBcTier = tier === 'B' || tier === 'C';
+
       return items
         .filter(item => strongCat || isKnownMedia(item.source))
-        .filter(item => isRelevant({ title: item.title, primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, excludeWords: target.excludeWords, contextWords: target.contextWords, category: target.category, link: item.link, source: item.source }))
+        .filter(item => {
+          if (isBcTier && excludeList.some(w => item.title.includes(w))) return false;
+          if (isBcTier && contextList.length > 0 && contextList.some(w => item.title.includes(w))) return true;
+          if (tier === 'C') return C_TIER_FALLBACK_KEYWORDS.some(w => item.title.includes(w));
+          return isRelevant({ title: item.title, primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, excludeWords: target.excludeWords, contextWords: target.contextWords, category: target.category, link: item.link, source: item.source });
+        })
         .map<RawArticle>(item => ({
           ...item,
           matchedKeyword: target.primaryKeyword,
           category: target.category as Category,
           basePriority: (CATEGORY_PRIORITY[target.category] ?? 50) + (TIER_BONUS[target.tier ?? ''] ?? 0),
+          companyDesc: (target as any).notes ?? undefined,
         }));
     }));
     results.forEach(arr => allArticles.push(...arr));
