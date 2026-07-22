@@ -1,0 +1,412 @@
+카테고리,기업명(한글),기업명(영문),대표검색어,보조키워드,제외키워드(NOT) ★,문맥어(반드시 하나 포함) ★,사업설명(한 줄) ★,티어 A/B/C ★,Status,인턴 메모
+portfolio_company,원데이원송,1Day1Song,원데이원송,주현규 음악추천,N/A,N/A,"전문가의 휴먼 큐레이션과 ICT 기술을 결합하여, 날씨나 기분 등 그날의 분위기에 맞는 숨은 명곡을 엄선해 소개하는 음악 추천 플랫폼",A,Written-off,
+portfolio_company,에이티에잇라이징,88rising,에이티에잇라이징,숀미야시로 음악레이블,N/A,N/A,아시아계 음악과 문화를 전 세계 주류 시장에 전파하는 글로벌 미디어·엔터테인먼트,A,Written-off,
+portfolio_company,아부하킴,AbuHakim,아부하킴,유덕영 중동이커머스,N/A,N/A,중동 아랍권 전문 이커머스. K뷰티 등 한국 상품 중동 수출·현지 배송 플랫폼,A,Written-off,
+portfolio_company,에이비제트,AB-Z,에이비제트,최하림 인플루언서커머스,N/A,N/A,인플루언서-브랜드 중개 커머스 인프라. 커머스 솔루션 '인포크' 및 판매채널 통합 솔루션 '인포크링크' 운영,A,Live,
+portfolio_company,에큐리바이오,Accuriebio,에큐리바이오,신수안 항암제,N/A,N/A,엔지니어링 파아지 플랫폼 (enPhaG)을 기반으로 고형암 및 감염병 치료제 개발. 인간 유전체 분석과 AI 기술 결합,A,Live,
+portfolio_company,애드바이미,Adbyme,애드바이미,김재홍 소셜광고,N/A,N/A,국내 최초의 '사용자 참여형 소셜 광고 플랫폼',A,Live,
+portfolio_company,에어로케이홀딩스,Aero K Holdings,에어로케이홀딩스,강병호 저비용항공,N/A,N/A,청주국제공항을 허브로 둔 저비용 항공사(LCC) '에어로케이항공',A,Live,
+portfolio_company,에이임팩트,A-Impact,에이임팩트,윤성진 농산물직거래,N/A,N/A,농산물 주문정보 자동정리 앱 '어레인지' 운영. SNS 주문 텍스트마이닝 기반 농가-바이어 매칭,A,Written-off,
+portfolio_company,에이보랩스,AIVE LABS,에이보랩스,이동훈 에듀테크,N/A,N/A,"AI 에듀테크 기업 (스파크랩 투자, 상세 사업내용 추가 확인 필요)",A,Live,
+portfolio_company,올거나이즈,Allganize,올거나이즈,이창수 LLM,N/A,N/A,엔터프라이즈 AI/LLM 솔루션 기업. 기업용 AI 업무자동화 플랫폼 '알리(Alli)' 운영,A,Live,
+portfolio_company,엘리스헬스케어,AlyceHealth,엘리스헬스케어,강다겸 AI헬스케어,N/A,N/A,AI 모션 인식 기술을 기반으로 대기업 임직원 건강 관리(B2B)와 미국 원격 치료 모니터링(RTM) 시장 선도,A,Exit,
+portfolio_company,앰버로드,Amberroad,앰버로드,"임언호
+AI",N/A,N/A,포스코 사내벤처 출신 제조 AI 솔루션 기업. 공정 최적화 AI '마이너 리포트(Miner Report)' 개발,A,Live,
+portfolio_company,애니모카브랜즈,Animoca Brands,애니모카브랜즈,로비융 웹3,N/A,N/A,메타버스 플랫폼 '더 샌드박스'를 비롯해 600개 이상의 블록체인 및 AI 기업에 투자·육성하며 디지털 자산 소유권을 확립해 나가는 글로벌 웹3 지주회사,A,Live,
+portfolio_company,아시안보스,ASIAN BOSS,아시안보스,스티븐박 저널리즘,N/A,N/A,글로벌 시민 저널리즘 뉴스 미디어. 거리 인터뷰 콘텐츠로 아시아·세계를 연결하는 유튜브 미디어,A,Live,
+portfolio_company,배젠,Baegen,배젠,배준 COPD신약,N/A,N/A,"바이오/의료 벤처기업, 한의학 처방을 과학적으로 분석하여 만성질환 합성신약 개발",A,Live,
+portfolio_company,발란,Balaan,발란,최형록 명품커머스,N/A,N/A,명품 커머스 플랫폼,A,Written-off,
+portfolio_company,비마이프렌즈,Be my friends,비마이프렌즈,서우석 팬덤,N/A,N/A,K팝 등 글로벌 팬덤 비즈니스 플랫폼 '비스테이지(b.stage)' 운영 (위버스 개발진 출신 창업),A,Exit,
+portfolio_company,비스트플래닛,Beast Planet,비스트플래닛,조천희 일렉트로복싱,N/A,N/A,클럽 음악과 조명 속에서 즐기는 국내 최초의 클럽형 일렉트로 복싱 스튜디오,A,Written-off,
+portfolio_company,베러먼데이코리아,Better Monday Korea,베러먼데이코리아,도경백 라이프스타일,N/A,N/A,F&B·라이프스타일 플랫폼 기업. 커피 프랜차이즈 '베러먼데이커피' 및 친환경 커머스 '비베러' 운영,A,Live,
+portfolio_company,빌리오,Billyo,빌리오,안준혁 공간예약,N/A,N/A,콘텐츠 크리에이터 대상 촬영·연습 공간 예약 플랫폼,A,Written-off,
+portfolio_company,비트센싱,Bitsensing,비트센싱,이재은 레이더,N/A,N/A,레이더 기술 기업. 자율주행·스마트시티용 4D 이미징 레이더 및 헬스케어 센싱 솔루션 개발,A,Exit,
+portfolio_company,블라블라이엔엠,blabla ENM,블라블라이엔엠,김영종 오디오커뮤니티,N/A,N/A,오디오 기반의 메타보이스 글로벌 커뮤니티 플랫폼 '블라블라(blabla)',A,Written-off,
+portfolio_company,블로코,BLOCKO,블로코,김원범 블록체인,N/A,N/A,블록체인 MSP(Managed Service Provider) 기업. 기업용 블록체인·NFT 플랫폼 구축 솔루션 '아르고' 제공,A,Live,
+portfolio_company,부톡,BOOTALK,부톡,이훈구 부동산,N/A,N/A,AI·빅데이터 기반 부동산 매물 추천·중개 플랫폼 (서울대 공간정보연구실 출신),A,Live,
+portfolio_company,부루구루,BREWGURU,부루구루,박상재 하이볼,N/A,N/A,데이터 기반 RTD 주류 및 생과일 하이볼을 개발·생산하는 푸드테크 기업,A,Live,
+portfolio_company,브링코,Brinko,브링코,김태환 역직구,N/A,N/A,해외 교민 대상 한국상품 역직구(구매대행) 플랫폼,A,Live,
+portfolio_company,브라이튼코퍼레이션,BRYTN,브라이튼코퍼레이션,유재황 광학엔진,N/A,N/A,초소형 레이저 광학엔진 기반의 AR·VR 디스플레이 및 차량용 HUD를 개발하는 XR 광학기술 기업,A,Written-off,
+portfolio_company,부에노컴퍼니,Buenocompany,부에노컴퍼니,이선희 마트홍보,N/A,N/A,오프라인 마트·편의점 할인정보 O2O 앱 '마트장보고' 및 마트 홍보 솔루션 '그로켓' 운영,A,Live,
+portfolio_company,케어닥,Caredoc,케어닥,박재병 시니어케어,N/A,N/A,시니어 헬스케어 플랫폼. 간병인·요양시설 중개 및 시니어 하우징 사업,A,Exit,
+portfolio_company,커리어데이,Careerday,커리어데이,강경민 HR테크,N/A,N/A,HR테크 기업 (스파크랩 포트폴리오),A,Live,
+portfolio_company,카머스,Carmerce ,카머스,안인성 중고차이커머스,N/A,N/A,중고차 이커머스 플랫폼,A,Exit,
+portfolio_company,차트메트릭,Chartmetric,차트메트릭,조성문 음악데이터,N/A,N/A,음악 산업 데이터 분석 플랫폼. 아티스트·음원 성과 통합 데이터 서비스 빅브레인랩 Bigbrainlab.kr ,A,Live,
+portfolio_company,클로저랩,Closer Labs,클로저랩,박경호 의사결정AI,N/A,N/A,"AI를 통해 사내외 데이터(ERP, CRM, 광고 플랫폼, 커머스 등)를 통합 검색하고 대시보드를 생성할 수 있는 플랫폼 데스크룸(Deskroom)",A,Live,
+portfolio_company,컬리지니에이아이,Collegenie AI,컬리지니에이아이,김광일 에듀테크,N/A,N/A,"AI(자연어 처리, 딥러닝) 기술을 기반으로 미국 대학 입시를 위한 전인적 평가 및 합격 에측 솔루션을 제공하는 에듀테크 스타트업",A,Live,
+portfolio_company,코핀커뮤니케이션즈,COPIN communications,코핀커뮤니케이션즈,유영학 웹툰,N/A,N/A,"웹소설, 웹툰, 캐릭터 이모티콘 등을 제작하고 유통하는 대한민국의 디지털 콘텐츠 기업",A,Exit,
+portfolio_company,코스모스이펙트,Cosmos Effect,코스모스이펙트,최현일 펫등록,N/A,N/A,모바일 반려동물 등록 서비스 플랫폼 ‘페오펫(Peopet)’,A,Live,
+portfolio_company,크레파스솔루션,CrePass,크레파스솔루션,김민정 대안신용평가,N/A,N/A,국내 1호 대안신용평가사. 외국인·씬파일러 대상 금융·비금융 데이터 기반 신용평가 핀테크,A,Live,
+portfolio_company,큐리오칩스,Curiochips ,큐리오칩스,백규석 인체장기칩,N/A,N/A,서울대 연구실창업 바이오텍. 3D 혈관구조 모사 인체장기칩(Organ-on-a-chip) 신약개발 플랫폼,A,Live,
+portfolio_company,디앤아이파비스,D&I PARVIS,디앤아이파비스,박상준 특허검색,N/A,N/A,인공지능(AI)과 자연어 처리(NLP) 기술을 활용해 복잡한 전문 문서를 정확하게 분석하고 탐색하는 AI 기반 특허 조사 솔루션 '브루넬(Brunel)',A,Exit,
+portfolio_company,달달웍스,Daldalworks,달달웍스,이창훈 런처,N/A,N/A,개인 맞춤형 모바일 런처 및 유틸리티 앱,A,Written-off,
+portfolio_company,담화컴퍼니,Damhwa Company,담화컴퍼니,이재욱 전통주,N/A,N/A,전통주 큐레이션·구독 플랫폼 '술담화' 운영,A,Live,
+portfolio_company,댄스트럭트,Danstruct,댄스트럭트,윤혜린 모션데이터,N/A,N/A,댄스 콘텐츠 테크 기업. 안무 3D 모션 데이터 유통 플랫폼 '엑스테이지(XSTAGE)' 운영,A,Live,
+portfolio_company,데이터빈,Databeen,데이터빈,김수용 액침냉각,N/A,N/A,데이터센터용 이머전 쿨링(액침냉각) 기술·엔지니어링 서비스 기업,A,Live,
+portfolio_company,디디케어스,DDCares,디디케어스,김상현 펫웨어러블,N/A,N/A,반려동물의 활동량과 수면 데이터를 수집하고 분석하는 AI 및 IoT 기반의 펫테크 스타트업,A,Written-off,
+portfolio_company,딥파인,DEEP.Fine,딥파인,김현배 스마트글라스,N/A,N/A,"모바일 기기로 정밀 3D 공간을 구축하는 'DSC(DEEP.FINE Spatial Crafter)', 스마트글라스 기반 원격 협업 솔루션 'DAO(DEEP.FINE AR.ON)'",A,Live,
+portfolio_company,현관앞마켓,doorkitchen,현관앞마켓,김태구 가정식 구독,N/A,N/A,"매일 갓 조리한 가정식, 반찬, 국, 샐러드 등을 매일 새벽 또는 아침에 문 앞까지 배송해 주는 신선 식품 및 반찬 구독 서비스",A,Live,
+portfolio_company,도시곳간,Dosigotgan,도시곳간,민요한 반찬유통,N/A,N/A,프리미엄 반찬 편집숍 운영. 시골 생산자와 도시 소비자를 연결하는 농식품 유통 소셜벤처,A,Live,
+portfolio_company,더블미,DoubleMe,더블미,김희관 홀로그램,N/A,N/A,XR(혼합현실) 기술 기업. 현실세계 메타버스 플랫폼 '트윈월드' 및 볼류메트릭 홀로그램 기술 개발,A,Live,
+portfolio_company,드래프타입,Draftype,드래프타입,김대희 옥외광고,N/A,N/A,AI·빅데이터 기반 광고테크 기업. 커스텀 AI모델 기반 콘텐츠 제작 및 옥외광고 솔루션 '애드타입' 운영,A,Live,
+portfolio_company,잇마플,eatmapl,잇마플,김현지 메디푸드,N/A,N/A,만성질환자 맞춤 메디푸드 브랜드 '맛있저염'(신장질환)·'맛있저당'(당뇨) 운영,A,Live,
+portfolio_company,에크네,ECNE,에크네,김민호 웹소설투고,N/A,N/A,스토리콘텐츠 창작자-제작자 매칭 서비스 '투고하다' 운영 (학생창업),A,Live,
+portfolio_company,엣지크로스,EdgeCross,엣지크로스,백훈 스마트머신,N/A,N/A,산업용 AIoT 스마트머신 전환 솔루션 기업 (구 빛컨/VITCON),A,Live,
+portfolio_company,엘로이랩,Eloilab,엘로이랩,유광선 초분광AI,N/A,N/A,AI 초분광 딥테크 기업. 식품 제조공정 이물질 검출 AI 솔루션,A,Live,
+portfolio_company,에몰라이즈,Emolize,에몰라이즈,김의순 크로스보더결제,N/A,N/A,국제 크로스보더 모바일 결제 핀테크. 중국 알리페이 연동 결제 앱 '페이빌(Payvil)' 운영,A,Live,
+portfolio_company,이너프유,enoughU,이너프유,임승혁 이유식,N/A,N/A,데이터를 분석해 맞춤형 식단과 영양 관리 솔루션을 제공하는 육아 앱 '이너프(enough)'와 간편 이유식 브랜드. 최근 리벨릭스 (Rebelix) 서비스도 론칭,A,Live,
+portfolio_company,이퀄테이블,Equaltable,이퀄테이블,문준석 탄소저감커피,N/A,N/A,탄소저감 커피 제조·유통업,A,Live,
+portfolio_company,엑소시스템즈,EXOSYSTEMS Inc.,엑소시스템즈,이후만 디지털재활,N/A,N/A,AI 기반 웨어러블 장치로 신경근육 건강을 진단하고 맞춤형 디지털 재활 치료를 제공,A,Written-off,
+portfolio_company,패스켓,Fasket,패스켓,김동우 퀵커머스,N/A,N/A,도심형 마이크로 풀필먼트센터 기반 퀵커머스 장보기 앱,A,Written-off,
+portfolio_company,패스트뷰,Fastview,패스트뷰,박상우 콘텐츠유통,N/A,N/A, AI 기반 콘텐츠 유통·신디케이션 기술을 통해 퍼블리셔의 디지털 수익화를 원스톱으로 해결하는 종합 콘텐츠 테크 기업,A,Live,
+portfolio_company,파이노버스랩,FiNovus Lab,페이먼스,장종욱 리벨릭스,N/A,N/A,소상공인을 위한 B2B 후불결제(BNPL) 서비스 '페이먼스'. AI 세금 환급 서비스 '세모아',A,Live,
+portfolio_company,피스칼노트,FiscalNote,피스칼노트,키컴튼 정책인텔리전스,N/A,N/A,글로벌 법률 및 규제 리스크 관리 플랫폼,A,Exit,
+portfolio_company,플라잉노트,Flying Note,플라잉노트,이윤종 승무원취업,N/A,N/A,예비 승무원들을 위해 항공지식 콘텐츠를 제작하고 승무원학과 입시 및 항공사 면접 맞춤형 온·오프라인 취업 컨설팅 교육 서비스를 제공,A,Written-off,
+portfolio_company,갭텍,GAPT,갭텍,김은학 온실가스,N/A,N/A,AI·ESG. 반도체 특수가스·대기오염물질 저감 및 CCUS 온실가스 저감 기술·장비,A,Live,
+portfolio_company,젤코,GELKO,젤코,마정수 연질캡슐,N/A,N/A,"제약, 건강기능식품, 화장품 산업을 위해 연질캡슐 생산 자동화 장비를 전문으로 개발 및 제조하는 혁신 스타트업",A,Live,
+portfolio_company,젠지 이스포츠,Gen.G Esports,젠지 이스포츠,"아놀드 원 허
+게임
+이스포츠",N/A,N/A,"글로벌 프로게임단 운영을 중심 선수 육성, 이스포츠 교육(Gen.G Global Academy), 브랜드 협업 및 마케팅 서비스",A,Written-off,
+portfolio_company,진캐스트,GENECAST,진캐스트,백승찬 액체생검,N/A,N/A,바이오·의료 스타트업 (공유실험실 메디오픈랩 입주),A,Written-Off,
+portfolio_company,제노플랜,Genoplan,제노플랜,김성식 유전자검사,N/A,N/A,유전자 검사 기반 맞춤형 헬스케어 기업,A,Live,
+portfolio_company,거북선컴퍼니,Geobukseon,거북선컴퍼니,염승헌 정산자동화,N/A,N/A,동대문 의류 도매 시장과 소매상 간의 거래에서 발생하는 정산을 자동화하고 업무를 관리해 주는 B2B 서비스인 '터틀체인',A,Exit,
+portfolio_company,지지큐,GGQ,지지큐,이용수 게임코칭,N/A,N/A,e스포츠 코칭·트레이닝 서비스 플랫폼 (AI 기반 게임 경기 분석),A,Live,
+portfolio_company,지아이빌리언스,GI BILLIONS,지아이빌리언스,최영성 덴탈케어,N/A,N/A,"D2C 이커머스 스타트업, 프리미엄 덴탈 케어 브랜드인 투스노트(TOOTHNOTE)와 더노트(THE:NOTE) 운영. 구강/위생용품 중심으로 성장해 욕실 라이프스타일 브랜드로 확장중",A,Live,
+portfolio_company,긴트,GINT,긴트,김용현 자율주행,N/A,N/A,"농기계 자율주행 스타트업. 탈부착형 자율주행 키트 '플루바 오토' 개발, 농업·방산·건설 분야 확장",A,Exit,
+portfolio_company,지냅스,GNAPSE,지냅스,김현철 모빌리티,N/A,N/A,차량용 인포테인먼트(IVI)와 eCockpit 시스템 및 AI 기반 스마트 모빌리티 솔루션,A,Live,
+portfolio_company,고미랩스,GOMILabs,고미랩스,김인수 펫테크,N/A,N/A,인공지능(AI) 기반 기술을 활용하여 반려동물의 분리불안을 해소하고 건강 데이터를 수집하는 스마트 토이인 '고미볼(GOMI.Ball)' 및 반려동물 헬스케어 플랫폼,A,Live,
+portfolio_company,가이버스,Gyverse,가이버스,김승훈 드라이에이징,N/A,N/A,육류 건조 숙성(드라이 에이징)에 특화된 푸드테크 솔루션,A,Written-off,
+portfolio_company,H2O호스피탈리티,H2O Hospitality,H2O호스피탈리티,"이웅희, 호스피탈리티",N/A,N/A,"숙박·레저 산업의 디지털 전환, 운영 자동화, 호스피탈리티 테크 기업",A,Exit,
+portfolio_company,에이치에이티컴퍼니,HAT Company,에이치에이티컴퍼니,임태윤 공유주방,N/A,N/A,국내 최초의 배달 전문 공유 주방 브랜드 '심플키친(Simple Kitchen)',A,Live,
+portfolio_company,해브해드,Havehad,해브해드,이승환 패션,N/A,N/A,패션·라이프스타일 브랜드 기업,A,Exit,
+portfolio_company,에이치디메디,hdmedi,에이치디메디,이정의 복약관리,N/A,N/A, AI 기반 의약품 안전 솔루션 ‘아이약’,A,Live,
+portfolio_company,히릿소프트,Hititsoft,히릿소프트,정주현 노코드,N/A,N/A,이커머스. 노코드 앱 제작 플랫폼 '메이더',A,Exit,
+portfolio_company,홈즈컴퍼니,HOMES Company,홈즈컴퍼니,"이태현
+공유 주거",N/A,N/A,"1인 가구 대상의 코리빙(공유주거) 및 도심형 숙박 시설을 기획·운영, 부동산 투자·개발부터 중개 플랫폼까지 주거 프로세스 전반 제공",A,Exit,
+portfolio_company,아이클레이브,iCLAVE,아이클레이브,최윤내 이커머스자동화,N/A,N/A,AI 기반 이커머스 운영자동화 SaaS. 배너·상품진열·추천 자동화 솔루션 '로보MD',A,Written-off,
+portfolio_company,임팩터스,Impactus,임팩터스,김보경 에듀테크,N/A,N/A,진로·진학 에듀테크 소셜벤처. 청소년 대상 전공 맞춤 교육 서비스,A,Live,
+portfolio_company,이노제닉스,Inogenix,이노제닉스,이혜영 액체생검,N/A,N/A,액체생검(Liquid Biopsy) 기반 정밀진단 기업. 혈액 기반 대장암·대장용종 스크리닝 진단키트,A,Live,
+portfolio_company,인포크,INPOCK,인포크,최하림 인플루언서커머스,N/A,N/A,인플루언서-브랜드 중개 커머스 인프라. 커머스 솔루션 및 판매채널 통합 솔루션,A,Live,
+portfolio_company,인테그리틱스,Integritics,인테그리틱스,박병진 실험실관리,N/A,N/A,랩인사이트(LabInsight)'를 통한 연구 및 품질 관리를 위한 통합 관리 솔루션,A,Live,
+portfolio_company,아이리스코퍼레이션,iriscorp,아이리스코퍼레이션,김종근 장례SaaS,N/A,N/A,장례식장 운영과 상조 서비스에 IT 기술을 접목한 B2B SaaS(서비스형 소프트웨어) 스타트업,A,Live,
+portfolio_company,잇그린 ,itgreen,잇그린 ,김선 다회용기,N/A,N/A,재사용 다회용기 대여·회수 서비스 '리턴잇' 운영,A,Live,
+portfolio_company,요쿠스,Jocoos,요쿠스,최창훈 동영상기술,N/A,N/A,"동영상 테크 기업. 영상압축·실시간 편집 기술, 라이브커머스 플랫폼 'myBeautip' 운영",A,Live,
+portfolio_company,캥스터즈,Kangsters,캥스터즈,김강 에이블테크,N/A,N/A,에이블테크 기업. 휠체어 사용자용 홈피트니스 솔루션 '휠리엑스' 개발,A,Live,
+portfolio_company,키즈벳,Kidsvet,키즈벳,메흐디 부아지즈 로봇게임,N/A,N/A,로봇을 원격조정하는 게임 플랫폼,A,Live,
+portfolio_company,키친인더랩,KITCHEN IN THE LAB,키친인더랩,최채환 레디밀,N/A,N/A,푸드테크 기업. 식품 ODM 기반 레디밀(RTH) B2B 공급 및 탄소저감형 밀키트 폐기물 재생 솔루션,A,Live,
+portfolio_company,코코지,Kokozi,코코지,박지희 오디오콘텐츠,N/A,N/A,키즈 오디오 콘텐츠 플랫폼. 오디오 플레이어 '코코지 하우스'와 캐릭터 피규어 '아띠' 기반 어린이 오디오 콘텐츠 (요기요 공동창업자 박지희 대표 2020년 창업),A,Live,
+portfolio_company,쿠딩,Kooding,쿠딩,류정빈 크로스보더,N/A,N/A,글로벌 패션 크로스보더 이커머스. 국내 로컬 브랜드를 해외 소비자와 연결하는 마켓플레이스,A,Live,
+portfolio_company,코나투스,Kornatus,코나투스,김기동 택시동승,N/A,N/A,"국내 최초의 AI 기반 택시 동승 서비스인 ‘반반택시’, 투루택시·투루대리 호출 서비스와 모빌리티 사업자용 B2B 관제 솔루션(SaaS)을 제공",A,Live,
+portfolio_company,케이존,KZONE,케이존,김성수 역물류,N/A,N/A,글로벌 이커머스에서 발생하는 반품 및 악성 재고를 회수하고 재유통하는 역물류 (reverse logistics) 전문 기업,A,Live,
+portfolio_company,라블라코,Lablaco,라블라코,알브리기 피지털패션,N/A,N/A,"2016년 프랑스 파리에서 설립된 패션 테크 기업. 블록체인 기술을 활용해 온라인과 오프라인을 연결하고, 디지털과 실물 패션을 결합한 '피지털(Phygital) 패션'과 지속 가능한 순환 경제를 구축하는 원스톱 커머스 플랫폼",A,Live,
+portfolio_company,랜딩인터내셔널,Landing International,랜딩인터내셔널,정새라 뷰티유통,N/A,N/A,K-뷰티 등 브랜드의 글로벌(미국) 유통 진출을 돕는 B2B 뷰티 플랫폼,A,Live,
+portfolio_company,랭코드,Langcode,랭코드,김민준 대화형AI,N/A,N/A,기업용 대화형 AI 플랫폼 'CXP' 개발. 문서 연동 챗봇·업무자동화 솔루션 제공,A,Live,
+portfolio_company,라스트스프링,Last spring,라스트스프링,김창원 스킨케어,N/A,N/A,고기능성 스킨케어 브랜드 '포들(PO:DL)',A,Live,
+portfolio_company,이명수디자인랩,Leemyungsu Design Lab,이명수디자인랩,이명수 웨어러블안전,N/A,N/A,자전거 이용자의 안전을 위한 LED 신호 표시 배낭인 '자일백(SEILbag)',A,Written-off,
+portfolio_company,르호사,Lehosa,르호사,김미진 주얼리테크,N/A,N/A,엔터·라이프스타일 관련 도소매업 (상세 사업정보 확인 필요),A,Live,
+portfolio_company,링크플릭스,LINKFLIX,링크플릭스,김두일 생분해접착제,N/A,N/A,화석연료 기반 접착제를 대체할 천연 고분자 기반의 고기능성 생분해 접착제,A,Live,
+portfolio_company,리빗,LIVIT,리빗,이정민 온실가스,N/A,N/A,탄소 관리 솔루션 기업. 기업 온실가스 배출량 관리 및 탄소 감축 자금 매칭 서비스,A,Live,
+portfolio_company,락인컴퍼니,Lockin Company,락인컴퍼니,최명규 앱보안,N/A,N/A,모바일 앱 보안 솔루션 기업. 앱 위변조 방지 솔루션 'LIAPP' 개발,A,Live,
+portfolio_company,로지스팟,Logispot,로지스팟,"박재용
+물류",N/A,N/A,디지털 통합 물류 솔루션 기업. 수출입 보세물류·내륙 배송·3PL 등 원스톱 물류 서비스,A,Live,
+portfolio_company,로그스택,Logstack,로그스택,한정규 IT감사,N/A,N/A,IT감사 자동화 솔루션 기업. DB 로그 추출·내부통제 자동화 솔루션 'Query Stacker' 제공,A,Live,
+portfolio_company,룩인사이트,Lookinsight,룩인사이트,가진웅 의약품유통,N/A,N/A,의약품 유통 플랫폼 '약올려' 운영. 도매-약국 온라인 직거래 중개,A,Live,
+portfolio_company,러브바드,LOVBOD,러브바드,김현정 바디케어,N/A,N/A,신체 부위별 고민과 데이터를 분석하여 맞춤형 바디케어 제품 및 솔루션을 제공하는 통합 플랫폼,A,Live,
+portfolio_company,루센트블록,Lucentblock,루센트블록,허세영 조각투자,N/A,N/A,부동산 조각투자(토큰증권) 플랫폼 '소유' 운영. 프롭테크+핀테크,A,Live,
+portfolio_company,럭스바이옴,LuxBiome,럭스바이옴,김원용 마이크로바이옴,N/A,N/A,"독자적인 AI 기술(판지놈마이너) 기반 특허 유산균 개발, 프리미엄 숙취해소제인 '닥터락 깨유'",A,Live,
+portfolio_company,망고플레이트,MangoPlate,망고플레이트,김대웅 맛집검색,N/A,N/A,"맛집 검색·추천 서비스 (現 서비스 종료, 여기어때에 인수 후 철수)",A,Exit,
+portfolio_company,마켓디자이너스,MarketDesigners,마켓디자이너스,김현영 교육매칭,N/A,N/A,데이터와 매칭 기술로 교육(링고라) 및 하우징(다이사·위매치) 시장의 정보 비대칭을 해결하는 온디맨드 플랫폼 기업,A,Live,
+portfolio_company,마플코퍼레이션,Marpple Corporation,마플코퍼레이션,박혜윤 POD커머스,N/A,N/A,"재고 없이 3분 만에 상품을 만들어 판매할 수 있는 원스톱 크리에이터 POD 커머스 플랫폼 마플 (Marpple), 마플샵 (MarppleShop)",A,Live,
+portfolio_company,메디띵스,MEDiThings,메디띵스,김아람 방광모니터링,N/A,N/A,헬스케어 스타트업. 웨어러블 방광 모니터링 기기 '메디라이트' 개발 (신경인성방광 관리),A,Live,
+portfolio_company,미미박스,Memebox,미미박스,하형석 뷰티커머스,N/A,N/A,뷰티 커머스·D2C 브랜드 기업. 화장품 큐레이션 커머스로 시작해 자체 브랜드 확장,A,Live,
+portfolio_company,메타파스,Metarpas,메타파스,허철균 드론점검,N/A,N/A,드론 플랫폼 기업. 태양광발전소 등 대형시설물 점검용 드론 솔루션 '솔빛(SOLVIT)' 개발,A,Live,
+portfolio_company,미드바르,Midbar,미드바르,서충모 애그테크,N/A,N/A,애그테크 스타트업. 사막화·물 부족 지역용 에어로포닉스 스마트팜 '에어팜' 개발,A,Live,
+portfolio_company,마인이스,Mine's,마인이스,김혜성 리커머스,N/A,N/A,중고 패션 리커머스 스타트업. 중고의류 위탁판매 플랫폼 '차란' 운영,A,Live,
+portfolio_company,모비두,Mobidoo,모비두,이윤희 라이브커머스,N/A,N/A,B2B SaaS 기반의 라이브 커머스 및 숏폼 비디오 솔루션(소스라이브/소스플렉스) 기업,A,Live,
+portfolio_company,뭉클랩,Moonk Labs,뭉클랩,윤도선 이커머스자동화,N/A,N/A,AI와 빅데이터 기반의 이커머스 자동화 솔루션(장사왕)과 개발 업무 효율화를 위한 AI 에이전트 시스템(Sprintable),A,Live,
+portfolio_company,모티브인텔리전스,Motiv Intelligence,모티브인텔리전스,양준모 애드테크,N/A,N/A,"국내 대표 애드테크 기업, 다양한 기기 연결해 맞춤형 광고를 자동으로 집행하고 분석하는 기술 제공",A,Exit,
+portfolio_company,모토브,Motov,모토브,임우혁 택시광고,N/A,N/A,택시 탑승형 스마트 디바이스를 통해 실시간 도시 데이터를 수집하고 맞춤형 디지털 옥외광고를 송출하는 서비스,A,Live,
+portfolio_company,무버스,Movus,무버스,형용준 3D모션,N/A,N/A,3D 모션/콘텐츠 테크 기업. 메타버스·버추얼휴먼용 3D 모션 데이터 및 의류 가상피팅 솔루션,A,Written-off,
+portfolio_company,뮤즈라이브,MUZLIVE,뮤즈라이브,석철 실물음반,N/A,N/A,"실물 앨범 테크 기업. NFC 탑재 실물 앨범 '키트앨범(KiTalbum)' 제작·유통, 정신건강 앱 '콰블'도 운영",A,Live,
+portfolio_company,마이샵클라우드,myshopcloud,마이샵클라우드,김준우 건어물유통,N/A,N/A,식자재 및 건어물 유통 산업을 위한 온라인 쇼핑몰 솔루션과 IT 플랫폼 '다시우리다',A,Live,
+portfolio_company,엔씽,N.Thing,엔씽,김혜연 스마트팜,N/A,N/A,스마트팜 기업. 컨테이너형 수직농장 및 IoT 기반 농업 밸류체인 혁신 솔루션,A,Exit,
+portfolio_company,네오블랑그룹,NEO BLANC GROUP,네오블랑그룹,장지혁 퍼퓸,N/A,N/A,프리미엄 퍼퓸 핸드크림 브랜드 '스텔라블랑' 등 자체 라이프스타일 IP 브랜드와 글로벌 이커머스 솔루션 기반 서비스,A,Live,
+portfolio_company,네오셀라,Neocella,네오셀라,김희준 항암면역,N/A,N/A,암 환자 개개인에 맞는 항암 면역환경을 분석하고 분석데이터를 기반으로 최적의 치료제를 적용할 수 있는 플랫폼,A,Live,
+portfolio_company,뉴베리글로벌,Newberry Global,뉴베리글로벌,이한주 클라우드,N/A,N/A,글로벌 클라우드 관리 서비스 기업(MSP)인 베스핀글로벌의 지주사,A,Exit,
+portfolio_company,넥스트메이커스,Next Makers,넥스트메이커스,이승진 크리에이터콘텐츠,N/A,N/A,"크리에이터를 위한 비디오 콘텐츠 제작 및 유통, 비즈니스 모델 혁신을 지원하는 글로벌 서비스",A,Live,
+portfolio_company,나인하이어,Nine Hire,나인하이어,정승현 채용관리,N/A,N/A,채용관리솔루션(ATS) 스타트업. 지원자 관리·면접 일정·채용 홈페이지 등 채용 전 과정 자동화 (現 잡코리아 계열),A,Exit,
+portfolio_company,노다랩,NODALAB,노다랩,이상윤 무역데이터,N/A,N/A,빅데이터 기반 B2B 무역거래 플랫폼 'KFoodBuyers/실크원(SILKONE)' 운영,A,Live,
+portfolio_company,오브젠,Obzen,오브젠,전배문 AI마케팅,N/A,N/A,AI 마케팅·CRM 솔루션 기업. 고객데이터·경험관리 플랫폼 'CDXP+' 공급 (코스닥 상장사),A,Exit,
+portfolio_company,옥타코,OCTACO,옥타코,이재형 FIDO인증,N/A,N/A,정보보안 기업. FIDO 생체인증 및 Workforce Identity/Access Management 솔루션,A,Live,
+portfolio_company,오마이어스,Ohmyearth,오마이어스,김대일 기후행동,N/A,N/A,문화예술 콘텐츠와 친환경 대체재를 통해 대중의 기후행동 참여를 유도하는 소셜벤처,A,Live,
+portfolio_company,오리지널이노베이션그룹,OINNG,오리지널이노베이션그룹,최용원 디지털콜렉터블,N/A,N/A, 전 세계 K팝 팬덤을 위한 디지털 포토카드 및 콜렉터블 플랫폼인 '픽잇(PICKIT)',A,Live,
+portfolio_company,원소프트다임,ONESOFTDIGM,원소프트다임,이대호 헬스케어,N/A,N/A,모바일 헬스케어 기업. 휴대용 체성분·혈압·수면 측정 디바이스 '피트러스(Fitrus)' 개발,A,Live,
+portfolio_company,페이워치,Paywatch,페이워치,"김리차드에이치
+조강연
+급여선지급",N/A,N/A,근로자가 이미 일한 만큼의 급여를 월급일 전에 미리 받을 수 있는 유연급여 솔루션 (급여 선지급 서비스)을 B2B SaaS 형태로 제공,A,Live,
+portfolio_company,페이워치글로벌,Paywatch Global,페이워치글로벌,김휘준 급여선지급,N/A,N/A,"일한 만큼 정산하여 급여일 전에 월급을 미리 받을 수 있는 급여 선지급(EWA, Earned Wage Access) 서비스를 제공하는 글로벌 핀테크 플랫폼",A,Exit,
+portfolio_company,페이워크,Paywork,페이워크,손지인 정산관리,N/A,N/A,"프리랜서, 1인 자영업자, 소상공인을 위한 AI 기반 업무 및 정산 관리 SaaS 스타트업",A,Live,
+portfolio_company,페오펫,Peopet,페오펫,최바울 반려동물등록,N/A,N/A,주식회사 코스모스이펙트가 운영하는 국내 1위 모바일 반려동물 등록 서비스 제공하는 펫테크 스타트업,A,Exit,
+portfolio_company,펄핏,Perfit,펄핏,이선용 신발핏테크,N/A,N/A,핏테크(Fit-tech) 기업. AI 3D 스캐닝 기반 신발 사이즈 추천 솔루션,A,Live,
+portfolio_company,퍼스널에이아이,Personal AI,퍼스널에이아이,이재영 마이데이터,N/A,N/A,구 에스앤피랩(SNPLab). 온디바이스 마이데이터 플랫폼 'my:D' ? 개인정보 주권·데이터 자산화 서비스,A,Live,
+portfolio_company,페스카로,Pescaro,페스카로,홍석민 자동차보안,N/A,N/A,자동차 사이버보안 전문기업,A,Exit,
+portfolio_company,피에로컴퍼니,Pierrot Company,피에로컴퍼니,박민진 IT기기순환,N/A,N/A,"중고 IT 기기 자원 순환 플랫폼 '폰고(PHONEGO)'와 '리고(reGO)'를 통해 개인에게는 기기 구독·판매 서비스, 기업에는 유휴 자산 매입·재유통 서비스 제공",A,Live,
+portfolio_company,파이퀀트,PiQuant,파이퀀트,피도연 환경분석,N/A,N/A,분광학 기반 환경·성분 분석 전문기업. 수질·대기질 모니터링 IoT 솔루션 '에어퀀트' 등,A,Live,
+portfolio_company,폴리머라이즈,Polymerize Korea LLC,폴리머라이즈,박은규 소재AI,N/A,N/A,,A,Exit,
+portfolio_company,피피엠아이,PPMI,피피엠아이,이태규 반려동물헬스케어,N/A,N/A,반려견·반려묘의 모발을 분석하여 맞춤형 건강 관리 솔루션을 제공,A,Live,
+portfolio_company,펄스애드,PULSE AD,펄스애드,윤거성 광고최적화,N/A,N/A,AdTech 기업. Amazon·Walmart·TikTok 등 글로벌 커머스 연동 AI 광고 최적화 SaaS,A,Live,
+portfolio_company,펄스나인,PULSE9,펄스나인,박지은 가상아이돌,,"딥리얼 Ai, AI걸그룹","딥리얼 AI' 기술을 기반으로 실사형 버추얼 휴먼(가상 인간)을 자동 생성하고, 가상 걸그룹 '이터니티' 등의 AI 캐릭터 IP를 활용해 글로벌 비즈니스 전개",A,Live,
+portfolio_company,쿼드메디슨,QuadMedicine,쿼드메디슨,백승기 마이크로니들,N/A,N/A,마이크로니들 플랫폼 기반 약물전달시스템 전문 기업,A,Exit,
+portfolio_company,큐비트시큐리티,Qubit Security,큐비트시큐리티,신승민 클라우드보안,N/A,N/A,실시간 해킹대응 클라우드 SaaS 'PLURA' 개발. 랜섬웨어·SQL인젝션·APT 공격 탐지 보안기업,A,Live,
+portfolio_company,퀸라이브,QUEEN LIVE,퀸라이브,윤정탁 라이브커머스,N/A,N/A,라이브 커머스 및 패션 테크 기업. 주력 플랫폼 '클릭메이트'를 통해 4050 세대 타겟의 패션 라이브 방송과 이커머스 솔루션 제공 ,A,Exit,
+portfolio_company,쿠엔즈버킷,Queensbucket,쿠엔즈버킷,박정용 프리미엄오일,N/A,N/A,저온압착 방식 프리미엄 참기름·들기름·식물성 오일 제조 식품기업,A,Live,
+portfolio_company,알머티리얼즈,R Materials,알머티리얼즈,김영광 신재생에너지,N/A,N/A,"저발열, 고효율 에너지 발전 솔루션, 항공기용 특수 안전 소재 개발",A,Live,
+portfolio_company,로랩스,RawLabs,로랩스,김원균 구매관리,N/A,N/A,회계·세무 분야 스타트업. 무역대금 송금 서비스 '에어서플라이' 운영,A,Live,
+portfolio_company,리하베스트,REharvest,리하베스트,민명준 업사이클링,N/A,N/A,푸드 업사이클링 기업. 식품 제조 부산물(맥주박·식혜박 등)을 재가공한 대체 식품 원료 개발,A,Live,
+portfolio_company,레뷰코퍼레이션,Revue Corporation,레뷰코퍼레이션,김주오 인플루언서마케팅,N/A,N/A,소상공인 및 브랜드 광고주와 최적의 인플루언서를 연결하는 플랫폼 서비스(REVU),A,Exit,
+portfolio_company,녹원정보기술,ROCKWON IT global,녹원정보기술,윤명록 디지털트윈,N/A,N/A,게임 기반 3D 기술로 항만·물류·빌딩의 실시간 관제를 구현하는 디지털 트윈 플랫폼,A,Exit,
+portfolio_company,에스랩아시아,S.Lab ASIA,에스랩아시아,이수아 콜드체인,N/A,N/A,콜드체인 물류 스타트업. 의약품·신선식품용 재사용 콜드체인 패키징 '그리니박스' 개발,A,Written-Off,
+portfolio_company,사이키바이오텍,Sci Key Biotech,사이키바이오텍,김은영 비만치료제,,,대사체 네트워크를 기반으로 한 압타머(Aptamer) 비만 치료제,A,Live,
+portfolio_company,센트비,Sentbe,센트비,최성욱 해외송금,N/A,N/A,해외송금·외환 핀테크 기업. 블록체인 기반 저비용 해외송금·결제 서비스,A,Exit,
+portfolio_company,서울번드,Seoulbund,서울번드,박찬호 리빙커머스,N/A,N/A,아시아 전통 공예·핸드메이드 소품 셀렉트샵(리빙 커머스),A,Live,
+portfolio_company,샤크마켓,SHARK MARKET,샤크마켓,정성원 신선식품,N/A,N/A,"베트남 현지 신선식품 새벽배송 플랫폼 (한인·현지인 공동창업, 롯데벤처스 투자)",A,Live,
+portfolio_company,슈타겐,Shutagen,슈타겐,김원현 제조솔루션,N/A,N/A,자동차·철강·조선 등 제조업 대상 산업현장 솔루션 기업 (Business Agility 지향),A,Live,
+portfolio_company,시끌커뮤니케이션즈,Sikkle Communications,시끌커뮤니케이션즈,오현웅 GIF공유,N/A,N/A,고품질 GIF(움짤) 제작 및 공유 모바일 앱인 ‘픽픽(PicPic)’,A,Live,
+portfolio_company,심플키친,Simple Kitchen,심플키친,임태윤 공유주방,N/A,N/A,배달 음식점 창업자를 위한 공유 주방 플랫폼. 초기 투자비용이 부담인 소상공인에게 주방시설과 공간 제공,A,Live,
+portfolio_company,스카이랩스,Skylabs,스카이랩스,이병환 웨어러블,N/A,N/A,디지털 헬스케어 기업. 반지형 웨어러블 심장·혈압 모니터링 의료기기 '카트원' 개발,A,Exit,
+portfolio_company,슬릭코퍼레이션,Sleek Corporation,슬릭코퍼레이션,김형주 헬스케어,N/A,N/A,그룹 헬스 트레이닝 프로그램인 '슬릭프로젝트'와 운동 코치 및 센터를 소비자와 연결하는 O2O 플랫폼 '하이파이브',A,Exit,
+portfolio_company,슬로웨이브,SLOWAVE,슬로웨이브,류경호 뇌파,N/A,N/A,슬립테크 기업. 뇌파 기반 수면·섬망 분석 및 진단기기 개발,A,Live,
+portfolio_company,스마트잭,Smartjack,스마트잭,김건우 연구실관리,N/A,N/A,연구실 통합관리 솔루션 '랩매니저' 운영. 시약·연구물품 관리 및 구매 플랫폼,A,Written-off,
+portfolio_company,에스엔이컴퍼니,SnE Company,에스엔이컴퍼니,장세훈 농산물가격예측,N/A,N/A,"비굿'을 통해 인공지능과 빅데이터 기반으로 못난이 농산물의 유통 및 무역, 농산물 가격 예측 솔루션을 B2B SaaS 형태로 제공",A,Live,
+portfolio_company,소프트랜더스,SOFT LANDERS,소프트랜더스,한만주 리로케이션,N/A,N/A,해외 주재원 파견기업 대상 리로케이션(정착지원) O2O 중개 플랫폼,A,Live,
+portfolio_company,소프트먼트,Softment,소프트먼트,"장하일 
+정재훈
+스마트오더",N/A,N/A,"핀테크 기업. QR/NFC 스마트오더 결제 서비스 '테이블로' 운영, PG업 진출",A,Live,
+portfolio_company,스파크펫,Sparkpet,스파크펫,최두열 반려동물,N/A,N/A,"반려동물 관련 커머스/서비스 (SSG 입점 확인, 상세 사업내용 추가 확인 필요)",A,Live,
+portfolio_company,스파크플러스,Sparkplus,스파크플러스,손주환 공유오피스,N/A,N/A,공유오피스 운영기업. 커스텀 오피스·거점오피스 등 오피스 공간 서비스 및 SaaS 임대관리 솔루션,A,Live,
+portfolio_company,스펙터,Specter,스펙터,윤경욱 인재검증,N/A,N/A,HR테크 기업. 경력·평판 조회 기반 인재검증 B2B SaaS,A,Exit,
+portfolio_company,스파이스웨어,Spiceware,스파이스웨어,김근진 데이터보안,N/A,N/A,클라우드·DB 보안 기업. 암호 필터 방식 데이터 암호화 및 멀티클라우드 보안 플랫폼,A,Live,
+portfolio_company,스플랩,Splab,스플랩,선민승 스케줄링,N/A,N/A,B2B 스케줄링 자동화 솔루션 '센드타임(sendtime)' 및 네트워킹 플랫폼 '우모(Umoh)' 운영,A,Live,
+portfolio_company,스프링어게인,Spring Again,스프링어게인,주이나 치매돌봄,N/A,N/A,시니어테크 기업. 치매 환자 돌봄·관리 서비스 '다시봄' 운영,A,Live,
+portfolio_company,센스톤,SSenStone,센스톤,유창훈 보안인증,N/A,N/A,보안인증 기술 기업. 단방향 다이내믹 인증코드(OTAC) 기반 인증 솔루션 '스톤패스' 개발,A,Live,
+portfolio_company,스탠딩톨,StandingTall,스탠딩톨,강선영 척추보조기,N/A,N/A,3D프린팅 기반 맞춤형 의료 보조기 제작·판매,A,Live,
+portfolio_company,스테이즈,Stayes,스테이즈,이병현 부동산,N/A,N/A,외국인 대상 한국 내 부동산 중개(주거 O2O) 서비스,A,Live,
+portfolio_company,스티팝,Stipop,스티팝,조준용 이모티콘,N/A,N/A,전 세계 크리에이터와 기업을 연결하는 글로벌 이모티콘 플랫폼,A,Live,
+portfolio_company,스타일위키,StyleWiki,스타일위키,장은정 패션위키,N/A,N/A,"패션 매니아, 블로거, 브랜드가 패션 지식을 공유하고 소통하는 글로벌 패션 위키백과 플랫폼 '스타일위키(StyleWiki)'",A,Exit,
+portfolio_company,스와치온,SwatchOn,스와치온,이우석 원단소싱,N/A,N/A,패션 원단·부자재 B2B 소싱 플랫폼. 글로벌 디자이너-원단 공급업체 연결,A,Written-Off,
+portfolio_company,스윙비,Swingvy,스윙비,최서진 인사관리,N/A,N/A,동남아시아 중소기업 대상 클라우드 인사관리(HR) SaaS,A,Live,
+portfolio_company,탭조이,Tapjoy,탭조이,아싸프벤아미 모바일광고,N/A,N/A,모바일 광고·인앱 리워드 광고 플랫폼 (글로벌 애드테크 기업),A,Exit,
+portfolio_company,팀카이,TeamKai,팀카이,김도아 AI에이전트,N/A,N/A,AI 에이전트를 활용해 24시간 완벽한 고객 서비스 (CS)를 구현하는 B2B 인공지능 스타트업,A,Live,
+portfolio_company,더클로젯컴퍼니,THE CLOZET COMPANY,더클로젯컴퍼니,성주희 패션셰어링,N/A,N/A,패션 셰어링 플랫폼 '클로젯셰어' 운영. 의류 대여·공유 서비스,A,Written-off,
+portfolio_company,서틴스플로어,THIRTEENTH FLOOR,서틴스플로어,박정우 VR콘텐츠,N/A,N/A,VR/AR 콘텐츠 제작사. 360도 촬영 기반 시네마틱 VR 콘텐츠 및 VR게임 개발,A,Written-off,
+portfolio_company,티키코퍼레이션,Tiki Corporation,티키코퍼레이션,리처드팜 이커머스,N/A,N/A,100% 정품 보장 상품을 2시간 이내에 배송하는 베트남의 종합 이커머스 플랫폼,A,Exit,
+portfolio_company,틴고랜드,Tingoland,틴고랜드,하현호 키덜트커머스,N/A,N/A,키덜트 (어른이) 큐레이션 커머스 및 브랜드 빌더 스타트업.,A,Live,
+portfolio_company,티킷,TKIT,티킷,정효섭 티켓팅,N/A,N/A,누구나 이벤트를 홍보하고 티켓을 만들어 판매할 수 있는 모바일 바이럴 티켓팅 플랫폼 운영. ,A,Live,
+portfolio_company,투스노트,TOOTHNOTE,투스노트,최영성 구강케어,N/A,N/A,구강케어 D2C 브랜드 (운영사: 지아이빌리언스). 치아미백·구취케어 맞춤형 덴탈 제품,A,Live,
+portfolio_company,토폴로그,Topolog,토폴로그,"김홍락, 채팅영어",N/A,N/A,채팅 기반의 영어 회화 학습 솔루션 제공하던 한국계 에듀테크 스타트업. 우간다 고학력자의 높은 실업률 문제를 한국의 영어 교육 시장과 연결하는 소셜 임팩트 모델 ,A,Live,
+portfolio_company,토스랩,Toss Lab,토스랩,김대현 협업툴,N/A,N/A,업무용 협업툴 '잔디(JANDI)' 개발 및 운영,A,Exit,
+portfolio_company,트리플래닛,Tree Planet,트리플래닛,김형수 숲조성,N/A,N/A,"숲 조성 소셜벤처. 나무심기 게임·크라우드펀딩으로 전 세계 숲 조성, 탄소저감·생태복원 사업",A,Exit,
+portfolio_company,튜터링,Tutoring,튜터링,김미희 화상영어,N/A,N/A,AI 기반 1:1 화상 영어회화 학습 플랫폼,A,Exit,
+portfolio_company,티밸류와이즈,TvalueWise,티밸류와이즈,박세준 강사평가,N/A,N/A,"학생, 강사, 학원을 연결하는 O2O 기반 강사 리뷰 플랫폼 '별별선생' 2023년 11월 폐업",A,Written-off,
+portfolio_company,어반베이스,Urbanbase,어반베이스,하진우 공간데이터,N/A,N/A,3D 공간 데이터 기업. 2D 도면 자동 3D 변환 공간 데이터 플랫폼,A,Written-Off,
+portfolio_company,유저해빗,UserHabit,유저해빗,정현종 행동분석,N/A,N/A,모바일 애플리케이션 사용자의 행동 데이터를 수집하고 시각화하여 분석하는 플랫폼,A,Written-off,
+portfolio_company,유유유유유,UUUUU,유유유유유,김민서 네일테크,N/A,N/A,네일 테크 스타트업; AI 벡터 그래픽 기술과 3D 프린팅 신소재를 뷰티 산업에 융합해 가정용 젤네일 제품 제조 및 판매,A,Live,
+portfolio_company,바닐라브레인,Vanillabrain,바닐라브레인,윤도선 데이터시각화,N/A,N/A,AI 기술 활용해 복잡한 비즈니스 데이터를 쉽고 빠르게 분석 및 시각화해주는 소프트웨어 개발 기업,A,Live,
+portfolio_company,벳플럭스,Vetflux,벳플럭스,윤상우 반려동물,N/A,N/A,동물병원 업무 자동화 스타트업. 챗봇 기반 동물병원 고객관리 플랫폼 '늘펫플러스' 운영,A,Live,
+portfolio_company,브이아이코리아,VI KOREA,브이아이코리아,신윤정 영상편집,N/A,N/A,"AI 영상 자동편집 콘텐츠 기업, 썸네일·클립 생성 솔루션 '쎔블' 운영",A,Live,
+portfolio_company,빔스튜디오,VIIMstudio,빔스튜디오,김근재 패션AI,N/A,N/A,"패션 특화 AI 영상 제작 플랫폼, 서울패션위크 런웨이 연출 등에 활용",A,Live,
+portfolio_company,빌리지베이비,Village Baby,빌리지베이비,이정윤 육아정보,N/A,N/A,임신·출산·육아 정보 및 커머스 플랫폼 '베이비빌리(BabyBilly)' 운영,A,Live,
+portfolio_company,원티드랩,WantedLab,원티드랩,이복기 채용관리,N/A,N/A,HR테크 기업. 채용 매칭 플랫폼 '원티드' 운영 (코스닥 상장사),A,Exit,
+portfolio_company,웨이브코퍼레이션,Wave,웨이브코퍼레이션,채정훈 영상통화,N/A,N/A,MZ세대 그룹 영상통화 플랫폼 'WAVE' 운영,A,Live,
+portfolio_company,웨이웨어러블,WayWearable,웨이웨어러블,문종수 피부측정,N/A,N/A,"세계 최초로 스마트폰 앱과 연동되는 휴대용 피부 측정 기기인 '웨이(WAY)','웨이스킨(WAYSKIN)'",A,Written-off,
+portfolio_company,위베어소프트,Webear Soft,위베어소프트,장영휘 API보안,N/A,N/A,API 보안 및 관리(APIM) 전문 기술 기업,A,Exit,
+portfolio_company,위플래닛,Weplanet,위플래닛,조덕기 라이프로그,N/A,N/A,모바일 라이프로그(일상 기록) 서비스,A,Exit,
+portfolio_company,와탭랩스,WhaTap,와탭랩스,이동인 옵저버빌리티,N/A,N/A,IT 인프라·애플리케이션 모니터링(옵저버빌리티) SaaS. 서버·DB·AI(LLM) 모니터링 솔루션,A,Exit,
+portfolio_company,왓섭,Whatssub,왓섭,김준태 구독관리,N/A,N/A,"금융 데이터를 자동으로 분석해 숨은 구독 지출을 찾아주고, 터치 한 번으로 해지·관리할 수 있는 AI 기반 핀테크 플랫폼",A,Live,
+portfolio_company,웰프,Whelp,웰프,라술로프 고객상담,N/A,N/A,세일즈 및 고객관리 직원들이 여러 대화 채널의 고객과 한곳에서 소통할 수 있도록 돕는 커뮤니케이션 기업,A,Live,
+portfolio_company,엑스브레인,Xbrain,엑스브레인,최진영 머신러닝,N/A,N/A,엔터프라이즈 AI 솔루션 기업. 노코드 머신러닝 데이터분석 플랫폼 '다리아(Daria)' 개발,A,Live,
+portfolio_company,엑스크루,xCREW,엑스크루,곽상준 러닝,N/A,N/A,글로벌 러닝(달리기) 커뮤니티 플랫폼. 현지 크루 기반 여행·러닝 액티비티 서비스,A,Live,
+portfolio_company,엑씽크,xSync,엑씽크,송보근 이벤트관리,N/A,N/A,이벤트·컨퍼런스 관리 플랫폼. 온/오프라인 행사용 QR 입퇴장·참가자 관리 솔루션,A,Live,
+portfolio_company,제스트,ZEST,제스트,정호건 녹색건축,N/A,N/A,"AI 기반 녹색건축인증, 제로에너지건축물 컨설팅 및 친환경 건설 자재 플랫폼 '그린북' 운영",A,Live,
+portfolio_company,젠허브,ZhenHub,젠허브,"빈스 푼 (Vince Poon), 물류자동화",N/A,N/A,깃허브 (github) 환경 내에서 애자일 프로젝트 관리를 할 수 있도록 지원하는 생산성 소프트웨어 및 기업 ,A,Live,
+portfolio_company,조이코퍼레이션,ZOYI Corporation,조이코퍼레이션,최시원 고객상담,N/A,N/A,소상공인 대상 매장관리 솔루션 '캐시노트' 운영,A,Exit,
+portfolio_company,알트에이,alt-a,알트에이,"이태우
+라스트마일","이태원, 미쉐린, 중식맛집, 비건","교통안전, AI, 교통 솔루션, 스마트교통, 교통환경, 데이터, 스타트업, 이태우, 알트플러스, alt-plus, 알트세이프, 라스트마일, 엣지AI, CCTV",도로의 라스트 마일 구간에서 발생하는 교통안전 문제를 인공지능(AI) 기술로 해결하는 스마트 교통 솔루션 스타트업,B,Live,식당명이랑 겹침
+portfolio_company,아마다스,AMADAS,아마다스,박은민 스마트도어락,"다이빙, 웨트슈트, 땅콩, 농기계","도어락, 스마트홈, IoT, 문손잡이, 박은민, 스마트 도어락",문손잡이만 교체하면 자가 설치가 가능한 IoT 스마트 도어락,B,Written-off,
+portfolio_company,아라블,Arable Labs,아라블,짐 에싱턴 기후테크,,"IoT센서, 기후테크, 농업, AI, 농지 데이터, 짐 에싱턴",올인원 IoT 센서로 농지 데이터를 실시간 수집·분석하여 농업의 생산성을 높이고 수자원을 최적화하는 AI 기후 테크 플랫폼,B,Live,
+portfolio_company,아티팩츠,ARTIFACTS,아티팩츠,"박원재
+크리에이티브테크",,"디지털 아트, 디지털 아트플랫폼, AI, 박원재",아티스트와 창작자를 위한 AI 기반 기술 플랫폼 '아티팩츠',B,Written-off,
+portfolio_company,바이오메디쿠스,BIOMEDICUS,바이오메디쿠스,김민환 분자진단,,"분자진단, 체외진단, PCR, 의료기기",분자진단(Lab-on-a-Disc) 기술을 기반으로 감염병 등을 빠르고 간편하게 검사하는 체외진단 의료기기를 개발하는 바이오 기업,B,Live,
+portfolio_company,비트바이트,Bitbyte,비트바이트,"안서형
+한택환 
+키보드테마",,"이모티콘, 테마, 커스텀, 플레이키보드, 안서형, 키보드, 한택환, 앱테크","이모티콘·테마 커스텀 키보드 앱 '플레이키보드' 개발, 사용자가 광고 시청과 미션 수행으로 포인트를 적립하는 글로벌 앱테크 리워드 플랫폼 '돈이돼지'",B,Live,
+portfolio_company,까리용,Carillon,까리용,오경원 AI,,"판례, 법률, 법, 리서치, 리걸엔진, 빅데이터, AI, 오경원",대규모 국내 판례 빅데이터 기반의 AI 법률 리서치 솔루션 '리걸엔진',B,Live,
+portfolio_company,클로아,Cloa,클로아,"임성은
+데이터
+AI",,"데이터 파이프라인, 대용량 데이터, 인프라, 임성은",데이터 파이프라인 솔루션 기업. 실시간 대용량 데이터 처리 인프라 개발,B,Live,
+portfolio_company,컨셉션,Conception,컨셉션,정구상 3D프린팅,"임신, 산부인과, 빅스","3D프린팅, 금속, 정구상, AI, 프린터",금속 3D 프린팅 및 제조 AI 솔루션 전문 기업,B,Live,
+portfolio_company,엘리멘탈머신,Elemental Machines,엘리멘탈머신,에드세귄 스마트랩,,"IoT센서, 실험실, 바이오, 환경 데이터, 손실방지, LapOps, 모니터링, 에드세귄",IoT 센서로 바이오 실험실의 온·습도 등 환경 데이터를 실시간 모니터링하여 기기 고장과 연구 손실을 방지하는 서비스,B,Live,
+portfolio_company,인라이튼,Enlighten,인라이튼,"신기용
+전자제품",,"배터리뉴, 뉴트, 가전수리, 친환경, 가전, 신기용, 수리, 배터리, 폐기, 절약",소형 가전 배터리 교체·수리 서비스(배터리뉴)와 자체 친환경 가전 브랜드(뉴트),B,Exit,
+portfolio_company,펜테크놀로지,Fintechnology,펜테크놀로지,전상훈 소프트웨어개발,"에쓰핀테크놀로지, 모니, 파피노스, S.Pin Technology, 모비핀테크놀러지","AI핀테크, 비대면 고객채널, 인공지능화, 챗봇서비스",인공지능(AI)과?핀테크를?융합하여?비대면?고객?채널을?인공지능화하는?독창적인?기술과?사업모델을?확보한?핀테크?기술 기업,B,Live,
+portfolio_company,플루언트,FluentT,플루언트,"전예찬
+AI",,"3D, 아바타, 디지털 휴먼, 스피치 모션, AI, 데이터, 버츄얼 휴먼, 전예찬, 톡모션, TalkMotion.ai",텍스트나 음성 데이터를 기반으로 자연스러운 3D 아바타(디지털 휴먼) 및 스피치 모션을 생성하는 AI 솔루션 기업,B,Live,
+portfolio_company,그로스핏,GrowthFit,그로스핏,송창열 데이터분석,크로스핏,"이커머스, 마케팅, 분석, GA4, 데이터, 광고, 송창열",이커머스 마케팅 분석 솔루션. GA4 기반 데이터 분석 및 광고 운영 최적화 툴 제공,B,Live,크로스핏이랑 같이 검색됨
+portfolio_company,헤이브레드,Hey Bread,헤이브레드,"유민주
+배달",,"베이커리, 정기배송, 유민주, 장인, 큐레이션, 배달, 빵배달",경쟁력 있는 동네 장인 베이커리의 빵을 큐레이션하여 소비자에게 정기 배송 및 묶음 배송,B,Live,
+portfolio_company,휴스페이스,Hue Space,휴스페이스,이영주 체류형쉼터,"아트스페이스휴, 목공방, 스페이스클라우드, 신축빌라, 다이닝","삼익산업, 한국프리커센터, 농지법, 농촌, 체류형 쉼터",삼익산업 한국프리커센터에서 농지법 시행규칙에 맞춰 개발한 대표적인 농촌 체류형 쉼터 브랜드,B,Live,
+portfolio_company,로커스랩,LocusLab,로커스랩,"무함마드 아르살란 아르샤드
+AI",,"AI, 인스타그램, 왓츠앱, 엡사이트, DM,  Md Arsalan Arshad, 고객",인공지능(AI) 고객 응대 자동화 플랫폼,B,Exit,
+portfolio_company,마이티빌딩,Mighty Buildings,마이티빌딩,"슬라바 솔로니친
+3D 프린팅
+건설","명동, 마스턴운용","3D프린팅, 모듈러 주택, 조립식 주택, 공장형, 로봇공학, 맞춤제작, 슬라바 솔로니친, 건축, 스타트업, 주택, ESG",공장형 3D 프린팅 기술과 로봇 공학을 활용해 친환경 조립식 모듈러 주택을 빠르게 맞춤 제작 및 현장 설치하는 서비스,B,Live,
+portfolio_company,미쉬팟,Mishpat,미쉬팟,"형용준
+SNS",성경,"스마트폰, 수평적 협업, 주소록, 그룹틱, 피플웨어, 형용준, 앱, 클라우드","스마트폰 기반의 수평적 협업 주소록 서비스 '그룹틱', 스마트폰 기반의 수평적 협업 주소록 서비스 '피플웨어'",B,Live,
+portfolio_company,문리버,Moonriver,문리버,문승우 이커머스데이터,,"온라인 쇼핑몰, 데이터 분석, 아이템스카우트, 문승우, 쇼핑, 솔루션",온라인 쇼핑몰 판매자를 위한 데이터 분석 플랫폼인 '아이템스카우트'를 운영하는 소프트웨어 개발 기업,B,Live,
+portfolio_company,엔사이어티,Nciety,엔사이어티,"김태현
+플랫폼
+SNS",,"글로벌, 청소년, SNS, 놀이터, 판타스틴닷컴, 김태현, 플랫폼", 글로벌 청소년을 타깃으로 한 SNS 놀이터 플랫폼 '판타스틴닷컴(Fatasteen.com)',B,Live,
+portfolio_company,피치스,Peaches,피치스,"여인택
+자동차","복숭아, 과일, 디저트","자동차문화, 스트리트, 튜닝, 라이프스타일, 카컬처, 여인택, 자동차, ",자동차 스트리트 문화 기반의 라이프스타일 브랜드,B,Live,
+portfolio_company,스타일메이트,Stylemate,스타일메이트,한상희 패션인플루언서,,"AI, 패션, 인플루언서, 브랜드, 협찬, 매칭, 마케팅, 한상희, 플랫폼",AI 기반 패션 인플루언서-브랜드 협찬 매칭 마케팅 플랫폼,B,Live,
+portfolio_company,더쿠키팩토리,TheKooky,더쿠키팩토리,"송정근
+스킨케어","베이킹, 브라우저, 소프트웨어","프랭클리, 스킨케어, 송정근, 성분중심, 세럼, 기능성, 톤업, 탄력",고효능 성분 중심의 스킨케어 브랜드 '프랭클리(Frankly)',B,Written-off,
+portfolio_company,티에스지테라퓨틱스,TSG Therapeutics,티에스지테라퓨틱스,"박원형
+치료제",TGTX,"지질막, 바이러스, 항바이러스, 신약, 뎅기열, 바이오, 박원형, 치료제, 티에스지홀딩스, TSG Holdings",지질 막(Envelope) 표적 기술을 활용해 뎅기열 등 전염성 바이러스 질환을 치료하는 광범위 항바이러스 신약 개발 바이오 스타트업,B,Written-off,티지테라퓨틱스가 섞여나옴(티지테라퓨틱스는 항암제를 만드는 제약사)
+portfolio_company,뷰오,Vuo,"뷰오
+투아이즈테크","송헌주
+VR 투아이즈테크 TwoEyes Tech","누마즈, 시즈오카, 수문, 방조제, 일본, ビュオ","3D, 가상현실, VR, 카메라, 영상, 투아이즈테크, TwoEyes, 투아이즈VR, 360도, 스테레오스코픽, 뷰오",투아이즈테크의 3D 360도 가상현실(VR) 카메라 및 영상 솔루션 개발,B,Written-off,일본 수문명이랑 섞여나옴
+portfolio_company,워터스트라이더,Waterstrider,워터스트라이더,"김기범
+딥테크",,"3차원, 터치리스, 공간 감지, 센서, 터치센서, IoT, 디스플레이, 김기범",3차원 터치리스 및 근접 공간 감지 센서 개발 기업,B,Written-off,
+portfolio_company,큐레이터,,큐레이터,,,,,C,Written-off,사명 찾을 수 X
+portfolio_company,카브,,카브,,,,,C,Written-off,CARV와 KHAV 모두 존재
+portfolio_company,한글회사,,한글회사,,,,,C,Written-off,
+portfolio_company,스타카드,,스타카드,,,,,C,Written-off,
+portfolio_company,인피니트아워글래스,,인피니트아워글래스,,,,,C,Written-off,
+portfolio_company,프리트너스,,프리트너스,,,,,C,Written-off,
+portfolio_company,핀솜,,핀솜,,,,,C,Written-off,
+portfolio_company,아블라,Ablar,아블라,,,,,C,Exit,
+portfolio_company,아몬디,Amondy,아몬디,"강신영
+헬스케어",,"아몬디케어, 강신영, 심리상담, 멘탈, 헬스케어, EHR",심리상담사들을 위한 전자건강기록 서비스인 아몬디케어를 운영하는 멘탈 헬스케어 스타트업,C,Written-off,아몬드가 잡힘
+portfolio_company,아스타,Astar,아스타,"이재원
+마케팅
+AI",,"디지털 콘텐츠 마케팅, AI 크리에이터 엔진, AVICA, 브랜드 마케팅 솔루션",AI 디지털 콘텐츠 마케팅 기업. AI 크리에이터 엔진 'AVICA' 기반 브랜드 마케팅 솔루션,C,Live,
+portfolio_company,증강지능,Augmented Knowledge Corp,증강지능,조근식 항공정비,,"VR, SaaS, 학습, AI, 디지털 트윈, 항공 정비,  가상 교육, AK VIEW, 조근식",고가의 VR 장비 없이 웹(SaaS) 기반으로 시공간 제약 없이 학습 가능한 AI 및 디지털 트윈 융합 항공정비 몰입형 가상 교육 솔루션(AK VIEW),C,Live,
+portfolio_company,액스,AX,액스,"오연주
+여행",,"현지 여행사, 여행상품 퍼블리싱, 예약관리",전세계 현지 여행사를 위해 여행상품 퍼블리싱과 예약관리 솔루션을 개발하는 스타트업,C,Live,
+portfolio_company,바벨탑,Babeltop,바벨탑,조은별 통번역,,"온디맨드, 통번역, 매칭, 조은별, 빅데이터, 언어",온디맨드 전문 통번역 매칭 플랫폼 스타트업,C,Written-off,
+portfolio_company,박스풀,Boxful,박스풀,"성정학
+창고",,"무인 관리, 데이터, 공유창고, 풀필먼트, 성정학, Boxful, 셀프스토리지",IoT 기반의 무인 관리 시스템과 데이터 기술을 활용한 공유창고(셀프스토리지) 및 풀필먼트 서비스,C,Live,
+portfolio_company,브로츠,Brots,브로츠,로렌츠 미리 음악발견,,"뮤직, 음악, Web3, 웹3, 블록체인, 팬, 플랫폼, 이탈리아, 아티스트, 로렌츠 미리","음악 취향 기반 아티스트 발견·팬 교류 모바일 앱 (이탈리아 기반, 스파크랩 17기)",C,Live,
+portfolio_company,캐스팅,Casting,캐스팅,"허성욱
+마케팅",,"캐스팅, 플랫폼, 인플루언서, 구독자, 구독, DM, 소통, 오현민",다양한 분야의 인플루언서들과 개인적으로 소통할 수 있는 플랫폼,C,Exit,
+portfolio_company,디센티,Decenti,디센티,"권수민
+도어락",디센터,"블록체인, 암호화, 고보안성, IoT, 스마트 도어락, 보안, 소프트웨어, 권수민",블록체인 기반의 암호화 모듈을 활용한 고보안성 IoT 스마트 도어락 및 물리 보안 솔루션,C,Written-off,
+portfolio_company,도모바이오텍,Domobiotech,도모바이오텍,이승규 수면무호흡증,,"코골이, 수면무호흡증. 치과의사, 이승규, 구강 장치, 의료, 큐티33",코골이 및 수면무호흡증 개선 장치를 연구·개발 및 유통,C,Exit,
+portfolio_company,드랍비트,DropBit,드랍비트,,,,,C,Written-off,
+portfolio_company,이어가다,Eargada,이어가다,"최자인
+박현아
+오디오",,"나디오, Nadio, 오디오, 음성, 에세이, 숏폼, 최자인, 박현아, TTS",AI 음성 합성 기술을 활용해 오디오 콘텐츠 플랫폼 나디오 (nadio)를 운영하는 오디오테크 스타트업,C,Live,
+portfolio_company,이멀전트브이알,Emergent VR,이멀전트브이알,"피터 윌킨스
+가상 현실(VR)",,"스마트폰, 360도 가상현실, 공유, 모바일 VR, 피터 윌킨스","일반 스마트폰으로 360도 가상현실 영상을 직접 촬영·공유하고, 모바일 VR 기기로 이를 탐험하는 'VR 전용 소셜 플랫폼'",C,Exit,
+portfolio_company,엔터핀,Enterphin,엔터핀,"김민욱
+IoT",,"클라우드, IoT 플랫폼, 스키드, 하드웨어, 김민욱, 소프트웨어",하드웨어 기기의 데이터를 클라우드 서버에 쉽게 연결하고 수집·활용할 수 있는 IoT 플랫폼 '스키드(skiiiD)',C,Written-off,
+portfolio_company,이퀼브리엄월드,Equilibrium World,이퀼브리엄월드,"프랭크 미한
+ESG
+AI 플랫폼",,"탄소 배출량, ESG, 클라우드, 탄소 회계, 프랭크 미한, AI, 탄소, SaaS, 자동화",AI 기반으로 탄소 배출량을 자동 추적하고 ESG 공시를 지원하는 클라우드 탄소 회계 솔루션,C,Exit,
+portfolio_company,이에스티미디어,EST.MEDIA,이에스티미디어,,,,,C,Written-off,
+portfolio_company,팔콘리,Falkonry,팔콘리,"Nikunji Mehta
+AI",맹금류,"제조산업, 센서 데이터, AI, 장비 고장, 예측, 노코드, 시계열, 데이터 분석, 머신러닝, 설비 고장, Nikunji Mehta, 실리콘밸리",제조·산업 장비의 센서 데이터를 AI로 실시간 분석하여 오탐지 없는 장비 고장 예측과 이상 징후를 탐지하는 '노코드 시계열 데이터 분석 AI 플랫폼',C,Written-off,
+portfolio_company,피처링,Featuring,피처링,장지훈 인플루언서,,"데이터 분석, AI, SNS, 인플루언서, 영향력, 마케팅, 장지훈","AI 기반 데이터 분석으로 SNS 인플루언서의 실제 영향력을 측정하고, 브랜드의 인플루언서 마케팅을 지원하는 플랫폼",C,Live,
+portfolio_company,필유,FeelU,필유,"아드리안 척
+웨어러블",,"감정, 연인, 가족, 반지, 웨어러블, 링유, 디바이스",멀리 떨어져 있는 연인이나 가족이 서로의 감정을 실시간으로 공유할 수 있도록 만든 반지 형태의 스마트 웨어러블 기기 '링유(Ringyou)',C,Exit,
+portfolio_company,플리팝,Fleapop,플리팝,"김동화
+리테일",,"Fleapop, 러블리마켓, 김동화, 쇼핑, 리테일, 커머스, 플랫폼",Z세대를 타깃으로 한 크로스오버 쇼핑 플랫폼 ‘러블리마켓’,C,Written-off,
+portfolio_company,플로우스테이트미디어,Flow State Media,플로우스테이트미디어,,,,,C,Written-off,
+portfolio_company,플루이드,Fluid,플루이드,"샤라드 쿠마르
+자동화",,"클라우드, 인프라, 자동화, 마이그레이션, SaaS, 샤라드 쿠마르",복잡한 클라우드 시스템 전체를 읽어내 다른 클라우드 환경으로 똑같이 복제하고 이전해 주는 인프라 자동화 플랫폼,C,Exit,
+portfolio_company,폴슨,Folsn,폴슨,"최진호 
+AI이커머스","사라 폴슨, 헨리 폴슨, 재무장관, 헤지펀드","엔지니어링, 플라스틱, 화학 제품, 첨가제, 글로벌 무역","엔지니어링 플라스틱, 화학 제품, 첨가제를 전문으로 취급하는 글로벌 무역 기업",C,Written-off,사명 찾을 수 X
+portfolio_company,푸드블록체인,Food Block Chain,푸드블록체인,,,,,C,Written-off,
+portfolio_company,프리스타일,Freestyle Technology Korea,프리스타일,"김용선
+AI
+IoT",,"AI, IoT 기술, 상수도, 가스, 원격자동검침, 스마트 시티, 김용선",AI 및 IoT 기술 기반의 상수도·가스 무선 원격자동검침 시스템과 스마트 시티 관리 솔루션을 제공,C,Written-off,
+portfolio_company,프레스코키친,Fresco,프레스코키친,"벤 해리스
+플랫폼",,"스마트 가전, 연결, 실시간 제어, KitchenOS, 밴 해리스, 스마트 주방","다양한 브랜드의 스마트 가전을 하나로 연결하고, AI가 조리 과정을 실시간으로 제어·안내하는 주방 전용 운영체제(KitchenOS)",C,Written-off,
+portfolio_company,프론트맨,FRONTMAN,프론트맨,,,,,C,Written-off,확실X 다시보니 출처를 찾을 수 없음 확인필요
+portfolio_company,펀앳,Funat,펀앳,"이준희
+진오민
+커뮤니티",펀앤,"동네, 소상공인, 지역 주민, 타임세일, 하이퍼로컬, 타운톡, SNS, 이준희, 진오민",동네 소상공인과 지역 주민을 연결하여 실시간 타임세일 및 할인 혜택 정보를 공유하는 하이퍼로컬 지역 소통 앱 ‘타운톡’,C,Exit,
+portfolio_company,글로벌브릿지,Global Bridge,글로벌브릿지,홍윤국 무선통신보안,,"홍윤국, 무선통신, 보안, CDMA, CCTV, 바이너리",무선통신 보안 기업. 바이너리CDMA 기반 영상 송수신·CCTV 보안 솔루션 개발,C,Written-off,
+portfolio_company,GMG,GMG,GMG,"도널드 클립
+로버트 채드윅
+부동산",,"프롭테크, 비시민권자, 해외 주거, 부동산, 도널드 클립, 로버트 채드윅, 글로벌모기지그룹, 중개, 투자, 담보, 대출",프롭테크. 비시민권자 해외 주거용 부동산 구매 지원,C,Written-off,
+portfolio_company,핸들,handle,핸들,"안인성
+중고차 플랫폼","운전대, 조향장치, 손잡이","카머스, Carmerce, 안인성, 중고차, 이커머스",100% 모바일 기반 중고차 이커머스 플랫폼 '카머스(Carmerce)',C,Live,
+portfolio_company,해브잇,Have It,해브잇,"서수아
+쇼핑
+커머스",,"인스타그램, SNS, 인플루언서, 패션, 명품, 정보 연계, 판매, 커머스, 서수아",인스타그램 등 SNS 인플루언서들이 착용하는 패션 및 명품 아이템 정보를 연계하여 선별 판매하는 큐레이션 기반 명품 커머스 플랫폼,C,Exit,
+portfolio_company,아이베이비박스,iBabyBox,아이베이비박스,"신진영
+중고 유아용품",,"중고, 유아용품, 교환, 매매, 소셜 마켓플레이스, 신진영",지인 및 지역 네트워크를 기반으로 안심하고 중고 유아용품을 교환·매매·공유할 수 있는 모바일 소셜 마켓플레이스,C,Written-off,
+portfolio_company,아이디엘,iDL,아이디엘,"김상현
+헬스케어
+IoT",,"아이, 활동량, 측정, 부모, 건강 데이터, 카롱, 김상현, 웨어러블",아이의 활동량을 실시간으로 측정하고 부모에게 또래 평균과 비교한 건강 데이터를 제공하는 IoT 기반 서비스 '카롱(Caron)',C,Exit,
+portfolio_company,제이킨,Jakin,제이킨,"정남교
+자동매매",,"암호화폐, 자산관리, 워치봇, 핀테크, 자동매매, 정남교",암호화폐 자산관리 플랫폼인 '워치봇(Watchbot)',C,Written-off,
+portfolio_company,캐드호,Kadho,캐드호,"카베 아자르타시
+AI
+뇌과학",,"두뇌, 신경과학, 언어교육, 에듀테크, 뇌훈련, AI, 카베 아자르타시",신경과학과 AI 및 머신러닝 결합하여 두뇌 훈련 커리큘럼과 언어 교육을 제공하는 에듀테크 스타트업,C,Exit,
+portfolio_company,카도,Kado,카도,"에메리 앤드루
+빈스 다우들
+결제",,"웹3, 암호화폐, 이커머스, 결제 인프라, 멀티체인, 에메리 앤드루, 빈스 다우들, Kado, Kado Ramp, Emery Andrew",웹3(Web3) 및 암호화폐 생태계를 위한 이커머스 결제 인프라 및 멀티체인 결제 서비스,C,Live,
+portfolio_company,클로저,Kloser,클로저,"변영진
+마케팅","야구, 마무리투수","고객채널, 마케팅, CRM, 클라우드, 변영진, 플랫폼",고객채널 관리 플랫폼을 클라우드로 제공하는 마케팅 테크 전문 기업,C,Exit,
+portfolio_company,노리,KnowRe,노리,"김용재
+수학교육",,"KnowRe, 김용재, 수학, 교육, 이러닝, 에듀테크, 학습",에듀테크 스타트업. 수학 교육 콘텐츠·이러닝 서비스 (現 매각/폐업),C,Exit,
+portfolio_company,쿠파,KUPA,쿠파,"노명헌
+김건영
+금융 플랫폼","마리오, 닌텐도","엣지, Edge, 노명헌, 김건영, 금융, 투자, 주식, ETF, 인베스트테크","인베스트테크 스타트업, 자체 개발한 AI 엔진과 다이내믹 데이터 매핑 (DDM) 기술을 활요한 금융 정보 플랫폼 엣지 (Edge) 운영중",C,Live,
+portfolio_company,엘에이소주,LA Soju,엘에이소주,빌리 강 주류,"빌리다, 돈","지드래곤, RTD 하이볼, 주류시장, 피스마이너스원, Ready-to-Drink",로스앤젤러스 기반의 RTD 브랜드 ,C,Live,
+portfolio_company,레터럴,Lateral,레터럴,,,,,C,Live,
+portfolio_company,레브로,Levro,레브로,"캐시 한 
+아비르 아그라왈
+핀테크 페이먼츠","인류보건, 힙합, 아티스트, 레브르, Revero, 백석예술대학교, 음악, 패션, 레브","다중 통화 자산, 맞춤형 AI 트레이닝, 실리콘밸리, 핀테크, 캐시 한",다중 통화 자산 관리에서 맞춤형 AI 모델 트레이닝 플랫폼으로 진화한 실리콘밸리 핀테크 스타트업,C,Live,
+portfolio_company,리체,LICHE,리체,김홍규 BNPL,"센텀, GS","로마드, 김홍규, BNPL, 렌탈, 가구, 분할납부, 핀테크",라이프스타일 커머스 플랫폼 '로마드' 운영. 가구 등에 BNPL(선구매 후결제) 핀테크 모델 적용,C,Live,
+portfolio_company,라이다에이아이,LIDA AI,라이다에이아이,,,,,C,Exit,
+portfolio_company,로브스터,Lobster,로브스터,양주영 소셜네트워킹,,"양주영, 소셜, 네트워크, 친구, 앱, 커뮤니티",소셜 인프라 스타트업. 사람들이 진짜 친구를 만들도록 돕는 네트워크·앱 개발,C,Live,
+portfolio_company,마스크모먼트,Mask Moments,마스크모먼트,소피아 홍 스킨케어,"방역, KF94, 미세먼지","소피아 홍, 이커머스, Mask Moments, 바이오셀룰로스, 코코넛, 구독, 시트마스크, getjelly,",2018년에 설립된 미국 기반의 뷰티 및 스킨케어 전문 전자상거래 스타트업. 유통 마진 줄이고 맞춤형 스킨케어 제공,C,Live,
+portfolio_company,메리윈드,Merrywind,메리윈드,"오재영
+게임",주얼리,"호텔, 카지노, 게임, 오재영",호텔 카지노 게임,C,Live,동일한 타브랜드명 존재
+portfolio_company,민트엔에프티,mintNFT,민트엔에프티,,,,,C,Written-off,
+portfolio_company,모바,MOBA,모바,"홍경표
+생산성 소프트웨어(SaaS)",,"캘린더, 일정 관리, 생산성 SaaS, 아키캘린더, Arch Calendar, 타임블로킹, 홍경표 ",캘린더 하나로 프로젝트와 일정을 통합 관리하는 생산성 SaaS(서비스형 소프트웨어) '아키캘린더(Arch Calendar)',C,Live,
+portfolio_company,모비테트리스,Mobi,모비테트리스,,,,,C,Live,
+portfolio_company,나인라이브스,Nine Lives,나인라이브스,,,,,C,Live,
+portfolio_company,온도,ONDO,온도,"심동현
+패션",,"신소재, 기술특허, 북미타겟, 윤리적 패션",신소재 및 기술특허로 D2C로 판매하는 북미타겟 윤리적 패션 브랜드,C,Live,
+portfolio_company,오닝,ONING,"오닝, 픽잇",,,,,C,Live,픽잇과 동일?
+portfolio_company,오이좀,Ouizome,,,,,,C,Exit,
+portfolio_company,펜타프레스,Pentapress,펜타프레스,이석용 보도사진,,"사진 전문 뉴스, 네트워크, 사진 제작, 사진가, 이석용","국내 최초 글로벌 사진 전문 뉴스 통신사, 글로벌 사진가들과 네트워크 구축해 다양한 분야의 고품질 보도사진 제작 및 배포",C,Exit,실제 펜타프레스가 찍은 사진기사가 나오게됨-어떻게 분류할지
+portfolio_company,페츠비,Petzbe,페츠비,안드레아 네렙 반려동물 SNS,"동물병원, 페츠비동물병원, gs리테일","반려동물, 소셜 미디어, 커뮤니티, Andrea Nerep, 안드레아 네렙, 앙구스, Angus, Petzbe",뉴욕 본사에 기반한 반려동물의 관점에서 일상을 공유하는 반려동물 전용 소셜 미디어 겸 커뮤니티 플랫폼 운영,C,Exit,
+portfolio_company,프로파운드,Profound,프로파운드,"이유경
+비즈니스
+플랫폼",,"컨설팅, 전문가, 인사이트, 비즈니스, 네트워크, 지식, 이유경",전세계 다양한 비즈니스 전문가들을 연결해 그들의 지식과 인사이트를 제공하는 '비즈니스 스팟 컨설팅 마켓 네트워크',C,Live,
+portfolio_company,큐픽,QPICK,큐픽,,,,,C,Written-Off,
+portfolio_company,리얼타임게임즈,Real Time Games,리얼타임게임즈,"정철희
+모바일 게임",,"방치형, 액션, RPG, 소녀전기, 정철희",모바일 방치형 액션 RPG '소녀전기'를 개발 및 서비스,C,Live,게임 분야에 리얼타임이라는 말이 많이 사용되어 필터링 주의
+portfolio_company,리플리오,Replio,리플리오,"아파나시 사빈
+소셜","풀리오, 리플리증후군","동영상, 1분, 불특정 다수, 상호 소통, 소셜, SNS, 리플리오, 아파나시 사빈, 스파크랩 10기, 러시아, 지식공유",친구·구독자·관객과 관심 분야 Q&A를 짧은 비디오로 주고받는 지식 공유 커뮤니케이션 플랫폼,C,Live,
+portfolio_company,리코,RICOH,리코,김근호 폐기물관리,"프린터, 이베리코, 인실리코","업박스, UpBox, 김근호, 폐기물, 자원순환, 수거, 재활용, 환경","폐기물 통합관리 서비스 기업. 폐기물 수거·관리 솔루션 '업박스(UpBox)' 운영, 자원순환 사업",C,Exit,~리코가 많이 잡힘
+portfolio_company,타코,Takko,타코,David Choi 숏폼비디오,"타코야끼, 멕시코음식, 또띠아","콘텐츠 크리에이터, 숏폼, 비디오, SNS, 커뮤니티",콘텐츠 크리에이터들을 위한 미국의 숏폼 비디오 플랫폼 ,C,Live,
+portfolio_company,텔라,Tella,텔라,"진유하
+교육",,"영어, 교육, 튜터, 회화, 진유하, 에듀테크, 학습",채팅 기반 영어교육 스타트업. 텍스트 학습 데이터 분석 기반 개인화 영어 커리큘럼 (최근 AI 호텔예약 자동화로도 확장),C,Exit,
+portfolio_company,벨루가브루어리,Veluga Brewery,벨루가브루어리,"김상민
+주류 유통 플랫폼",,"오프라인, 주류 도매, 유통 과정, 디지털화, 벨루가브루어리, 김상민",오프라인 중심의 주류 도매 유통 과정을 디지털화하는 B2B 주류 유통 플랫폼인 '벨루가 비즈니스',C,Written-off,
+portfolio_company,벤진,Vengine,벤진,노희선 인재채용,,"피지컬 AI, 인공지능, 벤처 빌더, 로보틱스, 딥테크, 스타트업, 노희선, 중국  시장",초기 창업가들과 함께 아이디어를 사업으로 키워나가는 홍콩 기반 벤처 빌더,C,Written-off,
+portfolio_company,브이로거,Vlogr,브이로거,"이태준 
+영상편집",,"영상 자동편집, 썸네일, 클립, 쎔블","AI 영상 자동편집 콘텐츠 기업, 썸네일·클립 생성 솔루션 '쎔블' 운영",C,Live,
+portfolio_company,세린,XELIN,세린,전장수 레이저커팅,"단백질, 아미노산, 뇌, 생화학","레이저, 초미세 커팅, 마이크로다이싱, 기술개발, 딥테크",레이저 초미세 커팅 기술 '마이크로다이싱(Micro Dicing)' 개발 딥테크 기업,C,Live,
+portfolio_company,와이오엘,yolcargo,와이오엘,"정현웅
+IT 물류 플랫폼",황유미,"수출입, 기업, 견적, 위치 추적, 디지털 국제 물류, 욜카고, 스마트 운송, 정현웅",수출입 기업에 투명한 견적과 실시간 위치 추적을 제공하는 디지털 국제 물류 서비스 '욜카고',C,Exit,와이오엘오'라는 타사와 섞임
+portfolio_company,윤앤컴퍼니,Yoon&Company,윤앤컴퍼니,,,,,C,Live,현 타운컴퍼니
+portfolio_company,제플린,Zeplin,제플린,펠린 케네즈 이승현 디자인 핸드오프,"Zeppelin X, 제플린엑스, 아파치 제플린","UI/UX, 디자이너, 디자인, 핸드오프(Handoff), 협업, 소프트웨어",UI/UX 디자이너가 작업한 디자인을 개발자가 정확하게 구현할 수 있도록 돕는 디자인 핸드오프(Handoff) 협업 소프트웨어,C,Live,제플린엑스?
