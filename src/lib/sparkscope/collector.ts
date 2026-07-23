@@ -225,6 +225,7 @@ async function fetchNaverNews(keyword: string): Promise<SourceItem[]> {
 
     const source = domainToSource(link);
     if (NOISE_SOURCES.has(source)) continue;
+    if (/@[a-zA-Z0-9.]+\.[a-zA-Z]{2,}/.test(title)) continue;
     out.push({ title, link, source, pubDate });
   }
   return out;
