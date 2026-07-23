@@ -2,6 +2,16 @@
 // 06_Claude_분석_프롬프트_v0.1.md 기반
 import { crisisKeywordsForPrompt } from './crisis-keywords';
 
+// 스파크랩 대표자명 동명이인 판별용 문맥어 (팀 큐레이션).
+// 제목에 이 단어가 있어야만 통과시키는 강제 규칙이 아니라, AI가 "이 기사가 진짜
+// 스파크랩 대표 얘기인지"를 판단할 때 참고하는 힌트임 — 없어도 문맥상 명백하면 통과 가능.
+const SPARKLABS_REP_CONTEXT_WORDS: Record<string, string[]> = {
+  '김유진': ['스파크랩', 'SparkLabs', '제너럴 파트너', '엑셀러레이터', '스타트업', '공동대표', '공동창업자', '벤처캐피탈'],
+  '김호민': ['스파크랩', 'SparkLabs', '제너럴 파트너', '엑셀러레이터', '스타트업', '공동대표', '공동창업자', 'Nexon', 'Nexonova', '벤처캐피탈'],
+  '이한주': ['스파크랩', 'SparkLabs', '제너럴 파트너', '엑셀러레이터', '공동설립자', '스타트업', '호스트웨이', '벤처캐피탈', '뉴베리글로벌'],
+  '버나드문': ['스파크랩', 'SparkLabs', '제너럴 파트너', '엑셀러레이터', '스타트업', '공동대표', '공동설립자', '벤처캐피탈', '글로벌'],
+};
+
 export const HAIKU_CLASSIFIER_SYSTEM = `당신은 스파크랩의 PR 분석 어시스턴트입니다.
 스파크랩은 한국 대표 액셀러레이터로, 200여 개 포트폴리오사를 보유하고 있습니다.
 
@@ -18,12 +28,18 @@ export function buildHaikuClassifierUserMessage(articles: Array<{
   matchedKeywordKind: string;
   companyDesc?: string;
 }>) {
+  const repNamesInBatch = Object.keys(SPARKLABS_REP_CONTEXT_WORDS)
+    .filter(name => articles.some(a => a.matchedKeyword === name));
+  const repContextBlock = repNamesInBatch.length > 0
+    ? `\n스파크랩 대표자명 동명이인 판별 힌트 (참고용 — 아래 단어가 제목에 없어도 문맥상 명백히 스파크랩 관련이면 통과 가능, 반대로 있어도 명백히 무관하면 homonym 처리):\n${repNamesInBatch.map(name => `- ${name}: ${SPARKLABS_REP_CONTEXT_WORDS[name].join(', ')}`).join('\n')}\n`
+    : '';
+
   return `다음 ${articles.length}개의 기사를 분류해주세요.
 각 기사에 대해 JSON 객체를 반환하고, 전체를 배열로 묶어주세요.
 
 기사 목록:
 ${articles.map(a => JSON.stringify(a)).join('\n')}
-
+${repContextBlock}
 각 기사의 출력 스키마:
 {
   "id": "<입력 id>",
@@ -47,6 +63,7 @@ ${articles.map(a => JSON.stringify(a)).join('\n')}
   · 예: 매칭 "리코"인데 기사가 "인실리코(Insilico)"에 대한 것 → unrelated (부분일치)
   · 예: 매칭 "노리"인데 실제 주어가 "KB증권/OpenAI" 등 우리와 무관한 회사 → unrelated
 - 매칭된 키워드가 "비트바이트"인데 기사가 암호화폐 거래소 "바이비트"에 대한 것이면 isNoise=true, noiseReason="homonym"
+- 매칭된 키워드가 김유진/김호민/이한주/버나드문 등 스파크랩 대표자명인데 흔한 이름이라 동명이인 기사가 잦음 → 위 "동명이인 판별 힌트" 목록의 문맥어나 그 외 정황(직함·회사 활동 등)으로 스파크랩 대표가 맞는지 판단. 명백히 다른 사람(가수·운동선수·정치인 등)이면 isNoise=true, noiseReason="homonym"
 - 자동생성된 시세·주가 분석은 isNoise=true, noiseReason="auto_generated"
 - 정부 정책 발표 같은 영향력 큰 기사는 importance="HIGH" 또는 "CRITICAL"
 - needsDeepAnalysis는 category가 sparklabs_self/portfolio_company이고 importance가 MEDIUM 이상일 때 true
