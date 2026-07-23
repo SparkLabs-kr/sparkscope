@@ -11,6 +11,11 @@ const prisma = new PrismaClient();
 async function main() {
   console.log(`Seeding ${targets.length} monitoring targets...`);
 
+  // 경쟁사 카테고리: 완전 교체 (이전 데이터 삭제)
+  await prisma.monitoringTarget.deleteMany({
+    where: { category: 'competitor' },
+  });
+
   let created = 0;
   let updated = 0;
 
@@ -27,6 +32,9 @@ async function main() {
         primaryKeyword: t.primaryKeyword,
         helperKeywords: t.helperKeywords,
         excludeWords: t.excludeWords,
+        contextWords: t.contextWords ?? null,
+        portfolioStatus: t.portfolioStatus ?? null,
+        tier: t.tier ?? null,
         notes: t.notes,
       },
       update: {
