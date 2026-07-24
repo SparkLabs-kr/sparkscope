@@ -66,7 +66,7 @@ ${repContextBlock}
 - 매칭된 키워드가 김유진/김호민/이한주/버나드문 등 스파크랩 대표자명인데 흔한 이름이라 동명이인 기사가 잦음 → 위 "동명이인 판별 힌트" 목록의 문맥어나 그 외 정황(직함·회사 활동 등)으로 스파크랩 대표가 맞는지 판단. 명백히 다른 사람(가수·운동선수·정치인 등)이면 isNoise=true, noiseReason="homonym"
 - 자동생성된 시세·주가 분석은 isNoise=true, noiseReason="auto_generated"
 - 정부 정책 발표 같은 영향력 큰 기사는 importance="HIGH" 또는 "CRITICAL"
-- needsDeepAnalysis는 category가 sparklabs_self/portfolio_company이고 importance가 MEDIUM 이상일 때 true
+- needsDeepAnalysis는 category가 sparklabs_self이면 importance 무관하게 무조건 true, portfolio_company이고 importance가 MEDIUM 이상일 때 true
 - 🚨 위기·부정 신호 (매우 중요): 포폴사/스파크랩이 주어인 기사에 소송·고소·수사·검찰·공정위·과징금·리콜·결함·해킹·정보유출·논란·의혹·횡령·갑질·불매·파업·구조조정·적자·사망 등 부정·위기 신호가 있으면 importance="HIGH"(중대하면 "CRITICAL") + needsDeepAnalysis=true. 이런 기사는 절대 isNoise로 버리지 말 것(명백한 무관 도메인/동명이인만 예외).
 
 JSON 배열만 반환:`;
