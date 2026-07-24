@@ -162,7 +162,7 @@ export function filterReason(a: RelevanceInput): FilterReason | null {
   const body = a.body ?? '';
 
   const excl = splitCsv(a.excludeWords);
-  if (excl.some(w => w.length >= 2 && (title.includes(w) || body.includes(w)))) return 'exclude_word';
+  if (excl.some(w => w.length >= 2 && (matchesAsToken(title, w) || (body.length > 0 && matchesAsToken(body, w))))) return 'exclude_word';
 
   // 문맥어: 지정된 경우, 동명이의어 등 흔한 단어의 회사명을 걸러내기 위해
   // 제목 또는 본문에 문맥어 중 하나가 반드시 등장해야 통과 (설정 안 하면 이 체크는 스킵).
