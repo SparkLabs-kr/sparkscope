@@ -104,6 +104,7 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
           matchedKeyword: target.primaryKeyword,
           category: target.category as Category,
           basePriority: (CATEGORY_PRIORITY[target.category] ?? 50) + (TIER_BONUS[target.tier ?? ''] ?? 0),
+          body: bodyMap.get(item.link)?.text, // 이미 스크래핑했으면 재사용 (analyzer가 다시 안 긁도록)
         }));
     }));
     results.forEach(arr => allArticles.push(...arr));

@@ -16,6 +16,8 @@ import {
   buildEditorIntroUserMessage,
 } from './prompts';
 import { hasNegativeKeyword, hasCrisisKeyword } from './keywords-data';
+import { scrapeArticleBody } from './scraper';
+import { resolveGoogleNewsUrl } from './google-news-resolver';
 import type { RawArticle, AnalyzedArticle, Importance, Tone, Category } from './types';
 
 const openai = new OpenAI({
@@ -59,6 +61,8 @@ export async function analyzeArticles(raw: RawArticle[], portfolioUniverse: stri
     let pitchScore: number;
     let pitchTopic: string | undefined;
     let riskFlag: string | undefined;
+    // 심층분석 대상인데 본문을 못 구해서(스크래핑 실패) title만으로 판단된 경우 — 조용히 넘기지 않고 명시적으로 플래그.
+    let titleOnlyFallback = false;
 
     if (cls.needsDeepAnalysis) {
       // 2단계: Sonnet 심층 분석
@@ -70,8 +74,9 @@ export async function analyzeArticles(raw: RawArticle[], portfolioUniverse: stri
       pitchScore = deep.pitchScore;
       pitchTopic = deep.pitchTopic;
       riskFlag = deep.riskFlag;
+      titleOnlyFallback = !deep.bodyUsed;
     } else {
-      // 휴리스틱
+      // 휴리스틱 (애초에 심층분석 대상이 아님 — 본문 시도 자체를 안 하므로 "실패"가 아니라 정상 동작)
       oneLiner = `${article.matchedKeyword} 관련 — ${article.source}`;
       tone = heuristicTone(article.title);
       relatedCompanies = [article.matchedKeyword];
@@ -91,6 +96,7 @@ export async function analyzeArticles(raw: RawArticle[], portfolioUniverse: stri
       isNoise: false,
       noiseReason: undefined,
       priorityScore: computePriorityScore(article, cls.importance, tone),
+      titleOnlyFallback,
     });
   }
 
@@ -131,11 +137,30 @@ async function classifyBatch(articles: Array<RawArticle & { _id: string }>): Pro
   return results;
 }
 
+// collector가 이미 스크래핑했으면 재사용, 없으면 심층분석 대상(needsDeepAnalysis=true, 소수)에 한해
+// 여기서 직접 시도. 네이버 재검색 폴백은 안 함(collector 전용 인프라) — 실패하면 title-only로 진행.
+async function ensureBody(article: RawArticle): Promise<string | undefined> {
+  if (article.body) return article.body;
+  try {
+    let link = article.link;
+    if (link.includes('news.google.com')) {
+      const resolved = await resolveGoogleNewsUrl(link);
+      if (!resolved) return undefined;
+      link = resolved;
+    }
+    const scraped = await scrapeArticleBody(link);
+    return scraped?.text;
+  } catch {
+    return undefined;
+  }
+}
+
 // ===== Sonnet 심층 분석 =====
 async function analyzeDeep(article: RawArticle & { _id: string }, portfolioUniverse: string[], trendingTopics: string[]): Promise<DeepResult> {
   try {
+    const body = await ensureBody(article);
     const userContent = buildSonnetDeepUserMessage(
-      { id: article._id, title: article.title, source: article.source, matchedKeyword: article.matchedKeyword, category: article.category },
+      { id: article._id, title: article.title, source: article.source, matchedKeyword: article.matchedKeyword, category: article.category, body },
       portfolioUniverse,
       trendingTopics,
     );
@@ -149,6 +174,7 @@ async function analyzeDeep(article: RawArticle & { _id: string }, portfolioUnive
       pitchScore: parsed.pitchScore ?? 0,
       pitchTopic: parsed.pitchTopic,
       riskFlag: parsed.riskFlag,
+      bodyUsed: !!body,
     };
   } catch (e) {
     console.error('[analyzer] Sonnet deep failed, falling back:', e);
@@ -157,6 +183,7 @@ async function analyzeDeep(article: RawArticle & { _id: string }, portfolioUnive
       tone: heuristicTone(article.title),
       relatedCompanies: [article.matchedKeyword],
       pitchScore: 0,
+      bodyUsed: false,
     };
   }
 }
@@ -298,4 +325,5 @@ interface DeepResult {
   pitchScore: number;
   pitchTopic?: string;
   riskFlag?: string;
+  bodyUsed: boolean;
 }

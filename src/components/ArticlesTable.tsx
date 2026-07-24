@@ -12,6 +12,7 @@ interface Article {
   tone: string | null;
   pitchScore: number | null;
   isScrapped?: boolean;
+  titleOnlyFallback?: boolean;
 }
 
 const CATEGORY_BADGE: Record<string, { label: string; cls: string }> = {
@@ -33,6 +34,18 @@ const IMP_STYLE: Record<string, string> = { HIGH: 'text-red-600 font-bold', CRIT
 function ToneBadge({ tone }: { tone: string | null }) {
   const t = TONE_BADGE[tone ?? 'NEUTRAL'] ?? TONE_BADGE.NEUTRAL;
   return <span className={`inline-block px-2 py-0.5 rounded-full text-[13px] font-bold whitespace-nowrap ${t.cls}`}>{t.label}</span>;
+}
+
+// 본문 스크래핑 실패로 title만으로 분석된 기사 표시 — 조용히 넘기지 않고 눈에 띄게 경고.
+function TitleOnlyBadge() {
+  return (
+    <span
+      title="본문을 읽지 못해 제목만으로 분석했습니다. 요약·톤 판정 정확도가 낮을 수 있습니다."
+      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap bg-amber-50 text-amber-700 border border-amber-200"
+    >
+      ⚠️ 본문 미확인
+    </span>
+  );
 }
 
 export function ArticlesTable({ articles, canScrap = false, emptyText, showCategoryColumn = true }: { articles: Article[]; canScrap?: boolean; emptyText?: string; showCategoryColumn?: boolean }) {
@@ -66,7 +79,10 @@ export function ArticlesTable({ articles, canScrap = false, emptyText, showCateg
                   {canScrap && <td className="px-2 py-3 text-center"><ScrapStar id={a.id} initial={!!a.isScrapped} /></td>}
                   <td className="px-3 py-3 text-xs text-gray-500">{date.getMonth() + 1}/{date.getDate()}</td>
                   {showCategoryColumn && <td className="px-3 py-3"><span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${cat.cls}`}>{cat.label}</span></td>}
-                  <td className="px-3 py-3"><a href={a.link} target="_blank" rel="noopener noreferrer" className="hover:text-spark-purple">{a.title}</a></td>
+                  <td className="px-3 py-3">
+                    <a href={a.link} target="_blank" rel="noopener noreferrer" className="hover:text-spark-purple">{a.title}</a>
+                    {a.titleOnlyFallback && <span className="ml-1.5 align-middle"><TitleOnlyBadge /></span>}
+                  </td>
                   <td className="px-3 py-3 text-xs text-gray-600">{a.source}</td>
                   <td className="px-3 py-3 text-center"><ToneBadge tone={a.tone} /></td>
                   <td className={`px-3 py-3 text-center text-xs ${IMP_STYLE[a.importance ?? 'LOW']}`}>{a.importance === 'HIGH' || a.importance === 'CRITICAL' ? '높음' : a.importance === 'MEDIUM' ? '중' : '낮음'}</td>
@@ -98,6 +114,7 @@ export function ArticlesTable({ articles, canScrap = false, emptyText, showCateg
               <a href={a.link} target="_blank" rel="noopener noreferrer" className="block text-sm font-medium text-gray-900 hover:text-spark-purple mb-2 line-clamp-2">
                 {a.title}
               </a>
+              {a.titleOnlyFallback && <div className="mb-2"><TitleOnlyBadge /></div>}
 
               {/* 하단: 매체 + 톤 + 중요도 + 피칭 */}
               <div className="flex items-center justify-between gap-2 text-xs text-gray-600">

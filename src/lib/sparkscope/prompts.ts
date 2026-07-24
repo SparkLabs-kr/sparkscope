@@ -71,11 +71,14 @@ export function buildSonnetDeepUserMessage(article: {
   source: string;
   matchedKeyword: string;
   category: string;
+  body?: string;
 }, portfolioUniverse: string[], trendingTopics: string[]) {
+  const { body, ...meta } = article;
   return `다음 기사를 깊이 분석해주세요.
 
 기사:
-${JSON.stringify(article)}
+${JSON.stringify(meta)}
+${body ? `\n기사 본문:\n${body}\n\n(본문이 제공된 경우, 제목만으로는 알 수 없는 세부 내용까지 반영해 oneLiner·ourTake·tone을 판단하세요.)` : ''}
 
 우리 포트폴리오사 (관련 회사 매칭에 참조):
 ${portfolioUniverse.slice(0, 50).join(', ')} (외 ${Math.max(0, portfolioUniverse.length - 50)}곳)
