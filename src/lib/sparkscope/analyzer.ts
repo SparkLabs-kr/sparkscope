@@ -1,12 +1,12 @@
 /**
- * Claude 기반 기사 분석기
- * 1단계: Haiku로 1차 분류 (배치 10건씩)
- * 2단계: Sonnet으로 심층 분석 (needsDeepAnalysis=true인 것만)
- * 3단계: Sonnet으로 편집자 한 줄 인사 생성
+ * OpenAI 기반 기사 분석기
+ * 1단계: gpt-4o-mini로 1차 분류 (배치 10건씩)
+ * 2단계: gpt-4o로 심층 분석 (needsDeepAnalysis=true인 것만)
+ * 3단계: gpt-4o로 편집자 한 줄 인사 생성
  *
- * Claude API 호출 실패 시 휴리스틱 fallback으로 결과 보장.
+ * OpenAI API 호출 실패 시 휴리스틱 fallback으로 결과 보장.
  */
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import {
   HAIKU_CLASSIFIER_SYSTEM,
   buildHaikuClassifierUserMessage,
@@ -16,11 +16,29 @@ import {
   buildEditorIntroUserMessage,
 } from './prompts';
 import { hasNegativeKeyword, hasCrisisKeyword } from './keywords-data';
+import { scrapeArticleBody } from './scraper';
+import { resolveGoogleNewsUrl } from './google-news-resolver';
 import type { RawArticle, AnalyzedArticle, Importance, Tone, Category } from './types';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
 });
+
+// 저비용 분류용 / 품질이 중요한 생성용 — 필요에 따라 모델명만 바꾸면 됨.
+const CLASSIFIER_MODEL = 'gpt-4o-mini';
+const DEEP_MODEL = 'gpt-4o';
+
+async function chatComplete(model: string, system: string, userContent: string, maxTokens: number): Promise<string> {
+  const resp = await openai.chat.completions.create({
+    model,
+    max_tokens: maxTokens,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: userContent },
+    ],
+  });
+  return resp.choices[0]?.message?.content ?? '';
+}
 
 const HAIKU_BATCH_SIZE = 10;
 const POSITIVE_HINTS = ['투자 유치', '상장', '협업', '계약', '돌파', '선정', '수상', 'MOU', '런칭', '개시', '진출', '기록', '성장', '확대'];
@@ -43,6 +61,8 @@ export async function analyzeArticles(raw: RawArticle[], portfolioUniverse: stri
     let pitchScore: number;
     let pitchTopic: string | undefined;
     let riskFlag: string | undefined;
+    // 심층분석 대상인데 본문을 못 구해서(스크래핑 실패) title만으로 판단된 경우 — 조용히 넘기지 않고 명시적으로 플래그.
+    let titleOnlyFallback = false;
 
     if (cls.needsDeepAnalysis) {
       // 2단계: Sonnet 심층 분석
@@ -54,8 +74,9 @@ export async function analyzeArticles(raw: RawArticle[], portfolioUniverse: stri
       pitchScore = deep.pitchScore;
       pitchTopic = deep.pitchTopic;
       riskFlag = deep.riskFlag;
+      titleOnlyFallback = !deep.bodyUsed;
     } else {
-      // 휴리스틱
+      // 휴리스틱 (애초에 심층분석 대상이 아님 — 본문 시도 자체를 안 하므로 "실패"가 아니라 정상 동작)
       oneLiner = `${article.matchedKeyword} 관련 — ${article.source}`;
       tone = heuristicTone(article.title);
       relatedCompanies = [article.matchedKeyword];
@@ -75,6 +96,7 @@ export async function analyzeArticles(raw: RawArticle[], portfolioUniverse: stri
       isNoise: false,
       noiseReason: undefined,
       priorityScore: computePriorityScore(article, cls.importance, tone),
+      titleOnlyFallback,
     });
   }
 
@@ -97,15 +119,7 @@ async function classifyBatch(articles: Array<RawArticle & { _id: string }>): Pro
     }));
 
     try {
-      const resp = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 2000,
-        system: HAIKU_CLASSIFIER_SYSTEM,
-        messages: [{ role: 'user', content: buildHaikuClassifierUserMessage(input) }],
-      });
-      const text = resp.content.find(c => c.type === 'text')?.type === 'text'
-        ? (resp.content[0] as any).text
-        : '';
+      const text = await chatComplete(CLASSIFIER_MODEL, HAIKU_CLASSIFIER_SYSTEM, buildHaikuClassifierUserMessage(input), 2000);
       const parsed = JSON.parse(extractJson(text));
       for (const item of parsed) {
         results.set(item.id, {
@@ -124,25 +138,34 @@ async function classifyBatch(articles: Array<RawArticle & { _id: string }>): Pro
   return results;
 }
 
+// collector가 이미 스크래핑했으면 재사용, 없으면 심층분석 대상(needsDeepAnalysis=true, 소수)에 한해
+// 여기서 직접 시도. 네이버 재검색 폴백은 안 함(collector 전용 인프라) — 실패하면 title-only로 진행.
+async function ensureBody(article: RawArticle): Promise<string | undefined> {
+  if (article.body) return article.body;
+  try {
+    let link = article.link;
+    if (link.includes('news.google.com')) {
+      const resolved = await resolveGoogleNewsUrl(link);
+      if (!resolved) return undefined;
+      link = resolved;
+    }
+    const scraped = await scrapeArticleBody(link);
+    return scraped?.text;
+  } catch {
+    return undefined;
+  }
+}
+
 // ===== Sonnet 심층 분석 =====
 async function analyzeDeep(article: RawArticle & { _id: string }, portfolioUniverse: string[], trendingTopics: string[]): Promise<DeepResult> {
   try {
-    const resp = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 800,
-      system: SONNET_DEEP_SYSTEM,
-      messages: [{
-        role: 'user',
-        content: buildSonnetDeepUserMessage(
-          { id: article._id, title: article.title, source: article.source, matchedKeyword: article.matchedKeyword, category: article.category },
-          portfolioUniverse,
-          trendingTopics,
-        ),
-      }],
-    });
-    const text = resp.content.find(c => c.type === 'text')?.type === 'text'
-      ? (resp.content[0] as any).text
-      : '';
+    const body = await ensureBody(article);
+    const userContent = buildSonnetDeepUserMessage(
+      { id: article._id, title: article.title, source: article.source, matchedKeyword: article.matchedKeyword, category: article.category, body },
+      portfolioUniverse,
+      trendingTopics,
+    );
+    const text = await chatComplete(DEEP_MODEL, SONNET_DEEP_SYSTEM, userContent, 800);
     const parsed = JSON.parse(extractJson(text));
     return {
       oneLiner: parsed.oneLiner ?? article.title,
@@ -152,6 +175,7 @@ async function analyzeDeep(article: RawArticle & { _id: string }, portfolioUnive
       pitchScore: parsed.pitchScore ?? 0,
       pitchTopic: parsed.pitchTopic,
       riskFlag: parsed.riskFlag,
+      bodyUsed: !!body,
     };
   } catch (e) {
     console.error('[analyzer] Sonnet deep failed, falling back:', e);
@@ -160,6 +184,7 @@ async function analyzeDeep(article: RawArticle & { _id: string }, portfolioUnive
       tone: heuristicTone(article.title),
       relatedCompanies: [article.matchedKeyword],
       pitchScore: 0,
+      bodyUsed: false,
     };
   }
 }
@@ -185,23 +210,13 @@ export function clampEditorIntro(text: string, max = EDITOR_INTRO_MAX): string {
 export async function generateEditorIntro(top3: AnalyzedArticle[]): Promise<string> {
   if (top3.length === 0) return '오늘은 주목할 만한 보도가 적은 날입니다. 업계 동향만 가볍게 확인해보세요.';
   try {
-    const resp = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 300,
-      system: EDITOR_INTRO_SYSTEM,
-      messages: [{
-        role: 'user',
-        content: buildEditorIntroUserMessage(top3.map(a => ({
-          title: a.title,
-          category: a.category,
-          source: a.source,
-          ourTake: a.ourTake,
-        }))),
-      }],
-    });
-    const text = resp.content.find(c => c.type === 'text')?.type === 'text'
-      ? (resp.content[0] as any).text
-      : '';
+    const userContent = buildEditorIntroUserMessage(top3.map(a => ({
+      title: a.title,
+      category: a.category,
+      source: a.source,
+      ourTake: a.ourTake,
+    })));
+    const text = await chatComplete(DEEP_MODEL, EDITOR_INTRO_SYSTEM, userContent, 300);
     return clampEditorIntro(text);
   } catch (e) {
     console.error('[analyzer] editor intro failed:', e);
@@ -222,25 +237,15 @@ const CRISIS_CAUSE_SYSTEM = `당신은 스파크랩 커뮤니케이션 본부의
 export async function summarizeCrisisCause(company: string, titles: string[]): Promise<string | null> {
   if (titles.length === 0) return null;
   try {
-    const resp = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 200,
-      system: CRISIS_CAUSE_SYSTEM,
-      messages: [{
-        role: 'user',
-        content: `회사: ${company}
+    const userContent = `회사: ${company}
 부정 기사 제목들:
 ${titles.map((t, i) => `${i + 1}. ${t}`).join('\n')}
 
 이 기사들의 공통 원인/이슈를 한국어 한 문장(70자 이내)으로 요약해주세요.
 "해당 원인은 ○○○, ○○○ 등으로 ~입니다." 형태의 자연스러운 서술을 권장합니다.
 출력 스키마: {"cause": "..."}
-JSON 객체만 반환:`,
-      }],
-    });
-    const text = resp.content.find(c => c.type === 'text')?.type === 'text'
-      ? (resp.content[0] as any).text
-      : '';
+JSON 객체만 반환:`;
+    const text = await chatComplete(CLASSIFIER_MODEL, CRISIS_CAUSE_SYSTEM, userContent, 200);
     const parsed = JSON.parse(extractJson(text));
     const cause = typeof parsed?.cause === 'string' ? parsed.cause.trim() : '';
     return cause.length > 0 ? cause : null;
@@ -321,4 +326,5 @@ interface DeepResult {
   pitchScore: number;
   pitchTopic?: string;
   riskFlag?: string;
+  bodyUsed: boolean;
 }

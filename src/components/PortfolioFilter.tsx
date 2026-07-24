@@ -3,17 +3,19 @@
 // 기간(from/to)은 유지하고 company만 URL에 추가/제거한다.
 import { useRouter } from 'next/navigation';
 
-export function PortfolioFilter({ companies, selected, from, to }: {
+export function PortfolioFilter({ companies, selected, from, to, tab }: {
   companies: { value: string; label: string }[];
   selected?: string;
   from: string;
   to: string;
+  tab?: string;
 }) {
   const router = useRouter();
 
   const go = (v: string) => {
     const params = new URLSearchParams({ from, to });
     if (v) params.set('company', v);
+    if (tab) params.set('tab', tab); // 보고 있던 탭 유지
     router.push(`/dashboard?${params.toString()}`, { scroll: false }); // 현재 스크롤 위치 유지
   };
 

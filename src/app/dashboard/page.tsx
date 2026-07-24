@@ -15,9 +15,23 @@ import { normalizeSource, isKnownMedia } from '@/lib/sparkscope/media';
 import { matchesAsToken, isBlockedNoise, normalizeTitleKey } from '@/lib/sparkscope/relevance';
 import { NEGATIVE_KEYWORDS, detectCrises, crisisFallbackCause, detectSpikes, type ArticleLite, type CrisisCard, type SpikeCard } from '@/lib/sparkscope/insights';
 import { summarizeCrisisCause } from '@/lib/sparkscope/analyzer';
-import { TIER1_NAME_SET, tier1EnglishOf, type CompetitorStat } from '@/lib/sparkscope/competitors';
+import { summarizeCompetitorTrend, summarizeOverallTrend } from '@/lib/sparkscope/competitor-insights';
+import { CompetitorPanel, type CompetitorStatView } from '@/components/CompetitorPanel';
 
 export const dynamic = 'force-dynamic';
+
+// 대시보드 섹션 탭 — 스크롤 대신 URL(?tab=)로 화면을 나눈다.
+const TABS = [
+  { id: 'sparklabs', label: '🏢 스파크랩' },
+  { id: 'portfolio', label: '📊 포트폴리오사' },
+  { id: 'competitor', label: '🏁 경쟁사 모니터링' },
+  { id: 'articles', label: '📋 최근 수집 기사' },
+] as const;
+export type TabId = (typeof TABS)[number]['id'];
+
+function resolveTab(v?: string): TabId {
+  return TABS.some(t => t.id === v) ? (v as TabId) : 'sparklabs';
+}
 
 const MIN_DATE = '2023-11-01';
 // 추이 차트 상위 N개사 — 색상으로 구분 가능한 최대치(가독성) 기준 6개.
@@ -163,7 +177,7 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     // 실시간 위기 감지용: 기간 선택과 무관하게 "최근 3일" 포트폴리오 부정 기사
     prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'portfolio_company', OR: negOr }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true }, take: 800 }),
     // 표시 단계 관련성 가드용: 포트폴리오 감시대상 키워드맵 (primaryKeyword → [이름·영문·보조])
-    prisma.monitoringTarget.findMany({ where: { category: 'portfolio_company', status: 'ACTIVE' }, select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true } }),
+    prisma.monitoringTarget.findMany({ where: { category: 'portfolio_company', status: 'ACTIVE' }, select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true, portfolioStatus: true } }),
     // 포트폴리오 vs 타 하우스 비교용: competitor(타 AC·VC 하우스) 노출 상위 3개 (실제 이름) — 업계 키워드 제외
     prisma.article.groupBy({ by: ['matchedKeyword'], where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor', matchedKeyword: { notIn: INDUSTRY_TREND_KEYWORDS } }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 3 }),
     // 경쟁사 모니터링 섹션용: 기간 내 competitor 기사 전체(matchedKeyword=실제 경쟁사명별 집계)
@@ -186,14 +200,24 @@ async function loadDashboardData(from: string, to: string, company?: string) {
 
   // 경쟁사 모니터링 통계: DB에 실제 수집된 경쟁사(matchedKeyword)별 노출량·TOP3 기사·부정 기사.
   // (주가 기사 등 competitor 카테고리 노이즈는 지금은 그대로 — 추후 프롬프트 튜닝에서 정리)
-  const competitorStatMap = new Map<string, CompetitorStat>();
+  // 경쟁사 영문명 (카드 부제로 표시) — DB의 감시대상 정보에서 가져온다
+  const competitorTargets = await prisma.monitoringTarget.findMany({
+    where: { category: 'competitor' },
+    select: { primaryKeyword: true, englishName: true },
+  });
+  const competitorEnglishOf = new Map(
+    competitorTargets.filter(t => t.englishName).map(t => [t.primaryKeyword, t.englishName as string]),
+  );
+
+  type CompetitorAgg = Omit<CompetitorStatView, 'trend'> & { titles: string[] };
+  const competitorStatMap = new Map<string, CompetitorAgg>();
   for (const a of competitorArticles) {
     if (!notNoise(a)) continue;
     const name = a.matchedKeyword;
     if (!name) continue;
     let s = competitorStatMap.get(name);
     if (!s) {
-      s = { name, english: tier1EnglishOf(name), isTier1: TIER1_NAME_SET.has(name), count: 0, negCount: 0, top3: [], negatives: [] };
+      s = { name, english: competitorEnglishOf.get(name) ?? '', count: 0, negCount: 0, top3: [], negatives: [], titles: [] };
       competitorStatMap.set(name, s);
     }
     s.count++;
@@ -202,9 +226,38 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     const art = { title: a.title, source: normalizeSource(a.source), pubDate: a.pubDate, link: a.link, neg }; // 입력이 최신순
     if (s.top3.length < 3) s.top3.push(art);
     if (neg) s.negatives.push(art);
+    if (s.titles.length < 40) s.titles.push(a.title); // AI 트렌드 요약 입력용(최신순)
   }
   // 노출 건수 desc → 상위 10곳
-  const competitors = Array.from(competitorStatMap.values()).sort((a, b) => b.count - a.count).slice(0, 10);
+  const competitorAggs = Array.from(competitorStatMap.values()).sort((a, b) => b.count - a.count).slice(0, 10);
+
+  // AI 트렌드 요약 — 기간+집계결과가 같으면 메모리 캐시 재사용(competitor-insights.ts).
+  // 요약 실패는 화면을 막지 않는다(해당 블록만 빠짐).
+  // 하루 한 번만 재계산 — 오늘 날짜(KST)를 키에 포함해 같은 날엔 몇 번을 봐도 캐시 재사용
+  const trendCacheKey = `${from}_${to}_${fmt(getKstNow())}`;
+  // 프롬프트에 "이 기간" 대신 실제 기간을 쓰게 — 일수를 보기 좋은 단위로 변환 (예: 3개월간, 7일간)
+  const periodDays = Math.max(1, Math.round((new Date(`${to}T00:00:00`).getTime() - new Date(`${from}T00:00:00`).getTime()) / 86400000) + 1);
+  const periodPhrase = periodDays >= 300 ? `${Math.round(periodDays / 365)}년간`
+    : periodDays >= 25 ? `${Math.round(periodDays / 30)}개월간`
+    : `${periodDays}일간`;
+  const [overallTrend, companyTrends] = await Promise.all([
+    summarizeOverallTrend(
+      competitorAggs.map(c => ({ name: c.name, count: c.count, negCount: c.negCount })),
+      competitorAggs.flatMap(c => c.titles.slice(0, 6)),
+      sparklabsMentions,
+      trendCacheKey,
+      periodPhrase,
+    ),
+    Promise.all(
+      competitorAggs.map(c =>
+        summarizeCompetitorTrend(c.name, c.titles, sparklabsMentions, c.count, trendCacheKey, periodPhrase),
+      ),
+    ),
+  ]);
+  const competitors: CompetitorStatView[] = competitorAggs.map(({ titles, ...c }, i) => ({
+    ...c,
+    trend: companyTrends[i],
+  }));
 
   // 기존 DB에 쌓인 부분일치 노이즈(예: '노리'→'노리지만', '리코'→'인실리코')를
   // 표시 단계에서 토큰 매칭으로 제거. (DB는 수정하지 않음 — 아침 승인 후 cleanup 스크립트로 영구정리 예정)
@@ -287,7 +340,18 @@ async function loadDashboardData(from: string, to: string, company?: string) {
 
   // 포트폴리오 TOP 15 (표시명 매핑) + 부정 기사(관련성 가드 후 상위 15건)
   const portfolioNameOf = new Map(portfolioTargets.map(t => [t.primaryKeyword, t.name]));
-  const portfolioTop = portfolioTop15.map(g => ({ name: portfolioNameOf.get(g.matchedKeyword) ?? g.matchedKeyword, count: g._count._all }));
+  const portfolioStatusOf = new Map(portfolioTargets.map(t => [t.primaryKeyword, t.portfolioStatus]));
+  const enrichedArticles = cleanedArticles.map(a => ({
+    ...a,
+    companyName: a.category === 'portfolio_company' ? (portfolioNameOf.get(a.matchedKeyword) ?? a.matchedKeyword) : undefined,
+    portfolioStatus: a.category === 'portfolio_company' ? (portfolioStatusOf.get(a.matchedKeyword) ?? null) : null,
+  }));
+  const enrichedCompanyArticles = companyArticles.map(a => ({
+    ...a,
+    companyName: portfolioNameOf.get(a.matchedKeyword) ?? a.matchedKeyword,
+    portfolioStatus: portfolioStatusOf.get(a.matchedKeyword) ?? null,
+  }));
+  const portfolioTop = portfolioTop15.map(g => ({ name: portfolioNameOf.get(g.matchedKeyword) ?? g.matchedKeyword, count: g._count._all, portfolioStatus: portfolioStatusOf.get(g.matchedKeyword) ?? null }));
   // 긍정/부정 하이라이트: 회사(matchedKeyword)별로 묶어 "언급 매체 수" 많은 순 → 동률이면 최신순, TOP 3만.
   // (Article에 검색노출도 필드가 없어 매체 다양성을 대리 지표로 사용)
   const top3ByMedia = (rows: { matchedKeyword: string; title: string; source: string; pubDate: Date; link: string }[]) => {
@@ -327,11 +391,11 @@ async function loadDashboardData(from: string, to: string, company?: string) {
   return {
     range: { from, to },
     kpi: { total, sparklabsCount, portfolioCount, pitchCount, mentionRate, mentionDelta: mentionRate - prevMentionRate },
-    articles: cleanedArticles,
+    articles: enrichedArticles,
     portfolioNames,
     selectedCompany: company,
     selectedCompanyName,
-    companyArticles,
+    companyArticles: enrichedCompanyArticles,
     sources: normalizeSources(sourceGroups.map(s => ({ source: s.source, count: s._count._all }))),
     tones: toneGroups.map(t => ({ tone: t.tone ?? 'NEUTRAL', count: t._count._all })),
     pitches: dedupedPitches,
@@ -343,6 +407,7 @@ async function loadDashboardData(from: string, to: string, company?: string) {
       houses: competitorTop.map(g => ({ name: g.matchedKeyword, count: g._count._all })),
     },
     competitors,
+    overallTrend,
     sparklabsMentions,
     portfolioTop,
     portfolioNegatives,
@@ -406,27 +471,60 @@ function buildTrendData(records: { matchedKeyword: string; pubDate: Date }[], si
   return { labels, datasets };
 }
 
-export default async function DashboardPage({ searchParams }: { searchParams: { from?: string; to?: string; company?: string } }) {
+export default async function DashboardPage({ searchParams }: { searchParams: { from?: string; to?: string; company?: string; tab?: string } }) {
   const range = resolveRange(searchParams);
   const company = typeof searchParams.company === 'string' && searchParams.company ? searchParams.company : undefined;
+  const tab = resolveTab(searchParams.tab);
   const data = await loadDashboardData(range.from, range.to, company);
   const session = await getServerSession(authOptions);
   const canScrap = canScrapEmail(session?.user?.email ?? null);
   const todayLabel = getKstNow().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
 
+  // 탭 링크: 현재 기간·회사 필터를 유지한 채 tab만 바꾼다.
+  const tabHref = (t: TabId) => {
+    const params = new URLSearchParams({ from: range.from, to: range.to, tab: t });
+    if (data.selectedCompany) params.set('company', data.selectedCompany);
+    return `/dashboard?${params.toString()}`;
+  };
+
   return (
     <>
-      <div className="flex flex-wrap justify-between items-end gap-4 mb-7">
+      <div className="flex flex-wrap justify-between items-end gap-4 mb-5">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-spark-purple mb-1.5">Daily Media Intelligence</div>
           <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight text-spark-ink leading-none">{todayLabel}</h1>
           <p className="text-[13px] text-spark-muted mt-2">{range.label} 데이터 기준</p>
         </div>
         <div className="flex items-center gap-2">
-          <DateRangePicker key={`${range.from}_${range.to}`} from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())} company={data.selectedCompany} />
           {canScrap && <Link href="/dashboard/scraps" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⭐ 스크랩함</Link>}
           <Link href="/dashboard/keywords" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⚙️ 키워드 관리</Link>
         </div>
+      </div>
+
+      {/* 섹션 탭 — 스크롤 대신 화면 전환. 선택된 탭만 보라색으로 강조. */}
+      <nav className="flex flex-wrap gap-2 mb-3" aria-label="대시보드 섹션">
+        {TABS.map(t => {
+          const active = t.id === tab;
+          return (
+            <Link
+              key={t.id}
+              href={tabHref(t.id)}
+              aria-current={active ? 'page' : undefined}
+              className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors whitespace-nowrap border ${
+                active
+                  ? 'bg-spark-purple border-spark-purple text-white shadow-sm'
+                  : 'bg-white border-spark-border text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple'
+              }`}
+            >
+              {t.label}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* 기간 선택 — 탭 바로 아래에 두어 어느 탭에서도 같은 자리에서 기간을 바꿀 수 있게 한다. */}
+      <div className="mb-6">
+        <DateRangePicker key={`${range.from}_${range.to}`} from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())} company={data.selectedCompany} tab={tab} />
       </div>
 
       {/* 실시간 위기 감지 — 위기 없을 땐 '정상' 상태를 명시해 기능이 살아있음을 표시 */}
@@ -461,6 +559,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       </div>
 
       {/* ── 스파크랩 (가장 궁금한 정보) ── */}
+      {tab === 'sparklabs' && <>
       <SectionTitle title="🏢 스파크랩" sub="우리 자사가 어디에, 어떤 논조로 보도되는가" />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
         <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
@@ -472,8 +571,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           <ToneBreakdown articles={data.toneArticles as any} />
         </div>
       </div>
+      </>}
 
       {/* ── 포트폴리오사 ── */}
+      {tab === 'portfolio' && <>
       <SectionTitle title="📊 포트폴리오사" sub="어느 포트폴리오사가 활발히 노출되고, 부정 이슈는 없는가" />
       {/* 긍정·부정 나란히 (대비가 한눈에) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
@@ -503,13 +604,22 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           )}
         </div>
       </div>
+      </>}
 
       {/* 경쟁사 모니터링 — Tier1 직접 경쟁 액셀러레이터 언급량·최근 이슈 */}
-      <div className="mb-6">
-        <CompetitorPanel competitors={data.competitors} sparklabsMentions={data.sparklabsMentions} rangeLabel={range.label} />
-      </div>
+      {tab === 'competitor' && (
+        <div className="mb-6">
+          <CompetitorPanel
+            competitors={data.competitors}
+            sparklabsMentions={data.sparklabsMentions}
+            rangeLabel={range.label}
+            overallTrend={data.overallTrend}
+          />
+        </div>
+      )}
 
       {/* 기사 테이블 — 기간/포트폴리오사 필터 + 정렬 + CSV */}
+      {tab === 'articles' &&
       <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
         <div className="mb-4">
           <div className="flex flex-wrap justify-between items-start gap-3">
@@ -521,12 +631,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                   : `${range.label} · 최신 상위 ${data.articles.length}건 · 분류·검색·정렬로 탐색`}
               </div>
             </div>
-            <PortfolioFilter companies={data.portfolioNames} selected={data.selectedCompany} from={range.from} to={range.to} />
+            <PortfolioFilter companies={data.portfolioNames} selected={data.selectedCompany} from={range.from} to={range.to} tab={tab} />
           </div>
           {/* 이 자리에서 바로 기간을 바꿀 수 있게 (맨 위로 안 올라가도 됨) */}
           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-spark-border/60 pt-3">
             <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">📅 기간</span>
-            <DateRangePicker key={`${range.from}_${range.to}`} from={range.from} to={range.to} min={MIN_DATE} max={fmt(new Date())} company={data.selectedCompany} />
+            <DateRangePicker key={`${range.from}_${range.to}`} from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())} company={data.selectedCompany} tab={tab} />
           </div>
         </div>
         {data.selectedCompany ? (
@@ -548,6 +658,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           />
         )}
       </div>
+      }
 
     </>
   );
@@ -575,107 +686,6 @@ function CrisisCardView({ c }: { c: CrisisCard & { cause: string } }) {
   );
 }
 
-function CompetitorPanel({ competitors, sparklabsMentions, rangeLabel }: { competitors: CompetitorStat[]; sparklabsMentions: number; rangeLabel: string }) {
-  const max = Math.max(sparklabsMentions, ...competitors.map(c => c.count), 1);
-  const totalComp = competitors.reduce((s, c) => s + c.count, 0);
-  return (
-    <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
-      <div className="flex flex-wrap justify-between items-center gap-2 mb-1">
-        <div className="font-bold">🏁 경쟁사 모니터링 — 언론 노출 상위 <InfoTip text={`DB에 실제 수집된 경쟁 AC·VC별 ${rangeLabel} 언론 노출량 상위 10곳과 최근 이슈를 스파크랩과 비교합니다.\n· 수치 = 언론 노출 기사 수 (선택 기간 기준)\n· "Tier1" 뱃지 = 국내 직접 경쟁 액셀러레이터 9곳\n· 주가·티커 기사 등 노이즈는 아직 섞여 있을 수 있음(추후 정리 예정)`} /></div>
-        <span className="px-2 py-0.5 bg-spark-light-purple/50 text-spark-purple rounded-full text-[10px] font-semibold whitespace-nowrap">TOP {competitors.length} · {rangeLabel}</span>
-      </div>
-      <p className="text-xs text-gray-500 mb-4">스파크랩과 실제 수집된 경쟁 하우스의 언론 노출량·최근 이슈를 한눈에 비교합니다.</p>
-
-      {/* 스파크랩 기준선 */}
-      <div className="mb-4 pb-4 border-b border-spark-border/60">
-        <CompareRow label="스파크랩 (기준)" count={sparklabsMentions} max={max} color="bg-spark-purple" strong />
-      </div>
-
-      {totalComp > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
-          {competitors.map(c => <CompetitorRow key={c.name} c={c} max={max} />)}
-        </div>
-      ) : (
-        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
-          선택 기간에 집계된 경쟁사 기사가 아직 없습니다. 뉴스 수집이 진행되면 경쟁사별 언급량과 최근 이슈가 여기에 표시됩니다.
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CompetitorRow({ c, max }: { c: CompetitorStat; max: number }) {
-  const pct = Math.round((c.count / max) * 100);
-  return (
-    <div className="rounded-xl border border-spark-border p-3.5">
-      <div className="flex items-center gap-2 mb-2 min-w-0">
-        <div className="text-sm font-bold text-spark-ink flex-1 min-w-0 truncate">
-          {c.isTier1 && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-spark-purple/10 text-spark-purple font-bold align-middle mr-1">Tier1</span>}
-          {c.name} {c.english && <span className="text-xs font-normal text-spark-muted">{c.english}</span>}
-        </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0 whitespace-nowrap">
-          {c.negCount > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 font-bold">부정 {c.negCount}</span>}
-          <span className="text-sm font-bold text-spark-ink tabular-nums">{c.count}<span className="text-xs text-spark-muted font-normal">건</span></span>
-        </div>
-      </div>
-      <div className="h-1.5 bg-spark-subtle rounded overflow-hidden mb-2.5">
-        <div className="h-full bg-slate-400 rounded" style={{ width: `${pct}%` }} />
-      </div>
-
-      {c.top3.length > 0 ? (
-        <>
-          <div className="text-[10px] font-semibold text-spark-muted mb-1">최근 기사 TOP {c.top3.length}</div>
-          <div className="space-y-1.5">
-            {c.top3.map((a, i) => {
-              const d = new Date(a.pubDate);
-              return (
-                <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" className="block group">
-                  <div className={`text-xs leading-snug line-clamp-2 group-hover:text-spark-purple ${a.neg ? 'text-red-700' : 'text-spark-ink-soft'}`}>
-                    {a.neg && '⚠️ '}{a.title}
-                  </div>
-                  <div className="text-[10px] text-spark-muted mt-0.5">{a.source} · {d.getMonth() + 1}.{d.getDate()}</div>
-                </a>
-              );
-            })}
-          </div>
-
-          {c.negatives.length > 0 && (
-            <div className="mt-2.5 pt-2.5 border-t border-spark-border/60">
-              <div className="text-[10px] font-semibold text-red-500 mb-1.5">⚠️ 부정 기사 전체 {c.negatives.length}건</div>
-              <div className="space-y-1 max-h-44 overflow-y-auto scroll-slim pr-1">
-                {c.negatives.map((a, i) => {
-                  const d = new Date(a.pubDate);
-                  return (
-                    <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" className="block rounded-lg border border-red-100 bg-red-50/50 p-1.5 hover:bg-red-50 transition-colors">
-                      <div className="text-[11px] text-spark-ink leading-snug line-clamp-2">{a.title}</div>
-                      <div className="text-[10px] text-spark-muted mt-0.5">{a.source} · {d.getMonth() + 1}.{d.getDate()}</div>
-                    </a>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </>
-      ) : (
-        <div className="text-[11px] text-spark-muted/70">최근 기사 없음</div>
-      )}
-    </div>
-  );
-}
-
-function CompareRow({ label, count, max, color, strong }: { label: string; count: number; max: number; color: string; strong?: boolean }) {
-  const pct = Math.round((count / max) * 100);
-  return (
-    <div className="flex items-center gap-2 text-sm min-w-0">
-      <div className={`flex-shrink-0 w-20 sm:w-40 truncate ${strong ? 'font-bold text-spark-purple' : 'text-gray-600'}`}>{label}</div>
-      <div className="flex-1 h-5 bg-gray-100 rounded overflow-hidden min-w-0">
-        <div className={`h-full rounded ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-      <div className="flex-shrink-0 w-10 text-right font-semibold tabular-nums">{count}</div>
-    </div>
-  );
-}
-
 function SpikeBanner({ s }: { s: SpikeCard }) {
   return (
     <div className="rounded-xl border-l-4 border-spark-purple bg-spark-light-purple/40 p-3 flex items-center gap-2">
@@ -698,7 +708,16 @@ function SectionTitle({ title, sub }: { title: string; sub?: string }) {
   );
 }
 
-function PortfolioTopList({ items, rangeLabel }: { items: { name: string; count: number }[]; rangeLabel: string }) {
+// portfolioStatus(Live/Exit/Written-off) 라벨 — Live는 기본 상태라 배지 없이 생략, 그 외만 표시.
+function PortfolioStatusBadge({ status }: { status: string | null }) {
+  if (!status || status === 'Live') return null;
+  const cls = status === 'Exit'
+    ? 'bg-blue-50 text-blue-600 border-blue-200'
+    : 'bg-gray-100 text-gray-500 border-gray-200';
+  return <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold border ${cls}`}>{status}</span>;
+}
+
+function PortfolioTopList({ items, rangeLabel }: { items: { name: string; count: number; portfolioStatus?: string | null }[]; rangeLabel: string }) {
   const max = Math.max(...items.map(i => i.count), 1);
   return (
     <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
@@ -710,6 +729,7 @@ function PortfolioTopList({ items, rangeLabel }: { items: { name: string; count:
             <div key={it.name} className="flex items-center gap-2 text-sm">
               <span className="w-5 text-right text-xs font-bold text-gray-400 tabular-nums">{i + 1}</span>
               <span className="w-28 truncate font-semibold text-gray-700" title={it.name}>{it.name}</span>
+              <PortfolioStatusBadge status={it.portfolioStatus ?? null} />
               <div className="flex-1 h-4 bg-gray-100 rounded overflow-hidden">
                 <div className="h-full rounded bg-spark-purple/80" style={{ width: `${Math.round((it.count / max) * 100)}%` }} />
               </div>
