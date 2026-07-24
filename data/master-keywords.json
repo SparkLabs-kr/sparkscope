@@ -97,6 +97,7 @@
     "primaryKeyword": "김호민",
     "helperKeywords": null,
     "excludeWords": null,
+    "contextWords": "스파크랩, 제너럴 파트너, 엑셀러레이터, 스타트업, 공동대표, SparkLabs, 공동창업자, Nexon, Nexonova, 벤처캐피탈, 대표",
     "notes": "공동대표 / Founding Partner (스파크랩)"
   },
   {
@@ -107,6 +108,7 @@
     "primaryKeyword": "이한주",
     "helperKeywords": null,
     "excludeWords": null,
+    "contextWords": "스파크랩, 제너럴 파트너, 엑셀러레이터, 공동설립자, 스타트업, 호스트웨이, 벤처캐피탈, 뉴베리글로벌, SparkLabs, 대표",
     "notes": "공동대표 / Founding Partner (스파크랩)"
   },
   {
@@ -117,6 +119,7 @@
     "primaryKeyword": "김유진",
     "helperKeywords": null,
     "excludeWords": null,
+    "contextWords": "스파크랩, 제너럴 파트너, 엑셀러레이터, 스타트업, 공동대표, SparkLabs, 공동창업자, 벤처캐피탈",
     "notes": "공동대표 / Managing Partner (스파크랩)"
   },
   {

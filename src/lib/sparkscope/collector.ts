@@ -102,6 +102,8 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
       const contextList = splitCsv((target as any).contextWords);
       const tier = (target as any).tier as string | null | undefined;
       const isBcTier = tier === 'B' || tier === 'C';
+      const SPARKLABS_PERSON_KEYWORDS = new Set(['김유진', '김호민', '이한주']);
+      const isSparkLabsPerson = target.category === 'sparklabs_self' && SPARKLABS_PERSON_KEYWORDS.has(target.primaryKeyword);
 
       // 관련성/노이즈 필터: 강한 식별자(회사명·영문명·주키워드) 포함 + 스포츠/광고/제외어 배제
       return items
@@ -113,6 +115,9 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
           if (isBcTier && contextList.length > 0 && contextList.some(w => item.title.includes(w))) return true;
           // C 티어: 문맥어도 없고 이벤트·부정 키워드도 없으면 버림
           if (tier === 'C') return C_TIER_FALLBACK_KEYWORDS.some(w => item.title.includes(w));
+          // 스파크랩 대표자명(김유진·김호민·이한주): 문맥어 반드시 포함돼야 통과 (동명이인 방지)
+          if (isSparkLabsPerson && contextList.length > 0) return contextList.some(w => item.title.includes(w));
+          if (isSparkLabsPerson && contextList.length === 0) return false;
           // A/B 티어: 기존 관련성 필터
           return isRelevant({ title: item.title, primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, excludeWords: target.excludeWords, category: target.category, link: item.link, source: item.source });
         })
