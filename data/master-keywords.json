@@ -5,7 +5,7 @@
     "category": "sparklabs_self",
     "status": "ACTIVE",
     "primaryKeyword": "스파크랩",
-    "helperKeywords": "액셀러레이터, 김호민, 데모데이, SparkClaw, 토큰밸리, 김유진, 이한주",
+    "helperKeywords": "SparkClaw, 토큰밸리",
     "excludeWords": "스파크, Spark, 랩, Labs",
     "notes": "한국 본사 / 액셀러레이터"
   },
