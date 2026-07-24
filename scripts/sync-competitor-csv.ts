@@ -2,12 +2,6 @@
  * data/competitor.csv → data/master-keywords.json 반영.
  * CSV 컬럼: 카테고리,기업명(한글),기업명(영문),primaryKeyword,helperKeywords,excludeWords,mustIncludeAny,businessContext,tier,status
  *
- * 정리 규칙:
- *  - status: 빈 값 → ACTIVE (경쟁사는 모두 수집)
- *  - "N/A" 문자열 → 빈 값(null) 처리
- *  - helperKeywords/excludeWords/contextWords: 줄바꿈 구분도 쉼표 구분으로 통일
- *  - businessContext → notes 로 매핑
- *
  * master-keywords.json의 competitor 항목만 교체하고 다른 카테고리는 그대로 둠.
  * 실행 후 `npm run db:seed` 로 DB에 반영해야 실제로 적용됨.
  *
@@ -43,13 +37,11 @@ const rows: Record<string, string>[] = parse(csvText, { columns: true, skip_empt
 
 const converted = rows.map(r => {
   const name = (r['기업명(한글)'] ?? '').trim();
-  const statusRaw = (r['status'] ?? '').trim();
-
   return {
     name,
     englishName: cleanText(r['기업명(영문)']),
     category: (r['카테고리'] ?? 'competitor').trim() || 'competitor',
-    status: statusRaw || 'ACTIVE', // 빈 status → ACTIVE
+    status: 'ACTIVE',
     tier: cleanText(r['tier']),
     primaryKeyword: (r['primaryKeyword'] ?? '').trim() || name,
     helperKeywords: cleanList(r['helperKeywords']),
@@ -65,5 +57,4 @@ const merged = [...keptOther, ...converted];
 
 fs.writeFileSync(JSON_PATH, JSON.stringify(merged, null, 2) + '\n', 'utf-8');
 
-console.log(`competitor: 기존 ${existing.filter(t => t.category === 'competitor').length}개 → 새 ${converted.length}개로 교체`);
-console.log(`master-keywords.json 총 ${merged.length}개 (다른 카테고리 ${keptOther.length}개 유지)`);
+console.log(`✓ competitor ${converted.length}건 반영 (기존 ${existing.filter(t => t.category === 'competitor').length}건 → master-keywords.json 갱신)`);
