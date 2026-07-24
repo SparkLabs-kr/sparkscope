@@ -6,9 +6,11 @@
 import { parseStringPromise } from 'xml2js';
 import { prisma } from '@/lib/prisma';
 import type { RawArticle, Category } from './types';
-import { isRelevant } from './relevance';
+import { isRelevant, normalizeTitleKey } from './relevance';
 import { isKnownMedia } from './media';
 import { NEGATIVE_KEYWORDS_DATA, CRISIS_KEYWORDS_DATA } from './keywords-data';
+import { scrapeArticleBody, type ScrapedBody } from './scraper';
+import { resolveGoogleNewsUrl } from './google-news-resolver';
 
 // C 티어 폴백: 문맥어 없어도 이 키워드가 제목에 있으면 수집 (이벤트·부정 기사 누락 방지)
 const C_TIER_FALLBACK_KEYWORDS: string[] = [
@@ -103,14 +105,20 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
       const contextList = splitCsv((target as any).contextWords);
       const tier = (target as any).tier as string | null | undefined;
       const isBcTier = tier === 'B' || tier === 'C';
+      const mediaFiltered = items.filter(item => strongCat || isKnownMedia(item.source));
 
-      return items
-        .filter(item => strongCat || isKnownMedia(item.source))
+      // 제외어/문맥어가 설정된 대상만 본문까지 스크래핑해서 title+본문 기준으로 판단.
+      // (전체 대상을 다 스크래핑하면 실행 시간이 과도해지므로, 실제로 그 필터가 필요한 대상으로 범위를 한정)
+      const needsBody = excludeList.length > 0 || contextList.length > 0;
+      const bodyMap = needsBody ? await scrapeBodiesFor(mediaFiltered) : new Map<string, ScrapedBody | null>();
+
+      return mediaFiltered
         .filter(item => {
-          if (isBcTier && excludeList.some(w => item.title.includes(w))) return false;
-          if (isBcTier && contextList.length > 0 && contextList.some(w => item.title.includes(w))) return true;
+          const body = bodyMap.get(item.link)?.text ?? '';
+          if (isBcTier && excludeList.some(w => item.title.includes(w) || body.includes(w))) return false;
+          if (isBcTier && contextList.length > 0 && contextList.some(w => item.title.includes(w) || body.includes(w))) return true;
           if (tier === 'C') return C_TIER_FALLBACK_KEYWORDS.some(w => item.title.includes(w));
-          return isRelevant({ title: item.title, primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, excludeWords: target.excludeWords, contextWords: target.contextWords, category: target.category, link: item.link, source: item.source });
+          return isRelevant({ title: item.title, body: bodyMap.get(item.link)?.text, primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, excludeWords: target.excludeWords, contextWords: target.contextWords, category: target.category, link: item.link, source: item.source });
         })
         .map<RawArticle>(item => ({
           ...item,
@@ -118,6 +126,7 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
           category: target.category as Category,
           basePriority: (CATEGORY_PRIORITY[target.category] ?? 50) + (TIER_BONUS[target.tier ?? ''] ?? 0),
           companyDesc: (target as any).notes ?? undefined,
+          body: bodyMap.get(item.link)?.text, // 이미 스크래핑했으면 재사용 (analyzer가 다시 안 긁도록)
         }));
     }));
     results.forEach(arr => allArticles.push(...arr));
@@ -127,6 +136,49 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
   const filtered = filterAndDedupe(allArticles, opts.daysBack ?? MAX_DAYS_AGO);
   console.log(`[collector] after dedupe: ${filtered.length}`);
   return filtered;
+}
+
+// 기사 목록의 본문을 스크래핑 (제한된 동시성).
+// 구글뉴스 프록시 링크(news.google.com/rss/articles/...)는 실제 언론사 URL이 아니라서 그대로는
+// 스크래핑이 안 됨 — ① 구글 비공식 API로 진짜 URL 해석 시도 → ② 실패하면 네이버 재검색으로
+// 같은 제목의 기사를 찾아 그 직링크로 폴백 → ③ 그래도 실패하면 본문 없이 title-only로 남김.
+async function scrapeBodiesFor(items: SourceItem[]): Promise<Map<string, ScrapedBody | null>> {
+  const out = new Map<string, ScrapedBody | null>();
+  const CONCURRENCY = 4;
+  for (let i = 0; i < items.length; i += CONCURRENCY) {
+    const batch = items.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(batch.map(item => resolveAndScrapeBody(item)));
+    batch.forEach((item, idx) => out.set(item.link, results[idx]));
+  }
+  return out;
+}
+
+async function resolveAndScrapeBody(item: SourceItem): Promise<ScrapedBody | null> {
+  try {
+    if (!item.link.includes('news.google.com')) {
+      return await scrapeArticleBody(item.link);
+    }
+
+    // ① 구글 비공식 API로 진짜 언론사 URL 해석 시도
+    const resolved = await resolveGoogleNewsUrl(item.link);
+    if (resolved) {
+      const body = await scrapeArticleBody(resolved);
+      if (body) return body;
+    }
+
+    // ② 네이버 재검색으로 같은 제목의 기사를 찾아 직링크로 폴백
+    if (naverEnabled()) {
+      const naverResults = await throttledNaver(item.title);
+      const key = normalizeTitleKey(item.title);
+      const match = naverResults.find(r => normalizeTitleKey(r.title) === key);
+      if (match) return await scrapeArticleBody(match.link);
+    }
+
+    return null;
+  } catch (e) {
+    console.error(`[collector] body resolve failed for "${item.title}":`, e);
+    return null;
+  }
 }
 
 // 대상 하나: Google(주키워드) + Naver(이름·영문·보조 다중 검색)

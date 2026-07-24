@@ -21,6 +21,7 @@ export interface RawArticle {
   category: Category;
   basePriority: number;
   companyDesc?: string; // MonitoringTarget.notes — Haiku 분류 시 회사 맥락 제공
+  body?: string; // 스크래핑된 본문 (collector에서 이미 긁었으면 재사용, 없으면 analyzer가 필요 시 추가 스크래핑)
 }
 
 export interface AnalyzedArticle extends RawArticle {
@@ -35,6 +36,7 @@ export interface AnalyzedArticle extends RawArticle {
   isNoise: boolean;
   noiseReason?: string;
   priorityScore: number;
+  titleOnlyFallback?: boolean; // 심층분석 대상인데 본문 스크래핑 실패로 title만으로 판단됨 (UI 경고 표시용)
 }
 
 export interface DigestData {
