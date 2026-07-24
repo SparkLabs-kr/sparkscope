@@ -44,6 +44,7 @@ export function DigestReviewEditor({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendMsg, setSendMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [testEmail, setTestEmail] = useState('');
 
   const byId = useMemo(() => new Map(candidates.map(c => [c.id, c])), [candidates]);
 
@@ -111,7 +112,8 @@ export function DigestReviewEditor({
 
   async function onSend() {
     const chosen = top3Ids.map(id => byId.get(id)?.title).filter(Boolean);
-    const msg = `실제로 다이제스트를 발송합니다.\n\n수신: ${recipient || '(환경변수 수신자)'}\nTOP 3:\n${chosen.map((t, i) => `  ${i + 1}. ${t}`).join('\n') || '  (자동 선정)'}\n\n발송하시겠습니까?`;
+    const actualRecipient = testEmail.trim() || recipient || '(환경변수 수신자)';
+    const msg = `실제로 다이제스트를 발송합니다.\n\n수신: ${actualRecipient}${testEmail.trim() ? ' (테스트)' : ''}\nTOP 3:\n${chosen.map((t, i) => `  ${i + 1}. ${t}`).join('\n') || '  (자동 선정)'}\n\n발송하시겠습니까?`;
     if (!window.confirm(msg)) return;
     setSending(true);
     setSendMsg(null);
@@ -119,7 +121,7 @@ export function DigestReviewEditor({
       const res = await fetch('/api/digest/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, ...(testEmail.trim() ? { testRecipient: testEmail.trim() } : {}) }),
       });
       const data = await res.json();
       if (res.ok && data.ok) setSendMsg({ ok: true, text: `발송 완료: ${data.recipient ?? recipient}` });
@@ -236,7 +238,18 @@ export function DigestReviewEditor({
               >
                 {sending ? '발송 중…' : '📤 지금 발송하기'}
               </button>
-              <p className="mt-2 text-center text-xs text-gray-400">수신: {recipient || '(환경변수 수신자)'} · 클릭 시 최종 확인 후 실제 발송</p>
+              <div className="mt-2 flex gap-2 items-center">
+                <input
+                  type="email"
+                  placeholder="테스트 수신 이메일 (비우면 실제 수신자)"
+                  value={testEmail}
+                  onChange={e => setTestEmail(e.target.value)}
+                  className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-spark-purple"
+                />
+              </div>
+              <p className="mt-1 text-center text-xs text-gray-400">
+                {testEmail.trim() ? `테스트 수신: ${testEmail.trim()}` : `수신: ${recipient || '(환경변수 수신자)'}`}
+              </p>
             </>
           ) : (
             <p className="text-center text-sm text-gray-500 py-2">발송 권한이 없습니다. (SCRAP_ALLOWED_EMAILS 지정 계정만 발송 가능)</p>
