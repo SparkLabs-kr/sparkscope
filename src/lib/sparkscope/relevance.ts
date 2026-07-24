@@ -123,6 +123,7 @@ export const NAME_MATCH_CATEGORIES = new Set(['portfolio_company', 'sparklabs_se
 
 export interface RelevanceInput {
   title: string;
+  body?: string | null; // 스크래핑된 본문 (있으면 제목과 함께 exclude/context/name 매칭에 사용)
   primaryKeyword: string;
   name?: string | null;         // 회사명 (강한 식별자)
   englishName?: string | null;  // 영문 회사명 (강한 식별자)
@@ -156,21 +157,27 @@ function strongKeys(a: RelevanceInput): string[] {
  */
 export function filterReason(a: RelevanceInput): FilterReason | null {
   const title = a.title ?? '';
+  const body = a.body ?? '';
 
   const excl = splitCsv(a.excludeWords);
-  if (excl.some(w => w.length >= 2 && title.includes(w))) return 'exclude_word';
+  if (excl.some(w => w.length >= 2 && (title.includes(w) || body.includes(w)))) return 'exclude_word';
 
   // 문맥어: 지정된 경우, 동명이의어 등 흔한 단어의 회사명을 걸러내기 위해
-  // 제목에 문맥어 중 하나가 반드시 등장해야 통과 (설정 안 하면 이 체크는 스킵).
+  // 제목 또는 본문에 문맥어 중 하나가 반드시 등장해야 통과 (설정 안 하면 이 체크는 스킵).
+  // 본문은 스크래핑 실패 시 빈 문자열일 수 있으므로 제목 매칭만으로도 통과 가능해야 함.
   const mustAny = splitCsv(a.contextWords);
-  if (mustAny.length > 0 && !mustAny.some(k => matchesAsToken(title, k))) return 'missing_context';
+  if (mustAny.length > 0) {
+    const inTitle = mustAny.some(k => matchesAsToken(title, k));
+    const inBody = body.length > 0 && mustAny.some(k => body.includes(k));
+    if (!inTitle && !inBody) return 'missing_context';
+  }
 
   if (isBlockedNoise({ title, link: a.link, source: a.source })) return 'sports_ad';
 
   if (AD_NOISE_KEYWORDS.some(w => title.includes(w))) return 'ad_noise';
 
   // 회사명 매칭은 지정 카테고리에만 적용 (그 외/미상은 스킵 — 오탐 방지)
-  // 강한 식별자(회사명·영문명·주키워드)가 독립 토큰으로 등장해야 통과.
+  // 강한 식별자(회사명·영문명·주키워드)가 제목 또는 본문에 독립 토큰으로 등장해야 통과.
   // helperKeywords(대표자명 등)만 있는 기사는 동명이인(야구선수 등) 오통과 방지를 위해 제외.
   const applyNameMatch = a.category != null && NAME_MATCH_CATEGORIES.has(a.category);
   if (applyNameMatch) {
@@ -178,7 +185,11 @@ export function filterReason(a: RelevanceInput): FilterReason | null {
     // 예: 서비스명 '약올려'만 제목에 있고 회사명 '룩인사이트'는 없는 기사도 포폴사로 인정.
     // (대표자명 등 동명이인 위험은 이후 AI 재분류·isBlockedNoise 단계에서 정리)
     const keys = [...strongKeys(a), ...splitCsv(a.helperKeywords)].filter(k => k.length >= 2);
-    if (keys.length > 0 && !keys.some(k => matchesAsToken(title, k))) return 'irrelevant';
+    if (keys.length > 0) {
+      const inTitle = keys.some(k => matchesAsToken(title, k));
+      const inBody = body.length > 0 && keys.some(k => matchesAsToken(body, k));
+      if (!inTitle && !inBody) return 'irrelevant';
+    }
   }
 
   return null;

@@ -6,8 +6,10 @@
 import { parseStringPromise } from 'xml2js';
 import { prisma } from '@/lib/prisma';
 import type { RawArticle, Category } from './types';
-import { isRelevant } from './relevance';
+import { isRelevant, normalizeTitleKey } from './relevance';
 import { isKnownMedia } from './media';
+import { scrapeArticleBody, type ScrapedBody } from './scraper';
+import { resolveGoogleNewsUrl } from './google-news-resolver';
 
 type SourceItem = Omit<RawArticle, 'matchedKeyword' | 'category' | 'basePriority'>;
 type Target = Awaited<ReturnType<typeof prisma.monitoringTarget.findMany>>[number];
@@ -87,10 +89,16 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
       // (약사공론·의학신문 등 업종 전문지의 포폴사 부정기사를 놓치지 않기 위함)
       // 경쟁사·업계동향은 기존대로 확정 매체 26개(media.ts)만.
       const strongCat = target.category === 'portfolio_company' || target.category === 'sparklabs_self';
+      const mediaFiltered = items.filter(item => strongCat || isKnownMedia(item.source));
+
+      // 제외어/문맥어가 설정된 대상만 본문까지 스크래핑해서 title+본문 기준으로 판단.
+      // (전체 대상을 다 스크래핑하면 실행 시간이 과도해지므로, 실제로 그 필터가 필요한 대상으로 범위를 한정)
+      const needsBody = splitCsv(target.excludeWords).length > 0 || splitCsv(target.contextWords).length > 0;
+      const bodyMap = needsBody ? await scrapeBodiesFor(mediaFiltered) : new Map<string, ScrapedBody | null>();
+
       // 관련성/노이즈 필터: 강한 식별자(회사명·영문명·주키워드) 포함 + 스포츠/광고/제외어 배제
-      return items
-        .filter(item => strongCat || isKnownMedia(item.source))
-        .filter(item => isRelevant({ title: item.title, primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, excludeWords: target.excludeWords, contextWords: target.contextWords, category: target.category, link: item.link, source: item.source }))
+      return mediaFiltered
+        .filter(item => isRelevant({ title: item.title, body: bodyMap.get(item.link)?.text, primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, excludeWords: target.excludeWords, contextWords: target.contextWords, category: target.category, link: item.link, source: item.source }))
         .map<RawArticle>(item => ({
           ...item,
           matchedKeyword: target.primaryKeyword,
@@ -105,6 +113,49 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
   const filtered = filterAndDedupe(allArticles, opts.daysBack ?? MAX_DAYS_AGO);
   console.log(`[collector] after dedupe: ${filtered.length}`);
   return filtered;
+}
+
+// 기사 목록의 본문을 스크래핑 (제한된 동시성).
+// 구글뉴스 프록시 링크(news.google.com/rss/articles/...)는 실제 언론사 URL이 아니라서 그대로는
+// 스크래핑이 안 됨 — ① 구글 비공식 API로 진짜 URL 해석 시도 → ② 실패하면 네이버 재검색으로
+// 같은 제목의 기사를 찾아 그 직링크로 폴백 → ③ 그래도 실패하면 본문 없이 title-only로 남김.
+async function scrapeBodiesFor(items: SourceItem[]): Promise<Map<string, ScrapedBody | null>> {
+  const out = new Map<string, ScrapedBody | null>();
+  const CONCURRENCY = 4;
+  for (let i = 0; i < items.length; i += CONCURRENCY) {
+    const batch = items.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(batch.map(item => resolveAndScrapeBody(item)));
+    batch.forEach((item, idx) => out.set(item.link, results[idx]));
+  }
+  return out;
+}
+
+async function resolveAndScrapeBody(item: SourceItem): Promise<ScrapedBody | null> {
+  try {
+    if (!item.link.includes('news.google.com')) {
+      return await scrapeArticleBody(item.link);
+    }
+
+    // ① 구글 비공식 API로 진짜 언론사 URL 해석 시도
+    const resolved = await resolveGoogleNewsUrl(item.link);
+    if (resolved) {
+      const body = await scrapeArticleBody(resolved);
+      if (body) return body;
+    }
+
+    // ② 네이버 재검색으로 같은 제목의 기사를 찾아 직링크로 폴백
+    if (naverEnabled()) {
+      const naverResults = await throttledNaver(item.title);
+      const key = normalizeTitleKey(item.title);
+      const match = naverResults.find(r => normalizeTitleKey(r.title) === key);
+      if (match) return await scrapeArticleBody(match.link);
+    }
+
+    return null;
+  } catch (e) {
+    console.error(`[collector] body resolve failed for "${item.title}":`, e);
+    return null;
+  }
 }
 
 // 대상 하나: Google(주키워드) + Naver(이름·영문·보조 다중 검색)
