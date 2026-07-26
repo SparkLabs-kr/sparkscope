@@ -13,6 +13,7 @@ const PRESETS = [
   { label: '1개월', shift: (d: Date) => d.setMonth(d.getMonth() - 1) },
   { label: '3개월', shift: (d: Date) => d.setMonth(d.getMonth() - 3) },
   { label: '1년', shift: (d: Date) => d.setFullYear(d.getFullYear() - 1) },
+  { label: '3년', shift: (d: Date) => d.setFullYear(d.getFullYear() - 3) },
 ];
 
 export function DateRangePicker({ from, to, min, max, company, tab }: { from: string; to: string; min: string; max: string; company?: string; tab?: string }) {
