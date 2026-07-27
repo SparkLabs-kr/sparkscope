@@ -70,12 +70,47 @@ async function fetchHtml(link: string): Promise<string | null> {
     if (!res.ok) return null;
     const contentType = res.headers.get('content-type') ?? '';
     if (!contentType.includes('text/html')) return null;
-    return await res.text();
+    const buf = await res.arrayBuffer();
+    return decodeHtml(buf, contentType);
   } catch {
     return null; // 타임아웃, 네트워크 오류, 봇 차단 등 — 조용히 실패 처리
   } finally {
     clearTimeout(timer);
   }
+}
+
+// EUC-KR 등 비-UTF-8 페이지(news.nate.com 등 오래된 언론사 사이트에 흔함)를 그대로 UTF-8로
+// 읽으면 본문이 깨진 문자로 나와 GPT 프롬프트 품질을 해침 — 응답 헤더/HTML 태그에서 실제
+// 인코딩을 찾아 그걸로 디코딩. 못 찾거나 실패하면 UTF-8로 폴백.
+function decodeHtml(buf: ArrayBuffer, contentType: string): string {
+  const charset = detectCharset(buf, contentType);
+  if (charset && charset !== 'utf-8') {
+    try {
+      return new TextDecoder(charset).decode(buf);
+    } catch {
+      // 인식 못하는 charset 이름이면 UTF-8로 폴백
+    }
+  }
+  return new TextDecoder('utf-8').decode(buf);
+}
+
+function detectCharset(buf: ArrayBuffer, contentType: string): string | null {
+  const headerMatch = contentType.match(/charset=([^;]+)/i);
+  if (headerMatch) return normalizeCharsetName(headerMatch[1]);
+
+  // HTTP 헤더에 charset이 없으면 <head> 안의 <meta charset> 태그를 뒤져봄
+  // (ASCII 범위만 필요하므로 latin1로 앞부분만 훑어도 충분)
+  const head = new TextDecoder('latin1').decode(buf.slice(0, 2048));
+  const metaMatch = head.match(/<meta[^>]+charset=["']?([a-zA-Z0-9_-]+)/i);
+  if (metaMatch) return normalizeCharsetName(metaMatch[1]);
+
+  return null;
+}
+
+function normalizeCharsetName(raw: string): string {
+  const name = raw.trim().toLowerCase().replace(/["']/g, '');
+  if (name === 'ks_c_5601-1987' || name === 'ksc5601' || name === 'euckr') return 'euc-kr';
+  return name;
 }
 
 function pickBodyText($: cheerio.CheerioAPI): string | null {
