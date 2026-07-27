@@ -286,6 +286,10 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     const keys = map.get(a.matchedKeyword) ?? [a.matchedKeyword];
     return keys.some(k => matchesAsToken(a.title, k));
   };
+  // KPI 카드("기사 제목에 '스파크랩'이 언급된 건수")와 실제로 아래 패널에 표시되는 기사 수가
+  // 어긋나지 않도록, DB count가 아니라 매체별 노출 분포/톤 분석과 동일한 필터를 적용한 값을 사용.
+  // (카테고리가 'sparklabs_self'로 분류돼도 제목이 아닌 본문에서만 매칭된 기사는 여기서 제외됨)
+  const sparklabsCountFiltered = sparklabsArticles.filter(notNoise).filter(passesName).length;
   // 중복 기사 제거: 제목 정규화 키 또는 동일 URL 기준으로 대표 1건만 (articles는 우선순위 desc 정렬 → 대표=상위)
   const dedupeSeen = new Set<string>();
   const cleanedArticles = articles
@@ -389,7 +393,7 @@ async function loadDashboardData(from: string, to: string, company?: string) {
 
   return {
     range: { from, to },
-    kpi: { total, sparklabsCount, portfolioCount, pitchCount, mentionRate, mentionDelta: mentionRate - prevMentionRate },
+    kpi: { total, sparklabsCount: sparklabsCountFiltered, portfolioCount, pitchCount, mentionRate, mentionDelta: mentionRate - prevMentionRate },
     articles: enrichedArticles,
     portfolioNames,
     selectedCompany: company,
