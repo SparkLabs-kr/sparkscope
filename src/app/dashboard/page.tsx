@@ -17,6 +17,7 @@ import { NEGATIVE_KEYWORDS, detectCrises, crisisFallbackCause, detectSpikes, typ
 import { summarizeCrisisCause } from '@/lib/sparkscope/analyzer';
 import { summarizeCompetitorTrend, summarizeOverallTrend } from '@/lib/sparkscope/competitor-insights';
 import { CompetitorPanel, type CompetitorStatView } from '@/components/CompetitorPanel';
+import { RISK_FLAGS } from '@/lib/sparkscope/risk-flags';
 
 export const dynamic = 'force-dynamic';
 
@@ -185,7 +186,7 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     // 가장 많이 언급된 포트폴리오사 TOP 15 (기간 내 노출 건수) — 업계 키워드 제외
     prisma.article.groupBy({ by: ['matchedKeyword'], where: { ...portfolioWhere, matchedKeyword: { notIn: INDUSTRY_TREND_KEYWORDS } }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 15 }),
     // 포트폴리오 부정 기사 (기간 내 부정 논조 — 회사·제목 확인용)
-    prisma.article.findMany({ where: { ...portfolioWhere, OR: negOr }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true }, take: 80 }),
+    prisma.article.findMany({ where: { ...portfolioWhere, OR: negOr }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true, riskFlag: true }, take: 80 }),
     // 스파크랩 자사 기사 (톤 분석 클릭 시 펼쳐볼 목록)
     prisma.article.findMany({ where: sparklabsWhere, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, link: true, source: true, pubDate: true, tone: true, matchedKeyword: true, category: true, riskFlag: true }, take: 300 }),
     // 포트폴리오 긍정 하이라이트 (호재 기사)
@@ -352,7 +353,7 @@ async function loadDashboardData(from: string, to: string, company?: string) {
   const portfolioTop = portfolioTop15.map(g => ({ name: portfolioNameOf.get(g.matchedKeyword) ?? g.matchedKeyword, count: g._count._all, portfolioStatus: portfolioStatusOf.get(g.matchedKeyword) ?? null }));
   // 긍정/부정 하이라이트: 회사(matchedKeyword)별로 묶어 "언급 매체 수" 많은 순 → 동률이면 최신순, TOP 3만.
   // (Article에 검색노출도 필드가 없어 매체 다양성을 대리 지표로 사용)
-  const top3ByMedia = (rows: { matchedKeyword: string; title: string; source: string; pubDate: Date; link: string }[]) => {
+  const top3ByMedia = (rows: { matchedKeyword: string; title: string; source: string; pubDate: Date; link: string; riskFlag?: string | null }[]) => {
     const g = new Map<string, { company: string; sources: Set<string>; rep: (typeof rows)[number] }>();
     for (const a of rows) {
       if (!notNoise(a)) continue;
@@ -366,7 +367,7 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     return Array.from(g.values())
       .sort((x, y) => y.sources.size - x.sources.size || new Date(y.rep.pubDate).getTime() - new Date(x.rep.pubDate).getTime())
       .slice(0, 3)
-      .map(e => ({ company: e.company, title: e.rep.title, source: normalizeSource(e.rep.source), pubDate: e.rep.pubDate, link: e.rep.link, mediaCount: e.sources.size }));
+      .map(e => ({ company: e.company, title: e.rep.title, source: normalizeSource(e.rep.source), pubDate: e.rep.pubDate, link: e.rep.link, mediaCount: e.sources.size, riskFlag: e.rep.riskFlag ?? null }));
   };
   const portfolioNegatives = top3ByMedia(portfolioNeg);
   const portfolioPositives = top3ByMedia(portfolioPos);
@@ -779,7 +780,7 @@ function PortfolioPositives({ items, rangeLabel }: { items: { company: string; t
   );
 }
 
-function PortfolioNegatives({ items, rangeLabel }: { items: { company: string; title: string; source: string; pubDate: Date; link: string; mediaCount?: number }[]; rangeLabel: string }) {
+function PortfolioNegatives({ items, rangeLabel }: { items: { company: string; title: string; source: string; pubDate: Date; link: string; mediaCount?: number; riskFlag?: string | null }[]; rangeLabel: string }) {
   return (
     <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
       <div className="font-bold mb-1">⚠️ 포트폴리오 부정 기사 <InfoTip text={`${rangeLabel} 동안 포트폴리오사 부정 논조 기사 중, 여러 매체가 다룬 순으로 TOP 3.`} /></div>
@@ -792,6 +793,11 @@ function PortfolioNegatives({ items, rangeLabel }: { items: { company: string; t
               <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" className="block rounded-lg border border-red-100 bg-red-50/50 p-2.5 hover:bg-red-50">
                 <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold whitespace-nowrap">{a.company}</span>
+                  {a.riskFlag && RISK_FLAGS[a.riskFlag] && (
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold whitespace-nowrap ${RISK_FLAGS[a.riskFlag].cls}`}>
+                      {RISK_FLAGS[a.riskFlag].label}
+                    </span>
+                  )}
                   {a.mediaCount && a.mediaCount > 1 ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-600/10 text-red-700 font-semibold whitespace-nowrap">{a.mediaCount}개 매체</span> : null}
                   <span className="text-[10px] text-gray-400">{a.source} · {d.getMonth() + 1}.{d.getDate()}</span>
                 </div>
