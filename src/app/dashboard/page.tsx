@@ -187,7 +187,7 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     // 포트폴리오 부정 기사 (기간 내 부정 논조 — 회사·제목 확인용)
     prisma.article.findMany({ where: { ...portfolioWhere, OR: negOr }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true }, take: 80 }),
     // 스파크랩 자사 기사 (톤 분석 클릭 시 펼쳐볼 목록)
-    prisma.article.findMany({ where: sparklabsWhere, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, link: true, source: true, pubDate: true, tone: true, matchedKeyword: true, category: true }, take: 300 }),
+    prisma.article.findMany({ where: sparklabsWhere, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, link: true, source: true, pubDate: true, tone: true, matchedKeyword: true, category: true, riskFlag: true }, take: 300 }),
     // 포트폴리오 긍정 하이라이트 (호재 기사)
     prisma.article.findMany({ where: { ...portfolioWhere, OR: posOr }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true }, take: 120 }),
   ]);
@@ -419,6 +419,7 @@ async function loadDashboardData(from: string, to: string, company?: string) {
       source: normalizeSource(a.source),
       pubDate: a.pubDate,
       tone: (a.tone ?? 'NEUTRAL') as string,
+      riskFlag: a.riskFlag as string | null,
     })),
   };
 }

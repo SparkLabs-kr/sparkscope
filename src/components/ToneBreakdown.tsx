@@ -1,6 +1,7 @@
 'use client';
 // 톤 분석 — 클릭 없이 세 논조(긍정/중립/부정)의 비율과 기사 목록이 한 화면에 바로 보인다.
 import { useState } from 'react';
+import { RISK_FLAGS } from '@/lib/sparkscope/risk-flags';
 
 interface ToneArticle {
   id: string;
@@ -9,6 +10,7 @@ interface ToneArticle {
   source: string;
   pubDate: Date | string;
   tone: string;
+  riskFlag?: string | null;
 }
 
 const TONES = [
@@ -130,6 +132,11 @@ export function ToneBreakdown({ articles }: { articles: ToneArticle[] }) {
                 return (
                   <div key={c.rep.id} className={`rounded-lg border border-transparent ${g.soft} transition`}>
                     <a href={c.rep.link} target="_blank" rel="noopener noreferrer" className="block p-2">
+                      {c.rep.riskFlag && RISK_FLAGS[c.rep.riskFlag] && (
+                        <span className={`inline-block mb-1 px-1.5 py-0.5 rounded text-[9px] font-semibold ${RISK_FLAGS[c.rep.riskFlag].cls}`}>
+                          {RISK_FLAGS[c.rep.riskFlag].label}
+                        </span>
+                      )}
                       <div className="text-xs text-spark-ink leading-snug line-clamp-2">{c.rep.title}</div>
                       <div className="text-[10px] text-spark-muted mt-0.5">{c.rep.source} · {d.getMonth() + 1}.{d.getDate()}</div>
                     </a>
