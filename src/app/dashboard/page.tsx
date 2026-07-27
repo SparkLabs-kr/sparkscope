@@ -154,7 +154,7 @@ async function loadDashboardData(from: string, to: string, company?: string) {
   const [
     total, sparklabsCount, portfolioCount, pitchCount, mentionCount,
     prevPortfolioCount, prevMentionCount,
-    articles, sourceGroups, toneGroups, pitches, trendArticles,
+    articles, sourceGroups, sourceToneGroups, toneGroups, pitches, trendArticles,
     spikeRecent, spikeBaseline, crisisNeg, portfolioTargets, competitorTop,
     competitorArticles, sparklabsMentions, portfolioTop15, portfolioNeg, sparklabsArticles, portfolioPos,
   ] = await Promise.all([
@@ -168,6 +168,9 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     prisma.article.findMany({ where, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], take: 400 }),
     // 매체별 노출 분포 — 스파크랩 기사 기준 (자사를 어느 매체가 많이 써주나)
     prisma.article.groupBy({ by: ['source'], where: sparklabsWhere, _count: { _all: true }, orderBy: { _count: { source: 'desc' } }, take: 120 }),
+    // 매체별 톤 성향 — 위 노출 분포와 같은 범위(sparklabsWhere)를 [매체, 톤]으로 쪼개 집계.
+    // (findMany take:300 캡에 의존하면 기간이 길 때 매체별 합계가 위 노출 건수와 어긋나므로 별도 groupBy로 정확히 맞춘다)
+    prisma.article.groupBy({ by: ['source', 'tone'], where: sparklabsWhere, _count: { _all: true } }),
     // 톤 분석 — 스파크랩 기준
     prisma.article.groupBy({ by: ['tone'], where: sparklabsWhere, _count: { _all: true } }),
     prisma.article.findMany({ where: { ...where, pitchScore: { gte: 60 } }, orderBy: { pitchScore: 'desc' }, take: 20 }),
@@ -396,7 +399,10 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     selectedCompany: company,
     selectedCompanyName,
     companyArticles: enrichedCompanyArticles,
-    sources: normalizeSources(sourceGroups.map(s => ({ source: s.source, count: s._count._all }))),
+    sources: normalizeSources(sourceGroups.map(s => ({ source: s.source, count: s._count._all }))).map(s => ({
+      ...s,
+      tones: sourceToneTally(sourceToneGroups, s.source),
+    })),
     tones: toneGroups.map(t => ({ tone: t.tone ?? 'NEUTRAL', count: t._count._all })),
     pitches: dedupedPitches,
     crises,
@@ -435,6 +441,18 @@ function normalizeSources(rows: { source: string; count: number }[]) {
   return Array.from(merged.entries())
     .map(([source, count]) => ({ source, count }))
     .sort((a, b) => b.count - a.count);
+}
+
+// 매체별 톤 성향 — 같은 사건을 다뤄도 매체마다 긍정/중립/부정 판정이 갈리는지 보여주기 위한 집계.
+// groupBy(['source','tone'])로 뽑은 raw 행을 정규화된 매체명 기준으로 합산 (노출 건수 집계와 동일 범위 유지).
+function sourceToneTally(rows: { source: string; tone: string | null; _count: { _all: number } }[], normalizedSource: string) {
+  const tally = { POSITIVE: 0, NEUTRAL: 0, NEGATIVE: 0 };
+  for (const r of rows) {
+    if (normalizeSource(r.source) !== normalizedSource) continue;
+    const tone = (r.tone ?? 'NEUTRAL') as 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
+    tally[tone] = (tally[tone] ?? 0) + r._count._all;
+  }
+  return tally;
 }
 
 function buildTrendData(records: { matchedKeyword: string; pubDate: Date }[], since: Date, until: Date) {
