@@ -31,6 +31,8 @@ async function main() {
         portfolioStatus: t.portfolioStatus ?? null,
         tier: t.tier ?? null,
         notes: t.notes,
+        tier: t.tier ?? null,
+        contextWords: t.contextWords ?? null,
       },
     });
 

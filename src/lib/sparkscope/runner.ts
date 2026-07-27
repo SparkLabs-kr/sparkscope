@@ -3,6 +3,7 @@
  * /api/cron/daily-digest 와 /scripts/run-digest.ts 양쪽에서 호출.
  */
 import { prisma } from '@/lib/prisma';
+import type { RawArticle } from './types';
 import { collectAllArticles } from './collector';
 import { analyzeArticles, generateEditorIntro } from './analyzer';
 import { buildDigestData, renderDigestHtml } from './digest';

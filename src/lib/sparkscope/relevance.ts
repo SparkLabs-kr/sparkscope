@@ -154,13 +154,15 @@ function strongKeys(a: RelevanceInput): string[] {
  * 4) 광고/생활정보 노이즈 → ad_noise
  * 5) 회사명(강한 식별자) 미포함 → irrelevant
  *    ※ helperKeywords(대표자명 등)만으로는 통과 불가 — 회사명/영문명이 함께 등장해야 함.
+ *    ※ 대표자명 동명이인 판별은 여기서 하지 않음 — 제목만으로는 오판 위험이 커서
+ *      AI 분류 단계(prompts.ts의 HAIKU_CLASSIFIER)에서 문맥어를 참고해 종합 판단함.
  */
 export function filterReason(a: RelevanceInput): FilterReason | null {
   const title = a.title ?? '';
   const body = a.body ?? '';
 
   const excl = splitCsv(a.excludeWords);
-  if (excl.some(w => w.length >= 2 && (title.includes(w) || body.includes(w)))) return 'exclude_word';
+  if (excl.some(w => w.length >= 2 && (matchesAsToken(title, w) || (body.length > 0 && matchesAsToken(body, w))))) return 'exclude_word';
 
   // 문맥어: 지정된 경우, 동명이의어 등 흔한 단어의 회사명을 걸러내기 위해
   // 제목 또는 본문에 문맥어 중 하나가 반드시 등장해야 통과 (설정 안 하면 이 체크는 스킵).
@@ -181,9 +183,8 @@ export function filterReason(a: RelevanceInput): FilterReason | null {
   // helperKeywords(대표자명 등)만 있는 기사는 동명이인(야구선수 등) 오통과 방지를 위해 제외.
   const applyNameMatch = a.category != null && NAME_MATCH_CATEGORIES.has(a.category);
   if (applyNameMatch) {
-    // 강한 식별자(회사명·영문명·주키워드) + 팀이 큐레이션한 보조 식별자(서비스명·별칭 등 helperKeywords).
+    // 강한 식별자(회사명·영문명·주키워드) + 팀이 큐레이션한 보조 식별자(서비스명·별칭·대표자명 등 helperKeywords).
     // 예: 서비스명 '약올려'만 제목에 있고 회사명 '룩인사이트'는 없는 기사도 포폴사로 인정.
-    // (대표자명 등 동명이인 위험은 이후 AI 재분류·isBlockedNoise 단계에서 정리)
     const keys = [...strongKeys(a), ...splitCsv(a.helperKeywords)].filter(k => k.length >= 2);
     if (keys.length > 0) {
       const inTitle = keys.some(k => matchesAsToken(title, k));

@@ -341,6 +341,16 @@ async function loadDashboardData(from: string, to: string, company?: string) {
   // 포트폴리오 TOP 15 (표시명 매핑) + 부정 기사(관련성 가드 후 상위 15건)
   const portfolioNameOf = new Map(portfolioTargets.map(t => [t.primaryKeyword, t.name]));
   const portfolioStatusOf = new Map(portfolioTargets.map(t => [t.primaryKeyword, t.portfolioStatus]));
+  const enrichedArticles = cleanedArticles.map(a => ({
+    ...a,
+    companyName: a.category === 'portfolio_company' ? (portfolioNameOf.get(a.matchedKeyword) ?? a.matchedKeyword) : undefined,
+    portfolioStatus: a.category === 'portfolio_company' ? (portfolioStatusOf.get(a.matchedKeyword) ?? null) : null,
+  }));
+  const enrichedCompanyArticles = companyArticles.map(a => ({
+    ...a,
+    companyName: portfolioNameOf.get(a.matchedKeyword) ?? a.matchedKeyword,
+    portfolioStatus: portfolioStatusOf.get(a.matchedKeyword) ?? null,
+  }));
   const portfolioTop = portfolioTop15.map(g => ({ name: portfolioNameOf.get(g.matchedKeyword) ?? g.matchedKeyword, count: g._count._all, portfolioStatus: portfolioStatusOf.get(g.matchedKeyword) ?? null }));
   // 긍정/부정 하이라이트: 회사(matchedKeyword)별로 묶어 "언급 매체 수" 많은 순 → 동률이면 최신순, TOP 3만.
   // (Article에 검색노출도 필드가 없어 매체 다양성을 대리 지표로 사용)
@@ -381,11 +391,11 @@ async function loadDashboardData(from: string, to: string, company?: string) {
   return {
     range: { from, to },
     kpi: { total, sparklabsCount, portfolioCount, pitchCount, mentionRate, mentionDelta: mentionRate - prevMentionRate },
-    articles: cleanedArticles,
+    articles: enrichedArticles,
     portfolioNames,
     selectedCompany: company,
     selectedCompanyName,
-    companyArticles,
+    companyArticles: enrichedCompanyArticles,
     sources: normalizeSources(sourceGroups.map(s => ({ source: s.source, count: s._count._all }))),
     tones: toneGroups.map(t => ({ tone: t.tone ?? 'NEUTRAL', count: t._count._all })),
     pitches: dedupedPitches,

@@ -2,6 +2,16 @@
 // 06_Claude_분석_프롬프트_v0.1.md 기반
 import { crisisKeywordsForPrompt } from './crisis-keywords';
 
+// 스파크랩 대표자명 동명이인 판별용 문맥어 (팀 큐레이션).
+// 제목에 이 단어가 있어야만 통과시키는 강제 규칙이 아니라, AI가 "이 기사가 진짜
+// 스파크랩 대표 얘기인지"를 판단할 때 참고하는 힌트임 — 없어도 문맥상 명백하면 통과 가능.
+const SPARKLABS_REP_CONTEXT_WORDS: Record<string, string[]> = {
+  '김유진': ['스파크랩', 'SparkLabs', '제너럴 파트너', '엑셀러레이터', '스타트업', '공동대표', '공동창업자', '벤처캐피탈'],
+  '김호민': ['스파크랩', 'SparkLabs', '제너럴 파트너', '엑셀러레이터', '스타트업', '공동대표', '공동창업자', 'Nexon', 'Nexonova', '벤처캐피탈', '대표'],
+  '이한주': ['스파크랩', 'SparkLabs', '제너럴 파트너', '엑셀러레이터', '공동설립자', '스타트업', '호스트웨이', '벤처캐피탈', '뉴베리글로벌', '대표'],
+  '버나드문': ['스파크랩', 'SparkLabs', '제너럴 파트너', '엑셀러레이터', '스타트업', '공동대표', '공동설립자', '벤처캐피탈', '글로벌', '대표'],
+};
+
 export const HAIKU_CLASSIFIER_SYSTEM = `당신은 스파크랩의 PR 분석 어시스턴트입니다.
 스파크랩은 한국 대표 액셀러레이터로, 200여 개 포트폴리오사를 보유하고 있습니다.
 
@@ -16,13 +26,20 @@ export function buildHaikuClassifierUserMessage(articles: Array<{
   source: string;
   matchedKeyword: string;
   matchedKeywordKind: string;
+  companyDesc?: string;
 }>) {
+  const repNamesInBatch = Object.keys(SPARKLABS_REP_CONTEXT_WORDS)
+    .filter(name => articles.some(a => a.matchedKeyword === name));
+  const repContextBlock = repNamesInBatch.length > 0
+    ? `\n스파크랩 대표자명 동명이인 판별 힌트 (참고용 — 아래 단어가 제목에 없어도 문맥상 명백히 스파크랩 관련이면 통과 가능, 반대로 있어도 명백히 무관하면 homonym 처리):\n${repNamesInBatch.map(name => `- ${name}: ${SPARKLABS_REP_CONTEXT_WORDS[name].join(', ')}`).join('\n')}\n`
+    : '';
+
   return `다음 ${articles.length}개의 기사를 분류해주세요.
 각 기사에 대해 JSON 객체를 반환하고, 전체를 배열로 묶어주세요.
 
 기사 목록:
 ${articles.map(a => JSON.stringify(a)).join('\n')}
-
+${repContextBlock}
 각 기사의 출력 스키마:
 {
   "id": "<입력 id>",
@@ -40,14 +57,16 @@ ${articles.map(a => JSON.stringify(a)).join('\n')}
 - industry_trend: 스타트업계 뉴스 — 스타트업 생태계·정부기관·정책 등 업계 전반
 
 판단 기준:
+- companyDesc(회사 사업설명)가 있으면, 기사 내용이 그 사업과 전혀 무관한 다른 대상(다른 회사, 다른 고유명사)에 대한 것이면 unrelated로 판단하세요. 같은 이름이 전혀 다른 도메인을 가리키는 경우가 핵심 판단 기준입니다.
 - ⭐ 가장 중요: 매칭된 키워드(회사명)가 기사의 "주어(주체)"여야 합니다. 단순 언급·스쳐 지나가는 인용, 또는 다른 단어의 일부(부분일치)면 해당 회사 기사가 아닙니다 → category="unrelated" 또는 isNoise=true, noiseReason="irrelevant".
   · 예: 매칭 "노리"인데 기사가 "IPO를 노리다(동사)"에 대한 것 → unrelated
   · 예: 매칭 "리코"인데 기사가 "인실리코(Insilico)"에 대한 것 → unrelated (부분일치)
   · 예: 매칭 "노리"인데 실제 주어가 "KB증권/OpenAI" 등 우리와 무관한 회사 → unrelated
 - 매칭된 키워드가 "비트바이트"인데 기사가 암호화폐 거래소 "바이비트"에 대한 것이면 isNoise=true, noiseReason="homonym"
+- 매칭된 키워드가 김유진/김호민/이한주/버나드문 등 스파크랩 대표자명인데 흔한 이름이라 동명이인 기사가 잦음 → 위 "동명이인 판별 힌트" 목록의 문맥어나 그 외 정황(직함·회사 활동 등)으로 스파크랩 대표가 맞는지 판단. 명백히 다른 사람(가수·운동선수·정치인 등)이면 isNoise=true, noiseReason="homonym"
 - 자동생성된 시세·주가 분석은 isNoise=true, noiseReason="auto_generated"
 - 정부 정책 발표 같은 영향력 큰 기사는 importance="HIGH" 또는 "CRITICAL"
-- needsDeepAnalysis는 category가 sparklabs_self/portfolio_company이고 importance가 MEDIUM 이상일 때 true
+- needsDeepAnalysis는 category가 sparklabs_self이면 importance 무관하게 무조건 true, portfolio_company이고 importance가 MEDIUM 이상일 때 true
 - 🚨 위기·부정 신호 (매우 중요): 포폴사/스파크랩이 주어인 기사에 소송·고소·수사·검찰·공정위·과징금·리콜·결함·해킹·정보유출·논란·의혹·횡령·갑질·불매·파업·구조조정·적자·사망 등 부정·위기 신호가 있으면 importance="HIGH"(중대하면 "CRITICAL") + needsDeepAnalysis=true. 이런 기사는 절대 isNoise로 버리지 말 것(명백한 무관 도메인/동명이인만 예외).
 
 JSON 배열만 반환:`;

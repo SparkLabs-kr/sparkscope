@@ -20,6 +20,7 @@ export interface RawArticle {
   matchedKeyword: string;
   category: Category;
   basePriority: number;
+  companyDesc?: string; // MonitoringTarget.notes — Haiku 분류 시 회사 맥락 제공
   body?: string; // 스크래핑된 본문 (collector에서 이미 긁었으면 재사용, 없으면 analyzer가 필요 시 추가 스크래핑)
 }
 
