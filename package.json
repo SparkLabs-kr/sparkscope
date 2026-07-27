@@ -10,7 +10,8 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "digest:run": "tsx scripts/run-digest.ts"
+    "digest:run": "tsx scripts/run-digest.ts",
+    "keywords:check": "tsx scripts/check-context-words.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

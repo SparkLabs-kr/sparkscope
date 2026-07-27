@@ -1,0 +1,45 @@
+name: Sync Keywords to DB
+
+# data/master-keywords.json이 main에 반영되면 프로덕션 DB(MonitoringTarget)에 자동 동기화.
+# 과거에 이 파일만 고치고 DB 시딩을 깜빡해서 문맥어(contextWords) 필터가
+# 실제 발송에는 반영 안 된 채로 다이제스트가 나간 사고가 있었음 — 재발 방지용.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'data/master-keywords.json'
+  workflow_dispatch:  # 수동 트리거
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Call seed-keywords endpoint
+        run: |
+          CRON_SECRET="${{ secrets.CRON_SECRET }}"
+
+          if [ -z "$CRON_SECRET" ]; then
+            echo "❌ CRON_SECRET not set"
+            exit 1
+          fi
+
+          echo "🔄 Syncing keywords to DB at $(date '+%Y-%m-%d %H:%M:%S')"
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "https://sparkscope.vercel.app/api/cron/seed-keywords")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Response code: $HTTP_CODE"
+          echo "Response body: $BODY"
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Keyword sync completed successfully"
+            exit 0
+          else
+            echo "❌ Keyword sync failed (HTTP $HTTP_CODE)"
+            exit 1
+          fi
