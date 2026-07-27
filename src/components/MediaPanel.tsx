@@ -6,15 +6,27 @@ import { useState } from 'react';
 interface SourceTones { POSITIVE: number; NEUTRAL: number; NEGATIVE: number }
 interface SourceRow { source: string; count: number; tones?: SourceTones }
 
-function toneLine(tones?: SourceTones): string {
-  if (!tones) return '';
-  const parts: string[] = [];
-  if (tones.POSITIVE) parts.push(`긍정 ${tones.POSITIVE}`);
-  if (tones.NEUTRAL) parts.push(`중립 ${tones.NEUTRAL}`);
-  if (tones.NEGATIVE) parts.push(`부정 ${tones.NEGATIVE}`);
-  if (parts.length === 0) return '';
-  if (parts.length === 1) return `전부 ${parts[0]}`;
-  return parts.join(' · ');
+// 긍정은 초록, 중립은 (기본 회색보다) 살짝 짙은 회색으로 구분. 부정은 기존 톤 유지.
+function ToneLine({ tones }: { tones?: SourceTones }) {
+  if (!tones) return null;
+  const parts: { text: string; cls: string }[] = [];
+  if (tones.POSITIVE) parts.push({ text: `긍정 ${tones.POSITIVE}`, cls: 'text-emerald-600' });
+  if (tones.NEUTRAL) parts.push({ text: `중립 ${tones.NEUTRAL}`, cls: 'text-gray-500' });
+  if (tones.NEGATIVE) parts.push({ text: `부정 ${tones.NEGATIVE}`, cls: 'text-spark-muted' });
+  if (parts.length === 0) return null;
+  if (parts.length === 1) {
+    return <span className="shrink-0 text-[11px] whitespace-nowrap"><span className="text-spark-muted">전부 </span><span className={parts[0].cls}>{parts[0].text}</span></span>;
+  }
+  return (
+    <span className="shrink-0 text-[11px] whitespace-nowrap">
+      {parts.map((p, i) => (
+        <span key={p.text}>
+          {i > 0 && <span className="text-spark-muted"> · </span>}
+          <span className={p.cls}>{p.text}</span>
+        </span>
+      ))}
+    </span>
+  );
 }
 
 export function MediaPanel({ data, defaultCount = 5 }: { data: SourceRow[]; defaultCount?: number }) {
@@ -26,21 +38,25 @@ export function MediaPanel({ data, defaultCount = 5 }: { data: SourceRow[]; defa
     return <p className="text-sm text-gray-400 py-8 text-center">선택 기간 내 매체 노출 데이터가 없습니다.</p>;
   }
 
+  // 긍정 기사를 가장 많이 쓴 매체(동률이면 모두) — 이름을 볼드로 강조.
+  const maxPositive = Math.max(...data.map(d => d.tones?.POSITIVE ?? 0));
+
   return (
     <div>
       <div className="space-y-1">
-        {shown.map(d => (
-          <div key={d.source} className="flex items-center gap-2">
-            <span className="w-24 shrink-0 text-xs text-spark-ink-soft text-right truncate" title={d.source}>{d.source}</span>
-            <span className="flex-1 h-2.5 rounded bg-spark-subtle overflow-hidden">
-              <span className="block h-full rounded bg-spark-purple/80" style={{ width: `${Math.max(4, (d.count / max) * 100)}%` }} />
-            </span>
-            <span className="w-5 shrink-0 text-xs font-semibold tabular-nums text-spark-ink text-right">{d.count}</span>
-            {toneLine(d.tones) && (
-              <span className="shrink-0 text-[11px] text-spark-muted whitespace-nowrap">{toneLine(d.tones)}</span>
-            )}
-          </div>
-        ))}
+        {shown.map(d => {
+          const isTopPositive = maxPositive > 0 && (d.tones?.POSITIVE ?? 0) === maxPositive;
+          return (
+            <div key={d.source} className="flex items-center gap-2">
+              <span className={`w-24 shrink-0 text-xs text-right truncate ${isTopPositive ? 'font-bold text-spark-ink' : 'text-spark-ink-soft'}`} title={d.source}>{d.source}</span>
+              <span className="flex-1 h-2.5 rounded bg-spark-subtle overflow-hidden">
+                <span className="block h-full rounded bg-spark-purple/80" style={{ width: `${Math.max(4, (d.count / max) * 100)}%` }} />
+              </span>
+              <span className="w-5 shrink-0 text-xs font-semibold tabular-nums text-spark-ink text-right">{d.count}</span>
+              <ToneLine tones={d.tones} />
+            </div>
+          );
+        })}
       </div>
       {data.length > defaultCount && (
         <button
