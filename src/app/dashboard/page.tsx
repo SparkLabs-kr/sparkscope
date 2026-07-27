@@ -561,13 +561,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       {/* ── 스파크랩 (가장 궁금한 정보) ── */}
       {tab === 'sparklabs' && <>
       <SectionTitle title="🏢 스파크랩" sub="우리 자사가 어디에, 어떤 논조로 보도되는가" />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+      <div className="flex flex-col gap-4 mb-8">
         <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
           <div className="font-bold mb-4">📰 매체별 노출 분포 (스파크랩) <InfoTip text="선택 기간 동안 '스파크랩' 기사를 다룬 매체 분포입니다(주요 26개 매체 기준).\n어느 매체가 우리를 가장 많이 써주는지 보여줍니다." /></div>
           <MediaPanel data={data.sources} defaultCount={12} />
         </div>
         <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
-          <div className="font-bold mb-4">💬 톤 분석 (스파크랩) <InfoTip text="'스파크랩' 기사의 긍정·중립·부정 논조 비율입니다. 막대를 클릭하면 해당 기사 목록이 열립니다." /></div>
+          <div className="font-bold mb-4">💬 톤 분석 (스파크랩) <InfoTip text="'스파크랩' 기사의 긍정·중립·부정 논조 비율입니다. 각 논조의 기사 목록이 바로 아래에 표시됩니다." /></div>
           <ToneBreakdown articles={data.toneArticles as any} />
         </div>
       </div>
