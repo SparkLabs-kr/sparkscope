@@ -108,6 +108,11 @@ export function hasNegativeKeyword(title: string): boolean {
     if (keyword === '감소' && /[가-힣]감소증/.test(title)) {
       continue;
     }
+    // "기소" 예외: 뉴시스 등 기사 말미 태그 "[중기소식]"(중소기업소식 줄임말)의 부분일치.
+    // 실제 기소·형사절차 기사가 아니라 단순 출처 태그라 위기 신호가 아님.
+    if (keyword === '기소' && /중기소식/.test(title)) {
+      continue;
+    }
 
     return true;
   }
