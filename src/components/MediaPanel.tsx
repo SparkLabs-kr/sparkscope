@@ -17,7 +17,7 @@ function toneLine(tones?: SourceTones): string {
   return parts.join(' · ');
 }
 
-export function MediaPanel({ data, defaultCount = 12 }: { data: SourceRow[]; defaultCount?: number }) {
+export function MediaPanel({ data, defaultCount = 5 }: { data: SourceRow[]; defaultCount?: number }) {
   const [expanded, setExpanded] = useState(false);
   const shown = expanded ? data : data.slice(0, defaultCount);
   const max = Math.max(...data.map(d => d.count), 1);
@@ -28,26 +28,24 @@ export function MediaPanel({ data, defaultCount = 12 }: { data: SourceRow[]; def
 
   return (
     <div>
-      <div className="space-y-2">
+      <div className="space-y-1">
         {shown.map(d => (
-          <div key={d.source} className="flex items-center gap-3">
+          <div key={d.source} className="flex items-center gap-2">
             <span className="w-24 shrink-0 text-xs text-spark-ink-soft text-right truncate" title={d.source}>{d.source}</span>
-            <span className="flex-1 min-w-0">
-              <span className="flex items-center gap-2">
-                <span className="h-4 rounded bg-spark-purple/80" style={{ width: `${Math.max(4, (d.count / max) * 100)}%` }} />
-                <span className="text-xs font-semibold tabular-nums text-spark-ink">{d.count}</span>
-              </span>
-              {toneLine(d.tones) && (
-                <span className="block text-[11px] text-spark-muted mt-0.5 truncate">{toneLine(d.tones)}</span>
-              )}
+            <span className="flex-1 h-2.5 rounded bg-spark-subtle overflow-hidden">
+              <span className="block h-full rounded bg-spark-purple/80" style={{ width: `${Math.max(4, (d.count / max) * 100)}%` }} />
             </span>
+            <span className="w-5 shrink-0 text-xs font-semibold tabular-nums text-spark-ink text-right">{d.count}</span>
+            {toneLine(d.tones) && (
+              <span className="shrink-0 text-[11px] text-spark-muted whitespace-nowrap">{toneLine(d.tones)}</span>
+            )}
           </div>
         ))}
       </div>
       {data.length > defaultCount && (
         <button
           onClick={() => setExpanded(v => !v)}
-          className="mt-3 w-full rounded-lg border border-gray-200 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50"
+          className="mt-2 w-full rounded-lg border border-gray-200 py-1 text-xs font-semibold text-gray-500 hover:bg-gray-50"
         >
           {expanded ? '접기' : `더보기 (전체 ${data.length}개 매체)`}
         </button>
