@@ -5,6 +5,7 @@
 import { prisma } from '@/lib/prisma';
 import type { RawArticle } from './types';
 import { collectAllArticles } from './collector';
+import { normalizeTitleKey } from './relevance';
 import { analyzeArticles, generateEditorIntro } from './analyzer';
 import { buildDigestData, renderDigestHtml } from './digest';
 import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } from './mailer';
@@ -88,9 +89,24 @@ export async function runDailyDigest(opts: RunOptions = {}) {
 
     // 4. DB 저장 (upsert by link) — skipCollect 모드는 생략 (이미 저장된 데이터)
     if (!opts.skipCollect) {
+      // 구글 뉴스는 같은 기사도 수집 때마다 link 토큰이 바뀌어서 link만으로 upsert하면
+      // 실행할 때마다 같은 기사가 새 행으로 계속 쌓인다(진짜 중복). link가 달라도 최근 14일 내
+      // 정규화 제목+매체가 같으면 같은 기사로 보고, 기존 행의 link로 upsert해서 갱신되게 한다.
+      const recentWindow = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+      const recentExisting = await prisma.article.findMany({
+        where: { pubDate: { gte: recentWindow } },
+        select: { link: true, title: true, source: true },
+      });
+      const existingByKey = new Map<string, string>(); // `${source}::${titleKey}` -> 기존 link
+      for (const e of recentExisting) {
+        existingByKey.set(`${e.source}::${normalizeTitleKey(e.title)}`, e.link);
+      }
+
       for (const a of analyzed) {
+        const dedupeKey = `${a.source}::${normalizeTitleKey(a.title)}`;
+        const targetLink = existingByKey.get(dedupeKey) ?? a.link;
         await prisma.article.upsert({
-          where: { link: a.link },
+          where: { link: targetLink },
           create: {
             title: a.title,
             link: a.link,

@@ -312,7 +312,7 @@ function filterAndDedupe(articles: RawArticle[], daysBack: number): RawArticle[]
     if (a.pubDate.getTime() < cutoff) continue;
     if (seenLinks.has(a.link)) continue; // URL 기반 중복 제거
     seenLinks.add(a.link);
-    const key = a.title.replace(/\s+/g, '').slice(0, 30);
+    const key = normalizeTitleKey(a.title);
     const existing = seenTitles.get(key);
     if (!existing || existing.basePriority < a.basePriority) {
       seenTitles.set(key, a);

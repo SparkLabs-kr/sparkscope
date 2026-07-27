@@ -289,7 +289,7 @@ function heuristicClassify(article: RawArticle): ClassificationResult {
   };
 }
 
-function heuristicTone(title: string, body?: string): Tone {
+export function heuristicTone(title: string, body?: string): Tone {
   // [5] data 폴더 키워드 규칙 우선 — 부정 키워드 리스트 + 위기 키워드 리스트 모두 신호로 사용.
   if (hasNegativeKeyword(title) || hasCrisisKeyword(title)) return 'NEGATIVE';
 
