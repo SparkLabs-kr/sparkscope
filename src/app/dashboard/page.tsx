@@ -11,7 +11,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { OPEN_ACCESS } from '@/lib/flags';
 import { canScrap as canScrapEmail } from '@/lib/scrap';
-import { normalizeSource, isKnownMedia } from '@/lib/sparkscope/media';
+import { normalizeSource } from '@/lib/sparkscope/media';
 import { matchesAsToken, isBlockedNoise, normalizeTitleKey } from '@/lib/sparkscope/relevance';
 import { NEGATIVE_KEYWORDS, detectCrises, crisisFallbackCause, detectSpikes, type ArticleLite, type CrisisCard, type SpikeCard } from '@/lib/sparkscope/insights';
 import { summarizeCrisisCause } from '@/lib/sparkscope/analyzer';
@@ -154,7 +154,7 @@ async function loadDashboardData(from: string, to: string, company?: string) {
   const [
     total, sparklabsCount, portfolioCount, pitchCount, mentionCount,
     prevPortfolioCount, prevMentionCount,
-    articles, sourceGroups, sourceToneGroups, toneGroups, pitches, trendArticles,
+    articles, toneGroups, pitches, trendArticles,
     spikeRecent, spikeBaseline, crisisNeg, portfolioTargets, competitorTop,
     competitorArticles, sparklabsMentions, portfolioTop15, portfolioNeg, sparklabsArticles, portfolioPos,
   ] = await Promise.all([
@@ -166,11 +166,6 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     prisma.article.count({ where: prevPortfolioWhere }),
     prisma.article.count({ where: { ...prevPortfolioWhere, title: { contains: '스파크랩' } } }),
     prisma.article.findMany({ where, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], take: 400 }),
-    // 매체별 노출 분포 — 스파크랩 기사 기준 (자사를 어느 매체가 많이 써주나)
-    prisma.article.groupBy({ by: ['source'], where: sparklabsWhere, _count: { _all: true }, orderBy: { _count: { source: 'desc' } }, take: 120 }),
-    // 매체별 톤 성향 — 위 노출 분포와 같은 범위(sparklabsWhere)를 [매체, 톤]으로 쪼개 집계.
-    // (findMany take:300 캡에 의존하면 기간이 길 때 매체별 합계가 위 노출 건수와 어긋나므로 별도 groupBy로 정확히 맞춘다)
-    prisma.article.groupBy({ by: ['source', 'tone'], where: sparklabsWhere, _count: { _all: true } }),
     // 톤 분석 — 스파크랩 기준
     prisma.article.groupBy({ by: ['tone'], where: sparklabsWhere, _count: { _all: true } }),
     prisma.article.findMany({ where: { ...where, pitchScore: { gte: 60 } }, orderBy: { pitchScore: 'desc' }, take: 20 }),
@@ -399,10 +394,9 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     selectedCompany: company,
     selectedCompanyName,
     companyArticles: enrichedCompanyArticles,
-    sources: normalizeSources(sourceGroups.map(s => ({ source: s.source, count: s._count._all }))).map(s => ({
-      ...s,
-      tones: sourceToneTally(sourceToneGroups, s.source),
-    })),
+    // 매체별 노출 분포 — 아래 톤 분석(toneArticles)과 반드시 같은 범위(노이즈 제외·이름 매치)로 집계해야
+    // "매체별 합계"와 "톤 분석 총합"이 서로 어긋나지 않는다.
+    sources: sourcesFromArticles(sparklabsArticles.filter(notNoise).filter(passesName)),
     tones: toneGroups.map(t => ({ tone: t.tone ?? 'NEUTRAL', count: t._count._all })),
     pitches: dedupedPitches,
     crises,
@@ -429,30 +423,24 @@ async function loadDashboardData(from: string, to: string, company?: string) {
   };
 }
 
-// 확정 26개 매체만 표시 — 정규화 후 병합, 노출 많은 순 정렬 (MediaPanel이 Top12/더보기 처리).
-// 26개에 없는 매체(v.daum.net·유니콘팩토리 등)는 수집은 하되 이 차트에서는 제외.
-function normalizeSources(rows: { source: string; count: number }[]) {
-  const merged = new Map<string, number>();
-  for (const r of rows) {
-    if (!isKnownMedia(r.source)) continue;
-    const name = normalizeSource(r.source);
-    merged.set(name, (merged.get(name) ?? 0) + r.count);
+// 매체별 노출 건수 + 톤 성향(긍정/중립/부정) — 톤 분석(toneArticles)과 정확히 같은 기사 집합에서
+// 뽑아야 "매체별 합계"와 "톤 분석 총합"이 서로 어긋나지 않는다.
+// (이전엔 "확정 26개 매체"만 표시했으나, 그 목록에 없는 매체가 실제로 상당수 기사를
+// 다뤄서 — 특히 긍정 톤 기사 다수가 화이트리스트 밖 매체였음 — 총합이 맞지 않아 보이는
+// 혼란을 낳았다. 정규화 후 병합, 노출 많은 순 정렬만 하고 매체 자체는 제한하지 않는다.)
+function sourcesFromArticles(articles: { source: string; tone: string | null }[]) {
+  const merged = new Map<string, { count: number; tones: { POSITIVE: number; NEUTRAL: number; NEGATIVE: number } }>();
+  for (const a of articles) {
+    const name = normalizeSource(a.source);
+    const tone = (a.tone ?? 'NEUTRAL') as 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
+    let e = merged.get(name);
+    if (!e) { e = { count: 0, tones: { POSITIVE: 0, NEUTRAL: 0, NEGATIVE: 0 } }; merged.set(name, e); }
+    e.count += 1;
+    e.tones[tone] = (e.tones[tone] ?? 0) + 1;
   }
   return Array.from(merged.entries())
-    .map(([source, count]) => ({ source, count }))
+    .map(([source, e]) => ({ source, count: e.count, tones: e.tones }))
     .sort((a, b) => b.count - a.count);
-}
-
-// 매체별 톤 성향 — 같은 사건을 다뤄도 매체마다 긍정/중립/부정 판정이 갈리는지 보여주기 위한 집계.
-// groupBy(['source','tone'])로 뽑은 raw 행을 정규화된 매체명 기준으로 합산 (노출 건수 집계와 동일 범위 유지).
-function sourceToneTally(rows: { source: string; tone: string | null; _count: { _all: number } }[], normalizedSource: string) {
-  const tally = { POSITIVE: 0, NEUTRAL: 0, NEGATIVE: 0 };
-  for (const r of rows) {
-    if (normalizeSource(r.source) !== normalizedSource) continue;
-    const tone = (r.tone ?? 'NEUTRAL') as 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
-    tally[tone] = (tally[tone] ?? 0) + r._count._all;
-  }
-  return tally;
 }
 
 function buildTrendData(records: { matchedKeyword: string; pubDate: Date }[], since: Date, until: Date) {
