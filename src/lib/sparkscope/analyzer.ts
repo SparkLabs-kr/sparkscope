@@ -15,7 +15,7 @@ import {
   EDITOR_INTRO_SYSTEM,
   buildEditorIntroUserMessage,
 } from './prompts';
-import { hasNegativeKeyword, hasCrisisKeyword } from './keywords-data';
+import { hasNegativeKeyword, hasCrisisKeyword, countNegativeSignals } from './keywords-data';
 import { scrapeArticleBody } from './scraper';
 import { resolveGoogleNewsUrl } from './google-news-resolver';
 import type { RawArticle, AnalyzedArticle, Importance, Tone, Category } from './types';
@@ -42,6 +42,16 @@ async function chatComplete(model: string, system: string, userContent: string, 
 
 const HAIKU_BATCH_SIZE = 10;
 const POSITIVE_HINTS = ['투자 유치', '상장', '협업', '계약', '돌파', '선정', '수상', 'MOU', '런칭', '개시', '진출', '기록', '성장', '확대'];
+// 제목이 중립이어도 본문에 부정/위기 키워드가 이 개수 이상 겹치면 "압도적으로 부정적"으로 보고 NEGATIVE로 override.
+const HOLISTIC_NEGATIVE_THRESHOLD = 3;
+const VALID_TONES: Tone[] = ['POSITIVE', 'NEUTRAL', 'NEGATIVE', 'MIXED'];
+
+// LLM이 소문자("negative")나 공백 섞인 값을 줘도 정규화해서 인식. 매치 안 되면 undefined(호출부에서 기본값 처리).
+function normalizeTone(raw: unknown): Tone | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const upper = raw.trim().toUpperCase();
+  return (VALID_TONES as string[]).includes(upper) ? (upper as Tone) : undefined;
+}
 
 export async function analyzeArticles(raw: RawArticle[], portfolioUniverse: string[], trendingTopics: string[]): Promise<AnalyzedArticle[]> {
   // 1단계: Haiku 1차 분류 (배치)
@@ -158,8 +168,10 @@ async function ensureBody(article: RawArticle): Promise<string | undefined> {
 
 // ===== Sonnet 심층 분석 =====
 async function analyzeDeep(article: RawArticle & { _id: string }, portfolioUniverse: string[], trendingTopics: string[]): Promise<DeepResult> {
+  // catch 블록에서도 본문 기반 휴리스틱을 쓸 수 있게 try 밖에서 선언.
+  let body: string | undefined;
   try {
-    const body = await ensureBody(article);
+    body = await ensureBody(article);
     const userContent = buildSonnetDeepUserMessage(
       { id: article._id, title: article.title, source: article.source, matchedKeyword: article.matchedKeyword, category: article.category, body },
       portfolioUniverse,
@@ -167,10 +179,22 @@ async function analyzeDeep(article: RawArticle & { _id: string }, portfolioUnive
     );
     const text = await chatComplete(DEEP_MODEL, SONNET_DEEP_SYSTEM, userContent, 800);
     const parsed = JSON.parse(extractJson(text));
+
+    const normalized = normalizeTone(parsed.tone);
+    if (parsed.tone !== undefined && normalized === undefined) {
+      console.error('[analyzer] LLM returned unrecognized tone value:', parsed.tone);
+    }
+    let tone: Tone = normalized ?? 'NEUTRAL';
+    // 제목만 보면 중립이어도 본문에 부정/위기 신호가 압도적으로 많으면 강제로 NEGATIVE.
+    // LLM이 본문을 보고도 놓치는 경우에 대한 안전망.
+    if (tone === 'NEUTRAL' && body && countNegativeSignals(body) >= HOLISTIC_NEGATIVE_THRESHOLD) {
+      tone = 'NEGATIVE';
+    }
+
     return {
       oneLiner: parsed.oneLiner ?? article.title,
       ourTake: parsed.ourTake,
-      tone: parsed.tone ?? 'NEUTRAL',
+      tone,
       relatedCompanies: parsed.relatedCompanies ?? [article.matchedKeyword],
       pitchScore: parsed.pitchScore ?? 0,
       pitchTopic: parsed.pitchTopic,
@@ -181,7 +205,7 @@ async function analyzeDeep(article: RawArticle & { _id: string }, portfolioUnive
     console.error('[analyzer] Sonnet deep failed, falling back:', e);
     return {
       oneLiner: `${article.matchedKeyword} — ${article.title.slice(0, 25)}`,
-      tone: heuristicTone(article.title),
+      tone: heuristicTone(article.title, body),
       relatedCompanies: [article.matchedKeyword],
       pitchScore: 0,
       bodyUsed: false,
@@ -265,11 +289,17 @@ function heuristicClassify(article: RawArticle): ClassificationResult {
   };
 }
 
-function heuristicTone(title: string): Tone {
-  // [5] data 폴더 키워드 규칙 우선
-  if (hasNegativeKeyword(title)) return 'NEGATIVE';
+function heuristicTone(title: string, body?: string): Tone {
+  // [5] data 폴더 키워드 규칙 우선 — 부정 키워드 리스트 + 위기 키워드 리스트 모두 신호로 사용.
+  if (hasNegativeKeyword(title) || hasCrisisKeyword(title)) return 'NEGATIVE';
 
   const isPos = POSITIVE_HINTS.some(k => title.includes(k));
+
+  // 제목은 중립·긍정 힌트가 없어도, 본문에 부정/위기 신호가 압도적으로 많으면 NEGATIVE로 override.
+  if (!isPos && body && countNegativeSignals(body) >= HOLISTIC_NEGATIVE_THRESHOLD) {
+    return 'NEGATIVE';
+  }
+
   if (isPos) return 'POSITIVE';
 
   return 'NEUTRAL';

@@ -30,8 +30,6 @@ export const NEGATIVE_KEYWORDS_DATA: NegativeKeyword[] = [
   { type: "분쟁/고소", keyword: "논란" },
   { type: "위반/적발", keyword: "위반" },
   { type: "위반/적발", keyword: "적발" },
-  { type: "위반/적발", keyword: "적발됨" },
-  { type: "위반/적발", keyword: "뜻밖의" },
   { type: "감소/하락", keyword: "감소" },
   { type: "감소/하락", keyword: "하락" },
   { type: "감소/하락", keyword: "급락" },
@@ -39,6 +37,37 @@ export const NEGATIVE_KEYWORDS_DATA: NegativeKeyword[] = [
   { type: "부정적 평가", keyword: "비판" },
   { type: "부정적 평가", keyword: "평가절하" },
   { type: "부정적 평가", keyword: "낮은평가" },
+  { type: "실적악화", keyword: "실적부진" },
+  { type: "실적악화", keyword: "적자전환" },
+  { type: "실적악화", keyword: "매출감소" },
+  { type: "실적악화", keyword: "영업손실" },
+  { type: "구조조정", keyword: "구조조정" },
+  { type: "구조조정", keyword: "해고" },
+  { type: "구조조정", keyword: "감원" },
+  { type: "구조조정", keyword: "정리해고" },
+  { type: "매각/철수", keyword: "매각" },
+  { type: "매각/철수", keyword: "철수" },
+  { type: "매각/철수", keyword: "청산" },
+  { type: "매각/철수", keyword: "폐업" },
+  { type: "매각/철수", keyword: "사업중단" },
+  { type: "제품결함", keyword: "리콜" },
+  { type: "제품결함", keyword: "결함" },
+  { type: "제품결함", keyword: "불량" },
+  { type: "재무위험", keyword: "부채" },
+  { type: "재무위험", keyword: "연체" },
+  { type: "재무위험", keyword: "유동성위기" },
+  { type: "재무위험", keyword: "자본잠식" },
+  { type: "제재/처벌", keyword: "제재" },
+  { type: "제재/처벌", keyword: "벌금" },
+  { type: "제재/처벌", keyword: "과징금" },
+  { type: "제재/처벌", keyword: "기소" },
+  { type: "제재/처벌", keyword: "압수수색" },
+  { type: "제재/처벌", keyword: "구속" },
+  { type: "비윤리", keyword: "횡령" },
+  { type: "비윤리", keyword: "배임" },
+  { type: "비윤리", keyword: "갑질" },
+  { type: "비윤리", keyword: "불매" },
+  { type: "비윤리", keyword: "파업" },
 ];
 
 // data/crisis-keywords.csv 정적 데이터
@@ -87,4 +116,17 @@ export function hasCrisisKeyword(title: string): string | null {
     }
   }
   return null;
+}
+
+// 제목이 아닌 본문 등 긴 텍스트에서 부정/위기 신호가 몇 개나 겹치는지 셈.
+// heuristicTone의 "본문이 압도적으로 부정적이면 override" 판단에 사용.
+export function countNegativeSignals(text: string): number {
+  let count = 0;
+  for (const { keyword } of NEGATIVE_KEYWORDS_DATA) {
+    if (text.includes(keyword)) count++;
+  }
+  for (const { keyword } of CRISIS_KEYWORDS_DATA) {
+    if (text.includes(keyword)) count++;
+  }
+  return count;
 }
