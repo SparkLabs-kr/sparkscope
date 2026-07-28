@@ -6,7 +6,7 @@
 import { parseStringPromise } from 'xml2js';
 import { prisma } from '@/lib/prisma';
 import type { RawArticle, Category } from './types';
-import { isRelevant, normalizeTitleKey } from './relevance';
+import { isRelevant, normalizeTitleKey, matchesAsToken } from './relevance';
 import { isKnownMedia } from './media';
 import { NEGATIVE_KEYWORDS_DATA, CRISIS_KEYWORDS_DATA } from './keywords-data';
 import { scrapeArticleBody, type ScrapedBody } from './scraper';
@@ -122,9 +122,14 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
           if (isBcTier && excludeList.some(w => item.title.includes(w) || body.includes(w))) return false;
           if (isBcTier && contextList.length > 0 && contextList.some(w => item.title.includes(w) || body.includes(w))) return true;
           if (tier === 'C') return C_TIER_FALLBACK_KEYWORDS.some(w => item.title.includes(w));
-          // 스파크랩 대표자명(김유진·김호민·이한주): 문맥어 반드시 포함돼야 통과 (동명이인 방지)
-          if (isSparkLabsPerson && contextList.length > 0) return contextList.some(w => item.title.includes(w) || body.includes(w));
-          if (isSparkLabsPerson && contextList.length === 0) return false;
+          // 스파크랩 대표자명(김유진·김호민·이한주): 이름이 토큰으로 실제 등장 + 문맥어까지 있어야 통과.
+          // (문맥어만 보고 이름 자체는 확인 안 하던 버그로, "대표"처럼 흔한 문맥어 하나 때문에
+          // 본문에 이름이 아예 없는 무관한 기사까지 통과한 사고가 있었음 — 2026-07-28)
+          if (isSparkLabsPerson) {
+            const nameMatches = matchesAsToken(item.title, target.primaryKeyword) || matchesAsToken(body, target.primaryKeyword);
+            if (!nameMatches) return false;
+            return contextList.length > 0 && contextList.some(w => item.title.includes(w) || body.includes(w));
+          }
           return isRelevant({ title: item.title, body: bodyMap.get(item.link)?.text, primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, excludeWords: target.excludeWords, contextWords: target.contextWords, category: target.category, link: item.link, source: item.source });
         })
         .map<RawArticle>(item => ({
