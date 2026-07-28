@@ -219,16 +219,23 @@ export function filterReason(a: RelevanceInput): FilterReason | null {
 
   // 회사명 매칭은 지정 카테고리에만 적용 (그 외/미상은 스킵 — 오탐 방지)
   // 강한 식별자(회사명·영문명·주키워드)가 제목 또는 본문에 독립 토큰으로 등장해야 통과.
-  // helperKeywords(대표자명 등)만 있는 기사는 동명이인(야구선수 등) 오통과 방지를 위해 제외.
+  // helperKeywords(대표자명·별칭 등)만 있는 기사는 동명이인 오통과 방지를 위해 제외 —
+  // 단, helperKeywords 중 강한 식별자의 단순 표기 변형(띄어쓰기 차이 등. 예: "스파크랩파트너스"
+  // ↔ "스파크랩 파트너스")은 사실상 같은 식별자이므로 강한 식별자와 동급으로 취급한다.
   const applyNameMatch = a.category != null && NAME_MATCH_CATEGORIES.has(a.category);
   if (applyNameMatch) {
-    // 강한 식별자(회사명·영문명·주키워드) + 팀이 큐레이션한 보조 식별자(서비스명·별칭·대표자명 등 helperKeywords).
-    // 예: 서비스명 '약올려'만 제목에 있고 회사명 '룩인사이트'는 없는 기사도 포폴사로 인정.
-    const keys = [...strongKeys(a), ...splitCsv(a.helperKeywords)].filter(k => k.length >= 2);
+    const strong = strongKeys(a);
+    const strongNormalized = new Set(strong.map(k => k.replace(/\s+/g, '')));
+    const helpers = splitCsv(a.helperKeywords).filter(k => k.length >= 2);
+    // 표기 변형(공백 차이만 있고 나머지는 동일)은 강한 식별자에 합류, 진짜 별칭/대표자명만 보조로 남김.
+    const variantHelpers = helpers.filter(h => strongNormalized.has(h.replace(/\s+/g, '')));
+    const keys = [...strong, ...variantHelpers];
     if (keys.length > 0) {
       const inTitle = keys.some(k => matchesAsToken(title, k));
       // 본문 매칭은 "직접 언급"만 인정 — 참여기관 나열문의 항목 하나일 뿐인 경우는 제외.
       const inBody = body.length > 0 && keys.some(k => matchesAsDirectMention(body, k));
+      // 강한 식별자(회사명 자체)가 전혀 없으면, 진짜 보조 식별자(대표자명·별칭)만 있어도 불통과.
+      // 예: 대표자명 "버나드문"만 있고 "스파크랩 그룹"/"SparkLabs Group" 자체는 없는 기사는 제외.
       if (!inTitle && !inBody) return 'irrelevant';
     }
   }
