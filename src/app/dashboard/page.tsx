@@ -286,10 +286,10 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     const keys = map.get(a.matchedKeyword) ?? [a.matchedKeyword];
     return keys.some(k => matchesAsToken(a.title, k));
   };
-  // KPI 카드("기사 제목에 '스파크랩'이 언급된 건수")와 실제로 아래 패널에 표시되는 기사 수가
-  // 어긋나지 않도록, DB count가 아니라 매체별 노출 분포/톤 분석과 동일한 필터를 적용한 값을 사용.
-  // (카테고리가 'sparklabs_self'로 분류돼도 제목이 아닌 본문에서만 매칭된 기사는 여기서 제외됨)
-  const sparklabsCountFiltered = sparklabsArticles.filter(notNoise).filter(passesName).length;
+  // KPI 카드("기사 제목에 '스파크랩'이 언급된 건수")·매체별 노출 분포·톤 분석 세 곳이 항상 같은
+  // 숫자를 보도록, sparklabsWhere로 가져온 sparklabsArticles를 그대로(추가 필터 없이) 공통 기준으로 사용.
+  // (요청에 따라 passesName 제목-토큰 재검증을 뺀 상태 — 동명이인·부분일치 오탐이 섞일 수 있음을 감안한 결정)
+  const sparklabsCountFiltered = sparklabsArticles.length;
   // 중복 기사 제거: 제목 정규화 키 또는 동일 URL 기준으로 대표 1건만 (articles는 우선순위 desc 정렬 → 대표=상위)
   const dedupeSeen = new Set<string>();
   const cleanedArticles = articles
@@ -399,9 +399,9 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     selectedCompany: company,
     selectedCompanyName,
     companyArticles: enrichedCompanyArticles,
-    // 매체별 노출 분포 — 아래 톤 분석(toneArticles)과 반드시 같은 범위(노이즈 제외·이름 매치)로 집계해야
-    // "매체별 합계"와 "톤 분석 총합"이 서로 어긋나지 않는다.
-    sources: sourcesFromArticles(sparklabsArticles.filter(notNoise).filter(passesName)),
+    // 매체별 노출 분포 — 아래 톤 분석(toneArticles)과 반드시 같은 범위로 집계해야
+    // "매체별 합계"와 "톤 분석 총합"이 서로 어긋나지 않는다. (passesName 제목-토큰 재검증 없음)
+    sources: sourcesFromArticles(sparklabsArticles),
     tones: toneGroups.map(t => ({ tone: t.tone ?? 'NEUTRAL', count: t._count._all })),
     pitches: dedupedPitches,
     crises,
@@ -417,7 +417,7 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     portfolioTop,
     portfolioNegatives,
     portfolioPositives,
-    toneArticles: sparklabsArticles.filter(notNoise).filter(passesName).map(a => ({
+    toneArticles: sparklabsArticles.map(a => ({
       id: a.id,
       title: a.title,
       link: a.link,
