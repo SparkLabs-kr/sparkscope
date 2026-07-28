@@ -186,6 +186,20 @@ function strongKeys(a: RelevanceInput): string[] {
 }
 
 /**
+ * 강한 식별자(mainKeys: primaryKeyword·name·englishName + 그 표기 변형 helperKeywords)와
+ * 진짜 보조 식별자(trueHelpers: 대표자명·별칭 등, 강한 식별자와 함께 있어야만 유효)를 분리.
+ * filterReason과 소급 정리 스크립트(scripts/cleanup-helper-only-matches.ts)가 공유.
+ */
+export function resolveMainKeys(a: RelevanceInput): { mainKeys: string[]; trueHelpers: string[] } {
+  const strong = strongKeys(a);
+  const strongNormalized = new Set(strong.map(k => k.replace(/\s+/g, '')));
+  const helpers = splitCsv(a.helperKeywords).filter(k => k.length >= 2);
+  const variantHelpers = helpers.filter(h => strongNormalized.has(h.replace(/\s+/g, '')));
+  const trueHelpers = helpers.filter(h => !strongNormalized.has(h.replace(/\s+/g, '')));
+  return { mainKeys: [...strong, ...variantHelpers], trueHelpers };
+}
+
+/**
  * 필터 위반 사유 반환 (통과 시 null).
  * 1) 대상별 제외어 → exclude_word
  * 2) 문맥어(contextWords) 미포함 → missing_context
@@ -224,12 +238,7 @@ export function filterReason(a: RelevanceInput): FilterReason | null {
   // ↔ "스파크랩 파트너스")은 사실상 같은 식별자이므로 강한 식별자와 동급으로 취급한다.
   const applyNameMatch = a.category != null && NAME_MATCH_CATEGORIES.has(a.category);
   if (applyNameMatch) {
-    const strong = strongKeys(a);
-    const strongNormalized = new Set(strong.map(k => k.replace(/\s+/g, '')));
-    const helpers = splitCsv(a.helperKeywords).filter(k => k.length >= 2);
-    // 표기 변형(공백 차이만 있고 나머지는 동일)은 강한 식별자에 합류, 진짜 별칭/대표자명만 보조로 남김.
-    const variantHelpers = helpers.filter(h => strongNormalized.has(h.replace(/\s+/g, '')));
-    const keys = [...strong, ...variantHelpers];
+    const { mainKeys: keys } = resolveMainKeys(a);
     if (keys.length > 0) {
       const inTitle = keys.some(k => matchesAsToken(title, k));
       // 본문 매칭은 "직접 언급"만 인정 — 참여기관 나열문의 항목 하나일 뿐인 경우는 제외.
