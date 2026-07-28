@@ -135,7 +135,7 @@ ${EMAIL_CSS}
       <span class="editor-byline">— 커뮤니케이션본부</span>
     </div>
     <div class="stats">
-      <div class="stat"><div class="stat-value">${pStat.sparklabsSelf}</div><div class="stat-label">스파크랩 직접 언급</div></div>
+      ${pStat.sparklabsSelf > 0 ? `<div class="stat"><div class="stat-value">${pStat.sparklabsSelf}</div><div class="stat-label">스파크랩 직접 언급</div></div>` : ''}
       <div class="stat"><div class="stat-value">${pStat.portfolio}</div><div class="stat-label">포트폴리오사 노출</div>${pStat.portfolioTrend ? `<div class="stat-trend">${escape(pStat.portfolioTrend)}</div>` : ''}</div>
       <div class="stat"><div class="stat-value">${pStat.competitor}</div><div class="stat-label">AC·VC 동향</div></div>
     </div>
