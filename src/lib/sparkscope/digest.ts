@@ -181,6 +181,13 @@ ${EMAIL_CSS}
     ${data.competitorArticles.map(a => renderArticle(a, {})).join('\n')}
   </div>` : ''}
 
+  ${data.industryArticles.length > 0 ? `
+  <div class="section">
+    <div class="section-label">🚀 스타트업계 뉴스</div>
+    ${catSummary(data.categorySummaries?.industry_trend)}
+    ${data.industryArticles.map(a => renderArticle(a, {})).join('\n')}
+  </div>` : ''}
+
   <div class="footer">
     <div class="footer-cta-text">더 많은 기사와 업계 동향은 대시보드에서 확인하실 수 있습니다.</div>
     <a href="https://sparkscope.vercel.app/dashboard?from=2026-04-09&amp;to=2026-07-08" class="footer-cta-button">SparkScope 대시보드 바로가기</a>

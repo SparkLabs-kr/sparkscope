@@ -89,7 +89,11 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
 
   const max = opts.maxKeywordsPerCategory ?? Infinity;
   const limited: Target[] = [];
-  for (const [, list] of grouped) limited.push(...list.slice(0, max));
+  // portfolio_company는 카테고리당 캡을 적용하지 않는다 — 297개(Live+Exit) 중 가나다순 30개만
+  // 매번 조회되고 나머지는 영영 검색되지 않던 문제(2026-07-28)를 막기 위함.
+  for (const [category, list] of grouped) {
+    limited.push(...list.slice(0, category === 'portfolio_company' ? Infinity : max));
+  }
 
   console.log(`[collector] querying ${limited.length} targets across ${grouped.size} categories (Naver: ${naverEnabled() ? 'ON' : 'OFF'})`);
 
