@@ -102,44 +102,57 @@ export async function runDailyDigest(opts: RunOptions = {}) {
         existingByKey.set(`${e.source}::${normalizeTitleKey(e.title)}`, e.link);
       }
 
+      // 기사 하나가 잘못돼도(NaN 필드·URL 과다 길이 등 예측 못한 제약 위반) 그날 수집분
+      // 전체가 통째로 유실되지 않도록 건별로 격리. 실패는 기록만 하고 나머지는 계속 저장.
+      // (2026-07-10: try/catch 없이 돌다가 priorityScore NaN·link 인덱스 크기 초과로
+      //  루프 중간에 예외가 나서 그날 수집분이 전부 저장 안 된 사고가 있었음)
+      let saveFailures = 0;
       for (const a of analyzed) {
         const dedupeKey = `${a.source}::${normalizeTitleKey(a.title)}`;
         const targetLink = existingByKey.get(dedupeKey) ?? a.link;
-        await prisma.article.upsert({
-          where: { link: targetLink },
-          create: {
-            title: a.title,
-            link: a.link,
-            source: a.source,
-            pubDate: a.pubDate,
-            matchedKeyword: a.matchedKeyword,
-            category: a.category,
-            importance: a.importance,
-            tone: a.tone,
-            oneLiner: a.oneLiner,
-            ourTake: a.ourTake,
-            relatedCompanies: JSON.stringify(a.relatedCompanies),
-            pitchScore: a.pitchScore,
-            pitchTopic: a.pitchTopic,
-            riskFlag: a.riskFlag,
-            isNoise: a.isNoise,
-            noiseReason: a.noiseReason,
-            priorityScore: a.priorityScore,
-            analyzedAt: new Date(),
-          },
-          update: {
-            importance: a.importance,
-            tone: a.tone,
-            oneLiner: a.oneLiner,
-            ourTake: a.ourTake,
-            relatedCompanies: JSON.stringify(a.relatedCompanies),
-            pitchScore: a.pitchScore,
-            pitchTopic: a.pitchTopic,
-            riskFlag: a.riskFlag,
-            priorityScore: a.priorityScore,
-            analyzedAt: new Date(),
-          },
-        });
+        try {
+          await prisma.article.upsert({
+            where: { link: targetLink },
+            create: {
+              title: a.title,
+              link: a.link,
+              source: a.source,
+              pubDate: a.pubDate,
+              matchedKeyword: a.matchedKeyword,
+              category: a.category,
+              importance: a.importance,
+              tone: a.tone,
+              oneLiner: a.oneLiner,
+              ourTake: a.ourTake,
+              relatedCompanies: JSON.stringify(a.relatedCompanies),
+              pitchScore: a.pitchScore,
+              pitchTopic: a.pitchTopic,
+              riskFlag: a.riskFlag,
+              isNoise: a.isNoise,
+              noiseReason: a.noiseReason,
+              priorityScore: a.priorityScore,
+              analyzedAt: new Date(),
+            },
+            update: {
+              importance: a.importance,
+              tone: a.tone,
+              oneLiner: a.oneLiner,
+              ourTake: a.ourTake,
+              relatedCompanies: JSON.stringify(a.relatedCompanies),
+              pitchScore: a.pitchScore,
+              pitchTopic: a.pitchTopic,
+              riskFlag: a.riskFlag,
+              priorityScore: a.priorityScore,
+              analyzedAt: new Date(),
+            },
+          });
+        } catch (e: any) {
+          saveFailures++;
+          console.error(`[runner] article save failed, skipping "${a.title}" (${a.link}):`, e?.message ?? e);
+        }
+      }
+      if (saveFailures > 0) {
+        console.error(`[runner] ${saveFailures}/${analyzed.length} articles failed to save this run`);
       }
     }
 

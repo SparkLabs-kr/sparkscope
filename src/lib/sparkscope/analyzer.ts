@@ -45,12 +45,22 @@ const POSITIVE_HINTS = ['투자 유치', '상장', '협업', '계약', '돌파',
 // 제목이 중립이어도 본문에 부정/위기 키워드가 이 개수 이상 겹치면 "압도적으로 부정적"으로 보고 NEGATIVE로 override.
 const HOLISTIC_NEGATIVE_THRESHOLD = 3;
 const VALID_TONES: Tone[] = ['POSITIVE', 'NEUTRAL', 'NEGATIVE', 'MIXED'];
+const VALID_IMPORTANCE: Importance[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
 
 // LLM이 소문자("negative")나 공백 섞인 값을 줘도 정규화해서 인식. 매치 안 되면 undefined(호출부에서 기본값 처리).
 function normalizeTone(raw: unknown): Tone | undefined {
   if (typeof raw !== 'string') return undefined;
   const upper = raw.trim().toUpperCase();
   return (VALID_TONES as string[]).includes(upper) ? (upper as Tone) : undefined;
+}
+
+// tone과 동일한 이유로 검증 필요: importance가 스키마 밖 값(오타·소문자·누락)이면
+// computePriorityScore의 { CRITICAL, HIGH, MEDIUM, LOW } 조회가 undefined를 반환해
+// priorityScore가 NaN이 되고, DB 저장(Int 컬럼) 시 전체 배치가 죽는 사고로 이어짐(2026-07-10 실제 발생).
+function normalizeImportance(raw: unknown): Importance | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const upper = raw.trim().toUpperCase();
+  return (VALID_IMPORTANCE as string[]).includes(upper) ? (upper as Importance) : undefined;
 }
 
 export async function analyzeArticles(raw: RawArticle[], portfolioUniverse: string[], trendingTopics: string[]): Promise<AnalyzedArticle[]> {
@@ -132,9 +142,13 @@ async function classifyBatch(articles: Array<RawArticle & { _id: string }>): Pro
       const text = await chatComplete(CLASSIFIER_MODEL, HAIKU_CLASSIFIER_SYSTEM, buildHaikuClassifierUserMessage(input), 2000);
       const parsed = JSON.parse(extractJson(text));
       for (const item of parsed) {
+        const importance = normalizeImportance(item.importance);
+        if (item.importance !== undefined && importance === undefined) {
+          console.error('[analyzer] LLM returned unrecognized importance value:', item.importance);
+        }
         results.set(item.id, {
           category: item.category,
-          importance: item.importance,
+          importance: importance ?? 'MEDIUM',
           isNoise: item.isNoise,
           noiseReason: item.noiseReason,
           needsDeepAnalysis: item.needsDeepAnalysis,
@@ -306,8 +320,10 @@ export function heuristicTone(title: string, body?: string): Tone {
 }
 
 function computePriorityScore(article: RawArticle, importance: Importance, tone: Tone): number {
-  let score = article.basePriority;
-  const impBonus = { CRITICAL: 30, HIGH: 20, MEDIUM: 10, LOW: 0 }[importance];
+  // ?? 0 안전망: importance가 검증을 뚫고 스키마 밖 값으로 들어와도 NaN 대신 0점 처리.
+  // (NaN이 DB Int 컬럼에 들어가면 upsert가 예외를 던져 그 회차 저장이 전부 실패했던 사고가 있었음)
+  let score = article.basePriority || 0;
+  const impBonus = { CRITICAL: 30, HIGH: 20, MEDIUM: 10, LOW: 0 }[importance] ?? 0;
   score += impBonus;
   // 메이저 매체 가중치
   const major = ['동아일보', '조선비즈', 'Chosunbiz', '매일경제', '한국경제', '전자신문', '디지털데일리', '디지털타임스', '아시아투데이'];
