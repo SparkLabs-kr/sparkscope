@@ -222,8 +222,12 @@ async function safeSource(fn: () => Promise<SourceItem[]>, keyword: string, labe
   }
 }
 
+// when:7d 없이 검색하면 구글이 "관련성"(사실상 인기·과거 조회수) 순으로 최대 100건만 주는데,
+// "스파크랩"처럼 예전 기사가 많이 쌓인 키워드는 최근 기사가 그 100건 안에도 못 들어가 통째로
+// 누락됨(직접 확인: when:7d 없이는 100건이 전부 작년 11월~올해 5월 기사, 최근 1주일치는 0건).
+// 7d로 넉넉히 받아오고, 실제 보존 기간은 뒤의 filterAndDedupe(daysBack)가 다시 컷한다.
 async function fetchGoogleNews(keyword: string): Promise<SourceItem[]> {
-  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(keyword)}&hl=ko&gl=KR&ceid=KR:ko`;
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(`${keyword} when:7d`)}&hl=ko&gl=KR&ceid=KR:ko`;
   const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 SparkScope/0.1' }, cache: 'no-store' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
