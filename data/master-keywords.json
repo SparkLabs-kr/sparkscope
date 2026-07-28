@@ -15,7 +15,7 @@
     "category": "sparklabs_self",
     "status": "ACTIVE",
     "primaryKeyword": "스파크랩 그룹",
-    "helperKeywords": "버나드문, 김호민",
+    "helperKeywords": "버나드문, 김호민, 스파크랩그룹, 스파크 애퀴지션, Spark Acquisition",
     "excludeWords": null,
     "notes": "글로벌 그룹"
   },
@@ -440,6 +440,7 @@
     "primaryKeyword": "컴업",
     "helperKeywords": null,
     "excludeWords": null,
+    "contextWords": "COMEUP, 스타트업, 창업, 코엑스",
     "notes": "Korea"
   },
   {
@@ -450,6 +451,7 @@
     "primaryKeyword": "팁스",
     "helperKeywords": null,
     "excludeWords": null,
+    "contextWords": "TIPS, 스타트업, 창업, 중소벤처기업부, R&D",
     "notes": "Korea"
   },
   {
@@ -530,6 +532,7 @@
     "primaryKeyword": "부산",
     "helperKeywords": null,
     "excludeWords": null,
+    "contextWords": "스타트업, 창업, 액셀러레이터, 벤처투자, 테크노파크",
     "notes": "Korea"
   },
   {
@@ -540,6 +543,7 @@
     "primaryKeyword": "벤처",
     "helperKeywords": null,
     "excludeWords": null,
+    "contextWords": "벤처투자, 벤처캐피탈, 벤처기업, 창업, 스타트업",
     "notes": "Korea"
   },
   {
@@ -650,6 +654,7 @@
     "primaryKeyword": "상장",
     "helperKeywords": null,
     "excludeWords": null,
+    "contextWords": "스타트업, 벤처기업, 유니콘, 예비유니콘, 코스닥",
     "notes": "Korea"
   },
   {
@@ -1145,7 +1150,7 @@
     "primaryKeyword": "배젠",
     "helperKeywords": "배준 COPD신약",
     "excludeWords": null,
-    "contextWords": null,
+    "contextWords": "Baegen, 배준, COPD, 신약, 한의학, 만성질환",
     "notes": "바이오/의료 벤처기업, 한의학 처방을 과학적으로 분석하여 만성질환 합성신약 개발"
   },
   {
@@ -1158,7 +1163,7 @@
     "primaryKeyword": "발란",
     "helperKeywords": "최형록 명품커머스",
     "excludeWords": null,
-    "contextWords": null,
+    "contextWords": "Balaan, 최형록, 명품, 커머스, 플랫폼",
     "notes": "명품 커머스 플랫폼"
   },
   {
@@ -1288,7 +1293,7 @@
     "primaryKeyword": "부톡",
     "helperKeywords": "이훈구 부동산",
     "excludeWords": null,
-    "contextWords": null,
+    "contextWords": "BOOTALK, 이훈구, 부동산, 매물, 중개",
     "notes": "AI·빅데이터 기반 부동산 매물 추천·중개 플랫폼 (서울대 공간정보연구실 출신)"
   },
   {
@@ -2185,7 +2190,7 @@
     "primaryKeyword": "갭텍",
     "helperKeywords": "김은학 온실가스",
     "excludeWords": null,
-    "contextWords": null,
+    "contextWords": "GAPT, 김은학, 온실가스, ESG, CCUS, 반도체",
     "notes": "AI·ESG. 반도체 특수가스·대기오염물질 저감 및 CCUS 온실가스 저감 기술·장비"
   },
   {
@@ -2198,7 +2203,7 @@
     "primaryKeyword": "젤코",
     "helperKeywords": "마정수 연질캡슐",
     "excludeWords": null,
-    "contextWords": null,
+    "contextWords": "GELKO, 마정수, 연질캡슐, 제약, 건강기능식품",
     "notes": "제약, 건강기능식품, 화장품 산업을 위해 연질캡슐 생산 자동화 장비를 전문으로 개발 및 제조하는 혁신 스타트업"
   },
   {
@@ -2289,7 +2294,7 @@
     "primaryKeyword": "긴트",
     "helperKeywords": "김용현 자율주행",
     "excludeWords": null,
-    "contextWords": null,
+    "contextWords": "GINT, 김용현, 자율주행, 농기계, 플루바",
     "notes": "농기계 자율주행 스타트업. 탈부착형 자율주행 키트 '플루바 오토' 개발, 농업·방산·건설 분야 확장"
   },
   {
@@ -2757,7 +2762,7 @@
     "primaryKeyword": "쿠딩",
     "helperKeywords": "류정빈 크로스보더",
     "excludeWords": null,
-    "contextWords": null,
+    "contextWords": "Kooding, 류정빈, 크로스보더, 이커머스, 패션",
     "notes": "글로벌 패션 크로스보더 이커머스. 국내 로컬 브랜드를 해외 소비자와 연결하는 마켓플레이스"
   },
   {
@@ -2965,7 +2970,7 @@
     "primaryKeyword": "리빗",
     "helperKeywords": "이정민 온실가스",
     "excludeWords": null,
-    "contextWords": null,
+    "contextWords": "LIVIT, 이정민, 탄소, 온실가스, 배출권",
     "notes": "탄소 관리 솔루션 기업. 기업 온실가스 배출량 관리 및 탄소 감축 자금 매칭 서비스"
   },
   {
@@ -3394,7 +3399,7 @@
     "primaryKeyword": "엔씽",
     "helperKeywords": "김혜연 스마트팜",
     "excludeWords": null,
-    "contextWords": null,
+    "contextWords": "N.Thing, 김혜연, 스마트팜, 수직농장",
     "notes": "스마트팜 기업. 컨테이너형 수직농장 및 IoT 기반 농업 밸류체인 혁신 솔루션"
   },
   {
@@ -3693,7 +3698,7 @@
     "primaryKeyword": "펄핏",
     "helperKeywords": "이선용 신발핏테크",
     "excludeWords": null,
-    "contextWords": null,
+    "contextWords": "Perfit, 이선용, 핏테크, 신발, 사이즈",
     "notes": "핏테크(Fit-tech) 기업. AI 3D 스캐닝 기반 신발 사이즈 추천 솔루션"
   },
   {
@@ -4499,7 +4504,7 @@
     "primaryKeyword": "티킷",
     "helperKeywords": "정효섭 티켓팅",
     "excludeWords": null,
-    "contextWords": null,
+    "contextWords": "TKIT, 정효섭, 티켓팅, 티켓",
     "notes": "누구나 이벤트를 홍보하고 티켓을 만들어 판매할 수 있는 모바일 바이럴 티켓팅 플랫폼 운영."
   },
   {
@@ -4850,7 +4855,7 @@
     "primaryKeyword": "왓섭",
     "helperKeywords": "김준태 구독관리",
     "excludeWords": null,
-    "contextWords": null,
+    "contextWords": "Whatssub, 김준태, 구독, 핀테크",
     "notes": "금융 데이터를 자동으로 분석해 숨은 구독 지출을 찾아주고, 터치 한 번으로 해지·관리할 수 있는 AI 기반 핀테크 플랫폼"
   },
   {
@@ -4863,7 +4868,7 @@
     "primaryKeyword": "웰프",
     "helperKeywords": "라술로프 고객상담",
     "excludeWords": null,
-    "contextWords": null,
+    "contextWords": "Whelp, 라술로프, 고객상담, 커뮤니케이션",
     "notes": "세일즈 및 고객관리 직원들이 여러 대화 채널의 고객과 한곳에서 소통할 수 있도록 돕는 커뮤니케이션 기업"
   },
   {
