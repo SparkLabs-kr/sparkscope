@@ -6,7 +6,7 @@
 import { parseStringPromise } from 'xml2js';
 import { prisma } from '@/lib/prisma';
 import type { RawArticle, Category } from './types';
-import { isRelevant, normalizeTitleKey, matchesAsToken } from './relevance';
+import { isRelevant, normalizeTitleKey, matchesAsToken, matchesAsDirectMention } from './relevance';
 import { isKnownMedia } from './media';
 import { NEGATIVE_KEYWORDS_DATA, CRISIS_KEYWORDS_DATA } from './keywords-data';
 import { scrapeArticleBody, type ScrapedBody } from './scraper';
@@ -89,7 +89,11 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
 
   const max = opts.maxKeywordsPerCategory ?? Infinity;
   const limited: Target[] = [];
-  for (const [, list] of grouped) limited.push(...list.slice(0, max));
+  // portfolio_company는 카테고리당 캡을 적용하지 않는다 — 297개(Live+Exit) 중 가나다순 30개만
+  // 매번 조회되고 나머지는 영영 검색되지 않던 문제(2026-07-28)를 막기 위함.
+  for (const [category, list] of grouped) {
+    limited.push(...list.slice(0, category === 'portfolio_company' ? Infinity : max));
+  }
 
   console.log(`[collector] querying ${limited.length} targets across ${grouped.size} categories (Naver: ${naverEnabled() ? 'ON' : 'OFF'})`);
 
@@ -126,7 +130,7 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
           // (문맥어만 보고 이름 자체는 확인 안 하던 버그로, "대표"처럼 흔한 문맥어 하나 때문에
           // 본문에 이름이 아예 없는 무관한 기사까지 통과한 사고가 있었음 — 2026-07-28)
           if (isSparkLabsPerson) {
-            const nameMatches = matchesAsToken(item.title, target.primaryKeyword) || matchesAsToken(body, target.primaryKeyword);
+            const nameMatches = matchesAsToken(item.title, target.primaryKeyword) || matchesAsDirectMention(body, target.primaryKeyword);
             if (!nameMatches) return false;
             return contextList.length > 0 && contextList.some(w => item.title.includes(w) || body.includes(w));
           }
