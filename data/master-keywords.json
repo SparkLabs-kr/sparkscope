@@ -10,6 +10,16 @@
     "notes": "한국 본사 / 액셀러레이터"
   },
   {
+    "name": "스파크랩 벤처스",
+    "englishName": "SparkLabs Ventures",
+    "category": "sparklabs_self",
+    "status": "ACTIVE",
+    "primaryKeyword": "스파크랩 벤처스",
+    "helperKeywords": "스파크랩벤처스, SparkLabs Ventures",
+    "excludeWords": "스파크, Spark, 랩, Labs",
+    "notes": "누락돼 있던 계열사 — 2026-07-28 추가"
+  },
+  {
     "name": "스파크랩 그룹",
     "englishName": "SparkLabs Group",
     "category": "sparklabs_self",
@@ -35,7 +45,7 @@
     "category": "sparklabs_self",
     "status": "ACTIVE",
     "primaryKeyword": "스파크랩 파트너스",
-    "helperKeywords": "김호민",
+    "helperKeywords": "김호민, 스파크랩파트너스",
     "excludeWords": "스파크, Spark, 랩, Labs",
     "notes": "후속 투자"
   },
@@ -45,7 +55,7 @@
     "category": "sparklabs_self",
     "status": "ACTIVE",
     "primaryKeyword": "스파크랩 타이완",
-    "helperKeywords": "Edgar Chiu",
+    "helperKeywords": "Edgar Chiu, 스파크랩대만, 스파크랩타이완",
     "excludeWords": "스파크, Spark, 랩, Labs",
     "notes": "대만 액셀러레이터"
   },
@@ -338,7 +348,7 @@
     "category": "sparklabs_self",
     "status": "ACTIVE",
     "primaryKeyword": "스파크랩 호주",
-    "helperKeywords": "Malcolm Nutt",
+    "helperKeywords": "Malcolm Nutt, Jonathon Quigley, 스파크랩호주",
     "excludeWords": "스파크, Spark, 랩, Labs",
     "notes": "Australia"
   },
@@ -348,7 +358,7 @@
     "category": "sparklabs_self",
     "status": "ACTIVE",
     "primaryKeyword": "스파크랩 사우디",
-    "helperKeywords": "Ivan Grlic",
+    "helperKeywords": "Ivan Grlic, 스파크랩사우디, 스파크랩아라비아",
     "excludeWords": "스파크, Spark, 랩, Labs",
     "notes": "Saudi"
   },
