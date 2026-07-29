@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { Pool } from 'pg';
+import { Client } from 'pg';
 import Anthropic from '@anthropic-ai/sdk';
 
 export const dynamic = 'force-dynamic';
@@ -26,24 +26,14 @@ export async function GET() {
     results.anthropic = { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 
-  // 3. Fund DB 테스트 (ssl:false / ssl:{rejectUnauthorized:false} 둘 다 시도)
-  const url = process.env.FUND_DB_URL!;
-  const u = new URL(url);
-  const baseConfig = {
-    host: u.hostname,
-    port: parseInt(u.port || '6543'),
-    database: u.pathname.replace('/', ''),
-    user: decodeURIComponent(u.username),
-    password: decodeURIComponent(u.password),
-    max: 1,
-  };
-
-  // ssl: false 로 연결 (Transaction pooler는 SSL 없이도 동작)
+  // 3. Fund DB 테스트 (fund-db.ts와 동일한 방식)
   try {
-    const pool = new Pool({ ...baseConfig, ssl: false });
-    const r = await pool.query(`SELECT COUNT(*) FROM shared_ro.external_funds WHERE investor_name = '미래에셋벤처투자'`);
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+    const client = new Client({ connectionString: process.env.FUND_DB_URL });
+    await client.connect();
+    const r = await client.query(`SELECT COUNT(*) FROM shared_ro.external_funds WHERE investor_name = '미래에셋벤처투자'`);
     results.fundDb = { ok: true, count: r.rows[0].count };
-    await pool.end();
+    await client.end();
   } catch (e: unknown) {
     results.fundDb = { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
