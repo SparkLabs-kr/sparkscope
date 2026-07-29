@@ -74,7 +74,10 @@ export function ArticlesTable({ articles, canScrap = false, emptyText, showCateg
   }
 
   const hasCompanyName = articles.some(a => a.companyName);
-  const clusters = clusterArticles(articles);
+  // 같은 회사(matchedKeyword) + 발행일 3일 이내 + 같은 톤(긍/부정)인 기사만 묶는다.
+  // 몇 달 뒤 같은 회사 기사가 우연히 묶이는 것과, 그날의 악재가 다른 긍정 기사 더미에
+  // 묻혀 안 보이는 것(톤이 다르면 안 묶음) 둘 다 방지.
+  const clusters = clusterArticles(articles, { maxDateDiffDays: 3 });
 
   // 펼쳐진 클러스터(대표 기사 id) 집합 — "+N개 매체 더보기" 토글 상태.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
