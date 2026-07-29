@@ -1,4 +1,7 @@
+'use client';
+import { useState } from 'react';
 import { ScrapStar } from '@/components/ScrapStar';
+import { clusterArticles } from '@/lib/sparkscope/cluster';
 
 interface Article {
   id: string;
@@ -71,6 +74,15 @@ export function ArticlesTable({ articles, canScrap = false, emptyText, showCateg
   }
 
   const hasCompanyName = articles.some(a => a.companyName);
+  const clusters = clusterArticles(articles);
+
+  // 펼쳐진 클러스터(대표 기사 id) 집합 — "+N개 매체 더보기" 토글 상태.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = (id: string) => setExpanded(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   return (
     <>
@@ -98,10 +110,11 @@ export function ArticlesTable({ articles, canScrap = false, emptyText, showCateg
             </tr>
           </thead>
           <tbody>
-            {articles.map(a => {
+            {clusters.map(({ rep: a, others }) => {
               const cat = CATEGORY_BADGE[a.category] ?? { label: a.category, cls: 'bg-gray-100' };
               const date = new Date(a.pubDate);
               const statusCls = STATUS_BADGE[a.portfolioStatus ?? ''];
+              const isOpen = expanded.has(a.id);
               return (
                 <tr key={a.id} className="border-b border-spark-border/60 hover:bg-spark-subtle transition-colors">
                   {canScrap && <td className="px-2 py-3 text-center"><ScrapStar id={a.id} initial={!!a.isScrapped} /></td>}
@@ -119,8 +132,32 @@ export function ArticlesTable({ articles, canScrap = false, emptyText, showCateg
                       )}
                       {a.titleOnlyFallback && <TitleOnlyBadge />}
                     </span>
+                    {others.length > 0 && (
+                      <div className="mt-1">
+                        <button
+                          type="button"
+                          onClick={() => toggle(a.id)}
+                          className="text-[11px] font-semibold text-spark-purple hover:underline"
+                        >
+                          {isOpen ? '접기 ▲' : `+${others.length}개 매체 더보기 ▼`}
+                        </button>
+                        {isOpen && (
+                          <div className="mt-1 space-y-1 border-l-2 border-spark-border pl-2">
+                            {others.map(o => {
+                              const od = new Date(o.pubDate);
+                              const href = hasRealLink(o.link) ? o.link : searchFallbackUrl(o.title, o.source);
+                              return (
+                                <a key={o.id} href={href} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-gray-500 hover:text-spark-purple">
+                                  {o.source} · {od.getMonth() + 1}.{od.getDate()}
+                                </a>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </td>
-                  <td className="px-3 py-3 text-xs text-gray-600">{a.source}</td>
+                  <td className="px-3 py-3 text-xs text-gray-600">{a.source}{others.length > 0 && ` 외 ${others.length}`}</td>
                   <td className={`px-3 py-3 text-center text-xs ${IMP_STYLE[a.importance ?? 'LOW']}`}>{a.importance === 'HIGH' || a.importance === 'CRITICAL' ? '높음' : a.importance === 'MEDIUM' ? '중' : '낮음'}</td>
                   <td className="px-3 py-3 text-center text-xs font-bold text-amber-700">{a.pitchScore && a.pitchScore >= 60 ? a.pitchScore : '—'}</td>
                 </tr>
@@ -132,10 +169,11 @@ export function ArticlesTable({ articles, canScrap = false, emptyText, showCateg
 
       {/* 모바일 카드 리스트 (md 미만) */}
       <div className="md:hidden space-y-3">
-        {articles.map(a => {
+        {clusters.map(({ rep: a, others }) => {
           const cat = CATEGORY_BADGE[a.category] ?? { label: a.category, cls: 'bg-gray-100' };
           const date = new Date(a.pubDate);
           const statusCls = STATUS_BADGE[a.portfolioStatus ?? ''];
+          const isOpen = expanded.has(a.id);
           return (
             <div key={a.id} className="border border-spark-border/60 rounded-lg p-3.5 bg-white hover:shadow-sm transition-shadow">
               {/* 상단: 분류 배지 + 날짜 + 별표 */}
@@ -163,9 +201,34 @@ export function ArticlesTable({ articles, canScrap = false, emptyText, showCateg
               )}
               {a.titleOnlyFallback && <div className="mb-2"><TitleOnlyBadge /></div>}
 
+              {others.length > 0 && (
+                <div className="mb-2">
+                  <button
+                    type="button"
+                    onClick={() => toggle(a.id)}
+                    className="text-[11px] font-semibold text-spark-purple hover:underline"
+                  >
+                    {isOpen ? '접기 ▲' : `+${others.length}개 매체 더보기 ▼`}
+                  </button>
+                  {isOpen && (
+                    <div className="mt-1 space-y-1 border-l-2 border-spark-border pl-2">
+                      {others.map(o => {
+                        const od = new Date(o.pubDate);
+                        const href = hasRealLink(o.link) ? o.link : searchFallbackUrl(o.title, o.source);
+                        return (
+                          <a key={o.id} href={href} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-gray-500 hover:text-spark-purple">
+                            {o.source} · {od.getMonth() + 1}.{od.getDate()}
+                          </a>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* 하단: 매체 + 중요도 + 피칭 */}
               <div className="flex items-center justify-between gap-2 text-xs text-gray-600">
-                <span className="truncate">{a.source}</span>
+                <span className="truncate">{a.source}{others.length > 0 && ` 외 ${others.length}`}</span>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
                   {(a.importance === 'HIGH' || a.importance === 'CRITICAL') && <span className={IMP_STYLE[a.importance]}>높</span>}
                   {a.pitchScore && a.pitchScore >= 60 && <span className="text-amber-700 font-bold">{a.pitchScore}점</span>}

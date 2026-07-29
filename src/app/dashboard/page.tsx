@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { ArticleListView } from '@/components/ArticleListView';
 import { PortfolioFilter } from '@/components/PortfolioFilter';
 import { ToneBreakdown } from '@/components/ToneBreakdown';
+import { CrisisPanel } from '@/components/CrisisPanel';
 import { TrendChart } from '@/components/TrendChart';
 import { MediaPanel } from '@/components/MediaPanel';
 import { DateRangePicker } from '@/components/DateRangePicker';
@@ -13,8 +14,8 @@ import { OPEN_ACCESS } from '@/lib/flags';
 import { canScrap as canScrapEmail } from '@/lib/scrap';
 import { normalizeSource } from '@/lib/sparkscope/media';
 import { matchesAsToken, isBlockedNoise, normalizeTitleKey } from '@/lib/sparkscope/relevance';
-import { NEGATIVE_KEYWORDS, detectCrises, crisisFallbackCause, detectSpikes, type ArticleLite, type CrisisCard, type SpikeCard } from '@/lib/sparkscope/insights';
-import { summarizeCrisisCause } from '@/lib/sparkscope/analyzer';
+import { NEGATIVE_KEYWORDS, detectCrises, crisisFallbackCause, detectSpikes, type ArticleLite, type SpikeCard } from '@/lib/sparkscope/insights';
+import { summarizeCrisisCause, summarizeCrisisOverview } from '@/lib/sparkscope/analyzer';
 import { summarizeCompetitorTrend, summarizeOverallTrend } from '@/lib/sparkscope/competitor-insights';
 import { CompetitorPanel, type CompetitorStatView } from '@/components/CompetitorPanel';
 import { RISK_FLAGS } from '@/lib/sparkscope/risk-flags';
@@ -39,6 +40,8 @@ const MIN_DATE = '2023-11-01';
 const TREND_TOP_N = 6;
 // 실시간 위기 감지: "급증" 판단 시간 창(일). 수집 주기(월·수·금)를 고려한 최근 3일.
 const CRISIS_WINDOW_DAYS = 3;
+// 위기 카드가 이 개수를 넘으면 개별 카드 대신 AI 종합요약 + "더보기"로 접어서 공간을 아낀다.
+const CRISIS_SUMMARY_THRESHOLD = 2;
 
 // 대시보드 집계에서 제외할 업계 키워드 (industry_trend category)
 const INDUSTRY_TREND_KEYWORDS = [
@@ -322,6 +325,10 @@ async function loadDashboardData(from: string, to: string, company?: string) {
       cause: (await summarizeCrisisCause(c.company, c.titles)) ?? crisisFallbackCause(c.reasonKeywords),
     })),
   );
+  // 위기 카드가 많을 때만 상단에 종합요약 — 1~2건이면 카드 자체가 이미 짧아 요약이 불필요.
+  const crisisOverview = crises.length > CRISIS_SUMMARY_THRESHOLD
+    ? await summarizeCrisisOverview(crises.map(c => ({ company: c.company, negCount: c.negCount, cause: c.cause })))
+    : null;
 
   // 포트폴리오사 선택 필터: 드롭다운 목록 + (선택 시) 해당 회사의 기간 내 기사 전체.
   const portfolioNames = portfolioTargets
@@ -405,6 +412,7 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     tones: toneGroups.map(t => ({ tone: t.tone ?? 'NEUTRAL', count: t._count._all })),
     pitches: dedupedPitches,
     crises,
+    crisisOverview,
     spikes: detectSpikes(spikeRecent as ArticleLite[], spikeBaseline, 3, 60),
     trendData: buildTrendData(trendArticles, since, until),
     compare: {
@@ -539,22 +547,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         <DateRangePicker key={`${range.from}_${range.to}`} from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())} company={data.selectedCompany} tab={tab} />
       </div>
 
-      {/* 실시간 위기 감지 — 위기 없을 땐 '정상' 상태를 명시해 기능이 살아있음을 표시 */}
-      <div className="mb-6 space-y-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-red-700">🚨 실시간 위기 감지</span>
-          <InfoTip text={`최근 ${CRISIS_WINDOW_DAYS}일간 포트폴리오사별 부정 논조 기사(부정 키워드·부정 톤)를 모아, 2건 이상 급증한 회사를 감지합니다.\n원인은 AI가 실제 기사 제목에서 요약합니다.`} />
-        </div>
-        {data.crises.length > 0 ? (
-          data.crises.map(c => <CrisisCardView key={c.company} c={c} />)
-        ) : (
-          <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
-            🟢 최근 {CRISIS_WINDOW_DAYS}일 내 감지된 포트폴리오 위기가 없습니다.
-            <span className="text-green-600"> 부정 기사가 급증하면 이 자리에 회사별 위기 카드가 자동으로 표시됩니다.</span>
-          </div>
-        )}
-      </div>
-
       {/* 이슈 급증 배너 */}
       {data.spikes.length > 0 && (
         <div className="mb-6 space-y-2">
@@ -588,6 +580,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       {/* ── 포트폴리오사 ── */}
       {tab === 'portfolio' && <>
       <SectionTitle title="📊 포트폴리오사" sub="어느 포트폴리오사가 활발히 노출되고, 부정 이슈는 없는가" />
+
+      {/* 실시간 위기 감지 — 위기 없을 땐 '정상' 상태를 명시해 기능이 살아있음을 표시 */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-sm font-bold text-red-700">🚨 실시간 위기 감지</span>
+          <InfoTip text={`최근 ${CRISIS_WINDOW_DAYS}일간 포트폴리오사별 부정 논조 기사(부정 키워드·부정 톤)를 모아, 2건 이상 급증한 회사를 감지합니다.\n원인은 AI가 실제 기사 제목에서 요약합니다.`} />
+        </div>
+        <CrisisPanel crises={data.crises} overview={data.crisisOverview} windowDays={CRISIS_WINDOW_DAYS} summaryThreshold={CRISIS_SUMMARY_THRESHOLD} />
+      </div>
+
       {/* 긍정·부정 나란히 (대비가 한눈에) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <PortfolioPositives items={data.portfolioPositives} rangeLabel={range.label} />
@@ -673,28 +675,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       }
 
     </>
-  );
-}
-
-function CrisisCardView({ c }: { c: CrisisCard & { cause: string } }) {
-  const d = new Date(c.article.pubDate);
-  return (
-    <div className="rounded-xl border-l-4 border-red-500 bg-gradient-to-r from-red-50 to-white p-4">
-      {/* 1줄: 급증 알림 (실제 회사명) */}
-      <div className="text-sm font-bold text-red-900">
-        {c.company} 관련 부정 기사가 최근 {CRISIS_WINDOW_DAYS}일 내 {c.negCount}건 급증했습니다.
-      </div>
-      {/* 2줄: AI 원인 요약 (두괄식) */}
-      <div className="text-sm text-gray-700 mt-1.5 leading-relaxed">{c.cause}</div>
-      {/* 대표 부정기사 1건 */}
-      <div className="mt-3 rounded-lg bg-white/70 border border-red-100 p-2.5">
-        <div className="text-[10px] font-semibold text-red-400 mb-1">대표 부정기사</div>
-        <a href={c.article.link} target="_blank" rel="noopener noreferrer" className="block text-sm text-gray-800 hover:text-spark-purple font-medium">
-          {c.article.title}
-        </a>
-        <div className="text-xs text-gray-500 mt-1">{c.article.source} · {d.getFullYear()}.{d.getMonth() + 1}.{d.getDate()}</div>
-      </div>
-    </div>
   );
 }
 
