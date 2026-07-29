@@ -84,7 +84,7 @@ function getFundPool(): Pool | null {
     database: u.pathname.replace('/', ''),
     user: decodeURIComponent(u.username),
     password: decodeURIComponent(u.password),
-    ssl: { rejectUnauthorized: false },
+    ssl: false,
     max: 5,
   });
   return poolCache;

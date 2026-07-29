@@ -38,24 +38,14 @@ export async function GET() {
     max: 1,
   };
 
-  // 시도 A: SSL 비활성화
+  // ssl: false 로 연결 (Transaction pooler는 SSL 없이도 동작)
   try {
     const pool = new Pool({ ...baseConfig, ssl: false });
     const r = await pool.query(`SELECT COUNT(*) FROM shared_ro.external_funds WHERE investor_name = '미래에셋벤처투자'`);
-    results.fundDb = { ok: true, method: 'ssl:false', count: r.rows[0].count };
+    results.fundDb = { ok: true, count: r.rows[0].count };
     await pool.end();
-  } catch (e1: unknown) {
-    results.fundDbNoSsl = { ok: false, error: e1 instanceof Error ? e1.message : String(e1) };
-
-    // 시도 B: rejectUnauthorized:false
-    try {
-      const pool = new Pool({ ...baseConfig, ssl: { rejectUnauthorized: false } });
-      const r = await pool.query(`SELECT COUNT(*) FROM shared_ro.external_funds WHERE investor_name = '미래에셋벤처투자'`);
-      results.fundDb = { ok: true, method: 'ssl:rejectUnauthorized=false', count: r.rows[0].count };
-      await pool.end();
-    } catch (e2: unknown) {
-      results.fundDb = { ok: false, error: e2 instanceof Error ? e2.message : String(e2) };
-    }
+  } catch (e: unknown) {
+    results.fundDb = { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 
   return NextResponse.json(results, { status: 200 });
