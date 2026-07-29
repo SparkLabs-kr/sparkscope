@@ -550,13 +550,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         <DateRangePicker key={`${range.from}_${range.to}`} from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())} company={data.selectedCompany} tab={tab} />
       </div>
 
-      {/* 이슈 급증 배너 */}
-      {data.spikes.length > 0 && (
-        <div className="mb-6 space-y-2">
-          {data.spikes.map(s => <SpikeBanner key={s.company} s={s} />)}
-        </div>
-      )}
-
       {/* KPI ROW */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <KpiCard label="총 수집 기사" value={data.kpi.total} hint="선택한 기간 내 수집된 모든 기사 수 (노이즈 제외)" />
