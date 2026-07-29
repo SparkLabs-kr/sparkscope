@@ -551,6 +551,23 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       </div>
 
 
+      {/* 이슈 급증 배너 + KPI — 경쟁사 탭 제외 */}
+      {tab !== 'competitor' && (
+        <>
+          {data.spikes.length > 0 && (
+            <div className="mb-6 space-y-2">
+              {data.spikes.map(s => <SpikeBanner key={s.company} s={s} />)}
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <KpiCard label="총 수집 기사" value={data.kpi.total} hint="선택한 기간 내 수집된 모든 기사 수 (노이즈 제외)" />
+            <KpiCard label="스파크랩 직접 언급" value={data.kpi.sparklabsCount} hint="기사 제목에 '스파크랩'이 언급된 건수" />
+            <KpiCard label="포트폴리오사 노출" value={data.kpi.portfolioCount} hint="스파크랩이 투자한 포트폴리오사가 언급된 기사 건수" />
+            <KpiCard label="피칭 기회" value={data.kpi.pitchCount} hint="AI가 기획기사 피칭 가능성을 75점 이상으로 평가한 건수" highlight />
+          </div>
+        </>
+      )}
+
       {/* ── 스파크랩 (가장 궁금한 정보) ── */}
       {tab === 'sparklabs' && <>
       <SectionTitle title="🏢 스파크랩" sub="우리 자사가 어디에, 어떤 논조로 보도되는가" />
