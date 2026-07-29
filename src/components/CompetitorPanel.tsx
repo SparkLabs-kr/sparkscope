@@ -4,6 +4,7 @@
 // 막대의 회사명을 누르면 아래 해당 카드가 파란색으로 하이라이트되고 화면에 잡힌다.
 import { useState } from 'react';
 import type { CompetitorFundSummary } from '@/lib/sparkscope/fund-db';
+import type { FundItem } from '@/lib/sparkscope/fund-db';
 
 export interface CompetitorArticleView {
   title: string;
@@ -163,7 +164,35 @@ function CompareRow({
   );
 }
 
+function FundList({ funds }: { funds: FundItem[] }) {
+  return (
+    <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-indigo-100 bg-indigo-50/50">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-indigo-100 text-indigo-600 text-xs">
+            <th className="py-1.5 px-3 text-left font-semibold">펀드명</th>
+            <th className="py-1.5 px-3 text-right font-semibold whitespace-nowrap">결성</th>
+            <th className="py-1.5 px-3 text-right font-semibold whitespace-nowrap">규모</th>
+          </tr>
+        </thead>
+        <tbody>
+          {funds.map((f, i) => (
+            <tr key={i} className="border-b border-indigo-50 last:border-0 hover:bg-indigo-50">
+              <td className="py-1.5 px-3 text-spark-ink leading-snug">{f.name}</td>
+              <td className="py-1.5 px-3 text-right text-spark-muted tabular-nums whitespace-nowrap">{f.vintage ?? '—'}</td>
+              <td className="py-1.5 px-3 text-right text-spark-muted tabular-nums whitespace-nowrap">
+                {f.aum > 0 ? `${f.aum.toLocaleString()}억` : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function CompetitorCard({ c, selected }: { c: CompetitorStatView; selected: boolean }) {
+  const [fundOpen, setFundOpen] = useState(false);
   const hasNeg = c.negCount > 0;
 
   // 카드 색은 선택 여부로만 구분 (부정 기사 유무는 뱃지로만 표시)
@@ -192,20 +221,25 @@ function CompetitorCard({ c, selected }: { c: CompetitorStatView; selected: bool
 
       {/* 펀드 요약 */}
       {c.fundSummary && c.fundSummary.fundCount > 0 && (
-        <div className="mb-3 flex flex-wrap gap-2 text-sm">
-          <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-medium">
-            펀드 {c.fundSummary.fundCount}개
-          </span>
-          {c.fundSummary.totalAum > 0 && (
-            <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-medium">
-              AUM {c.fundSummary.totalAum.toLocaleString()}억
-            </span>
+        <div className="mb-3">
+          <div className="flex flex-wrap gap-2 text-sm">
+            <button
+              type="button"
+              onClick={() => setFundOpen(v => !v)}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-medium hover:bg-indigo-200 transition-colors"
+            >
+              펀드 {c.fundSummary.fundCount}개
+              <span className="text-xs">{fundOpen ? '▲' : '▼'}</span>
+            </button>
+            {c.fundSummary.totalAum > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-medium">
+                AUM {c.fundSummary.totalAum.toLocaleString()}억
+              </span>
+            )}
+          </div>
+          {fundOpen && c.fundSummary.funds.length > 0 && (
+            <FundList funds={c.fundSummary.funds} />
           )}
-          {c.fundSummary.topSectors.slice(0, 2).map(s => (
-            <span key={s} className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-              {s}
-            </span>
-          ))}
         </div>
       )}
 

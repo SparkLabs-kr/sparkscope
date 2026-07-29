@@ -1,10 +1,17 @@
 import { Client } from 'pg';
 
+export interface FundItem {
+  name: string;
+  vintage: number | null;
+  aum: number; // 억 원
+}
+
 export interface CompetitorFundSummary {
   investorName: string;
   fundCount: number;
   totalAum: number; // 억 원 단위
   topSectors: string[];
+  funds: FundItem[];
 }
 
 // sparkscope 경쟁사명 → SLAB DB investor_name 매핑
@@ -58,7 +65,7 @@ const INVESTOR_NAME_MAP: Record<string, string> = {
   '시그나이트': '시그나이트',
   '스마트스터디벤처스': '스마트스터디벤처스',
   '효성벤처스': '효성벤처스',
-  'GS벤처스': '500글로벌매니지먼트코리아', // 500 Global Korea
+  'GS벤처스': '500글로벌매니지먼트코리아',
 };
 
 let clientCache: Client | null = null;
@@ -93,7 +100,7 @@ export async function getCompetitorFundSummaries(
     if (!investorName) continue;
 
     try {
-      const [fundCountRes, sectorRes] = await Promise.all([
+      const [summaryRes, sectorRes, fundsRes] = await Promise.all([
         client.query(
           `SELECT COUNT(*) AS cnt, COALESCE(SUM(aum), 0) AS total_aum
            FROM shared_ro.external_funds
@@ -107,13 +114,25 @@ export async function getCompetitorFundSummaries(
            GROUP BY sector ORDER BY cnt DESC LIMIT 3`,
           [investorName],
         ),
+        client.query(
+          `SELECT name, vintage, COALESCE(aum, 0) AS aum
+           FROM shared_ro.external_funds
+           WHERE investor_name = $1
+           ORDER BY vintage DESC NULLS LAST, aum DESC`,
+          [investorName],
+        ),
       ]);
 
-      const fundCount = parseInt(fundCountRes.rows[0].cnt, 10);
-      const totalAum = Math.round(parseFloat(fundCountRes.rows[0].total_aum) / 1e8); // 원 → 억
+      const fundCount = parseInt(summaryRes.rows[0].cnt, 10);
+      const totalAum = Math.round(parseFloat(summaryRes.rows[0].total_aum) / 1e8);
       const topSectors = sectorRes.rows.map((r: { sector: string }) => r.sector);
+      const funds: FundItem[] = fundsRes.rows.map((r: { name: string; vintage: number | null; aum: string }) => ({
+        name: r.name,
+        vintage: r.vintage,
+        aum: Math.round(parseFloat(r.aum) / 1e8),
+      }));
 
-      result.set(name, { investorName, fundCount, totalAum, topSectors });
+      result.set(name, { investorName, fundCount, totalAum, topSectors, funds });
     } catch {
       // 개별 실패는 무시
     }
