@@ -325,7 +325,7 @@ function heuristicClassify(article: RawArticle): ClassificationResult {
     category: article.category,
     importance: article.basePriority >= 90 ? 'HIGH' : article.basePriority >= 60 ? 'MEDIUM' : 'LOW',
     isNoise: false,
-    needsDeepAnalysis: false,
+    needsDeepAnalysis: article.category === 'sparklabs_self' || article.category === 'portfolio_company',
   };
 }
 
