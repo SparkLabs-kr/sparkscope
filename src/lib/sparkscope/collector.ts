@@ -1,7 +1,7 @@
 /**
  * 뉴스 수집기 — Google News RSS + 네이버 뉴스 검색 API.
  * 감시대상(MonitoringTarget) 키워드로 호출하고, 관련성/노이즈 필터·중복 제거·게시일 컷을 적용.
- * 네이버는 name(한글)+englishName+helperKeywords 각각으로 검색 (키가 있을 때만).
+ * 네이버는 primaryKeyword+name+englishName으로만 검색. helperKeywords는 관련성 필터 전용.
  */
 import { parseStringPromise } from 'xml2js';
 import { prisma } from '@/lib/prisma';
@@ -203,7 +203,7 @@ async function fetchForTarget(target: Target): Promise<SourceItem[]> {
     safeSource(() => fetchGoogleNews(target.primaryKeyword), target.primaryKeyword, 'google'),
   ];
   if (naverEnabled()) {
-    const terms = uniqueTerms([target.primaryKeyword, target.name, target.englishName, ...splitCsv(target.helperKeywords)]);
+    const terms = uniqueTerms([target.primaryKeyword, target.name, target.englishName]);
     jobs.push(fetchNaverForTerms(terms));
   }
   const results = await Promise.all(jobs);

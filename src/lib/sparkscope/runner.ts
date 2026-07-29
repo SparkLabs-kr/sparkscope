@@ -3,13 +3,12 @@
  * /api/cron/daily-digest 와 /scripts/run-digest.ts 양쪽에서 호출.
  */
 import { prisma } from '@/lib/prisma';
-import type { RawArticle } from './types';
+import type { RawArticle, AnalyzedArticle } from './types';
 import { collectAllArticles } from './collector';
 import { normalizeTitleKey } from './relevance';
 import { analyzeArticles, generateEditorIntro } from './analyzer';
 import { buildDigestData, renderDigestHtml } from './digest';
 import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } from './mailer';
-import type { RawArticle, AnalyzedArticle } from './types';
 
 export interface RunOptions {
   send?: boolean;            // 실제 메일 발송 여부 (false면 DB 저장까지만)
