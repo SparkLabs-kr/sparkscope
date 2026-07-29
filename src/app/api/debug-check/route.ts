@@ -26,24 +26,36 @@ export async function GET() {
     results.anthropic = { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 
-  // 3. Fund DB 테스트 (URL 직접 파싱)
+  // 3. Fund DB 테스트 (ssl:false / ssl:{rejectUnauthorized:false} 둘 다 시도)
+  const url = process.env.FUND_DB_URL!;
+  const u = new URL(url);
+  const baseConfig = {
+    host: u.hostname,
+    port: parseInt(u.port || '6543'),
+    database: u.pathname.replace('/', ''),
+    user: decodeURIComponent(u.username),
+    password: decodeURIComponent(u.password),
+    max: 1,
+  };
+
+  // 시도 A: SSL 비활성화
   try {
-    const url = process.env.FUND_DB_URL!;
-    const u = new URL(url);
-    const pool = new Pool({
-      host: u.hostname,
-      port: parseInt(u.port || '6543'),
-      database: u.pathname.replace('/', ''),
-      user: decodeURIComponent(u.username),
-      password: decodeURIComponent(u.password),
-      ssl: { rejectUnauthorized: false },
-      max: 1,
-    });
+    const pool = new Pool({ ...baseConfig, ssl: false });
     const r = await pool.query(`SELECT COUNT(*) FROM shared_ro.external_funds WHERE investor_name = '미래에셋벤처투자'`);
-    results.fundDb = { ok: true, count: r.rows[0].count };
+    results.fundDb = { ok: true, method: 'ssl:false', count: r.rows[0].count };
     await pool.end();
-  } catch (e: unknown) {
-    results.fundDb = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  } catch (e1: unknown) {
+    results.fundDbNoSsl = { ok: false, error: e1 instanceof Error ? e1.message : String(e1) };
+
+    // 시도 B: rejectUnauthorized:false
+    try {
+      const pool = new Pool({ ...baseConfig, ssl: { rejectUnauthorized: false } });
+      const r = await pool.query(`SELECT COUNT(*) FROM shared_ro.external_funds WHERE investor_name = '미래에셋벤처투자'`);
+      results.fundDb = { ok: true, method: 'ssl:rejectUnauthorized=false', count: r.rows[0].count };
+      await pool.end();
+    } catch (e2: unknown) {
+      results.fundDb = { ok: false, error: e2 instanceof Error ? e2.message : String(e2) };
+    }
   }
 
   return NextResponse.json(results, { status: 200 });
