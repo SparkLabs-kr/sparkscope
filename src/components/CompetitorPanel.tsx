@@ -3,6 +3,7 @@
 // 경쟁사 모니터링 패널 — 상단에 전체 총평 + 통합 막대 비교, 하단에 경쟁사별 카드.
 // 막대의 회사명을 누르면 아래 해당 카드가 파란색으로 하이라이트되고 화면에 잡힌다.
 import { useState } from 'react';
+import type { CompetitorFundSummary } from '@/lib/sparkscope/fund-db';
 
 export interface CompetitorArticleView {
   title: string;
@@ -21,6 +22,8 @@ export interface CompetitorStatView {
   negatives: CompetitorArticleView[];
   /** AI 트렌드 3줄 (실패 시 null) */
   trend: string[] | null;
+  /** SLAB DB 펀드 요약 (매핑 없으면 null) */
+  fundSummary?: CompetitorFundSummary | null;
 }
 
 function cardId(name: string) {
@@ -186,6 +189,25 @@ function CompetitorCard({ c, selected }: { c: CompetitorStatView; selected: bool
           </span>
         </div>
       </div>
+
+      {/* 펀드 요약 */}
+      {c.fundSummary && c.fundSummary.fundCount > 0 && (
+        <div className="mb-3 flex flex-wrap gap-2 text-sm">
+          <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-medium">
+            펀드 {c.fundSummary.fundCount}개
+          </span>
+          {c.fundSummary.totalAum > 0 && (
+            <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-medium">
+              AUM {c.fundSummary.totalAum.toLocaleString()}억
+            </span>
+          )}
+          {c.fundSummary.topSectors.slice(0, 2).map(s => (
+            <span key={s} className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+              {s}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* 이 기간 트렌드 3줄 */}
       {c.trend && c.trend.length > 0 && (

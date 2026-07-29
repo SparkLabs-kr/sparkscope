@@ -18,6 +18,7 @@ import { NEGATIVE_KEYWORDS, detectCrises, crisisFallbackCause, detectSpikes, typ
 import { summarizeCrisisCause, summarizeCrisisOverview } from '@/lib/sparkscope/analyzer';
 import { summarizeCompetitorTrend, summarizeOverallTrend } from '@/lib/sparkscope/competitor-insights';
 import { CompetitorPanel, type CompetitorStatView } from '@/components/CompetitorPanel';
+import { getCompetitorFundSummaries } from '@/lib/sparkscope/fund-db';
 import { RISK_FLAGS } from '@/lib/sparkscope/risk-flags';
 
 export const dynamic = 'force-dynamic';
@@ -256,9 +257,11 @@ async function loadDashboardData(from: string, to: string, company?: string) {
       ),
     ),
   ]);
+  const fundSummaries = await getCompetitorFundSummaries(competitorAggs.map(c => c.name));
   const competitors: CompetitorStatView[] = competitorAggs.map(({ titles, ...c }, i) => ({
     ...c,
     trend: companyTrends[i],
+    fundSummary: fundSummaries.get(c.name) ?? null,
   }));
 
   // 기존 DB에 쌓인 부분일치 노이즈(예: '노리'→'노리지만', '리코'→'인실리코')를
