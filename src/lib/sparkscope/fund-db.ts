@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Client } from 'pg';
 
 export interface FundItem {
   name: string;
@@ -68,26 +68,23 @@ const INVESTOR_NAME_MAP: Record<string, string> = {
   'GS벤처스': '500글로벌매니지먼트코리아',
 };
 
-let poolCache: Pool | null = null;
+let clientCache: Client | null = null;
 
-function getFundPool(): Pool | null {
+async function getFundClient(): Promise<Client | null> {
   const url = process.env.FUND_DB_URL;
   if (!url) return null;
-  if (poolCache) return poolCache;
 
-  // connectionString으로 넘기면 pg가 sslmode를 덮어써서 인증서 검증 실패.
-  // URL을 직접 파싱해서 각 파라미터로 넘겨야 ssl 옵션이 제대로 적용됨.
-  const u = new URL(url);
-  poolCache = new Pool({
-    host: u.hostname,
-    port: parseInt(u.port || '6543'),
-    database: u.pathname.replace('/', ''),
-    user: decodeURIComponent(u.username),
-    password: decodeURIComponent(u.password),
-    ssl: false,
-    max: 5,
-  });
-  return poolCache;
+  if (clientCache) return clientCache;
+
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  const client = new Client({ connectionString: url });
+  try {
+    await client.connect();
+    clientCache = client;
+    return client;
+  } catch {
+    return null;
+  }
 }
 
 export async function getCompetitorFundSummaries(
@@ -95,8 +92,8 @@ export async function getCompetitorFundSummaries(
 ): Promise<Map<string, CompetitorFundSummary>> {
   const result = new Map<string, CompetitorFundSummary>();
 
-  const pool = getFundPool();
-  if (!pool) return result;
+  const client = await getFundClient();
+  if (!client) return result;
 
   await Promise.all(competitorNames.map(async (name) => {
     const investorName = INVESTOR_NAME_MAP[name];
@@ -104,20 +101,20 @@ export async function getCompetitorFundSummaries(
 
     try {
       const [summaryRes, sectorRes, fundsRes] = await Promise.all([
-        pool.query(
+        client.query(
           `SELECT COUNT(*) AS cnt, COALESCE(SUM(aum), 0) AS total_aum
            FROM shared_ro.external_funds
            WHERE investor_name = $1`,
           [investorName],
         ),
-        pool.query(
+        client.query(
           `SELECT unnest(sector_focus) AS sector, COUNT(*) AS cnt
            FROM shared_ro.external_funds
            WHERE investor_name = $1 AND sector_focus IS NOT NULL
            GROUP BY sector ORDER BY cnt DESC LIMIT 3`,
           [investorName],
         ),
-        pool.query(
+        client.query(
           `SELECT name, vintage, COALESCE(aum, 0) AS aum
            FROM shared_ro.external_funds
            WHERE investor_name = $1
