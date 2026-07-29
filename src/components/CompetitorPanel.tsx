@@ -164,37 +164,22 @@ function CompareRow({
   );
 }
 
-function FundList({ funds }: { funds: FundItem[] }) {
-  return (
-    <div className="mt-2 max-h-64 overflow-y-auto space-y-1 pr-0.5">
-      {funds.map((f, i) => (
-        <div key={i} className="rounded-lg bg-indigo-50 px-3 py-2">
-          <div className="text-sm text-spark-ink leading-snug">{f.name}</div>
-          <div className="flex gap-2 mt-0.5">
-            {f.vintage && (
-              <span className="text-xs text-indigo-500 font-medium tabular-nums">{f.vintage}년</span>
-            )}
-            {f.aum > 0 && (
-              <span className="text-xs text-indigo-500 tabular-nums">{f.aum.toLocaleString()}억</span>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
+type TabKey = '트렌드' | '기사' | '펀드';
 
 function CompetitorCard({ c, selected }: { c: CompetitorStatView; selected: boolean }) {
-  const [fundOpen, setFundOpen] = useState(false);
+  const [tab, setTab] = useState<TabKey>('트렌드');
   const hasNeg = c.negCount > 0;
+  const hasFund = !!(c.fundSummary && c.fundSummary.fundCount > 0);
 
-  // 카드 색은 선택 여부로만 구분 (부정 기사 유무는 뱃지로만 표시)
   const frame = selected
     ? 'border-spark-purple bg-spark-light-purple/30 ring-2 ring-spark-purple/30'
     : 'border-gray-400 bg-white';
 
+  const tabs: TabKey[] = ['트렌드', '기사', '펀드'];
+
   return (
     <div id={cardId(c.name)} className={`rounded-xl border-2 p-4 scroll-mt-24 transition-colors ${frame}`}>
+      {/* 헤더 */}
       <div className="flex items-center gap-2 mb-2 min-w-0">
         <div className="text-lg font-bold text-spark-ink flex-1 min-w-0 truncate">
           {c.name}{' '}
@@ -212,79 +197,102 @@ function CompetitorCard({ c, selected }: { c: CompetitorStatView; selected: bool
         </div>
       </div>
 
-      {/* 펀드 요약 */}
-      {c.fundSummary && c.fundSummary.fundCount > 0 && (
-        <div className="mb-3">
-          <div className="flex flex-wrap gap-2 text-sm">
-            <button
-              type="button"
-              onClick={() => setFundOpen(v => !v)}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-medium hover:bg-indigo-200 transition-colors"
-            >
-              펀드 {c.fundSummary.fundCount}개
-              <span className="text-xs">{fundOpen ? '▲' : '▼'}</span>
-            </button>
-            {c.fundSummary.totalAum > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-medium">
-                AUM {c.fundSummary.totalAum.toLocaleString()}억
-              </span>
-            )}
+      {/* 부정 기사 — 탭 위에 항상 표시 */}
+      {hasNeg && c.negatives.length > 0 && (
+        <div className="mb-3 rounded-lg border border-red-100 bg-red-50/50 px-3 py-2">
+          <div className="text-xs font-semibold text-red-500 mb-1.5">⚠️ 부정 기사 {c.negCount}건</div>
+          <div className="space-y-1.5 max-h-32 overflow-y-auto scroll-slim pr-1">
+            {c.negatives.map((a, i) => {
+              const d = new Date(a.pubDate);
+              return (
+                <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" className="block hover:opacity-80">
+                  <div className="text-sm text-spark-ink leading-snug line-clamp-2">{a.title}</div>
+                  <div className="text-xs text-spark-muted mt-0.5">{a.source} · {d.getMonth() + 1}.{d.getDate()}</div>
+                </a>
+              );
+            })}
           </div>
-          {fundOpen && c.fundSummary.funds.length > 0 && (
-            <FundList funds={c.fundSummary.funds} />
-          )}
         </div>
       )}
 
-      {/* 이 기간 트렌드 3줄 */}
-      {c.trend && c.trend.length > 0 && (
-        <ul className="mb-3 space-y-1 rounded-lg bg-blue-50 px-3 py-2.5">
-          {c.trend.map((t, i) => (
-            <li key={i} className="text-sm leading-relaxed text-spark-ink-soft flex gap-1.5">
-              <span className="text-blue-500 flex-shrink-0">•</span>
-              <span>{t}</span>
-            </li>
-          ))}
-        </ul>
+      {/* 탭 */}
+      <div className="flex border-b border-spark-border mb-3">
+        {tabs.map(t => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={`px-3 py-1.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === t
+                ? 'border-spark-purple text-spark-purple'
+                : 'border-transparent text-spark-muted hover:text-spark-ink'
+            }`}
+          >
+            {t === '펀드' && hasFund ? `펀드 ${c.fundSummary!.fundCount}개` : t}
+          </button>
+        ))}
+      </div>
+
+      {/* 탭 콘텐츠 */}
+      {tab === '트렌드' && (
+        c.trend && c.trend.length > 0 ? (
+          <ul className="space-y-1 rounded-lg bg-blue-50 px-3 py-2.5">
+            {c.trend.map((t, i) => (
+              <li key={i} className="text-sm leading-relaxed text-spark-ink-soft flex gap-1.5">
+                <span className="text-blue-500 flex-shrink-0">•</span>
+                <span>{t}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-spark-muted/70">트렌드 분석 없음</p>
+        )
       )}
 
-      {c.top3.length > 0 ? (
-        <>
-          <div className="text-sm font-semibold text-spark-muted mb-1.5">최근 기사 TOP {c.top3.length}</div>
+      {tab === '기사' && (
+        c.top3.length > 0 ? (
           <div className="space-y-2">
             {c.top3.map((a, i) => {
               const d = new Date(a.pubDate);
               return (
                 <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" className="block group">
-                  <div className={`text-base leading-snug line-clamp-2 group-hover:text-spark-purple ${a.neg ? 'text-red-700' : 'text-spark-ink-soft'}`}>
-                    {a.neg && '⚠️ '}{a.title}
+                  <div className={`text-sm leading-snug line-clamp-2 group-hover:text-spark-purple ${a.neg ? 'text-red-700' : 'text-spark-ink-soft'}`}>
+                    {a.title}
                   </div>
-                  <div className="text-sm text-spark-muted mt-0.5">{a.source} · {d.getMonth() + 1}.{d.getDate()}</div>
+                  <div className="text-xs text-spark-muted mt-0.5">{a.source} · {d.getMonth() + 1}.{d.getDate()}</div>
                 </a>
               );
             })}
           </div>
+        ) : (
+          <p className="text-sm text-spark-muted/70">최근 기사 없음</p>
+        )
+      )}
 
-          {/* 부정 기사 섹션 — 기존 형태 유지 */}
-          {c.negatives.length > 0 && (
-            <div className="mt-2.5 pt-2.5 border-t border-spark-border/60">
-              <div className="text-sm font-semibold text-red-500 mb-1.5">⚠️ 부정 기사 전체 {c.negatives.length}건</div>
-              <div className="space-y-1.5 max-h-52 overflow-y-auto scroll-slim pr-1">
-                {c.negatives.map((a, i) => {
-                  const d = new Date(a.pubDate);
-                  return (
-                    <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" className="block rounded-lg border border-red-100 bg-red-50/50 p-2 hover:bg-red-50 transition-colors">
-                      <div className="text-base text-spark-ink leading-snug line-clamp-2">{a.title}</div>
-                      <div className="text-sm text-spark-muted mt-0.5">{a.source} · {d.getMonth() + 1}.{d.getDate()}</div>
-                    </a>
-                  );
-                })}
-              </div>
+      {tab === '펀드' && (
+        hasFund ? (
+          <div>
+            <div className="flex gap-3 mb-2 text-sm">
+              <span className="font-semibold text-spark-ink">{c.fundSummary!.fundCount}개 펀드</span>
+              {c.fundSummary!.totalAum > 0 && (
+                <span className="text-spark-muted">총 AUM {c.fundSummary!.totalAum.toLocaleString()}억</span>
+              )}
             </div>
-          )}
-        </>
-      ) : (
-        <div className="text-base text-spark-muted/70">최근 기사 없음</div>
+            <div className="space-y-1.5 max-h-52 overflow-y-auto pr-0.5">
+              {c.fundSummary!.funds.map((f, i) => (
+                <div key={i} className="rounded-lg bg-indigo-50 px-3 py-2">
+                  <div className="text-sm text-spark-ink leading-snug">{f.name}</div>
+                  <div className="flex gap-2 mt-0.5">
+                    {f.vintage && <span className="text-xs text-indigo-500 font-medium tabular-nums">{f.vintage}년</span>}
+                    {f.aum > 0 && <span className="text-xs text-indigo-500 tabular-nums">{f.aum.toLocaleString()}억</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-spark-muted/70">펀드 데이터 없음</p>
+        )
       )}
     </div>
   );
