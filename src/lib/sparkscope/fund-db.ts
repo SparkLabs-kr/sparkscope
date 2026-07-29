@@ -74,7 +74,19 @@ function getFundPool(): Pool | null {
   const url = process.env.FUND_DB_URL;
   if (!url) return null;
   if (poolCache) return poolCache;
-  poolCache = new Pool({ connectionString: url, ssl: { rejectUnauthorized: false }, max: 5 });
+
+  // connectionString으로 넘기면 pg가 sslmode를 덮어써서 인증서 검증 실패.
+  // URL을 직접 파싱해서 각 파라미터로 넘겨야 ssl 옵션이 제대로 적용됨.
+  const u = new URL(url);
+  poolCache = new Pool({
+    host: u.hostname,
+    port: parseInt(u.port || '6543'),
+    database: u.pathname.replace('/', ''),
+    user: decodeURIComponent(u.username),
+    password: decodeURIComponent(u.password),
+    ssl: { rejectUnauthorized: false },
+    max: 5,
+  });
   return poolCache;
 }
 
