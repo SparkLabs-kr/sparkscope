@@ -22,6 +22,7 @@ import { getCompetitorFundSummaries } from '@/lib/sparkscope/fund-db';
 import { RISK_FLAGS } from '@/lib/sparkscope/risk-flags';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
 // 대시보드 섹션 탭 — 스크롤 대신 URL(?tab=)로 화면을 나눈다.
 const TABS = [

@@ -1,4 +1,4 @@
-import { Client } from 'pg';
+import { Pool } from 'pg';
 
 export interface FundItem {
   name: string;
@@ -68,22 +68,14 @@ const INVESTOR_NAME_MAP: Record<string, string> = {
   'GS벤처스': '500글로벌매니지먼트코리아',
 };
 
-let clientCache: Client | null = null;
+let poolCache: Pool | null = null;
 
-async function getFundClient(): Promise<Client | null> {
+function getFundPool(): Pool | null {
   const url = process.env.FUND_DB_URL;
   if (!url) return null;
-
-  if (clientCache) return clientCache;
-
-  const client = new Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
-  try {
-    await client.connect();
-    clientCache = client;
-    return client;
-  } catch {
-    return null;
-  }
+  if (poolCache) return poolCache;
+  poolCache = new Pool({ connectionString: url, ssl: { rejectUnauthorized: false }, max: 5 });
+  return poolCache;
 }
 
 export async function getCompetitorFundSummaries(
@@ -91,8 +83,8 @@ export async function getCompetitorFundSummaries(
 ): Promise<Map<string, CompetitorFundSummary>> {
   const result = new Map<string, CompetitorFundSummary>();
 
-  const client = await getFundClient();
-  if (!client) return result;
+  const pool = getFundPool();
+  if (!pool) return result;
 
   await Promise.all(competitorNames.map(async (name) => {
     const investorName = INVESTOR_NAME_MAP[name];
@@ -100,20 +92,20 @@ export async function getCompetitorFundSummaries(
 
     try {
       const [summaryRes, sectorRes, fundsRes] = await Promise.all([
-        client.query(
+        pool.query(
           `SELECT COUNT(*) AS cnt, COALESCE(SUM(aum), 0) AS total_aum
            FROM shared_ro.external_funds
            WHERE investor_name = $1`,
           [investorName],
         ),
-        client.query(
+        pool.query(
           `SELECT unnest(sector_focus) AS sector, COUNT(*) AS cnt
            FROM shared_ro.external_funds
            WHERE investor_name = $1 AND sector_focus IS NOT NULL
            GROUP BY sector ORDER BY cnt DESC LIMIT 3`,
           [investorName],
         ),
-        client.query(
+        pool.query(
           `SELECT name, vintage, COALESCE(aum, 0) AS aum
            FROM shared_ro.external_funds
            WHERE investor_name = $1
