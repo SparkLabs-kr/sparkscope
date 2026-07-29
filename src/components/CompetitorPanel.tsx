@@ -166,27 +166,20 @@ function CompareRow({
 
 function FundList({ funds }: { funds: FundItem[] }) {
   return (
-    <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-indigo-100 bg-indigo-50/50">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-indigo-100 text-indigo-600 text-xs">
-            <th className="py-1.5 px-3 text-left font-semibold">펀드명</th>
-            <th className="py-1.5 px-3 text-right font-semibold whitespace-nowrap">결성</th>
-            <th className="py-1.5 px-3 text-right font-semibold whitespace-nowrap">규모</th>
-          </tr>
-        </thead>
-        <tbody>
-          {funds.map((f, i) => (
-            <tr key={i} className="border-b border-indigo-50 last:border-0 hover:bg-indigo-50">
-              <td className="py-1.5 px-3 text-spark-ink leading-snug">{f.name}</td>
-              <td className="py-1.5 px-3 text-right text-spark-muted tabular-nums whitespace-nowrap">{f.vintage ?? '—'}</td>
-              <td className="py-1.5 px-3 text-right text-spark-muted tabular-nums whitespace-nowrap">
-                {f.aum > 0 ? `${f.aum.toLocaleString()}억` : '—'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="mt-2 max-h-64 overflow-y-auto space-y-1 pr-0.5">
+      {funds.map((f, i) => (
+        <div key={i} className="rounded-lg bg-indigo-50 px-3 py-2">
+          <div className="text-sm text-spark-ink leading-snug">{f.name}</div>
+          <div className="flex gap-2 mt-0.5">
+            {f.vintage && (
+              <span className="text-xs text-indigo-500 font-medium tabular-nums">{f.vintage}년</span>
+            )}
+            {f.aum > 0 && (
+              <span className="text-xs text-indigo-500 tabular-nums">{f.aum.toLocaleString()}억</span>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

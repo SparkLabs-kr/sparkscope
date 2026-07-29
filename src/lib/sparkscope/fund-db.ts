@@ -95,9 +95,9 @@ export async function getCompetitorFundSummaries(
   const client = await getFundClient();
   if (!client) return result;
 
-  for (const name of competitorNames) {
+  await Promise.all(competitorNames.map(async (name) => {
     const investorName = INVESTOR_NAME_MAP[name];
-    if (!investorName) continue;
+    if (!investorName) return;
 
     try {
       const [summaryRes, sectorRes, fundsRes] = await Promise.all([
@@ -136,7 +136,8 @@ export async function getCompetitorFundSummaries(
     } catch {
       // 개별 실패는 무시
     }
-  }
+  }));
 
   return result;
 }
+
