@@ -26,10 +26,16 @@ export async function GET() {
     results.anthropic = { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 
-  // 3. Fund DB 테스트
+  // 3. Fund DB 테스트 (URL 직접 파싱)
   try {
+    const url = process.env.FUND_DB_URL!;
+    const u = new URL(url);
     const pool = new Pool({
-      connectionString: process.env.FUND_DB_URL,
+      host: u.hostname,
+      port: parseInt(u.port || '6543'),
+      database: u.pathname.replace('/', ''),
+      user: decodeURIComponent(u.username),
+      password: decodeURIComponent(u.password),
       ssl: { rejectUnauthorized: false },
       max: 1,
     });
