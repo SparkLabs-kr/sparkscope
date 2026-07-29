@@ -10,17 +10,20 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "digest:run": "tsx scripts/run-digest.ts"
+    "digest:run": "tsx scripts/run-digest.ts",
+    "keywords:check": "tsx scripts/check-context-words.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
     "@auth/prisma-adapter": "^2.7.4",
     "@prisma/client": "^5.22.0",
     "chart.js": "^4.4.6",
+    "cheerio": "^1.2.0",
     "csv-parse": "^7.0.1",
     "next": "14.2.18",
     "next-auth": "^4.24.10",
     "nodemailer": "^7.0.7",
+    "openai": "^6.48.0",
     "react": "^18.3.1",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.3.1",

@@ -11,12 +11,13 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { OPEN_ACCESS } from '@/lib/flags';
 import { canScrap as canScrapEmail } from '@/lib/scrap';
-import { normalizeSource, isKnownMedia } from '@/lib/sparkscope/media';
+import { normalizeSource } from '@/lib/sparkscope/media';
 import { matchesAsToken, isBlockedNoise, normalizeTitleKey } from '@/lib/sparkscope/relevance';
 import { NEGATIVE_KEYWORDS, detectCrises, crisisFallbackCause, detectSpikes, type ArticleLite, type CrisisCard, type SpikeCard } from '@/lib/sparkscope/insights';
 import { summarizeCrisisCause } from '@/lib/sparkscope/analyzer';
 import { summarizeCompetitorTrend, summarizeOverallTrend } from '@/lib/sparkscope/competitor-insights';
 import { CompetitorPanel, type CompetitorStatView } from '@/components/CompetitorPanel';
+import { RISK_FLAGS } from '@/lib/sparkscope/risk-flags';
 
 export const dynamic = 'force-dynamic';
 
@@ -154,7 +155,7 @@ async function loadDashboardData(from: string, to: string, company?: string) {
   const [
     total, sparklabsCount, portfolioCount, pitchCount, mentionCount,
     prevPortfolioCount, prevMentionCount,
-    articles, sourceGroups, toneGroups, pitches, trendArticles,
+    articles, toneGroups, pitches, trendArticles,
     spikeRecent, spikeBaseline, crisisNeg, portfolioTargets, competitorTop,
     competitorArticles, sparklabsMentions, portfolioTop15, portfolioNeg, sparklabsArticles, portfolioPos,
   ] = await Promise.all([
@@ -166,8 +167,6 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     prisma.article.count({ where: prevPortfolioWhere }),
     prisma.article.count({ where: { ...prevPortfolioWhere, title: { contains: '스파크랩' } } }),
     prisma.article.findMany({ where, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], take: 400 }),
-    // 매체별 노출 분포 — 스파크랩 기사 기준 (자사를 어느 매체가 많이 써주나)
-    prisma.article.groupBy({ by: ['source'], where: sparklabsWhere, _count: { _all: true }, orderBy: { _count: { source: 'desc' } }, take: 120 }),
     // 톤 분석 — 스파크랩 기준
     prisma.article.groupBy({ by: ['tone'], where: sparklabsWhere, _count: { _all: true } }),
     prisma.article.findMany({ where: { ...where, pitchScore: { gte: 60 } }, orderBy: { pitchScore: 'desc' }, take: 20 }),
@@ -187,9 +186,9 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     // 가장 많이 언급된 포트폴리오사 TOP 15 (기간 내 노출 건수) — 업계 키워드 제외
     prisma.article.groupBy({ by: ['matchedKeyword'], where: { ...portfolioWhere, matchedKeyword: { notIn: INDUSTRY_TREND_KEYWORDS } }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 15 }),
     // 포트폴리오 부정 기사 (기간 내 부정 논조 — 회사·제목 확인용)
-    prisma.article.findMany({ where: { ...portfolioWhere, OR: negOr }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true }, take: 80 }),
+    prisma.article.findMany({ where: { ...portfolioWhere, OR: negOr }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true, riskFlag: true }, take: 80 }),
     // 스파크랩 자사 기사 (톤 분석 클릭 시 펼쳐볼 목록)
-    prisma.article.findMany({ where: sparklabsWhere, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, link: true, source: true, pubDate: true, tone: true, matchedKeyword: true, category: true }, take: 300 }),
+    prisma.article.findMany({ where: sparklabsWhere, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, link: true, source: true, pubDate: true, tone: true, matchedKeyword: true, category: true, riskFlag: true }, take: 300 }),
     // 포트폴리오 긍정 하이라이트 (호재 기사)
     prisma.article.findMany({ where: { ...portfolioWhere, OR: posOr }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true }, take: 120 }),
   ]);
@@ -287,6 +286,10 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     const keys = map.get(a.matchedKeyword) ?? [a.matchedKeyword];
     return keys.some(k => matchesAsToken(a.title, k));
   };
+  // KPI 카드("기사 제목에 '스파크랩'이 언급된 건수")·매체별 노출 분포·톤 분석 세 곳이 항상 같은
+  // 숫자를 보도록, sparklabsWhere로 가져온 sparklabsArticles를 그대로(추가 필터 없이) 공통 기준으로 사용.
+  // (요청에 따라 passesName 제목-토큰 재검증을 뺀 상태 — 동명이인·부분일치 오탐이 섞일 수 있음을 감안한 결정)
+  const sparklabsCountFiltered = sparklabsArticles.length;
   // 중복 기사 제거: 제목 정규화 키 또는 동일 URL 기준으로 대표 1건만 (articles는 우선순위 desc 정렬 → 대표=상위)
   const dedupeSeen = new Set<string>();
   const cleanedArticles = articles
@@ -354,7 +357,7 @@ async function loadDashboardData(from: string, to: string, company?: string) {
   const portfolioTop = portfolioTop15.map(g => ({ name: portfolioNameOf.get(g.matchedKeyword) ?? g.matchedKeyword, count: g._count._all, portfolioStatus: portfolioStatusOf.get(g.matchedKeyword) ?? null }));
   // 긍정/부정 하이라이트: 회사(matchedKeyword)별로 묶어 "언급 매체 수" 많은 순 → 동률이면 최신순, TOP 3만.
   // (Article에 검색노출도 필드가 없어 매체 다양성을 대리 지표로 사용)
-  const top3ByMedia = (rows: { matchedKeyword: string; title: string; source: string; pubDate: Date; link: string }[]) => {
+  const top3ByMedia = (rows: { matchedKeyword: string; title: string; source: string; pubDate: Date; link: string; riskFlag?: string | null }[]) => {
     const g = new Map<string, { company: string; sources: Set<string>; rep: (typeof rows)[number] }>();
     for (const a of rows) {
       if (!notNoise(a)) continue;
@@ -368,7 +371,7 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     return Array.from(g.values())
       .sort((x, y) => y.sources.size - x.sources.size || new Date(y.rep.pubDate).getTime() - new Date(x.rep.pubDate).getTime())
       .slice(0, 3)
-      .map(e => ({ company: e.company, title: e.rep.title, source: normalizeSource(e.rep.source), pubDate: e.rep.pubDate, link: e.rep.link, mediaCount: e.sources.size }));
+      .map(e => ({ company: e.company, title: e.rep.title, source: normalizeSource(e.rep.source), pubDate: e.rep.pubDate, link: e.rep.link, mediaCount: e.sources.size, riskFlag: e.rep.riskFlag ?? null }));
   };
   const portfolioNegatives = top3ByMedia(portfolioNeg);
   const portfolioPositives = top3ByMedia(portfolioPos);
@@ -390,13 +393,15 @@ async function loadDashboardData(from: string, to: string, company?: string) {
 
   return {
     range: { from, to },
-    kpi: { total, sparklabsCount, portfolioCount, pitchCount, mentionRate, mentionDelta: mentionRate - prevMentionRate },
+    kpi: { total, sparklabsCount: sparklabsCountFiltered, portfolioCount, pitchCount, mentionRate, mentionDelta: mentionRate - prevMentionRate },
     articles: enrichedArticles,
     portfolioNames,
     selectedCompany: company,
     selectedCompanyName,
     companyArticles: enrichedCompanyArticles,
-    sources: normalizeSources(sourceGroups.map(s => ({ source: s.source, count: s._count._all }))),
+    // 매체별 노출 분포 — 아래 톤 분석(toneArticles)과 반드시 같은 범위로 집계해야
+    // "매체별 합계"와 "톤 분석 총합"이 서로 어긋나지 않는다. (passesName 제목-토큰 재검증 없음)
+    sources: sourcesFromArticles(sparklabsArticles),
     tones: toneGroups.map(t => ({ tone: t.tone ?? 'NEUTRAL', count: t._count._all })),
     pitches: dedupedPitches,
     crises,
@@ -412,28 +417,35 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     portfolioTop,
     portfolioNegatives,
     portfolioPositives,
-    toneArticles: sparklabsArticles.filter(notNoise).filter(passesName).map(a => ({
+    toneArticles: sparklabsArticles.map(a => ({
       id: a.id,
       title: a.title,
       link: a.link,
       source: normalizeSource(a.source),
       pubDate: a.pubDate,
       tone: (a.tone ?? 'NEUTRAL') as string,
+      riskFlag: a.riskFlag as string | null,
     })),
   };
 }
 
-// 확정 26개 매체만 표시 — 정규화 후 병합, 노출 많은 순 정렬 (MediaPanel이 Top12/더보기 처리).
-// 26개에 없는 매체(v.daum.net·유니콘팩토리 등)는 수집은 하되 이 차트에서는 제외.
-function normalizeSources(rows: { source: string; count: number }[]) {
-  const merged = new Map<string, number>();
-  for (const r of rows) {
-    if (!isKnownMedia(r.source)) continue;
-    const name = normalizeSource(r.source);
-    merged.set(name, (merged.get(name) ?? 0) + r.count);
+// 매체별 노출 건수 + 톤 성향(긍정/중립/부정) — 톤 분석(toneArticles)과 정확히 같은 기사 집합에서
+// 뽑아야 "매체별 합계"와 "톤 분석 총합"이 서로 어긋나지 않는다.
+// (이전엔 "확정 26개 매체"만 표시했으나, 그 목록에 없는 매체가 실제로 상당수 기사를
+// 다뤄서 — 특히 긍정 톤 기사 다수가 화이트리스트 밖 매체였음 — 총합이 맞지 않아 보이는
+// 혼란을 낳았다. 정규화 후 병합, 노출 많은 순 정렬만 하고 매체 자체는 제한하지 않는다.)
+function sourcesFromArticles(articles: { source: string; tone: string | null }[]) {
+  const merged = new Map<string, { count: number; tones: { POSITIVE: number; NEUTRAL: number; NEGATIVE: number } }>();
+  for (const a of articles) {
+    const name = normalizeSource(a.source);
+    const tone = (a.tone ?? 'NEUTRAL') as 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
+    let e = merged.get(name);
+    if (!e) { e = { count: 0, tones: { POSITIVE: 0, NEUTRAL: 0, NEGATIVE: 0 } }; merged.set(name, e); }
+    e.count += 1;
+    e.tones[tone] = (e.tones[tone] ?? 0) + 1;
   }
   return Array.from(merged.entries())
-    .map(([source, count]) => ({ source, count }))
+    .map(([source, e]) => ({ source, count: e.count, tones: e.tones }))
     .sort((a, b) => b.count - a.count);
 }
 
@@ -561,13 +573,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       {/* ── 스파크랩 (가장 궁금한 정보) ── */}
       {tab === 'sparklabs' && <>
       <SectionTitle title="🏢 스파크랩" sub="우리 자사가 어디에, 어떤 논조로 보도되는가" />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+      <div className="flex flex-col gap-4 mb-8">
         <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
           <div className="font-bold mb-4">📰 매체별 노출 분포 (스파크랩) <InfoTip text="선택 기간 동안 '스파크랩' 기사를 다룬 매체 분포입니다(주요 26개 매체 기준).\n어느 매체가 우리를 가장 많이 써주는지 보여줍니다." /></div>
           <MediaPanel data={data.sources} defaultCount={12} />
         </div>
         <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
-          <div className="font-bold mb-4">💬 톤 분석 (스파크랩) <InfoTip text="'스파크랩' 기사의 긍정·중립·부정 논조 비율입니다. 막대를 클릭하면 해당 기사 목록이 열립니다." /></div>
+          <div className="font-bold mb-4">💬 톤 분석 (스파크랩) <InfoTip text="'스파크랩' 기사의 긍정·중립·부정 논조 비율입니다. 각 논조의 기사 목록이 바로 아래에 표시됩니다." /></div>
           <ToneBreakdown articles={data.toneArticles as any} />
         </div>
       </div>
@@ -772,7 +784,7 @@ function PortfolioPositives({ items, rangeLabel }: { items: { company: string; t
   );
 }
 
-function PortfolioNegatives({ items, rangeLabel }: { items: { company: string; title: string; source: string; pubDate: Date; link: string; mediaCount?: number }[]; rangeLabel: string }) {
+function PortfolioNegatives({ items, rangeLabel }: { items: { company: string; title: string; source: string; pubDate: Date; link: string; mediaCount?: number; riskFlag?: string | null }[]; rangeLabel: string }) {
   return (
     <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
       <div className="font-bold mb-1">⚠️ 포트폴리오 부정 기사 <InfoTip text={`${rangeLabel} 동안 포트폴리오사 부정 논조 기사 중, 여러 매체가 다룬 순으로 TOP 3.`} /></div>
@@ -785,6 +797,11 @@ function PortfolioNegatives({ items, rangeLabel }: { items: { company: string; t
               <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" className="block rounded-lg border border-red-100 bg-red-50/50 p-2.5 hover:bg-red-50">
                 <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold whitespace-nowrap">{a.company}</span>
+                  {a.riskFlag && RISK_FLAGS[a.riskFlag] && (
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold whitespace-nowrap ${RISK_FLAGS[a.riskFlag].cls}`}>
+                      {RISK_FLAGS[a.riskFlag].label}
+                    </span>
+                  )}
                   {a.mediaCount && a.mediaCount > 1 ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-600/10 text-red-700 font-semibold whitespace-nowrap">{a.mediaCount}개 매체</span> : null}
                   <span className="text-[10px] text-gray-400">{a.source} · {d.getMonth() + 1}.{d.getDate()}</span>
                 </div>

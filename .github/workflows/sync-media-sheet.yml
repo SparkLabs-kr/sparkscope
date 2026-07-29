@@ -1,0 +1,43 @@
+name: Sync Media Sheet (Schedule)
+
+# 팀이 수기로 관리하는 "SparkLabs_Media Coverage Tracker" 구글 시트(트래커 탭 + 발란 기업회생
+# 부정기사 모니터링 탭)를 매일 Article 테이블에 동기화. 일일 뉴스 수집(daily-collect)과는
+# 별개 작업이라 별도 워크플로로 분리.
+on:
+  schedule:
+    - cron: '30 22 * * *'  # UTC 22:30 = KST 07:30 (일일 수집 직후)
+  workflow_dispatch:  # 수동 트리거
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Call sync-media-sheet endpoint
+        run: |
+          CRON_SECRET="${{ secrets.CRON_SECRET }}"
+
+          if [ -z "$CRON_SECRET" ]; then
+            echo "❌ CRON_SECRET not set"
+            exit 1
+          fi
+
+          echo "📋 Syncing media sheet at $(date '+%Y-%m-%d %H:%M:%S')"
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "https://sparkscope.vercel.app/api/cron/sync-media-sheet")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Response code: $HTTP_CODE"
+          echo "Response body: $BODY"
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Media sheet sync completed successfully"
+            exit 0
+          else
+            echo "❌ Media sheet sync failed (HTTP $HTTP_CODE)"
+            exit 1
+          fi

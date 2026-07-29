@@ -14,6 +14,7 @@ interface Article {
   isScrapped?: boolean;
   companyName?: string;
   portfolioStatus?: string | null;
+  titleOnlyFallback?: boolean;
 }
 
 const CATEGORY_BADGE: Record<string, { label: string; cls: string }> = {
@@ -37,9 +38,31 @@ const STATUS_BADGE: Record<string, string> = {
   Exit: 'bg-amber-50 text-amber-700 border border-amber-200',
 };
 
+// 백필 기사는 원문 링크가 없고 backfill://해시 형태의 더미 값만 있음 — 그대로 열면 빈 화면만 뜬다.
+function hasRealLink(link: string): boolean {
+  return !link.startsWith('backfill://');
+}
+
+// 원문 링크를 못 찾은 백필 기사는 제목+매체로 구글 검색 결과라도 열어준다 (그냥 "링크 없음"보다 낫다).
+function searchFallbackUrl(title: string, source: string): string {
+  return `https://www.google.com/search?q=${encodeURIComponent(`${title} ${source}`)}`;
+}
+
 function ToneDot({ tone }: { tone: string | null }) {
   const cls = TONE_DOT[tone ?? 'NEUTRAL'] ?? TONE_DOT.NEUTRAL;
   return <span className={`inline-block shrink-0 w-2 h-2 rounded-full ${cls}`} title={tone ?? 'NEUTRAL'} />;
+}
+
+// 본문 스크래핑 실패로 title만으로 분석된 기사 표시 — 조용히 넘기지 않고 눈에 띄게 경고.
+function TitleOnlyBadge() {
+  return (
+    <span
+      title="본문을 읽지 못해 제목만으로 분석했습니다. 요약·톤 판정 정확도가 낮을 수 있습니다."
+      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap bg-amber-50 text-amber-700 border border-amber-200"
+    >
+      ⚠️ 본문 미확인
+    </span>
+  );
 }
 
 export function ArticlesTable({ articles, canScrap = false, emptyText, showCategoryColumn = true }: { articles: Article[]; canScrap?: boolean; emptyText?: string; showCategoryColumn?: boolean }) {
@@ -89,7 +112,12 @@ export function ArticlesTable({ articles, canScrap = false, emptyText, showCateg
                   <td className="px-3 py-3">
                     <span className="flex items-center gap-2">
                       <ToneDot tone={a.tone} />
-                      <a href={a.link} target="_blank" rel="noopener noreferrer" className="hover:text-spark-purple">{a.title}</a>
+                      {hasRealLink(a.link) ? (
+                        <a href={a.link} target="_blank" rel="noopener noreferrer" className="hover:text-spark-purple">{a.title}</a>
+                      ) : (
+                        <a href={searchFallbackUrl(a.title, a.source)} target="_blank" rel="noopener noreferrer" title="원문 링크를 찾지 못해 검색 결과로 연결합니다." className="hover:text-spark-purple">{a.title} 🔍</a>
+                      )}
+                      {a.titleOnlyFallback && <TitleOnlyBadge />}
                     </span>
                   </td>
                   <td className="px-3 py-3 text-xs text-gray-600">{a.source}</td>
@@ -122,10 +150,18 @@ export function ArticlesTable({ articles, canScrap = false, emptyText, showCateg
               </div>
 
               {/* 제목 */}
-              <a href={a.link} target="_blank" rel="noopener noreferrer" className="flex items-start gap-2 text-sm font-medium text-gray-900 hover:text-spark-purple mb-2">
-                <ToneDot tone={a.tone} />
-                <span className="line-clamp-2">{a.title}</span>
-              </a>
+              {hasRealLink(a.link) ? (
+                <a href={a.link} target="_blank" rel="noopener noreferrer" className="flex items-start gap-2 text-sm font-medium text-gray-900 hover:text-spark-purple mb-2">
+                  <ToneDot tone={a.tone} />
+                  <span className="line-clamp-2">{a.title}</span>
+                </a>
+              ) : (
+                <a href={searchFallbackUrl(a.title, a.source)} target="_blank" rel="noopener noreferrer" title="원문 링크를 찾지 못해 검색 결과로 연결합니다." className="flex items-start gap-2 text-sm font-medium text-gray-900 hover:text-spark-purple mb-2">
+                  <ToneDot tone={a.tone} />
+                  <span className="line-clamp-2">{a.title} 🔍</span>
+                </a>
+              )}
+              {a.titleOnlyFallback && <div className="mb-2"><TitleOnlyBadge /></div>}
 
               {/* 하단: 매체 + 중요도 + 피칭 */}
               <div className="flex items-center justify-between gap-2 text-xs text-gray-600">

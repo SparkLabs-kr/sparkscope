@@ -74,9 +74,9 @@ export function isBlockedNoise(a: { title?: string | null; link?: string | null;
 //     → "노리지만"(지=조사 아님) 차단, "노리는데"(는 뒤에 데=단어문자) 차단, "노리가 "/"노리는 "는 통과
 // 한국어 조사 목록 (길이 내림차순으로 그리디 매칭)
 const JOSA = [
-  '으로서', '으로써', '에서는', '에게서', '으로', '에서', '에게', '한테', '부터', '까지',
+  '으로부터', '로부터', '으로서', '으로써', '에서는', '에게서', '으로', '에서', '에게', '한테', '부터', '까지',
   '보다', '처럼', '마다', '밖에', '조차', '이나', '이란', '이라', '으론', '이든',
-  '은', '는', '이', '가', '을', '를', '과', '와', '의', '에', '도', '만', '로', '라', '란', '나', '께', '든', '야', '여',
+  '은', '는', '이', '가', '을', '를', '과', '와', '의', '에', '도', '만', '로', '라', '란', '나', '께', '든', '야', '여', '서',
 ].sort((a, b) => b.length - a.length);
 
 function isWordChar(ch: string): boolean {
@@ -91,28 +91,67 @@ function isWordChar(ch: string): boolean {
   return false;
 }
 
-/** 회사명(name)이 제목(title) 안에서 독립 토큰(주어 위치)으로 등장하는지. */
-export function matchesAsToken(title: string, name: string): boolean {
-  if (!title || !name) return false;
+/** 회사명(name)이 텍스트 안에서 독립 토큰(주어 위치)으로 등장하는 시작 인덱스 전부. */
+function findTokenIndices(text: string, name: string): number[] {
+  if (!text || !name) return [];
+  const out: number[] = [];
   let from = 0;
   for (;;) {
-    const idx = title.indexOf(name, from);
-    if (idx === -1) return false;
+    const idx = text.indexOf(name, from);
+    if (idx === -1) break;
     const end = idx + name.length;
-    const leftOk = idx === 0 || !isWordChar(title[idx - 1]);
+    const leftOk = idx === 0 || !isWordChar(text[idx - 1]);
     if (leftOk) {
-      const next = end < title.length ? title[end] : '';
-      if (end >= title.length || !isWordChar(next)) return true; // 오른쪽 깔끔한 경계
-      // 오른쪽이 단어문자면 "조사 + 경계"일 때만 허용
-      for (const j of JOSA) {
-        if (title.startsWith(j, end)) {
-          const after = end + j.length;
-          if (after >= title.length || !isWordChar(title[after])) return true;
+      const next = end < text.length ? text[end] : '';
+      if (end >= text.length || !isWordChar(next)) {
+        out.push(idx); // 오른쪽 깔끔한 경계
+      } else {
+        // 오른쪽이 단어문자면 "조사 + 경계"일 때만 허용
+        for (const j of JOSA) {
+          if (text.startsWith(j, end)) {
+            const after = end + j.length;
+            if (after >= text.length || !isWordChar(text[after])) { out.push(idx); break; }
+          }
         }
       }
     }
     from = idx + 1;
   }
+  return out;
+}
+
+/** 회사명(name)이 텍스트(title/body) 안에서 독립 토큰(주어 위치)으로 등장하는지. */
+export function matchesAsToken(text: string, name: string): boolean {
+  return findTokenIndices(text, name).length > 0;
+}
+
+// 참여기관 나열문("A, B, C, 우리회사, D 등 8곳이 참여했다") 판별 기준.
+// 콤마가 이 개수 이상이면 "여러 항목을 나열하는 문장"으로 본다.
+const LIST_MENTION_MIN_COMMAS = 2;
+// 문장 시작에서 이 글자 수 이내에 등장하면 나열이어도 문장의 주어(=진짜 당사자)일 가능성이
+// 높다고 보고 직접 언급으로 인정한다.
+const LIST_MENTION_SUBJECT_WINDOW = 10;
+
+/** idx 위치의 매칭이 "여러 기관을 나열하는 문장"의 한 항목일 뿐인지 판별. */
+function isListMentionAt(text: string, idx: number): boolean {
+  const sentStart = Math.max(text.lastIndexOf('.', idx), text.lastIndexOf('\n', idx)) + 1;
+  const nextEnd = text.indexOf('.', idx);
+  const sentEnd = nextEnd === -1 ? text.length : nextEnd;
+  const sentence = text.slice(sentStart, sentEnd);
+  const commaCount = (sentence.match(/,/g) || []).length;
+  if (commaCount < LIST_MENTION_MIN_COMMAS) return false;
+  return idx - sentStart > LIST_MENTION_SUBJECT_WINDOW;
+}
+
+/**
+ * 본문에서 회사명이 "직접 언급"(당사자)인지 — 토큰으로 등장 + 여러 기관을 나열하는
+ * 문장의 항목 하나일 뿐인 경우는 제외. 제목은 나열문일 가능성이 희박해 이 검사를 안 함.
+ * 예: "노틸러스인베스트먼트, iM투자파트너스, 심산벤처스, 스파크랩파트너스, 와이앤아처,
+ *      에트리홀딩스, 포스코기술투자, 파트너스라운지는 발표 심사에 이어..." → 나열의 일부, 제외.
+ */
+export function matchesAsDirectMention(body: string, name: string): boolean {
+  if (!body || !name) return false;
+  return findTokenIndices(body, name).some(idx => !isListMentionAt(body, idx));
 }
 
 // 회사명 매칭(관련성)을 적용할 카테고리.
@@ -123,6 +162,7 @@ export const NAME_MATCH_CATEGORIES = new Set(['portfolio_company', 'sparklabs_se
 
 export interface RelevanceInput {
   title: string;
+  body?: string | null; // 스크래핑된 본문 (있으면 제목과 함께 exclude/context/name 매칭에 사용)
   primaryKeyword: string;
   name?: string | null;         // 회사명 (강한 식별자)
   englishName?: string | null;  // 영문 회사명 (강한 식별자)
@@ -146,40 +186,84 @@ function strongKeys(a: RelevanceInput): string[] {
 }
 
 /**
+ * 강한 식별자(mainKeys: primaryKeyword·name·englishName + 그 표기 변형 helperKeywords)와
+ * 진짜 보조 식별자(trueHelpers: 대표자명·별칭 등, 강한 식별자와 함께 있어야만 유효)를 분리.
+ * filterReason과 소급 정리 스크립트(scripts/cleanup-helper-only-matches.ts)가 공유.
+ */
+export function resolveMainKeys(a: RelevanceInput): { mainKeys: string[]; trueHelpers: string[] } {
+  const strong = strongKeys(a);
+  const strongNormalized = new Set(strong.map(k => k.replace(/\s+/g, '')));
+  const helpers = splitCsv(a.helperKeywords).filter(k => k.length >= 2);
+  const variantHelpers = helpers.filter(h => strongNormalized.has(h.replace(/\s+/g, '')));
+  const trueHelpers = helpers.filter(h => !strongNormalized.has(h.replace(/\s+/g, '')));
+  return { mainKeys: [...strong, ...variantHelpers], trueHelpers };
+}
+
+/**
  * 필터 위반 사유 반환 (통과 시 null).
+ * 판단 순서(우선순위) — 반드시 이 순서로 검사한다:
  * 1) 대상별 제외어 → exclude_word
- * 2) 문맥어(contextWords) 미포함 → missing_context
- * 3) 스포츠·게임·연예·광고 강제 제외 → sports_ad
- * 4) 광고/생활정보 노이즈 → ad_noise
- * 5) 회사명(강한 식별자) 미포함 → irrelevant
- *    ※ helperKeywords(대표자명 등)만으로는 통과 불가 — 회사명/영문명이 함께 등장해야 함.
- *    ※ 대표자명 동명이인 판별은 여기서 하지 않음 — 제목만으로는 오판 위험이 커서
- *      AI 분류 단계(prompts.ts의 HAIKU_CLASSIFIER)에서 문맥어를 참고해 종합 판단함.
+ * 2) 회사명(강한 식별자: primaryKeyword·name·englishName) 미포함 → irrelevant
+ *    ※ NAME_MATCH_CATEGORIES 적용 카테고리에서는 이 검사가 최우선 — helperKeywords나
+ *      contextWords가 아무리 맞아도 회사명 자체가 없으면 그 시점에서 바로 탈락시킨다.
+ *      (과거엔 티어 B/C 대상에 한해 이 검사 자체를 건너뛰어, contextWords 단어 하나만
+ *      우연히 일치해도 회사명이 전혀 없는 무관한 기사가 통과하는 사고가 있었음 — 2026-07-29,
+ *      카도/GMG/글로벌브릿지 오탐 3건. collector.ts의 티어 우회 로직 제거로 근본 수정.)
+ * 3) 회사명이 확인된 후 — 진짜 보조 식별자(trueHelpers: 대표자명·별칭 등)가 함께 등장 →
+ *    더 확실한 근거이므로 문맥어 검사 없이 즉시 통과.
+ * 4) 보조 식별자가 없으면 → 문맥어(contextWords) 중 하나라도 포함돼야 통과 (missing_context)
+ *    ※ 문맥어만으로 동명이인을 완전히 걸러내진 못한다 (예: "공동대표"처럼 흔한 문맥어는
+ *      전혀 다른 조직의 동명이인 대표에도 걸림 — 이런 경우는 문맥어 자체를 더 구체적인
+ *      단어로 좁혀야 한다. data/master-keywords.json 참고).
+ * 5) 스포츠·게임·연예·광고 강제 제외 → sports_ad
+ * 6) 광고/생활정보 노이즈 → ad_noise
  */
 export function filterReason(a: RelevanceInput): FilterReason | null {
   const title = a.title ?? '';
+  const body = a.body ?? '';
 
   const excl = splitCsv(a.excludeWords);
-  if (excl.some(w => w.length >= 2 && title.includes(w))) return 'exclude_word';
+  if (excl.some(w => w.length >= 2 && (matchesAsToken(title, w) || (body.length > 0 && matchesAsToken(body, w))))) return 'exclude_word';
+
+  // 회사명 매칭은 지정 카테고리에만 적용 (그 외/미상은 스킵 — 오탐 방지)
+  // 강한 식별자(회사명·영문명·주키워드)가 제목 또는 본문에 독립 토큰으로 등장해야 통과.
+  // helperKeywords(대표자명·별칭 등)만 있는 기사는 동명이인 오통과 방지를 위해 제외 —
+  // 단, helperKeywords 중 강한 식별자의 단순 표기 변형(띄어쓰기 차이 등. 예: "스파크랩파트너스"
+  // ↔ "스파크랩 파트너스")은 사실상 같은 식별자이므로 강한 식별자와 동급으로 취급한다.
+  const applyNameMatch = a.category != null && NAME_MATCH_CATEGORIES.has(a.category);
+  const { mainKeys: keys, trueHelpers } = resolveMainKeys(a);
+
+  let nameMatchedInTitle = false;
+  if (applyNameMatch && keys.length > 0) {
+    nameMatchedInTitle = keys.some(k => matchesAsToken(title, k));
+    // 본문 매칭은 "직접 언급"만 인정 — 참여기관 나열문의 항목 하나일 뿐인 경우는 제외.
+    const inBody = body.length > 0 && keys.some(k => matchesAsDirectMention(body, k));
+    // 강한 식별자(회사명 자체)가 전혀 없으면, 진짜 보조 식별자(대표자명·별칭)만 있어도 불통과.
+    // 예: 대표자명 "버나드문"만 있고 "스파크랩 그룹"/"SparkLabs Group" 자체는 없는 기사는 제외.
+    if (!nameMatchedInTitle && !inBody) return 'irrelevant';
+  }
+
+  // 진짜 보조 식별자(trueHelpers)가 회사명과 함께 등장하면 더 확실한 근거 — 문맥어 검사 생략.
+  // (NAME_MATCH_CATEGORIES 적용 대상에서 회사명이 이미 확인된 경우에만 적용 — 그 외 카테고리는
+  // 기존처럼 문맥어를 항상 검사한다.)
+  const helperConfirmed = applyNameMatch && trueHelpers.length > 0 && (
+    trueHelpers.some(k => matchesAsToken(title, k)) ||
+    (body.length > 0 && trueHelpers.some(k => body.includes(k)))
+  );
 
   // 문맥어: 지정된 경우, 동명이의어 등 흔한 단어의 회사명을 걸러내기 위해
-  // 제목에 문맥어 중 하나가 반드시 등장해야 통과 (설정 안 하면 이 체크는 스킵).
+  // 제목 또는 본문에 문맥어 중 하나가 반드시 등장해야 통과 (설정 안 하면 이 체크는 스킵).
+  // 본문은 스크래핑 실패 시 빈 문자열일 수 있으므로 제목 매칭만으로도 통과 가능해야 함.
   const mustAny = splitCsv(a.contextWords);
-  if (mustAny.length > 0 && !mustAny.some(k => matchesAsToken(title, k))) return 'missing_context';
+  if (!helperConfirmed && mustAny.length > 0) {
+    const inTitle = mustAny.some(k => matchesAsToken(title, k));
+    const inBody = body.length > 0 && mustAny.some(k => body.includes(k));
+    if (!inTitle && !inBody) return 'missing_context';
+  }
 
   if (isBlockedNoise({ title, link: a.link, source: a.source })) return 'sports_ad';
 
   if (AD_NOISE_KEYWORDS.some(w => title.includes(w))) return 'ad_noise';
-
-  // 회사명 매칭은 지정 카테고리에만 적용 (그 외/미상은 스킵 — 오탐 방지)
-  // 강한 식별자(회사명·영문명·주키워드)가 독립 토큰으로 등장해야 통과.
-  const applyNameMatch = a.category != null && NAME_MATCH_CATEGORIES.has(a.category);
-  if (applyNameMatch) {
-    // 강한 식별자(회사명·영문명·주키워드) + 팀이 큐레이션한 보조 식별자(서비스명·별칭·대표자명 등 helperKeywords).
-    // 예: 서비스명 '약올려'만 제목에 있고 회사명 '룩인사이트'는 없는 기사도 포폴사로 인정.
-    const keys = [...strongKeys(a), ...splitCsv(a.helperKeywords)].filter(k => k.length >= 2);
-    if (keys.length > 0 && !keys.some(k => matchesAsToken(title, k))) return 'irrelevant';
-  }
 
   return null;
 }
