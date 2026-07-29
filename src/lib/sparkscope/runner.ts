@@ -7,6 +7,7 @@ import { collectAllArticles } from './collector';
 import { analyzeArticles, generateEditorIntro } from './analyzer';
 import { buildDigestData, renderDigestHtml } from './digest';
 import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } from './mailer';
+import type { RawArticle, AnalyzedArticle } from './types';
 
 export interface RunOptions {
   send?: boolean;            // 실제 메일 발송 여부 (false면 DB 저장까지만)
@@ -81,9 +82,15 @@ export async function runDailyDigest(opts: RunOptions = {}) {
     });
     const trendingTopics = trendTargets.map(t => t.name);
 
-    // 3. 분석 (Claude)
-    const analyzed = await analyzeArticles(raw, portfolioUniverse, trendingTopics);
-    console.log(`[runner] analyzed ${analyzed.length} articles`);
+    // 3. 분석 (Claude) — skipCollect 모드는 이미 DB에 분석 완료된 데이터이므로 재분석하지 않고 그대로 사용
+    //    (기존에는 skipCollect에서도 최대 500건을 순차 재분석해 60초 maxDuration을 초과, 발송 자체가 무산되었음)
+    const analyzed: AnalyzedArticle[] = opts.skipCollect
+      ? (raw as any[]).map(a => ({
+          ...a,
+          relatedCompanies: typeof a.relatedCompanies === 'string' ? JSON.parse(a.relatedCompanies) : (a.relatedCompanies ?? []),
+        }))
+      : await analyzeArticles(raw, portfolioUniverse, trendingTopics);
+    console.log(`[runner] analyzed ${analyzed.length} articles (skipCollect=${!!opts.skipCollect})`);
 
     // 4. DB 저장 (upsert by link) — skipCollect 모드는 생략 (이미 저장된 데이터)
     if (!opts.skipCollect) {
