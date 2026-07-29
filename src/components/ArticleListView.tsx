@@ -17,6 +17,7 @@ interface Article {
   tone: string | null;
   pitchScore: number | null;
   isScrapped?: boolean;
+  titleOnlyFallback?: boolean;
 }
 
 type SortKey = 'recent' | 'oldest' | 'tier';

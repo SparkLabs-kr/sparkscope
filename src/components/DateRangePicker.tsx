@@ -13,6 +13,7 @@ const PRESETS = [
   { label: '1개월', shift: (d: Date) => d.setMonth(d.getMonth() - 1) },
   { label: '3개월', shift: (d: Date) => d.setMonth(d.getMonth() - 3) },
   { label: '1년', shift: (d: Date) => d.setFullYear(d.getFullYear() - 1) },
+  { label: '3년', shift: (d: Date) => d.setFullYear(d.getFullYear() - 3) },
 ];
 
 export function DateRangePicker({ from, to, min, max, company, tab }: { from: string; to: string; min: string; max: string; company?: string; tab?: string }) {
@@ -31,10 +32,13 @@ export function DateRangePicker({ from, to, min, max, company, tab }: { from: st
   };
 
   // 프리셋 기준일은 서버가 내려준 max(=오늘, KST)를 쓴다. 브라우저 시간대와 어긋나 하이라이트가 빗나가는 걸 방지.
+  // min(=서버가 clamp하는 최저 조회일)보다 이전으로 계산되면 서버도 min으로 clamp해서 내려주므로,
+  // 여기서도 똑같이 min으로 clamp해야 "3년"처럼 min보다 오래된 프리셋의 하이라이트가 어긋나지 않는다.
   const presetFrom = (shift: (d: Date) => void) => {
     const d = new Date(`${max}T00:00:00`);
     shift(d);
-    return fmt(d);
+    const computed = fmt(d);
+    return computed < min ? min : computed;
   };
 
   const inputCls = 'rounded-lg border border-spark-border px-2 py-1 text-sm focus:border-spark-purple focus:outline-none';

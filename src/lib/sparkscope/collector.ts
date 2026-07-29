@@ -6,8 +6,24 @@
 import { parseStringPromise } from 'xml2js';
 import { prisma } from '@/lib/prisma';
 import type { RawArticle, Category } from './types';
-import { isRelevant } from './relevance';
+import { isRelevant, normalizeTitleKey, matchesAsToken, matchesAsDirectMention } from './relevance';
 import { isKnownMedia } from './media';
+import { NEGATIVE_KEYWORDS_DATA, CRISIS_KEYWORDS_DATA } from './keywords-data';
+import { scrapeArticleBody, type ScrapedBody } from './scraper';
+import { resolveGoogleNewsUrl } from './google-news-resolver';
+
+// C 티어 폴백: 문맥어 없어도 이 키워드가 제목에 있으면 수집 (이벤트·부정 기사 누락 방지)
+const C_TIER_FALLBACK_KEYWORDS: string[] = [
+  // 긍정/이벤트
+  '투자', '유치', '수상', '선정', 'MOU', '협약', '계약', '출시', '런칭', '오픈', '개시',
+  '상장', '인수', '합병', '설립', '창업', '서비스', '기술', '제품', '파트너십',
+  '진출', '확대', '성장', '돌파', '기록', '협력', '수주', '납품', '글로벌',
+  // 부정/위기 (keywords-data.ts 통합)
+  ...NEGATIVE_KEYWORDS_DATA.map(k => k.keyword),
+  ...CRISIS_KEYWORDS_DATA.map(k => k.keyword),
+  '의혹', '수사', '검찰', '공정위', '과징금', '리콜', '결함', '해킹', '정보유출',
+  '횡령', '갑질', '불매', '파업', '구조조정', '사기', '폐업', '위기', '부실',
+];
 
 type SourceItem = Omit<RawArticle, 'matchedKeyword' | 'category' | 'basePriority'>;
 type Target = Awaited<ReturnType<typeof prisma.monitoringTarget.findMany>>[number];
@@ -73,7 +89,11 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
 
   const max = opts.maxKeywordsPerCategory ?? Infinity;
   const limited: Target[] = [];
-  for (const [, list] of grouped) limited.push(...list.slice(0, max));
+  // portfolio_company는 카테고리당 캡을 적용하지 않는다 — 297개(Live+Exit) 중 가나다순 30개만
+  // 매번 조회되고 나머지는 영영 검색되지 않던 문제(2026-07-28)를 막기 위함.
+  for (const [category, list] of grouped) {
+    limited.push(...list.slice(0, category === 'portfolio_company' ? Infinity : max));
+  }
 
   console.log(`[collector] querying ${limited.length} targets across ${grouped.size} categories (Naver: ${naverEnabled() ? 'ON' : 'OFF'})`);
 
@@ -87,15 +107,42 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
       // (약사공론·의학신문 등 업종 전문지의 포폴사 부정기사를 놓치지 않기 위함)
       // 경쟁사·업계동향은 기존대로 확정 매체 26개(media.ts)만.
       const strongCat = target.category === 'portfolio_company' || target.category === 'sparklabs_self';
-      // 관련성/노이즈 필터: 강한 식별자(회사명·영문명·주키워드) 포함 + 스포츠/광고/제외어 배제
-      return items
-        .filter(item => strongCat || isKnownMedia(item.source))
-        .filter(item => isRelevant({ title: item.title, primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, excludeWords: target.excludeWords, contextWords: target.contextWords, category: target.category, link: item.link, source: item.source }))
+      const excludeList = splitCsv((target as any).excludeWords);
+      const contextList = splitCsv((target as any).contextWords);
+      const tier = (target as any).tier as string | null | undefined;
+      const isBcTier = tier === 'B' || tier === 'C';
+      const SPARKLABS_PERSON_KEYWORDS = new Set(['김유진', '김호민', '이한주']);
+      const isSparkLabsPerson = target.category === 'sparklabs_self' && SPARKLABS_PERSON_KEYWORDS.has(target.primaryKeyword);
+
+      const mediaFiltered = items.filter(item => strongCat || isKnownMedia(item.source));
+
+      // 제외어/문맥어가 설정된 대상만 본문까지 스크래핑해서 title+본문 기준으로 판단.
+      const needsBody = excludeList.length > 0 || contextList.length > 0 || isSparkLabsPerson;
+      const bodyMap = needsBody ? await scrapeBodiesFor(mediaFiltered) : new Map<string, ScrapedBody | null>();
+
+      return mediaFiltered
+        .filter(item => {
+          const body = bodyMap.get(item.link)?.text ?? '';
+          if (isBcTier && excludeList.some(w => item.title.includes(w) || body.includes(w))) return false;
+          if (isBcTier && contextList.length > 0 && contextList.some(w => item.title.includes(w) || body.includes(w))) return true;
+          if (tier === 'C') return C_TIER_FALLBACK_KEYWORDS.some(w => item.title.includes(w));
+          // 스파크랩 대표자명(김유진·김호민·이한주): 이름이 토큰으로 실제 등장 + 문맥어까지 있어야 통과.
+          // (문맥어만 보고 이름 자체는 확인 안 하던 버그로, "대표"처럼 흔한 문맥어 하나 때문에
+          // 본문에 이름이 아예 없는 무관한 기사까지 통과한 사고가 있었음 — 2026-07-28)
+          if (isSparkLabsPerson) {
+            const nameMatches = matchesAsToken(item.title, target.primaryKeyword) || matchesAsDirectMention(body, target.primaryKeyword);
+            if (!nameMatches) return false;
+            return contextList.length > 0 && contextList.some(w => item.title.includes(w) || body.includes(w));
+          }
+          return isRelevant({ title: item.title, body: bodyMap.get(item.link)?.text, primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, excludeWords: target.excludeWords, contextWords: target.contextWords, category: target.category, link: item.link, source: item.source });
+        })
         .map<RawArticle>(item => ({
           ...item,
           matchedKeyword: target.primaryKeyword,
           category: target.category as Category,
           basePriority: (CATEGORY_PRIORITY[target.category] ?? 50) + (TIER_BONUS[target.tier ?? ''] ?? 0),
+          companyDesc: (target as any).notes ?? undefined,
+          body: bodyMap.get(item.link)?.text,
         }));
     }));
     results.forEach(arr => allArticles.push(...arr));
@@ -105,6 +152,49 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
   const filtered = filterAndDedupe(allArticles, opts.daysBack ?? MAX_DAYS_AGO);
   console.log(`[collector] after dedupe: ${filtered.length}`);
   return filtered;
+}
+
+// 기사 목록의 본문을 스크래핑 (제한된 동시성).
+// 구글뉴스 프록시 링크(news.google.com/rss/articles/...)는 실제 언론사 URL이 아니라서 그대로는
+// 스크래핑이 안 됨 — ① 구글 비공식 API로 진짜 URL 해석 시도 → ② 실패하면 네이버 재검색으로
+// 같은 제목의 기사를 찾아 그 직링크로 폴백 → ③ 그래도 실패하면 본문 없이 title-only로 남김.
+async function scrapeBodiesFor(items: SourceItem[]): Promise<Map<string, ScrapedBody | null>> {
+  const out = new Map<string, ScrapedBody | null>();
+  const CONCURRENCY = 4;
+  for (let i = 0; i < items.length; i += CONCURRENCY) {
+    const batch = items.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(batch.map(item => resolveAndScrapeBody(item)));
+    batch.forEach((item, idx) => out.set(item.link, results[idx]));
+  }
+  return out;
+}
+
+async function resolveAndScrapeBody(item: SourceItem): Promise<ScrapedBody | null> {
+  try {
+    if (!item.link.includes('news.google.com')) {
+      return await scrapeArticleBody(item.link);
+    }
+
+    // ① 구글 비공식 API로 진짜 언론사 URL 해석 시도
+    const resolved = await resolveGoogleNewsUrl(item.link);
+    if (resolved) {
+      const body = await scrapeArticleBody(resolved);
+      if (body) return body;
+    }
+
+    // ② 네이버 재검색으로 같은 제목의 기사를 찾아 직링크로 폴백
+    if (naverEnabled()) {
+      const naverResults = await throttledNaver(item.title);
+      const key = normalizeTitleKey(item.title);
+      const match = naverResults.find(r => normalizeTitleKey(r.title) === key);
+      if (match) return await scrapeArticleBody(match.link);
+    }
+
+    return null;
+  } catch (e) {
+    console.error(`[collector] body resolve failed for "${item.title}":`, e);
+    return null;
+  }
 }
 
 // 대상 하나: Google(주키워드) + Naver(이름·영문·보조 다중 검색)
@@ -141,8 +231,12 @@ async function safeSource(fn: () => Promise<SourceItem[]>, keyword: string, labe
   }
 }
 
+// when:7d 없이 검색하면 구글이 "관련성"(사실상 인기·과거 조회수) 순으로 최대 100건만 주는데,
+// "스파크랩"처럼 예전 기사가 많이 쌓인 키워드는 최근 기사가 그 100건 안에도 못 들어가 통째로
+// 누락됨(직접 확인: when:7d 없이는 100건이 전부 작년 11월~올해 5월 기사, 최근 1주일치는 0건).
+// 7d로 넉넉히 받아오고, 실제 보존 기간은 뒤의 filterAndDedupe(daysBack)가 다시 컷한다.
 async function fetchGoogleNews(keyword: string): Promise<SourceItem[]> {
-  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(keyword)}&hl=ko&gl=KR&ceid=KR:ko`;
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(`${keyword} when:7d`)}&hl=ko&gl=KR&ceid=KR:ko`;
   const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 SparkScope/0.1' }, cache: 'no-store' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
@@ -199,6 +293,7 @@ async function fetchNaverNews(keyword: string): Promise<SourceItem[]> {
 
     const source = domainToSource(link);
     if (NOISE_SOURCES.has(source)) continue;
+    if (/@[a-zA-Z0-9.]+\.[a-zA-Z]{2,}/.test(title)) continue;
     out.push({ title, link, source, pubDate });
   }
   return out;
@@ -230,7 +325,7 @@ function filterAndDedupe(articles: RawArticle[], daysBack: number): RawArticle[]
     if (a.pubDate.getTime() < cutoff) continue;
     if (seenLinks.has(a.link)) continue; // URL 기반 중복 제거
     seenLinks.add(a.link);
-    const key = a.title.replace(/\s+/g, '').slice(0, 30);
+    const key = normalizeTitleKey(a.title);
     const existing = seenTitles.get(key);
     if (!existing || existing.basePriority < a.basePriority) {
       seenTitles.set(key, a);

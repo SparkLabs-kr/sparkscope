@@ -3,7 +3,7 @@
  * CSV 컬럼: 카테고리,기업명(한글),기업명(영문),primaryKeyword,helperKeywords,excludeWords,contextWords,businessContext,tier,status
  *
  * 정리 규칙:
- *  - status: Live→ACTIVE, Exit/Written-off/Written-Off→EXIT
+ *  - status(수집 on/off): Written-off만 PAUSED, Live/Exit는 둘 다 ACTIVE — exit했다고 수집을 멈추지 않는다.
  *  - "N/A" 문자열 → 빈 값(null) 처리 (그대로 두면 제목에 "N/A"가 있는 기사까지 걸러짐)
  *  - helperKeywords/excludeWords/contextWords: 줄바꿈 구분도 쉼표 구분으로 통일
  *  - businessContext → notes 로 매핑 (tier는 현재 매칭 로직에서 안 쓰여 반영 안 함)
@@ -20,8 +20,7 @@ import { parse } from 'csv-parse/sync';
 const CSV_PATH = path.join(__dirname, '../data/portfolio_company.csv');
 const JSON_PATH = path.join(__dirname, '../data/master-keywords.json');
 
-// portfolioStatus 표기 통일 (대소문자만 다른 것 정리). status(수집 on/off)는 전부 ACTIVE로 —
-// Live/Exit/Written-off 구분 없이 다 수집하되, 실제 상태는 portfolioStatus에 라벨로 남긴다.
+// portfolioStatus 표기 통일 (대소문자만 다른 것 정리). 실제 상태는 portfolioStatus에 라벨로 남긴다.
 const PORTFOLIO_STATUS_MAP: Record<string, string> = {
   'Live': 'Live',
   'Exit': 'Exit',
@@ -61,7 +60,7 @@ const converted = rows.map(r => {
     name,
     englishName: cleanText(r['기업명(영문)']),
     category: (r['카테고리'] ?? 'portfolio_company').trim() || 'portfolio_company',
-    status: 'ACTIVE',
+    status: portfolioStatus === 'Written-off' ? 'PAUSED' : 'ACTIVE',
     portfolioStatus: portfolioStatus ?? statusRaw ?? null,
     tier: cleanText(r['tier']),
     primaryKeyword: (r['primaryKeyword'] ?? '').trim() || name,

@@ -3,7 +3,9 @@
  * /api/cron/daily-digest 와 /scripts/run-digest.ts 양쪽에서 호출.
  */
 import { prisma } from '@/lib/prisma';
+import type { RawArticle } from './types';
 import { collectAllArticles } from './collector';
+import { normalizeTitleKey } from './relevance';
 import { analyzeArticles, generateEditorIntro } from './analyzer';
 import { buildDigestData, renderDigestHtml } from './digest';
 import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } from './mailer';
@@ -94,42 +96,70 @@ export async function runDailyDigest(opts: RunOptions = {}) {
 
     // 4. DB 저장 (upsert by link) — skipCollect 모드는 생략 (이미 저장된 데이터)
     if (!opts.skipCollect) {
+      // 구글 뉴스는 같은 기사도 수집 때마다 link 토큰이 바뀌어서 link만으로 upsert하면
+      // 실행할 때마다 같은 기사가 새 행으로 계속 쌓인다(진짜 중복). link가 달라도 최근 14일 내
+      // 정규화 제목+매체가 같으면 같은 기사로 보고, 기존 행의 link로 upsert해서 갱신되게 한다.
+      const recentWindow = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+      const recentExisting = await prisma.article.findMany({
+        where: { pubDate: { gte: recentWindow } },
+        select: { link: true, title: true, source: true },
+      });
+      const existingByKey = new Map<string, string>(); // `${source}::${titleKey}` -> 기존 link
+      for (const e of recentExisting) {
+        existingByKey.set(`${e.source}::${normalizeTitleKey(e.title)}`, e.link);
+      }
+
+      // 기사 하나가 잘못돼도(NaN 필드·URL 과다 길이 등 예측 못한 제약 위반) 그날 수집분
+      // 전체가 통째로 유실되지 않도록 건별로 격리. 실패는 기록만 하고 나머지는 계속 저장.
+      // (2026-07-10: try/catch 없이 돌다가 priorityScore NaN·link 인덱스 크기 초과로
+      //  루프 중간에 예외가 나서 그날 수집분이 전부 저장 안 된 사고가 있었음)
+      let saveFailures = 0;
       for (const a of analyzed) {
-        await prisma.article.upsert({
-          where: { link: a.link },
-          create: {
-            title: a.title,
-            link: a.link,
-            source: a.source,
-            pubDate: a.pubDate,
-            matchedKeyword: a.matchedKeyword,
-            category: a.category,
-            importance: a.importance,
-            tone: a.tone,
-            oneLiner: a.oneLiner,
-            ourTake: a.ourTake,
-            relatedCompanies: JSON.stringify(a.relatedCompanies),
-            pitchScore: a.pitchScore,
-            pitchTopic: a.pitchTopic,
-            riskFlag: a.riskFlag,
-            isNoise: a.isNoise,
-            noiseReason: a.noiseReason,
-            priorityScore: a.priorityScore,
-            analyzedAt: new Date(),
-          },
-          update: {
-            importance: a.importance,
-            tone: a.tone,
-            oneLiner: a.oneLiner,
-            ourTake: a.ourTake,
-            relatedCompanies: JSON.stringify(a.relatedCompanies),
-            pitchScore: a.pitchScore,
-            pitchTopic: a.pitchTopic,
-            riskFlag: a.riskFlag,
-            priorityScore: a.priorityScore,
-            analyzedAt: new Date(),
-          },
-        });
+        const dedupeKey = `${a.source}::${normalizeTitleKey(a.title)}`;
+        const targetLink = existingByKey.get(dedupeKey) ?? a.link;
+        try {
+          await prisma.article.upsert({
+            where: { link: targetLink },
+            create: {
+              title: a.title,
+              link: a.link,
+              source: a.source,
+              pubDate: a.pubDate,
+              matchedKeyword: a.matchedKeyword,
+              category: a.category,
+              importance: a.importance,
+              tone: a.tone,
+              oneLiner: a.oneLiner,
+              ourTake: a.ourTake,
+              relatedCompanies: JSON.stringify(a.relatedCompanies),
+              pitchScore: a.pitchScore,
+              pitchTopic: a.pitchTopic,
+              riskFlag: a.riskFlag,
+              isNoise: a.isNoise,
+              noiseReason: a.noiseReason,
+              priorityScore: a.priorityScore,
+              analyzedAt: new Date(),
+            },
+            update: {
+              importance: a.importance,
+              tone: a.tone,
+              oneLiner: a.oneLiner,
+              ourTake: a.ourTake,
+              relatedCompanies: JSON.stringify(a.relatedCompanies),
+              pitchScore: a.pitchScore,
+              pitchTopic: a.pitchTopic,
+              riskFlag: a.riskFlag,
+              priorityScore: a.priorityScore,
+              analyzedAt: new Date(),
+            },
+          });
+        } catch (e: any) {
+          saveFailures++;
+          console.error(`[runner] article save failed, skipping "${a.title}" (${a.link}):`, e?.message ?? e);
+        }
+      }
+      if (saveFailures > 0) {
+        console.error(`[runner] ${saveFailures}/${analyzed.length} articles failed to save this run`);
       }
     }
 
