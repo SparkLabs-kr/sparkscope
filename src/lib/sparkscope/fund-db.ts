@@ -76,8 +76,7 @@ async function getFundClient(): Promise<Client | null> {
 
   if (clientCache) return clientCache;
 
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-  const client = new Client({ connectionString: url });
+  const client = new Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
   try {
     await client.connect();
     clientCache = client;
