@@ -201,14 +201,22 @@ export function resolveMainKeys(a: RelevanceInput): { mainKeys: string[]; trueHe
 
 /**
  * 필터 위반 사유 반환 (통과 시 null).
+ * 판단 순서(우선순위) — 반드시 이 순서로 검사한다:
  * 1) 대상별 제외어 → exclude_word
- * 2) 문맥어(contextWords) 미포함 → missing_context
- * 3) 스포츠·게임·연예·광고 강제 제외 → sports_ad
- * 4) 광고/생활정보 노이즈 → ad_noise
- * 5) 회사명(강한 식별자) 미포함 → irrelevant
- *    ※ helperKeywords(대표자명 등)만으로는 통과 불가 — 회사명/영문명이 함께 등장해야 함.
- *    ※ 대표자명 동명이인 판별은 여기서 하지 않음 — 제목만으로는 오판 위험이 커서
- *      AI 분류 단계(prompts.ts의 HAIKU_CLASSIFIER)에서 문맥어를 참고해 종합 판단함.
+ * 2) 회사명(강한 식별자: primaryKeyword·name·englishName) 미포함 → irrelevant
+ *    ※ NAME_MATCH_CATEGORIES 적용 카테고리에서는 이 검사가 최우선 — helperKeywords나
+ *      contextWords가 아무리 맞아도 회사명 자체가 없으면 그 시점에서 바로 탈락시킨다.
+ *      (과거엔 티어 B/C 대상에 한해 이 검사 자체를 건너뛰어, contextWords 단어 하나만
+ *      우연히 일치해도 회사명이 전혀 없는 무관한 기사가 통과하는 사고가 있었음 — 2026-07-29,
+ *      카도/GMG/글로벌브릿지 오탐 3건. collector.ts의 티어 우회 로직 제거로 근본 수정.)
+ * 3) 회사명이 확인된 후 — 진짜 보조 식별자(trueHelpers: 대표자명·별칭 등)가 함께 등장 →
+ *    더 확실한 근거이므로 문맥어 검사 없이 즉시 통과.
+ * 4) 보조 식별자가 없으면 → 문맥어(contextWords) 중 하나라도 포함돼야 통과 (missing_context)
+ *    ※ 문맥어만으로 동명이인을 완전히 걸러내진 못한다 (예: "공동대표"처럼 흔한 문맥어는
+ *      전혀 다른 조직의 동명이인 대표에도 걸림 — 이런 경우는 문맥어 자체를 더 구체적인
+ *      단어로 좁혀야 한다. data/master-keywords.json 참고).
+ * 5) 스포츠·게임·연예·광고 강제 제외 → sports_ad
+ * 6) 광고/생활정보 노이즈 → ad_noise
  */
 export function filterReason(a: RelevanceInput): FilterReason | null {
   const title = a.title ?? '';
@@ -217,11 +225,37 @@ export function filterReason(a: RelevanceInput): FilterReason | null {
   const excl = splitCsv(a.excludeWords);
   if (excl.some(w => w.length >= 2 && (matchesAsToken(title, w) || (body.length > 0 && matchesAsToken(body, w))))) return 'exclude_word';
 
+  // 회사명 매칭은 지정 카테고리에만 적용 (그 외/미상은 스킵 — 오탐 방지)
+  // 강한 식별자(회사명·영문명·주키워드)가 제목 또는 본문에 독립 토큰으로 등장해야 통과.
+  // helperKeywords(대표자명·별칭 등)만 있는 기사는 동명이인 오통과 방지를 위해 제외 —
+  // 단, helperKeywords 중 강한 식별자의 단순 표기 변형(띄어쓰기 차이 등. 예: "스파크랩파트너스"
+  // ↔ "스파크랩 파트너스")은 사실상 같은 식별자이므로 강한 식별자와 동급으로 취급한다.
+  const applyNameMatch = a.category != null && NAME_MATCH_CATEGORIES.has(a.category);
+  const { mainKeys: keys, trueHelpers } = resolveMainKeys(a);
+
+  let nameMatchedInTitle = false;
+  if (applyNameMatch && keys.length > 0) {
+    nameMatchedInTitle = keys.some(k => matchesAsToken(title, k));
+    // 본문 매칭은 "직접 언급"만 인정 — 참여기관 나열문의 항목 하나일 뿐인 경우는 제외.
+    const inBody = body.length > 0 && keys.some(k => matchesAsDirectMention(body, k));
+    // 강한 식별자(회사명 자체)가 전혀 없으면, 진짜 보조 식별자(대표자명·별칭)만 있어도 불통과.
+    // 예: 대표자명 "버나드문"만 있고 "스파크랩 그룹"/"SparkLabs Group" 자체는 없는 기사는 제외.
+    if (!nameMatchedInTitle && !inBody) return 'irrelevant';
+  }
+
+  // 진짜 보조 식별자(trueHelpers)가 회사명과 함께 등장하면 더 확실한 근거 — 문맥어 검사 생략.
+  // (NAME_MATCH_CATEGORIES 적용 대상에서 회사명이 이미 확인된 경우에만 적용 — 그 외 카테고리는
+  // 기존처럼 문맥어를 항상 검사한다.)
+  const helperConfirmed = applyNameMatch && trueHelpers.length > 0 && (
+    trueHelpers.some(k => matchesAsToken(title, k)) ||
+    (body.length > 0 && trueHelpers.some(k => body.includes(k)))
+  );
+
   // 문맥어: 지정된 경우, 동명이의어 등 흔한 단어의 회사명을 걸러내기 위해
   // 제목 또는 본문에 문맥어 중 하나가 반드시 등장해야 통과 (설정 안 하면 이 체크는 스킵).
   // 본문은 스크래핑 실패 시 빈 문자열일 수 있으므로 제목 매칭만으로도 통과 가능해야 함.
   const mustAny = splitCsv(a.contextWords);
-  if (mustAny.length > 0) {
+  if (!helperConfirmed && mustAny.length > 0) {
     const inTitle = mustAny.some(k => matchesAsToken(title, k));
     const inBody = body.length > 0 && mustAny.some(k => body.includes(k));
     if (!inTitle && !inBody) return 'missing_context';
@@ -230,24 +264,6 @@ export function filterReason(a: RelevanceInput): FilterReason | null {
   if (isBlockedNoise({ title, link: a.link, source: a.source })) return 'sports_ad';
 
   if (AD_NOISE_KEYWORDS.some(w => title.includes(w))) return 'ad_noise';
-
-  // 회사명 매칭은 지정 카테고리에만 적용 (그 외/미상은 스킵 — 오탐 방지)
-  // 강한 식별자(회사명·영문명·주키워드)가 제목 또는 본문에 독립 토큰으로 등장해야 통과.
-  // helperKeywords(대표자명·별칭 등)만 있는 기사는 동명이인 오통과 방지를 위해 제외 —
-  // 단, helperKeywords 중 강한 식별자의 단순 표기 변형(띄어쓰기 차이 등. 예: "스파크랩파트너스"
-  // ↔ "스파크랩 파트너스")은 사실상 같은 식별자이므로 강한 식별자와 동급으로 취급한다.
-  const applyNameMatch = a.category != null && NAME_MATCH_CATEGORIES.has(a.category);
-  if (applyNameMatch) {
-    const { mainKeys: keys } = resolveMainKeys(a);
-    if (keys.length > 0) {
-      const inTitle = keys.some(k => matchesAsToken(title, k));
-      // 본문 매칭은 "직접 언급"만 인정 — 참여기관 나열문의 항목 하나일 뿐인 경우는 제외.
-      const inBody = body.length > 0 && keys.some(k => matchesAsDirectMention(body, k));
-      // 강한 식별자(회사명 자체)가 전혀 없으면, 진짜 보조 식별자(대표자명·별칭)만 있어도 불통과.
-      // 예: 대표자명 "버나드문"만 있고 "스파크랩 그룹"/"SparkLabs Group" 자체는 없는 기사는 제외.
-      if (!inTitle && !inBody) return 'irrelevant';
-    }
-  }
 
   return null;
 }

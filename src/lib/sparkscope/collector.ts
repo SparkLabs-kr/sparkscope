@@ -6,7 +6,7 @@
 import { parseStringPromise } from 'xml2js';
 import { prisma } from '@/lib/prisma';
 import type { RawArticle, Category } from './types';
-import { isRelevant, normalizeTitleKey, matchesAsToken, matchesAsDirectMention } from './relevance';
+import { isRelevant, normalizeTitleKey, matchesAsToken } from './relevance';
 import { isKnownMedia } from './media';
 import { NEGATIVE_KEYWORDS_DATA, CRISIS_KEYWORDS_DATA } from './keywords-data';
 import { scrapeArticleBody, type ScrapedBody } from './scraper';
@@ -110,31 +110,33 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
       const excludeList = splitCsv((target as any).excludeWords);
       const contextList = splitCsv((target as any).contextWords);
       const tier = (target as any).tier as string | null | undefined;
-      const isBcTier = tier === 'B' || tier === 'C';
-      const SPARKLABS_PERSON_KEYWORDS = new Set(['김유진', '김호민', '이한주']);
-      const isSparkLabsPerson = target.category === 'sparklabs_self' && SPARKLABS_PERSON_KEYWORDS.has(target.primaryKeyword);
 
       const mediaFiltered = items.filter(item => strongCat || isKnownMedia(item.source));
 
       // 제외어/문맥어가 설정된 대상만 본문까지 스크래핑해서 title+본문 기준으로 판단.
-      const needsBody = excludeList.length > 0 || contextList.length > 0 || isSparkLabsPerson;
+      const needsBody = excludeList.length > 0 || contextList.length > 0;
       const bodyMap = needsBody ? await scrapeBodiesFor(mediaFiltered) : new Map<string, ScrapedBody | null>();
 
       return mediaFiltered
         .filter(item => {
           const body = bodyMap.get(item.link)?.text ?? '';
-          if (isBcTier && excludeList.some(w => item.title.includes(w) || body.includes(w))) return false;
-          if (isBcTier && contextList.length > 0 && contextList.some(w => item.title.includes(w) || body.includes(w))) return true;
-          if (tier === 'C') return C_TIER_FALLBACK_KEYWORDS.some(w => item.title.includes(w));
-          // 스파크랩 대표자명(김유진·김호민·이한주): 이름이 토큰으로 실제 등장 + 문맥어까지 있어야 통과.
-          // (문맥어만 보고 이름 자체는 확인 안 하던 버그로, "대표"처럼 흔한 문맥어 하나 때문에
-          // 본문에 이름이 아예 없는 무관한 기사까지 통과한 사고가 있었음 — 2026-07-28)
-          if (isSparkLabsPerson) {
-            const nameMatches = matchesAsToken(item.title, target.primaryKeyword) || matchesAsDirectMention(body, target.primaryKeyword);
-            if (!nameMatches) return false;
-            return contextList.length > 0 && contextList.some(w => item.title.includes(w) || body.includes(w));
+          // 판단 순서(티어 무관 — 모든 대상 동일):
+          // 1) 메인 키워드(회사명/영문명/주키워드)가 실제로 등장하는지 최우선 확인.
+          //    과거엔 티어 B/C 대상에 한해 이 확인을 건너뛰고 contextWords(문맥어) 한 단어만
+          //    맞아도 통과시켜, 회사명 자체가 전혀 없는 무관한 기사가 새는 사고가 있었음
+          //    (2026-07-29: 카도→"사이드카도" 부분일치, GMG→"대출", 글로벌브릿지→"보안" 같은
+          //    흔한 단어 하나로 무관 기사가 전부 통과). isRelevant()가 이 순서를 강제한다.
+          // 2) 메인 키워드가 확인되면 → 보조 식별자(helperKeywords)가 함께 있는지로 더 확실히 검증.
+          // 3) 보조 식별자가 없으면 → 문맥어로 판단(문맥어 없으면 메인 키워드 매칭만으로 통과).
+          // 문맥어(contextWords)가 설정되어 있고 티어 C인 대상이 그마저도 없으면, 최소한
+          // "뉴스거리" 신호 키워드(C_TIER_FALLBACK_KEYWORDS)가 제목에 토큰으로 있어야 통과.
+          if (!isRelevant({ title: item.title, body, primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, excludeWords: target.excludeWords, contextWords: target.contextWords, category: target.category, link: item.link, source: item.source })) {
+            return false;
           }
-          return isRelevant({ title: item.title, body: bodyMap.get(item.link)?.text, primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, excludeWords: target.excludeWords, contextWords: target.contextWords, category: target.category, link: item.link, source: item.source });
+          if (tier === 'C' && contextList.length === 0) {
+            return C_TIER_FALLBACK_KEYWORDS.some(w => matchesAsToken(item.title, w));
+          }
+          return true;
         })
         .map<RawArticle>(item => ({
           ...item,
