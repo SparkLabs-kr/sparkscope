@@ -18,6 +18,7 @@ import { summarizeCrisisCause } from '@/lib/sparkscope/analyzer';
 import { summarizeCompetitorTrend, summarizeOverallTrend } from '@/lib/sparkscope/competitor-insights';
 import { CompetitorPanel, type CompetitorStatView } from '@/components/CompetitorPanel';
 import { RISK_FLAGS } from '@/lib/sparkscope/risk-flags';
+import { InterPanel } from '@/components/InterPanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +33,16 @@ export type TabId = (typeof TABS)[number]['id'];
 
 function resolveTab(v?: string): TabId {
   return TABS.some(t => t.id === v) ? (v as TabId) : 'sparklabs';
+}
+
+// Intra(내부 생태계) / Inter(해외 트렌드) 스코프 전환 — URL(?scope=)로 화면을 나눈다.
+const SCOPES = [
+  { id: 'intra', label: '🏠 Intra', desc: '내부 생태계 — 스파크랩 · 포트폴리오사 · 경쟁사' },
+  { id: 'inter', label: '🔭 Inter', desc: '외부 시장 — 글로벌 트렌드 · 국가별 현황 · 포지셔닝 분석' },
+] as const;
+type ScopeId = (typeof SCOPES)[number]['id'];
+function resolveScope(v?: string): ScopeId {
+  return SCOPES.some(s => s.id === v) ? (v as ScopeId) : 'intra';
 }
 
 const MIN_DATE = '2023-11-01';
@@ -483,10 +494,11 @@ function buildTrendData(records: { matchedKeyword: string; pubDate: Date }[], si
   return { labels, datasets };
 }
 
-export default async function DashboardPage({ searchParams }: { searchParams: { from?: string; to?: string; company?: string; tab?: string } }) {
+export default async function DashboardPage({ searchParams }: { searchParams: { from?: string; to?: string; company?: string; tab?: string; scope?: string } }) {
   const range = resolveRange(searchParams);
   const company = typeof searchParams.company === 'string' && searchParams.company ? searchParams.company : undefined;
   const tab = resolveTab(searchParams.tab);
+  const scope = resolveScope(searchParams.scope);
   const data = await loadDashboardData(range.from, range.to, company);
   const session = await getServerSession(authOptions);
   const canScrap = canScrapEmail(session?.user?.email ?? null);
@@ -494,13 +506,44 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
   // 탭 링크: 현재 기간·회사 필터를 유지한 채 tab만 바꾼다.
   const tabHref = (t: TabId) => {
-    const params = new URLSearchParams({ from: range.from, to: range.to, tab: t });
+    const params = new URLSearchParams({ from: range.from, to: range.to, tab: t, scope });
     if (data.selectedCompany) params.set('company', data.selectedCompany);
     return `/dashboard?${params.toString()}`;
   };
+  // 스코프 링크: Intra ↔ Inter 전환, 기간·탭 필터는 유지.
+  const scopeHref = (s: ScopeId) => {
+    const params = new URLSearchParams({ from: range.from, to: range.to, tab, scope: s });
+    if (data.selectedCompany) params.set('company', data.selectedCompany);
+    return `/dashboard?${params.toString()}`;
+  };
+  const activeScope = SCOPES.find(s => s.id === scope)!;
 
   return (
     <>
+      {/* 스코프 전환 — Intra(내부 생태계) / Inter(해외 트렌드) */}
+      <div className="flex flex-wrap items-center gap-3 mb-5">
+        <div className="flex gap-0.5 rounded-lg bg-spark-cream p-0.5">
+          {SCOPES.map(s => {
+            const active = s.id === scope;
+            const activeCls = s.id === 'inter' ? 'bg-emerald-600 text-white' : 'bg-spark-purple text-white';
+            return (
+              <Link
+                key={s.id}
+                href={scopeHref(s.id)}
+                className={`rounded-md px-4 py-1.5 text-xs font-bold transition-colors whitespace-nowrap ${active ? activeCls : 'text-spark-muted hover:text-spark-ink-soft'}`}
+              >
+                {s.label}
+              </Link>
+            );
+          })}
+        </div>
+        <span className="text-[11px] text-spark-muted">{activeScope.desc}</span>
+      </div>
+
+      {scope === 'inter' ? (
+        <InterPanel />
+      ) : (
+      <>
       <div className="flex flex-wrap justify-between items-end gap-4 mb-5">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-spark-purple mb-1.5">Daily Media Intelligence</div>
@@ -671,7 +714,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         )}
       </div>
       }
-
+      </>
+      )}
     </>
   );
 }
