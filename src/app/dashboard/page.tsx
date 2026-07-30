@@ -357,6 +357,7 @@ async function loadDashboardData(from: string, to: string, company?: string) {
   const crisesRaw = detectCrises(
     crisisNeg
       .filter(notNoise)
+      .filter(passesName)
       .filter(a => !INSTITUTION_KEYWORDS.some(k => a.title.includes(k))) as ArticleLite[]
   );
   const crises = await Promise.all(
