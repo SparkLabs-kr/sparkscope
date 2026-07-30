@@ -3,6 +3,8 @@
 // 경쟁사 모니터링 패널 — 상단에 전체 총평 + 통합 막대 비교, 하단에 경쟁사별 카드.
 // 막대의 회사명을 누르면 아래 해당 카드가 파란색으로 하이라이트되고 화면에 잡힌다.
 import { useState } from 'react';
+import type { CompetitorFundSummary } from '@/lib/sparkscope/fund-db';
+import type { FundItem } from '@/lib/sparkscope/fund-db';
 
 export interface CompetitorArticleView {
   title: string;
@@ -21,6 +23,16 @@ export interface CompetitorStatView {
   negatives: CompetitorArticleView[];
   /** AI 트렌드 3줄 (실패 시 null) */
   trend: string[] | null;
+  /** SLAB DB 펀드 요약 (매핑 없으면 null) */
+  fundSummary?: CompetitorFundSummary | null;
+}
+
+function computeDday(maturityDateIso: string): number {
+  const mat = new Date(maturityDateIso);
+  mat.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((mat.getTime() - today.getTime()) / 86400000);
 }
 
 function cardId(name: string) {
@@ -30,15 +42,20 @@ function cardId(name: string) {
 
 export function CompetitorPanel({
   competitors,
+  cardCompetitors,
   sparklabsMentions,
   rangeLabel,
   overallTrend,
+  sparkLabsAum,
 }: {
   competitors: CompetitorStatView[];
+  cardCompetitors?: CompetitorStatView[];
   sparklabsMentions: number;
   rangeLabel: string;
   overallTrend: string[] | null;
+  sparkLabsAum?: number;
 }) {
+  const cards = cardCompetitors ?? competitors;
   const [selected, setSelected] = useState<string | null>(null);
   const max = Math.max(sparklabsMentions, ...competitors.map(c => c.count), 1);
   const totalComp = competitors.reduce((s, c) => s + c.count, 0);
@@ -55,7 +72,7 @@ export function CompetitorPanel({
       <div className="flex flex-wrap justify-between items-center gap-2 mb-1">
         <div className="font-bold text-xl">🏁 경쟁사 모니터링 — 언론 노출 상위</div>
         <span className="px-2.5 py-1 bg-spark-light-purple/50 text-spark-purple rounded-full text-sm font-semibold whitespace-nowrap">
-          TOP {competitors.length} · {rangeLabel}
+          TOP {cards.length} · {rangeLabel}
         </span>
       </div>
       <p className="text-base text-gray-500 mb-4">
@@ -94,7 +111,7 @@ export function CompetitorPanel({
 
       {totalComp > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
-          {competitors.map(c => (
+          {cards.map(c => (
             <CompetitorCard key={c.name} c={c} selected={selected === c.name} />
           ))}
         </div>
@@ -103,6 +120,48 @@ export function CompetitorPanel({
           선택 기간에 집계된 경쟁사 기사가 아직 없습니다. 뉴스 수집이 진행되면 경쟁사별 언급량과 최근 이슈가 여기에 표시됩니다.
         </div>
       )}
+
+      {/* AUM 비교 — 스파크랩 기준 + 카드 경쟁사 펀드 AUM */}
+      {(() => {
+        const aumItems = [
+          ...(sparkLabsAum !== undefined ? [{ name: '스파크랩', aum: sparkLabsAum, isSelf: true }] : []),
+          ...cards
+            .filter(c => c.fundSummary && c.fundSummary.totalAum > 0)
+            .map(c => ({ name: c.name, aum: c.fundSummary!.totalAum, isSelf: false }))
+            .sort((a, b) => b.aum - a.aum),
+        ];
+        const maxAum = Math.max(...aumItems.map(i => i.aum), 1);
+        if (aumItems.length === 0) return null;
+        return (
+          <div className="mt-6 pt-5 border-t border-spark-border">
+            <div className="font-bold mb-3">📊 경쟁사 AUM 비교</div>
+            <div className="space-y-1.5">
+              {aumItems.map(item => (
+                <div key={item.name} className="flex items-center gap-2 text-sm min-w-0">
+                  <div className={`flex-shrink-0 w-28 sm:w-44 truncate text-left ${item.isSelf ? 'font-bold text-spark-purple' : 'text-gray-600'}`}>
+                    {item.name}
+                  </div>
+                  <div className="flex-1 h-5 rounded overflow-hidden min-w-0 bg-gray-100">
+                    <div
+                      className={`h-full rounded ${item.isSelf ? 'bg-spark-purple' : 'bg-slate-400'}`}
+                      style={{ width: `${Math.round((item.aum / maxAum) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex-shrink-0 w-20 text-right tabular-nums font-semibold text-spark-muted">
+                    {item.aum.toLocaleString()}억
+                  </div>
+                </div>
+              ))}
+              {cards.filter(c => !c.fundSummary || c.fundSummary.totalAum === 0).map(c => (
+                <div key={c.name} className="flex items-center gap-2 text-sm min-w-0 opacity-50">
+                  <div className="flex-shrink-0 w-28 sm:w-44 truncate text-gray-400">{c.name}</div>
+                  <div className="flex-1 text-xs text-gray-400 italic">미등록</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -160,16 +219,22 @@ function CompareRow({
   );
 }
 
-function CompetitorCard({ c, selected }: { c: CompetitorStatView; selected: boolean }) {
-  const hasNeg = c.negCount > 0;
+type TabKey = '트렌드' | '기사' | '펀드';
 
-  // 카드 색은 선택 여부로만 구분 (부정 기사 유무는 뱃지로만 표시)
+function CompetitorCard({ c, selected }: { c: CompetitorStatView; selected: boolean }) {
+  const [tab, setTab] = useState<TabKey>('트렌드');
+  const hasNeg = c.negCount > 0;
+  const hasFund = !!(c.fundSummary && c.fundSummary.fundCount > 0);
+
   const frame = selected
     ? 'border-spark-purple bg-spark-light-purple/30 ring-2 ring-spark-purple/30'
     : 'border-gray-400 bg-white';
 
+  const tabs: TabKey[] = ['트렌드', '기사', '펀드'];
+
   return (
     <div id={cardId(c.name)} className={`rounded-xl border-2 p-4 scroll-mt-24 transition-colors ${frame}`}>
+      {/* 헤더 */}
       <div className="flex items-center gap-2 mb-2 min-w-0">
         <div className="text-lg font-bold text-spark-ink flex-1 min-w-0 truncate">
           {c.name}{' '}
@@ -187,55 +252,102 @@ function CompetitorCard({ c, selected }: { c: CompetitorStatView; selected: bool
         </div>
       </div>
 
-      {/* 이 기간 트렌드 3줄 */}
-      {c.trend && c.trend.length > 0 && (
-        <ul className="mb-3 space-y-1 rounded-lg bg-blue-50 px-3 py-2.5">
-          {c.trend.map((t, i) => (
-            <li key={i} className="text-sm leading-relaxed text-spark-ink-soft flex gap-1.5">
-              <span className="text-blue-500 flex-shrink-0">•</span>
-              <span>{t}</span>
-            </li>
-          ))}
-        </ul>
+      {/* 부정 기사 — 탭 위에 항상 표시 */}
+      {hasNeg && c.negatives.length > 0 && (
+        <div className="mb-3 rounded-lg border border-red-100 bg-red-50/50 px-3 py-2">
+          <div className="text-xs font-semibold text-red-500 mb-1.5">⚠️ 부정 기사 {c.negCount}건</div>
+          <div className="space-y-1.5 max-h-32 overflow-y-auto scroll-slim pr-1">
+            {c.negatives.map((a, i) => {
+              const d = new Date(a.pubDate);
+              return (
+                <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" className="block hover:opacity-80">
+                  <div className="text-sm text-spark-ink leading-snug line-clamp-2">{a.title}</div>
+                  <div className="text-xs text-spark-muted mt-0.5">{a.source} · {d.getMonth() + 1}.{d.getDate()}</div>
+                </a>
+              );
+            })}
+          </div>
+        </div>
       )}
 
-      {c.top3.length > 0 ? (
-        <>
-          <div className="text-sm font-semibold text-spark-muted mb-1.5">최근 기사 TOP {c.top3.length}</div>
+      {/* 탭 */}
+      <div className="flex border-b border-spark-border mb-3">
+        {tabs.map(t => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={`px-3 py-1.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === t
+                ? 'border-spark-purple text-spark-purple'
+                : 'border-transparent text-spark-muted hover:text-spark-ink'
+            }`}
+          >
+            {t === '펀드' && hasFund ? `펀드 ${c.fundSummary!.fundCount}개` : t}
+          </button>
+        ))}
+      </div>
+
+      {/* 탭 콘텐츠 */}
+      {tab === '트렌드' && (
+        c.trend && c.trend.length > 0 ? (
+          <ul className="space-y-1 rounded-lg bg-blue-50 px-3 py-2.5">
+            {c.trend.map((t, i) => (
+              <li key={i} className="text-sm leading-relaxed text-spark-ink-soft flex gap-1.5">
+                <span className="text-blue-500 flex-shrink-0">•</span>
+                <span>{t}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-spark-muted/70">트렌드 분석 없음</p>
+        )
+      )}
+
+      {tab === '기사' && (
+        c.top3.length > 0 ? (
           <div className="space-y-2">
             {c.top3.map((a, i) => {
               const d = new Date(a.pubDate);
               return (
                 <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" className="block group">
-                  <div className={`text-base leading-snug line-clamp-2 group-hover:text-spark-purple ${a.neg ? 'text-red-700' : 'text-spark-ink-soft'}`}>
-                    {a.neg && '⚠️ '}{a.title}
+                  <div className={`text-sm leading-snug line-clamp-2 group-hover:text-spark-purple ${a.neg ? 'text-red-700' : 'text-spark-ink-soft'}`}>
+                    {a.title}
                   </div>
-                  <div className="text-sm text-spark-muted mt-0.5">{a.source} · {d.getMonth() + 1}.{d.getDate()}</div>
+                  <div className="text-xs text-spark-muted mt-0.5">{a.source} · {d.getMonth() + 1}.{d.getDate()}</div>
                 </a>
               );
             })}
           </div>
+        ) : (
+          <p className="text-sm text-spark-muted/70">최근 기사 없음</p>
+        )
+      )}
 
-          {/* 부정 기사 섹션 — 기존 형태 유지 */}
-          {c.negatives.length > 0 && (
-            <div className="mt-2.5 pt-2.5 border-t border-spark-border/60">
-              <div className="text-sm font-semibold text-red-500 mb-1.5">⚠️ 부정 기사 전체 {c.negatives.length}건</div>
-              <div className="space-y-1.5 max-h-52 overflow-y-auto scroll-slim pr-1">
-                {c.negatives.map((a, i) => {
-                  const d = new Date(a.pubDate);
-                  return (
-                    <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" className="block rounded-lg border border-red-100 bg-red-50/50 p-2 hover:bg-red-50 transition-colors">
-                      <div className="text-base text-spark-ink leading-snug line-clamp-2">{a.title}</div>
-                      <div className="text-sm text-spark-muted mt-0.5">{a.source} · {d.getMonth() + 1}.{d.getDate()}</div>
-                    </a>
-                  );
-                })}
-              </div>
+      {tab === '펀드' && (
+        hasFund ? (
+          <div>
+            <div className="flex gap-3 mb-2 text-sm">
+              <span className="font-semibold text-spark-ink">{c.fundSummary!.fundCount}개 펀드</span>
+              {c.fundSummary!.totalAum > 0 && (
+                <span className="text-spark-muted">총 AUM {c.fundSummary!.totalAum.toLocaleString()}억</span>
+              )}
             </div>
-          )}
-        </>
-      ) : (
-        <div className="text-base text-spark-muted/70">최근 기사 없음</div>
+            <div className="space-y-1.5 max-h-52 overflow-y-auto pr-0.5">
+              {c.fundSummary!.funds.map((f, i) => (
+                <div key={i} className="rounded-lg bg-indigo-50 px-3 py-2">
+                  <div className="text-sm text-spark-ink leading-snug">{f.name}</div>
+                  <div className="flex gap-2 mt-0.5">
+                    {f.vintage && <span className="text-xs text-indigo-500 font-medium tabular-nums">{f.vintage}년</span>}
+                    {f.aum > 0 && <span className="text-xs text-indigo-500 tabular-nums">{f.aum.toLocaleString()}억</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-spark-muted/70">펀드 데이터 없음</p>
+        )
       )}
     </div>
   );

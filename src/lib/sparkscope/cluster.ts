@@ -1,0 +1,155 @@
+/**
+ * 같은 사건을 다룬 기사(매체만 다름)를 대표 기사 1개 + 나머지로 묶는 클러스터링.
+ *
+ * 회사 정보(matchedKeyword)가 있는 호출부(최근 수집 기사 등)는:
+ *   같은 회사(서로의 matchedKeyword가 상대 제목에 단어로 등장) + 발행일 근접 + 톤(긍/부정) 일치
+ *   를 기준으로 묶는다. 매체마다 문장을 완전히 새로 써서 어순·표현이 겹치지 않아도
+ *   ("엔씽, 158억 AI농업플랫폼 수직농장 공급" vs "엔씽, 158억 'AI 수직농장' 구축…연구기관·
+ *   유통·교육 '전방위 수주'") 같은 회사·비슷한 시점 기사는 놓치지 않는다.
+ *   matchedKeyword는 카테고리 분류가 갈려도(포트폴리오 vs 스타트업계) 실제 제목에 회사명이
+ *   있으면 같은 회사로 인정 — 카테고리 오분류와 무관하게 묶이게 하기 위함.
+ *   톤이 다르면(같은 회사라도 완전히 다른 사안일 가능성이 큼 — 예: 그날 있었던 좋은 소식과
+ *   별개로 발생한 악재) 묶지 않는다. 부정 기사가 긍정 기사 더미에 묻혀 안 보이는 사고 방지.
+ *
+ * 회사 정보가 없는 호출부(톤 분석 등 — 이미 스파크랩 단일 주제라 구분 불필요)는 기존처럼
+ * 문자 bigram + 단어 토큰 유사도만으로 판단한다.
+ */
+
+export interface ClusterableArticle {
+  id: string;
+  title: string;
+  matchedKeyword?: string;
+  pubDate?: Date | string;
+  tone?: string | null;
+}
+
+export interface ArticleCluster<T> {
+  rep: T;
+  others: T[];
+}
+
+const BIGRAM_THRESHOLD = 0.65;
+const TOKEN_THRESHOLD = 0.5;
+
+function normalizeForBigram(title: string): string {
+  return title.replace(/[\[\]'"‘’“”()·,.\-–—0-9\s]/g, '').toLowerCase();
+}
+
+function bigramSet(s: string): Set<string> {
+  const set = new Set<string>();
+  for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2));
+  return set;
+}
+
+// containment 계수(교집합/짧은쪽 크기) — 부제가 붙어 길이가 크게 달라도, 짧은 제목의
+// bigram이 긴 제목 안에 거의 다 들어있으면 같은 사건으로 판단.
+function bigramSimilarity(a: string, b: string): number {
+  const A = bigramSet(normalizeForBigram(a));
+  const B = bigramSet(normalizeForBigram(b));
+  if (!A.size || !B.size) return 0;
+  let overlap = 0;
+  for (const g of A) if (B.has(g)) overlap++;
+  return overlap / Math.min(A.size, B.size);
+}
+
+function normalizeToken(t: string): string {
+  return t.replace(/[·,.\-–—'"‘’“”()\[\]]/g, '').toLowerCase();
+}
+
+// 공백/문장부호 기준 단어 분리. 2글자 미만(조사·기호 파편)은 제외.
+function tokenize(title: string): Set<string> {
+  const tokens = title
+    .replace(/[\[\]'"‘’“”()]/g, ' ')
+    .split(/[\s·,.\-–—…]+/)
+    .map(normalizeToken)
+    .filter(t => t.length >= 2);
+  return new Set(tokens);
+}
+
+// 회사명 토큰은 거의 모든 제목에 들어있어 겹침을 부풀리므로 제외하고, 나머지 핵심 단어끼리만 비교.
+function tokenSimilarity(a: string, b: string, excludeToken?: string): number {
+  const exclude = excludeToken ? normalizeToken(excludeToken) : null;
+  const A = new Set([...tokenize(a)].filter(t => t !== exclude));
+  const B = new Set([...tokenize(b)].filter(t => t !== exclude));
+  if (!A.size || !B.size) return 0;
+  let overlap = 0;
+  for (const t of A) if (B.has(t)) overlap++;
+  return overlap / Math.min(A.size, B.size);
+}
+
+// 두 신호를 각자의 임계값 대비 비율로 정규화해 최댓값을 매칭 점수로 쓴다 — 1.0 이상이면 매칭.
+function titleMatchScore(aTitle: string, bTitle: string, companyName?: string): number {
+  const bigramRatio = bigramSimilarity(aTitle, bTitle) / BIGRAM_THRESHOLD;
+  const tokenRatio = tokenSimilarity(aTitle, bTitle, companyName) / TOKEN_THRESHOLD;
+  return Math.max(bigramRatio, tokenRatio);
+}
+
+// 정확히 단어 단위로 등장하는지 확인 — "노리"가 "노리개"의 일부로 잘못 걸리는 것 방지
+// (2글자 이하 짧은 회사명·부분문자열 오탐은 이 프로젝트에서 실제로 겪은 문제라 단어 경계를 지킨다).
+function titleHasToken(title: string, token?: string): boolean {
+  if (!token) return false;
+  const norm = normalizeToken(token);
+  if (norm.length < 2) return false;
+  return tokenize(title).has(norm);
+}
+
+// 같은 회사 여부 — matchedKeyword가 서로 달라도(카테고리 분류가 갈려 다른 키워드로 수집된
+// 경우, 예: portfolio_company용 "엔씽" vs industry_trend용 "스타트업 글로벌 진출") 상대
+// 제목에 내 matchedKeyword가 단어로 등장하면 같은 회사로 본다.
+function sameCompany<T extends ClusterableArticle>(a: T, b: T): boolean {
+  if (a.matchedKeyword && titleHasToken(b.title, a.matchedKeyword)) return true;
+  if (b.matchedKeyword && titleHasToken(a.title, b.matchedKeyword)) return true;
+  return false;
+}
+
+function toneCompatible<T extends ClusterableArticle>(a: T, b: T): boolean {
+  if (!a.tone || !b.tone) return true; // 톤 정보 없으면 막지 않음
+  return a.tone === b.tone;
+}
+
+function daysBetween(a?: Date | string, b?: Date | string): number {
+  if (!a || !b) return 0;
+  const diff = Math.abs(+new Date(a) - +new Date(b));
+  return Number.isNaN(diff) ? 0 : diff / 86_400_000;
+}
+
+function isMatch<T extends ClusterableArticle>(a: T, b: T, maxDateDiffDays: number): boolean {
+  if (daysBetween(a.pubDate, b.pubDate) > maxDateDiffDays) return false;
+  const hasCompanyInfo = !!(a.matchedKeyword || b.matchedKeyword);
+  if (hasCompanyInfo) return sameCompany(a, b) && toneCompatible(a, b);
+  // 회사 정보가 없으면(톤 분석 등, 이미 단일 주제) 제목 유사도만으로 판단 — 기존 동작 유지.
+  return titleMatchScore(a.title, b.title, a.matchedKeyword) >= 1;
+}
+
+// 대표는 그룹 내 가장 간결한(짧은) 제목 — 부제가 덕지덕지 붙은 제목보다 핵심만 담겨 있어 대표로 적합.
+export function clusterArticles<T extends ClusterableArticle>(
+  list: T[],
+  opts?: { maxDateDiffDays?: number },
+): ArticleCluster<T>[] {
+  const maxDateDiffDays = opts?.maxDateDiffDays ?? Infinity;
+  const clusters: ArticleCluster<T>[] = [];
+
+  for (const article of list) {
+    let bestCluster: ArticleCluster<T> | null = null;
+    let bestRank = -Infinity;
+    for (const cluster of clusters) {
+      // 대표뿐 아니라 이미 묶인 기사 전부와 비교 — 표현이 조금씩 이어지는 변형 체인을 놓치지 않는다.
+      for (const member of [cluster.rep, ...cluster.others]) {
+        if (!isMatch(article, member, maxDateDiffDays)) continue;
+        const rank = -daysBetween(article.pubDate, member.pubDate); // 발행일 더 가까운 클러스터 우선
+        if (rank > bestRank) { bestRank = rank; bestCluster = cluster; }
+      }
+    }
+    if (bestCluster) {
+      if (article.title.length < bestCluster.rep.title.length) {
+        bestCluster.others.push(bestCluster.rep);
+        bestCluster.rep = article;
+      } else {
+        bestCluster.others.push(article);
+      }
+    } else {
+      clusters.push({ rep: article, others: [] });
+    }
+  }
+  return clusters;
+}

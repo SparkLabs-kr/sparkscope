@@ -293,13 +293,39 @@ JSON 객체만 반환:`;
   }
 }
 
+// 위기 카드가 여러 건일 때 대시보드 상단에 붙이는 전체 요약 (개별 카드 원인들을 한 번 더 종합).
+const CRISIS_OVERVIEW_SYSTEM = `당신은 스파크랩 커뮤니케이션 본부의 PR 애널리스트입니다.
+여러 포트폴리오사에서 동시에 감지된 부정 이슈 목록을 보고, 지금 상황을 한눈에 파악할 수 있도록 2~3문장(총 120자 이내)으로 종합 요약합니다.
+원칙: 두괄식, 사실만(과장·추측 금지), 입력에 없는 내용 지어내지 않기.
+응답은 반드시 valid JSON 객체로, 추가 설명 없이.`;
+
+export async function summarizeCrisisOverview(
+  crises: { company: string; negCount: number; cause: string }[],
+): Promise<string | null> {
+  if (crises.length === 0) return null;
+  try {
+    const userContent = `위기 감지된 포트폴리오사 목록:
+${crises.map((c, i) => `${i + 1}. ${c.company} (부정 기사 ${c.negCount}건) — ${c.cause}`).join('\n')}
+
+출력 스키마: {"overview": "..."}
+JSON 객체만 반환:`;
+    const text = await chatComplete(CLASSIFIER_MODEL, CRISIS_OVERVIEW_SYSTEM, userContent, 200);
+    const parsed = JSON.parse(extractJson(text));
+    const overview = typeof parsed?.overview === 'string' ? parsed.overview.trim() : '';
+    return overview.length > 0 ? overview : null;
+  } catch (e) {
+    console.error('[analyzer] crisis overview summary failed, using fallback:', e);
+    return null;
+  }
+}
+
 // ===== 휴리스틱 fallback =====
 function heuristicClassify(article: RawArticle): ClassificationResult {
   return {
     category: article.category,
     importance: article.basePriority >= 90 ? 'HIGH' : article.basePriority >= 60 ? 'MEDIUM' : 'LOW',
     isNoise: false,
-    needsDeepAnalysis: false,
+    needsDeepAnalysis: article.category === 'sparklabs_self' || article.category === 'portfolio_company',
   };
 }
 

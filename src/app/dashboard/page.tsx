@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { ArticleListView } from '@/components/ArticleListView';
 import { PortfolioFilter } from '@/components/PortfolioFilter';
 import { ToneBreakdown } from '@/components/ToneBreakdown';
+import { CrisisPanel } from '@/components/CrisisPanel';
 import { TrendChart } from '@/components/TrendChart';
 import { MediaPanel } from '@/components/MediaPanel';
 import { DateRangePicker } from '@/components/DateRangePicker';
@@ -13,15 +14,18 @@ import { OPEN_ACCESS } from '@/lib/flags';
 import { canScrap as canScrapEmail } from '@/lib/scrap';
 import { normalizeSource } from '@/lib/sparkscope/media';
 import { matchesAsToken, isBlockedNoise, normalizeTitleKey } from '@/lib/sparkscope/relevance';
-import { NEGATIVE_KEYWORDS, INDUSTRY_TREND_KEYWORDS, detectCrises, crisisFallbackCause, detectSpikes, type ArticleLite, type CrisisCard, type SpikeCard } from '@/lib/sparkscope/insights';
+import { NEGATIVE_KEYWORDS, INDUSTRY_TREND_KEYWORDS, detectCrises, crisisFallbackCause, detectSpikes, type ArticleLite, type SpikeCard } from '@/lib/sparkscope/insights';
 import { getPrecomputedCrisisCauses, getPrecomputedCompetitorInsights, wasInsightsBatchFreshToday, type InsightSource } from '@/lib/sparkscope/dashboard-insights';
-import { summarizeCrisisCause } from '@/lib/sparkscope/analyzer';
+import { summarizeCrisisCause, summarizeCrisisOverview } from '@/lib/sparkscope/analyzer';
 import { summarizeCompetitorTrend, summarizeOverallTrend } from '@/lib/sparkscope/competitor-insights';
 import { CompetitorPanel, type CompetitorStatView } from '@/components/CompetitorPanel';
+import { getCompetitorFundSummaries, getSparkLabsFundSummary } from '@/lib/sparkscope/fund-db';
+import type { SparkLabsFundSummary } from '@/lib/sparkscope/fund-db';
 import { RISK_FLAGS } from '@/lib/sparkscope/risk-flags';
 import { InterPanel } from '@/components/InterPanel';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
 // 대시보드 섹션 탭 — 스크롤 대신 URL(?tab=)로 화면을 나눈다.
 const TABS = [
@@ -51,6 +55,8 @@ const MIN_DATE = '2023-11-01';
 const TREND_TOP_N = 6;
 // 실시간 위기 감지: "급증" 판단 시간 창(일). 수집 주기(월·수·금)를 고려한 최근 3일.
 const CRISIS_WINDOW_DAYS = 3;
+// 위기 카드가 이 개수를 넘으면 개별 카드 대신 AI 종합요약 + "더보기"로 접어서 공간을 아낀다.
+const CRISIS_SUMMARY_THRESHOLD = 2;
 
 function fmt(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -182,31 +188,55 @@ async function loadDashboardData(from: string, to: string, company: string | und
     if (neg) s.negatives.push(art);
     if (s.titles.length < 40) s.titles.push(a.title); // AI 트렌드 요약 입력용(최신순)
   }
-  // 노출 건수 desc → 상위 10곳
+  // 바차트·AI 총평: 건수 내림차순 상위 10곳 (기존 동작 유지)
   const competitorAggs = Array.from(competitorStatMap.values()).sort((a, b) => b.count - a.count).slice(0, 10);
+
+  // 카드: 고정 12개 (순서 고정, 기사 수와 무관)
+  const PINNED_COMPETITORS: { keyword: string; displayName?: string }[] = [
+    { keyword: '프라이머' },
+    { keyword: '씨엔티테크' },
+    { keyword: '블루포인트파트너스' },
+    { keyword: '아산나눔재단' },
+    { keyword: '와이앤아처' },
+    { keyword: '캡스톤파트너스' },
+    { keyword: '해시드' },
+    { keyword: '디캠프' },
+    { keyword: '알토스벤처스' },
+    { keyword: '카카오벤처스' },
+    { keyword: 'IMM인베스트먼트' },
+    { keyword: '에이티넘인베스트먼트' },
+  ];
+  const pinnedAggs = PINNED_COMPETITORS.map(({ keyword, displayName }) => {
+    const agg = competitorStatMap.get(keyword);
+    const name = displayName ?? keyword;
+    if (!agg) return { name, english: competitorEnglishOf.get(keyword) ?? '', count: 0, negCount: 0, top3: [], negatives: [], titles: [] };
+    return { ...agg, name };
+  });
 
   // 대시보드 AI 요약(위기 원인·경쟁사 트렌드) 사전계산 배치가 오늘(KST) 정상 실행됐는지 —
   // 이 값 하나로 두 섹션(경쟁사 트렌드/아래 위기 카드) 모두 "사전계산 신뢰 여부"를 판단한다.
   // 배치가 안 돌았으면(크론 실패) 예전처럼 그 자리에서 실시간 AI 호출로 자동 대체한다.
   const batchFresh = await wasInsightsBatchFreshToday();
 
-  // AI 트렌드 요약 — 기본 기간(최근 3개월)일 때만 사전계산 결과를 쓴다. 사용자가 기간을 직접
-  // 고르면(비기본 범위) 그 조합은 크론이 미리 계산해두지 않으므로 예전처럼 그 자리에서 계산한다.
+  // AI 트렌드 요약(대시보드 상위 10곳) — 기본 기간(최근 3개월)일 때만 사전계산 결과를 쓴다.
+  // 사용자가 기간을 직접 고르면(비기본 범위) 그 조합은 크론이 미리 계산해두지 않으므로
+  // 예전처럼 그 자리에서 계산한다. 고정 12개 카드(pinnedAggs)는 사전계산 대상이 아니라 항상
+  // 아래에서 실시간으로 계산한다(daily-collect 사전계산은 top10만 커버).
   // 요약 실패는 화면을 막지 않는다(해당 블록만 빠짐).
   let overallTrend: string[] | null;
   let companyTrends: (string[] | null)[];
+  // 하루 한 번만 재계산 — 오늘 날짜(KST)를 키에 포함해 같은 날엔 몇 번을 봐도 캐시 재사용
+  const trendCacheKey = `${from}_${to}_${fmt(getKstNow())}`;
+  // 프롬프트에 "이 기간" 대신 실제 기간을 쓰게 — 일수를 보기 좋은 단위로 변환 (예: 3개월간, 7일간)
+  const periodDays = Math.max(1, Math.round((new Date(`${to}T00:00:00`).getTime() - new Date(`${from}T00:00:00`).getTime()) / 86400000) + 1);
+  const periodPhrase = periodDays >= 300 ? `${Math.round(periodDays / 365)}년간`
+    : periodDays >= 25 ? `${Math.round(periodDays / 30)}개월간`
+    : `${periodDays}일간`;
   if (isDefaultRange && batchFresh) {
     const pre = await getPrecomputedCompetitorInsights();
     overallTrend = pre.overall?.lines ?? null;
     companyTrends = competitorAggs.map(c => pre.byCompany.get(c.name)?.points ?? null);
   } else {
-    // 하루 한 번만 재계산 — 오늘 날짜(KST)를 키에 포함해 같은 날엔 몇 번을 봐도 캐시 재사용
-    const trendCacheKey = `${from}_${to}_${fmt(getKstNow())}`;
-    // 프롬프트에 "이 기간" 대신 실제 기간을 쓰게 — 일수를 보기 좋은 단위로 변환 (예: 3개월간, 7일간)
-    const periodDays = Math.max(1, Math.round((new Date(`${to}T00:00:00`).getTime() - new Date(`${from}T00:00:00`).getTime()) / 86400000) + 1);
-    const periodPhrase = periodDays >= 300 ? `${Math.round(periodDays / 365)}년간`
-      : periodDays >= 25 ? `${Math.round(periodDays / 30)}개월간`
-      : `${periodDays}일간`;
     [overallTrend, companyTrends] = await Promise.all([
       summarizeOverallTrend(
         competitorAggs.map(c => ({ name: c.name, count: c.count, negCount: c.negCount })),
@@ -222,9 +252,25 @@ async function loadDashboardData(from: string, to: string, company: string | und
       ),
     ]);
   }
+  // 고정 12개 카드(pinnedAggs)는 사전계산 대상이 아니므로 항상 실시간으로 계산한다.
+  const [fundSummaries, sparkLabsFundSummary, pinnedCompanyTrends] = await Promise.all([
+    getCompetitorFundSummaries(pinnedAggs.map(c => c.name)),
+    getSparkLabsFundSummary(),
+    Promise.all(
+      pinnedAggs.map(c =>
+        summarizeCompetitorTrend(c.name, c.titles, sparklabsMentions, c.count, trendCacheKey, periodPhrase),
+      ),
+    ),
+  ]);
   const competitors: CompetitorStatView[] = competitorAggs.map(({ titles, ...c }, i) => ({
     ...c,
     trend: companyTrends[i],
+    fundSummary: fundSummaries.get(c.name) ?? null,
+  }));
+  const pinnedCompetitors: CompetitorStatView[] = pinnedAggs.map(({ titles, ...c }, i) => ({
+    ...c,
+    trend: pinnedCompanyTrends[i],
+    fundSummary: fundSummaries.get(c.name) ?? null,
   }));
 
   // 기존 DB에 쌓인 부분일치 노이즈(예: '노리'→'노리지만', '리코'→'인실리코')를
@@ -284,7 +330,8 @@ async function loadDashboardData(from: string, to: string, company: string | und
   //   폴백임을 화면에 명시(source: fallback) — 두 경우를 구분해야 "AI가 실제로 분석한 원인"과
   //   "그냥 키워드 매칭 기본 문구"를 혼동하지 않는다.
   // - 오늘 배치 자체가 안 돎(크론 실패) → 예전처럼 그 자리에서 실시간 호출, 화면은 평소와 동일
-  const crisesRaw = detectCrises(crisisNeg.filter(notNoise) as ArticleLite[]);
+  // (센터/기관 명칭 제외는 detectCrises() 내부(insights.ts)에서 처리 — page.tsx에서 중복 필터링하지 않음)
+  const crisesRaw = detectCrises(crisisNeg.filter(notNoise).filter(passesName) as ArticleLite[]);
   const precomputedCauses = batchFresh
     ? await getPrecomputedCrisisCauses(crisesRaw.map(c => c.company))
     : new Map<string, { cause: string; computedAt: Date }>();
@@ -299,6 +346,10 @@ async function loadDashboardData(from: string, to: string, company: string | und
         : { ...c, cause: crisisFallbackCause(c.reasonKeywords), causeSource: 'fallback' as InsightSource, causeComputedAt: null };
     }),
   );
+  // 위기 카드가 많을 때만 상단에 종합요약 — 1~2건이면 카드 자체가 이미 짧아 요약이 불필요.
+  const crisisOverview = crises.length > CRISIS_SUMMARY_THRESHOLD
+    ? await summarizeCrisisOverview(crises.map(c => ({ company: c.company, negCount: c.negCount, cause: c.cause })))
+    : null;
 
   // 포트폴리오사 선택 필터: 드롭다운 목록 + (선택 시) 해당 회사의 기간 내 기사 전체.
   const portfolioNames = portfolioTargets
@@ -382,6 +433,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
     tones: toneGroups.map(t => ({ tone: t.tone ?? 'NEUTRAL', count: t._count._all })),
     pitches: dedupedPitches,
     crises,
+    crisisOverview,
     spikes: detectSpikes(spikeRecent as ArticleLite[], spikeBaseline, 3, 60),
     trendData: buildTrendData(trendArticles, since, until),
     compare: {
@@ -389,8 +441,10 @@ async function loadDashboardData(from: string, to: string, company: string | und
       houses: competitorTop.map(g => ({ name: g.matchedKeyword, count: g._count._all })),
     },
     competitors,
+    pinnedCompetitors,
     overallTrend,
     sparklabsMentions,
+    sparkLabsFundSummary,
     portfolioTop,
     portfolioNegatives,
     portfolioPositives,
@@ -548,36 +602,23 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         <DateRangePicker key={`${range.from}_${range.to}`} from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())} company={data.selectedCompany} tab={tab} />
       </div>
 
-      {/* 실시간 위기 감지 — 위기 없을 땐 '정상' 상태를 명시해 기능이 살아있음을 표시 */}
-      <div className="mb-6 space-y-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-red-700">🚨 실시간 위기 감지</span>
-          <InfoTip text={`최근 ${CRISIS_WINDOW_DAYS}일간 포트폴리오사별 부정 논조 기사(부정 키워드·부정 톤)를 모아, 2건 이상 급증한 회사를 감지합니다.\n원인은 AI가 실제 기사 제목에서 요약합니다.`} />
-        </div>
-        {data.crises.length > 0 ? (
-          data.crises.map(c => <CrisisCardView key={c.company} c={c} />)
-        ) : (
-          <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
-            🟢 최근 {CRISIS_WINDOW_DAYS}일 내 감지된 포트폴리오 위기가 없습니다.
-            <span className="text-green-600"> 부정 기사가 급증하면 이 자리에 회사별 위기 카드가 자동으로 표시됩니다.</span>
+
+      {/* 이슈 급증 배너 + KPI — 경쟁사 탭 제외 */}
+      {tab !== 'competitor' && (
+        <>
+          {data.spikes.length > 0 && (
+            <div className="mb-6 space-y-2">
+              {data.spikes.map(s => <SpikeBanner key={s.company} s={s} />)}
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <KpiCard label="총 수집 기사" value={data.kpi.total} hint="선택한 기간 내 수집된 모든 기사 수 (노이즈 제외)" />
+            <KpiCard label="스파크랩 직접 언급" value={data.kpi.sparklabsCount} hint="기사 제목에 '스파크랩'이 언급된 건수" />
+            <KpiCard label="포트폴리오사 노출" value={data.kpi.portfolioCount} hint="스파크랩이 투자한 포트폴리오사가 언급된 기사 건수" />
+            <KpiCard label="피칭 기회" value={data.kpi.pitchCount} hint="AI가 기획기사 피칭 가능성을 75점 이상으로 평가한 건수" highlight />
           </div>
-        )}
-      </div>
-
-      {/* 이슈 급증 배너 */}
-      {data.spikes.length > 0 && (
-        <div className="mb-6 space-y-2">
-          {data.spikes.map(s => <SpikeBanner key={s.company} s={s} />)}
-        </div>
+        </>
       )}
-
-      {/* KPI ROW */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <KpiCard label="총 수집 기사" value={data.kpi.total} hint="선택한 기간 내 수집된 모든 기사 수 (노이즈 제외)" />
-        <KpiCard label="스파크랩 직접 언급" value={data.kpi.sparklabsCount} hint="기사 제목에 '스파크랩'이 언급된 건수" />
-        <KpiCard label="포트폴리오사 노출" value={data.kpi.portfolioCount} hint="스파크랩이 투자한 포트폴리오사가 언급된 기사 건수" />
-        <KpiCard label="피칭 기회" value={data.kpi.pitchCount} hint="AI가 기획기사 피칭 가능성을 75점 이상으로 평가한 건수" highlight />
-      </div>
 
       {/* ── 스파크랩 (가장 궁금한 정보) ── */}
       {tab === 'sparklabs' && <>
@@ -591,12 +632,78 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           <div className="font-bold mb-4">💬 톤 분석 (스파크랩) <InfoTip text="'스파크랩' 기사의 긍정·중립·부정 논조 비율입니다. 각 논조의 기사 목록이 바로 아래에 표시됩니다." /></div>
           <ToneBreakdown articles={data.toneArticles as any} />
         </div>
+
+        {/* 스파크랩 펀드 현황 */}
+        {data.sparkLabsFundSummary && (
+          <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
+            <div className="font-bold mb-4">🏦 스파크랩 펀드 현황</div>
+            <div className="flex flex-wrap gap-4 mb-4">
+              <div className="flex flex-col items-center px-4 py-3 rounded-xl bg-spark-light-purple/40 min-w-[80px]">
+                <span className="text-2xl font-extrabold text-spark-purple tabular-nums">{data.sparkLabsFundSummary.fundCount}</span>
+                <span className="text-xs text-spark-muted mt-0.5">펀드 수</span>
+              </div>
+              {data.sparkLabsFundSummary.latestVintage && (
+                <div className="flex flex-col items-center px-4 py-3 rounded-xl bg-spark-light-purple/40 min-w-[80px]">
+                  <span className="text-2xl font-extrabold text-spark-purple tabular-nums">{data.sparkLabsFundSummary.latestVintage}</span>
+                  <span className="text-xs text-spark-muted mt-0.5">최근 빈티지</span>
+                </div>
+              )}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-spark-border text-spark-muted text-left">
+                    <th className="py-2 pr-4 font-semibold">펀드명</th>
+                    <th className="py-2 pr-4 font-semibold text-right tabular-nums">빈티지</th>
+                    <th className="py-2 pr-4 font-semibold">상태</th>
+                    <th className="py-2 font-semibold text-right tabular-nums">만기 D-day</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.sparkLabsFundSummary.funds.map((f, i) => {
+                    const dday = f.maturityDate ? computeDday(f.maturityDate) : null;
+                    return (
+                      <tr key={i} className="border-b border-spark-border/50 last:border-0 hover:bg-spark-subtle">
+                        <td className="py-2 pr-4 text-spark-ink">{f.name}</td>
+                        <td className="py-2 pr-4 text-right tabular-nums text-spark-muted">{f.vintage ?? '—'}</td>
+                        <td className="py-2 pr-4">
+                          {f.status && (
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${f.status === '운용 중' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                              {f.status}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 text-right tabular-nums">
+                          {dday !== null ? (
+                            <span className={`font-semibold ${dday <= 0 ? 'text-red-500' : dday <= 180 ? 'text-amber-500' : 'text-indigo-500'}`}>
+                              {dday <= 0 ? `D+${Math.abs(dday)}` : `D-${dday}`}
+                            </span>
+                          ) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
       </>}
 
       {/* ── 포트폴리오사 ── */}
       {tab === 'portfolio' && <>
       <SectionTitle title="📊 포트폴리오사" sub="어느 포트폴리오사가 활발히 노출되고, 부정 이슈는 없는가" />
+
+      {/* 실시간 위기 감지 — 위기 없을 땐 '정상' 상태를 명시해 기능이 살아있음을 표시 */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-sm font-bold text-red-700">🚨 실시간 위기 감지</span>
+          <InfoTip text={`최근 ${CRISIS_WINDOW_DAYS}일간 포트폴리오사별 부정 논조 기사(부정 키워드·부정 톤)를 모아, 2건 이상 급증한 회사를 감지합니다.\n원인은 AI가 실제 기사 제목에서 요약합니다.`} />
+        </div>
+        <CrisisPanel crises={data.crises} overview={data.crisisOverview} windowDays={CRISIS_WINDOW_DAYS} summaryThreshold={CRISIS_SUMMARY_THRESHOLD} />
+      </div>
+
       {/* 긍정·부정 나란히 (대비가 한눈에) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <PortfolioPositives items={data.portfolioPositives} rangeLabel={range.label} />
@@ -632,6 +739,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         <div className="mb-6">
           <CompetitorPanel
             competitors={data.competitors}
+            cardCompetitors={data.pinnedCompetitors}
             sparklabsMentions={data.sparklabsMentions}
             rangeLabel={range.label}
             overallTrend={data.overallTrend}
@@ -686,36 +794,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   );
 }
 
-function CrisisCardView({ c }: { c: CrisisCard & { cause: string; causeSource: InsightSource; causeComputedAt: Date | null } }) {
-  const d = new Date(c.article.pubDate);
-  return (
-    <div className="rounded-xl border-l-4 border-red-500 bg-gradient-to-r from-red-50 to-white p-4">
-      {/* 1줄: 급증 알림 (실제 회사명) */}
-      <div className="text-sm font-bold text-red-900">
-        {c.company} 관련 부정 기사가 최근 {CRISIS_WINDOW_DAYS}일 내 {c.negCount}건 급증했습니다.
-      </div>
-      {/* 2줄: AI 원인 요약 (두괄식) */}
-      <div className="text-sm text-gray-700 mt-1.5 leading-relaxed">{c.cause}</div>
-      {/* AI가 실제로 읽고 요약한 건지, 아직 분석 전이라 키워드 매칭 기본 문구인지 구분 표시 */}
-      <div className="text-[10px] text-gray-400 mt-0.5">
-        {c.causeSource === 'fallback'
-          ? '⚙️ 기본 요약 · AI 분석 대기 중(다음 수집 때 자동 갱신)'
-          : c.causeComputedAt
-          ? `🤖 AI 요약 · ${fmtKstTime(c.causeComputedAt)} 기준`
-          : '🤖 AI 요약 · 실시간'}
-      </div>
-      {/* 대표 부정기사 1건 */}
-      <div className="mt-3 rounded-lg bg-white/70 border border-red-100 p-2.5">
-        <div className="text-[10px] font-semibold text-red-400 mb-1">대표 부정기사</div>
-        <a href={c.article.link} target="_blank" rel="noopener noreferrer" className="block text-sm text-gray-800 hover:text-spark-purple font-medium">
-          {c.article.title}
-        </a>
-        <div className="text-xs text-gray-500 mt-1">{c.article.source} · {d.getFullYear()}.{d.getMonth() + 1}.{d.getDate()}</div>
-      </div>
-    </div>
-  );
-}
-
 function SpikeBanner({ s }: { s: SpikeCard }) {
   return (
     <div className="rounded-xl border-l-4 border-spark-purple bg-spark-light-purple/40 p-3 flex items-center gap-2">
@@ -724,6 +802,15 @@ function SpikeBanner({ s }: { s: SpikeCard }) {
       <span className="text-xs text-gray-500">(최근 3일 {s.recentCount}건)</span>
     </div>
   );
+}
+
+function computeDday(maturityDateIso: string): number | null {
+  if (maturityDateIso.startsWith('9999') || maturityDateIso.startsWith('2099')) return null; // 만기 미정 placeholder
+  const mat = new Date(maturityDateIso);
+  mat.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((mat.getTime() - today.getTime()) / 86400000);
 }
 
 function SectionTitle({ title, sub }: { title: string; sub?: string }) {
