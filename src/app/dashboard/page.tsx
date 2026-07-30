@@ -13,7 +13,8 @@ import { OPEN_ACCESS } from '@/lib/flags';
 import { canScrap as canScrapEmail } from '@/lib/scrap';
 import { normalizeSource } from '@/lib/sparkscope/media';
 import { matchesAsToken, isBlockedNoise, normalizeTitleKey } from '@/lib/sparkscope/relevance';
-import { NEGATIVE_KEYWORDS, detectCrises, crisisFallbackCause, detectSpikes, type ArticleLite, type CrisisCard, type SpikeCard } from '@/lib/sparkscope/insights';
+import { NEGATIVE_KEYWORDS, INDUSTRY_TREND_KEYWORDS, detectCrises, crisisFallbackCause, detectSpikes, type ArticleLite, type CrisisCard, type SpikeCard } from '@/lib/sparkscope/insights';
+import { getPrecomputedCrisisCauses, getPrecomputedCompetitorInsights, wasInsightsBatchFreshToday, type InsightSource } from '@/lib/sparkscope/dashboard-insights';
 import { summarizeCrisisCause } from '@/lib/sparkscope/analyzer';
 import { summarizeCompetitorTrend, summarizeOverallTrend } from '@/lib/sparkscope/competitor-insights';
 import { CompetitorPanel, type CompetitorStatView } from '@/components/CompetitorPanel';
@@ -51,67 +52,6 @@ const TREND_TOP_N = 6;
 // 실시간 위기 감지: "급증" 판단 시간 창(일). 수집 주기(월·수·금)를 고려한 최근 3일.
 const CRISIS_WINDOW_DAYS = 3;
 
-// 대시보드 집계에서 제외할 업계 키워드 (industry_trend category)
-const INDUSTRY_TREND_KEYWORDS = [
-  'AI 스타트업',
-  'AI 에이전트',
-  'AI 핀테크',
-  'AI 헬스케어',
-  '과학기술정보통신부',
-  '기업주도 벤처캐피탈',
-  '기후테크',
-  '넥스트라이즈',
-  '데모데이',
-  '딥테크',
-  '로보틱스',
-  '모태펀드',
-  '바이오테크',
-  '벤처',
-  '벤처 투자',
-  '벤처캐피탈',
-  '벤처캐피털',
-  '부산',
-  '산업통상자원부',
-  '상장',
-  '생성형 AI',
-  '서울산업진흥원',
-  '스케일업',
-  '스타트업',
-  '스타트업 IPO',
-  '스타트업 M&A',
-  '스타트업 글로벌 진출',
-  '스타트업 시드 투자',
-  '시리즈 A 투자',
-  '시리즈 B 투자',
-  '씨이에스',
-  '아웃스탠딩',
-  '액셀러레이터',
-  '엑시트',
-  '오픈이노베이션',
-  '유니콘',
-  '인수합병',
-  '정부지원사업',
-  '중소벤처기업부',
-  '창업가',
-  '창업진흥원',
-  '창조경제혁신센터',
-  '컴업',
-  '케이글로벌',
-  '케이스타트업',
-  '코트라',
-  '콘텐츠진흥원',
-  '탄소중립',
-  '투자유치',
-  '트라이에브리씽',
-  '팁스',
-  '팁스(TIPS)',
-  '펀드결성',
-  '푸드테크',
-  '한국벤처투자',
-  '한국엔젤투자협회',
-  '한국초기투자기관협회',
-];
-
 function fmt(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -123,6 +63,10 @@ function clamp(s: string, lo: string, hi: string) {
 }
 function getKstNow() {
   return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+}
+function fmtKstTime(d: Date) {
+  const kst = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+  return `${String(kst.getHours()).padStart(2, '0')}:${String(kst.getMinutes()).padStart(2, '0')}`;
 }
 
 function resolveRange(searchParams: { from?: string; to?: string }) {
@@ -137,10 +81,10 @@ function resolveRange(searchParams: { from?: string; to?: string }) {
   const isDefaultRange = to === todayStr && from === fmt(def);
   const pretty = (s: string) => { const [y, m, d] = s.split('-'); return `${y}.${Number(m)}.${Number(d)}`; };
   const label = isDefaultRange ? '최근 3개월' : `${pretty(from)} ~ ${pretty(to)}`;
-  return { from, to, label };
+  return { from, to, label, isDefaultRange };
 }
 
-async function loadDashboardData(from: string, to: string, company?: string) {
+async function loadDashboardData(from: string, to: string, company: string | undefined, isDefaultRange: boolean) {
   const since = new Date(`${from}T00:00:00`);
   const until = new Date(`${to}T23:59:59`);
   const where = { pubDate: { gte: since, lte: until }, isNoise: false };
@@ -241,29 +185,43 @@ async function loadDashboardData(from: string, to: string, company?: string) {
   // 노출 건수 desc → 상위 10곳
   const competitorAggs = Array.from(competitorStatMap.values()).sort((a, b) => b.count - a.count).slice(0, 10);
 
-  // AI 트렌드 요약 — 기간+집계결과가 같으면 메모리 캐시 재사용(competitor-insights.ts).
+  // 대시보드 AI 요약(위기 원인·경쟁사 트렌드) 사전계산 배치가 오늘(KST) 정상 실행됐는지 —
+  // 이 값 하나로 두 섹션(경쟁사 트렌드/아래 위기 카드) 모두 "사전계산 신뢰 여부"를 판단한다.
+  // 배치가 안 돌았으면(크론 실패) 예전처럼 그 자리에서 실시간 AI 호출로 자동 대체한다.
+  const batchFresh = await wasInsightsBatchFreshToday();
+
+  // AI 트렌드 요약 — 기본 기간(최근 3개월)일 때만 사전계산 결과를 쓴다. 사용자가 기간을 직접
+  // 고르면(비기본 범위) 그 조합은 크론이 미리 계산해두지 않으므로 예전처럼 그 자리에서 계산한다.
   // 요약 실패는 화면을 막지 않는다(해당 블록만 빠짐).
-  // 하루 한 번만 재계산 — 오늘 날짜(KST)를 키에 포함해 같은 날엔 몇 번을 봐도 캐시 재사용
-  const trendCacheKey = `${from}_${to}_${fmt(getKstNow())}`;
-  // 프롬프트에 "이 기간" 대신 실제 기간을 쓰게 — 일수를 보기 좋은 단위로 변환 (예: 3개월간, 7일간)
-  const periodDays = Math.max(1, Math.round((new Date(`${to}T00:00:00`).getTime() - new Date(`${from}T00:00:00`).getTime()) / 86400000) + 1);
-  const periodPhrase = periodDays >= 300 ? `${Math.round(periodDays / 365)}년간`
-    : periodDays >= 25 ? `${Math.round(periodDays / 30)}개월간`
-    : `${periodDays}일간`;
-  const [overallTrend, companyTrends] = await Promise.all([
-    summarizeOverallTrend(
-      competitorAggs.map(c => ({ name: c.name, count: c.count, negCount: c.negCount })),
-      competitorAggs.flatMap(c => c.titles.slice(0, 6)),
-      sparklabsMentions,
-      trendCacheKey,
-      periodPhrase,
-    ),
-    Promise.all(
-      competitorAggs.map(c =>
-        summarizeCompetitorTrend(c.name, c.titles, sparklabsMentions, c.count, trendCacheKey, periodPhrase),
+  let overallTrend: string[] | null;
+  let companyTrends: (string[] | null)[];
+  if (isDefaultRange && batchFresh) {
+    const pre = await getPrecomputedCompetitorInsights();
+    overallTrend = pre.overall?.lines ?? null;
+    companyTrends = competitorAggs.map(c => pre.byCompany.get(c.name)?.points ?? null);
+  } else {
+    // 하루 한 번만 재계산 — 오늘 날짜(KST)를 키에 포함해 같은 날엔 몇 번을 봐도 캐시 재사용
+    const trendCacheKey = `${from}_${to}_${fmt(getKstNow())}`;
+    // 프롬프트에 "이 기간" 대신 실제 기간을 쓰게 — 일수를 보기 좋은 단위로 변환 (예: 3개월간, 7일간)
+    const periodDays = Math.max(1, Math.round((new Date(`${to}T00:00:00`).getTime() - new Date(`${from}T00:00:00`).getTime()) / 86400000) + 1);
+    const periodPhrase = periodDays >= 300 ? `${Math.round(periodDays / 365)}년간`
+      : periodDays >= 25 ? `${Math.round(periodDays / 30)}개월간`
+      : `${periodDays}일간`;
+    [overallTrend, companyTrends] = await Promise.all([
+      summarizeOverallTrend(
+        competitorAggs.map(c => ({ name: c.name, count: c.count, negCount: c.negCount })),
+        competitorAggs.flatMap(c => c.titles.slice(0, 6)),
+        sparklabsMentions,
+        trendCacheKey,
+        periodPhrase,
       ),
-    ),
-  ]);
+      Promise.all(
+        competitorAggs.map(c =>
+          summarizeCompetitorTrend(c.name, c.titles, sparklabsMentions, c.count, trendCacheKey, periodPhrase),
+        ),
+      ),
+    ]);
+  }
   const competitors: CompetitorStatView[] = competitorAggs.map(({ titles, ...c }, i) => ({
     ...c,
     trend: companyTrends[i],
@@ -319,19 +277,27 @@ async function loadDashboardData(from: string, to: string, company?: string) {
   const mentionRate = portfolioCount > 0 ? Math.round((mentionCount / portfolioCount) * 100) : 0;
   const prevMentionRate = prevPortfolioCount > 0 ? Math.round((prevMentionCount / prevPortfolioCount) * 100) : 0;
 
-  // 위기 카드: 최근 3일 부정 기사로 감지 후, 회사별 AI 원인요약 주입(실패 시 fallback).
-  // 센터/기관 명칭이 있는 기사는 MOU/협력 뉴스이므로 제외
-  const INSTITUTION_KEYWORDS = ['센터', '기관', '부', '청', '위원회', '연구소', '교육청', '공사', '공단'];
-  const crisesRaw = detectCrises(
-    crisisNeg
-      .filter(notNoise)
-      .filter(a => !INSTITUTION_KEYWORDS.some(k => a.title.includes(k))) as ArticleLite[]
-  );
+  // 위기 카드: 최근 3일 부정 기사로 감지(항상 실시간) 후, 회사별 AI 원인요약 문장만 주입.
+  // 원인 문장은 사전계산(daily-collect 크론) 결과를 우선 쓰고, 아래 3가지 경우로 나뉜다.
+  // - 오늘 배치가 정상 실행됐고 이 회사 결과가 있음 → 그대로 사용(source: ai)
+  // - 오늘 배치는 정상 실행됐는데 이 회사만 없음(신규 위기·신규 회사) → 휴리스틱으로 대체,
+  //   폴백임을 화면에 명시(source: fallback) — 두 경우를 구분해야 "AI가 실제로 분석한 원인"과
+  //   "그냥 키워드 매칭 기본 문구"를 혼동하지 않는다.
+  // - 오늘 배치 자체가 안 돎(크론 실패) → 예전처럼 그 자리에서 실시간 호출, 화면은 평소와 동일
+  const crisesRaw = detectCrises(crisisNeg.filter(notNoise) as ArticleLite[]);
+  const precomputedCauses = batchFresh
+    ? await getPrecomputedCrisisCauses(crisesRaw.map(c => c.company))
+    : new Map<string, { cause: string; computedAt: Date }>();
   const crises = await Promise.all(
-    crisesRaw.map(async c => ({
-      ...c,
-      cause: (await summarizeCrisisCause(c.company, c.titles)) ?? crisisFallbackCause(c.reasonKeywords),
-    })),
+    crisesRaw.map(async c => {
+      const pre = precomputedCauses.get(c.company);
+      if (pre) return { ...c, cause: pre.cause, causeSource: 'ai' as InsightSource, causeComputedAt: pre.computedAt as Date | null };
+      if (batchFresh) return { ...c, cause: crisisFallbackCause(c.reasonKeywords), causeSource: 'fallback' as InsightSource, causeComputedAt: null };
+      const realtime = await summarizeCrisisCause(c.company, c.titles);
+      return realtime
+        ? { ...c, cause: realtime, causeSource: 'ai' as InsightSource, causeComputedAt: null }
+        : { ...c, cause: crisisFallbackCause(c.reasonKeywords), causeSource: 'fallback' as InsightSource, causeComputedAt: null };
+    }),
   );
 
   // 포트폴리오사 선택 필터: 드롭다운 목록 + (선택 시) 해당 회사의 기간 내 기사 전체.
@@ -499,7 +465,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const company = typeof searchParams.company === 'string' && searchParams.company ? searchParams.company : undefined;
   const tab = resolveTab(searchParams.tab);
   const scope = resolveScope(searchParams.scope);
-  const data = await loadDashboardData(range.from, range.to, company);
+  const data = await loadDashboardData(range.from, range.to, company, range.isDefaultRange);
   const session = await getServerSession(authOptions);
   const canScrap = canScrapEmail(session?.user?.email ?? null);
   const todayLabel = getKstNow().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
@@ -720,7 +686,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   );
 }
 
-function CrisisCardView({ c }: { c: CrisisCard & { cause: string } }) {
+function CrisisCardView({ c }: { c: CrisisCard & { cause: string; causeSource: InsightSource; causeComputedAt: Date | null } }) {
   const d = new Date(c.article.pubDate);
   return (
     <div className="rounded-xl border-l-4 border-red-500 bg-gradient-to-r from-red-50 to-white p-4">
@@ -730,6 +696,14 @@ function CrisisCardView({ c }: { c: CrisisCard & { cause: string } }) {
       </div>
       {/* 2줄: AI 원인 요약 (두괄식) */}
       <div className="text-sm text-gray-700 mt-1.5 leading-relaxed">{c.cause}</div>
+      {/* AI가 실제로 읽고 요약한 건지, 아직 분석 전이라 키워드 매칭 기본 문구인지 구분 표시 */}
+      <div className="text-[10px] text-gray-400 mt-0.5">
+        {c.causeSource === 'fallback'
+          ? '⚙️ 기본 요약 · AI 분석 대기 중(다음 수집 때 자동 갱신)'
+          : c.causeComputedAt
+          ? `🤖 AI 요약 · ${fmtKstTime(c.causeComputedAt)} 기준`
+          : '🤖 AI 요약 · 실시간'}
+      </div>
       {/* 대표 부정기사 1건 */}
       <div className="mt-3 rounded-lg bg-white/70 border border-red-100 p-2.5">
         <div className="text-[10px] font-semibold text-red-400 mb-1">대표 부정기사</div>

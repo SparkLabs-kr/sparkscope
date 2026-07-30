@@ -7,6 +7,7 @@ import type { RawArticle, AnalyzedArticle } from './types';
 import { collectAllArticles } from './collector';
 import { normalizeTitleKey } from './relevance';
 import { analyzeArticles, generateEditorIntro } from './analyzer';
+import { computeAndStoreDashboardInsights } from './dashboard-insights';
 import { buildDigestData, renderDigestHtml } from './digest';
 import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } from './mailer';
 
@@ -160,6 +161,10 @@ export async function runDailyDigest(opts: RunOptions = {}) {
       if (saveFailures > 0) {
         console.error(`[runner] ${saveFailures}/${analyzed.length} articles failed to save this run`);
       }
+
+      // 4.5 대시보드 AI 요약(위기 원인·경쟁사 트렌드) 사전계산 — 하루 1회, 실제 수집 실행 때만
+      // (skipCollect=발송 전용 모드에서는 돌리지 않음). 내부적으로 실패를 삼키므로 발송에는 영향 없음.
+      await computeAndStoreDashboardInsights();
     }
 
     // 5. 편집자 인사

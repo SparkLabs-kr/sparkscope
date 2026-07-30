@@ -10,6 +10,69 @@ export const NEGATIVE_KEYWORDS = NEGATIVE_KEYWORDS_DATA.map(k => k.keyword);
 // 부정 키워드 오분류 방지: 센터/기관/정부기관 등은 보도자료/협력 뉴스이므로 제외
 const INSTITUTION_KEYWORDS = ['센터', '기관', '부', '청', '위원회', '연구소', '교육청', '공사', '공단'];
 
+// 경쟁사 집계에서 제외할 업계 키워드 (industry_trend category) — 대시보드 렌더링과
+// 대시보드 인사이트 사전계산(dashboard-insights.ts) 양쪽이 같은 목록을 참조해야
+// 두 경로의 집계 결과가 어긋나지 않는다.
+export const INDUSTRY_TREND_KEYWORDS = [
+  'AI 스타트업',
+  'AI 에이전트',
+  'AI 핀테크',
+  'AI 헬스케어',
+  '과학기술정보통신부',
+  '기업주도 벤처캐피탈',
+  '기후테크',
+  '넥스트라이즈',
+  '데모데이',
+  '딥테크',
+  '로보틱스',
+  '모태펀드',
+  '바이오테크',
+  '벤처',
+  '벤처 투자',
+  '벤처캐피탈',
+  '벤처캐피털',
+  '부산',
+  '산업통상자원부',
+  '상장',
+  '생성형 AI',
+  '서울산업진흥원',
+  '스케일업',
+  '스타트업',
+  '스타트업 IPO',
+  '스타트업 M&A',
+  '스타트업 글로벌 진출',
+  '스타트업 시드 투자',
+  '시리즈 A 투자',
+  '시리즈 B 투자',
+  '씨이에스',
+  '아웃스탠딩',
+  '액셀러레이터',
+  '엑시트',
+  '오픈이노베이션',
+  '유니콘',
+  '인수합병',
+  '정부지원사업',
+  '중소벤처기업부',
+  '창업가',
+  '창업진흥원',
+  '창조경제혁신센터',
+  '컴업',
+  '케이글로벌',
+  '케이스타트업',
+  '코트라',
+  '콘텐츠진흥원',
+  '탄소중립',
+  '투자유치',
+  '트라이에브리씽',
+  '팁스',
+  '팁스(TIPS)',
+  '펀드결성',
+  '푸드테크',
+  '한국벤처투자',
+  '한국엔젤투자협회',
+  '한국초기투자기관협회',
+];
+
 export interface ArticleLite {
   id: string;
   title: string;
@@ -51,6 +114,8 @@ export function detectCrises(portfolioArticles: ArticleLite[], threshold = 2): C
   const byCompany = new Map<string, ArticleLite[]>();
 
   for (const a of portfolioArticles) {
+    // 센터/기관 명칭이 있는 기사는 MOU/협력 뉴스이므로 위기 감지에서 제외
+    if (INSTITUTION_KEYWORDS.some(k => a.title.includes(k))) continue;
     if (!negativeInfo(a).neg) continue;
     const list = byCompany.get(a.matchedKeyword) ?? [];
     list.push(a);

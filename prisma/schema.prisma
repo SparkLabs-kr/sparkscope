@@ -121,11 +121,25 @@ model Digest {
 
 model RunLog {
   id          String   @id @default(cuid())
-  runType     String   // daily / manual / test
+  runType     String   // daily / manual / test / dashboard-insights
   startedAt   DateTime @default(now())
   finishedAt  DateTime?
   status      String   // RUNNING / SUCCESS / FAILED
   collected   Int      @default(0)
   analyzed    Int      @default(0)
   errors      String?
+}
+
+// 대시보드 AI 요약 사전계산 결과 — 위기 원인 / 경쟁사 트렌드.
+// daily-collect 크론 끝에서 하루 1회 계산해 저장하고, 대시보드는 읽기만 한다
+// (렌더링 시점에 LLM을 호출하지 않아 탭 클릭이 항상 빠르게 반응하도록).
+model DashboardInsight {
+  id         String   @id @default(cuid())
+  kind       String   // crisis_cause / competitor_trend / competitor_overall
+  key        String   // crisis_cause·competitor_trend: 회사명 / competitor_overall: "overall" 고정값
+  value      String   // JSON — {"cause":"..."} / {"points":[...]} / {"lines":[...]}
+  computedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@unique([kind, key])
+  @@index([kind])
 }
