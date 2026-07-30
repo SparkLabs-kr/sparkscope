@@ -3,8 +3,9 @@ import { Pool } from 'pg';
 export interface FundItem {
   name: string;
   vintage: number | null;
-  aum: number; // 억 원
+  aum: number; // 억 원 (holding_funds에는 없어 0으로 고정)
   maturityDate: string | null; // ISO date string (YYYY-MM-DD)
+  status?: string | null;
 }
 
 export interface CompetitorFundSummary {
@@ -153,23 +154,22 @@ export async function getSparkLabsFundSummary(): Promise<SparkLabsFundSummary | 
 
   try {
     const res = await pool.query(
-      `SELECT name, vintage, COALESCE(aum, 0) AS aum, TO_CHAR(maturity_date, 'YYYY-MM-DD') AS maturity_date
-       FROM shared_ro.external_funds
-       WHERE investor_name IN ('스파크랩', '스파크랩파트너스')
-       ORDER BY vintage DESC NULLS LAST, aum DESC`,
+      `SELECT name, vintage, TO_CHAR(maturity_date, 'YYYY-MM-DD') AS maturity_date, status
+       FROM shared_ro.holding_funds
+       ORDER BY vintage DESC NULLS LAST, name ASC`,
     );
 
-    const funds: FundItem[] = res.rows.map((r: { name: string; vintage: number | null; aum: string; maturity_date: string | null }) => ({
+    const funds: FundItem[] = res.rows.map((r: { name: string; vintage: number | null; maturity_date: string | null; status: string | null }) => ({
       name: r.name,
       vintage: r.vintage,
-      aum: Math.round(parseFloat(r.aum) / 1e8),
+      aum: 0,
       maturityDate: r.maturity_date ?? null,
+      status: r.status ?? null,
     }));
 
-    const totalAum = funds.reduce((s, f) => s + f.aum, 0);
     const latestVintage = funds.find(f => f.vintage)?.vintage ?? null;
 
-    return { fundCount: funds.length, totalAum, latestVintage, funds };
+    return { fundCount: funds.length, totalAum: 0, latestVintage, funds };
   } catch (e) {
     console.error('[fund-db] sparklab query failed:', (e as Error).message);
     return null;
