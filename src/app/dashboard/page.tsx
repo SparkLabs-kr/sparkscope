@@ -629,10 +629,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                 <span className="text-2xl font-extrabold text-spark-purple tabular-nums">{data.sparkLabsFundSummary.fundCount}</span>
                 <span className="text-xs text-spark-muted mt-0.5">펀드 수</span>
               </div>
-              <div className="flex flex-col items-center px-4 py-3 rounded-xl bg-spark-light-purple/40 min-w-[100px]">
-                <span className="text-2xl font-extrabold text-spark-purple tabular-nums">{data.sparkLabsFundSummary.totalAum.toLocaleString()}억</span>
-                <span className="text-xs text-spark-muted mt-0.5">총 AUM</span>
-              </div>
               {data.sparkLabsFundSummary.latestVintage && (
                 <div className="flex flex-col items-center px-4 py-3 rounded-xl bg-spark-light-purple/40 min-w-[80px]">
                   <span className="text-2xl font-extrabold text-spark-purple tabular-nums">{data.sparkLabsFundSummary.latestVintage}</span>
@@ -646,7 +642,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                   <tr className="border-b border-spark-border text-spark-muted text-left">
                     <th className="py-2 pr-4 font-semibold">펀드명</th>
                     <th className="py-2 pr-4 font-semibold text-right tabular-nums">빈티지</th>
-                    <th className="py-2 pr-4 font-semibold text-right tabular-nums">AUM (억)</th>
+                    <th className="py-2 pr-4 font-semibold">상태</th>
                     <th className="py-2 font-semibold text-right tabular-nums">만기 D-day</th>
                   </tr>
                 </thead>
@@ -657,7 +653,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                       <tr key={i} className="border-b border-spark-border/50 last:border-0 hover:bg-spark-subtle">
                         <td className="py-2 pr-4 text-spark-ink">{f.name}</td>
                         <td className="py-2 pr-4 text-right tabular-nums text-spark-muted">{f.vintage ?? '—'}</td>
-                        <td className="py-2 pr-4 text-right tabular-nums">{f.aum > 0 ? f.aum.toLocaleString() : '—'}</td>
+                        <td className="py-2 pr-4">
+                          {f.status && (
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${f.status === '운용 중' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                              {f.status}
+                            </span>
+                          )}
+                        </td>
                         <td className="py-2 text-right tabular-nums">
                           {dday !== null ? (
                             <span className={`font-semibold ${dday <= 0 ? 'text-red-500' : dday <= 180 ? 'text-amber-500' : 'text-indigo-500'}`}>
@@ -728,7 +730,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             sparklabsMentions={data.sparklabsMentions}
             rangeLabel={range.label}
             overallTrend={data.overallTrend}
-            sparkLabsAum={data.sparkLabsFundSummary?.totalAum}
           />
         </div>
       )}
