@@ -257,7 +257,8 @@ export function filterReason(a: RelevanceInput): FilterReason | null {
   const mustAny = splitCsv(a.contextWords);
   if (!helperConfirmed && mustAny.length > 0) {
     const inTitle = mustAny.some(k => matchesAsToken(title, k));
-    const inBody = body.length > 0 && mustAny.some(k => body.includes(k));
+    // body도 토큰 경계 매칭으로 검사 — includes()는 "교육"이 LEET 기사 등 무관 본문에 포함돼도 통과시키는 오탐 원인.
+    const inBody = body.length > 0 && mustAny.some(k => matchesAsToken(body, k));
     if (!inTitle && !inBody) return 'missing_context';
   }
 
