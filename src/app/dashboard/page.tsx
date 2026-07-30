@@ -18,7 +18,8 @@ import { NEGATIVE_KEYWORDS, detectCrises, crisisFallbackCause, detectSpikes, typ
 import { summarizeCrisisCause, summarizeCrisisOverview } from '@/lib/sparkscope/analyzer';
 import { summarizeCompetitorTrend, summarizeOverallTrend } from '@/lib/sparkscope/competitor-insights';
 import { CompetitorPanel, type CompetitorStatView } from '@/components/CompetitorPanel';
-import { getCompetitorFundSummaries } from '@/lib/sparkscope/fund-db';
+import { getCompetitorFundSummaries, getSparkLabsFundSummary } from '@/lib/sparkscope/fund-db';
+import type { SparkLabsFundSummary } from '@/lib/sparkscope/fund-db';
 import { RISK_FLAGS } from '@/lib/sparkscope/risk-flags';
 
 export const dynamic = 'force-dynamic';
@@ -232,8 +233,30 @@ async function loadDashboardData(from: string, to: string, company?: string) {
     if (neg) s.negatives.push(art);
     if (s.titles.length < 40) s.titles.push(a.title); // AI 트렌드 요약 입력용(최신순)
   }
-  // 노출 건수 desc → 상위 10곳
+  // 바차트·AI 총평: 건수 내림차순 상위 10곳 (기존 동작 유지)
   const competitorAggs = Array.from(competitorStatMap.values()).sort((a, b) => b.count - a.count).slice(0, 10);
+
+  // 카드: 고정 12개 (순서 고정, 기사 수와 무관)
+  const PINNED_COMPETITORS: { keyword: string; displayName?: string }[] = [
+    { keyword: '프라이머' },
+    { keyword: '씨엔티테크' },
+    { keyword: '블루포인트파트너스' },
+    { keyword: '아산나눔재단' },
+    { keyword: '와이앤아처' },
+    { keyword: '캡스톤파트너스' },
+    { keyword: '해시드' },
+    { keyword: '디캠프' },
+    { keyword: '알토스벤처스' },
+    { keyword: '카카오벤처스' },
+    { keyword: 'IMM인베스트먼트' },
+    { keyword: '에이티넘인베스트먼트' },
+  ];
+  const pinnedAggs = PINNED_COMPETITORS.map(({ keyword, displayName }) => {
+    const agg = competitorStatMap.get(keyword);
+    const name = displayName ?? keyword;
+    if (!agg) return { name, english: competitorEnglishOf.get(keyword) ?? '', count: 0, negCount: 0, top3: [], negatives: [], titles: [] };
+    return { ...agg, name };
+  });
 
   // AI 트렌드 요약 — 기간+집계결과가 같으면 메모리 캐시 재사용(competitor-insights.ts).
   // 요약 실패는 화면을 막지 않는다(해당 블록만 빠짐).
@@ -258,10 +281,23 @@ async function loadDashboardData(from: string, to: string, company?: string) {
       ),
     ),
   ]);
-  const fundSummaries = await getCompetitorFundSummaries(competitorAggs.map(c => c.name));
+  const [fundSummaries, sparkLabsFundSummary, pinnedCompanyTrends] = await Promise.all([
+    getCompetitorFundSummaries(pinnedAggs.map(c => c.name)),
+    getSparkLabsFundSummary(),
+    Promise.all(
+      pinnedAggs.map(c =>
+        summarizeCompetitorTrend(c.name, c.titles, sparklabsMentions, c.count, trendCacheKey, periodPhrase),
+      ),
+    ),
+  ]);
   const competitors: CompetitorStatView[] = competitorAggs.map(({ titles, ...c }, i) => ({
     ...c,
     trend: companyTrends[i],
+    fundSummary: fundSummaries.get(c.name) ?? null,
+  }));
+  const pinnedCompetitors: CompetitorStatView[] = pinnedAggs.map(({ titles, ...c }, i) => ({
+    ...c,
+    trend: pinnedCompanyTrends[i],
     fundSummary: fundSummaries.get(c.name) ?? null,
   }));
 
@@ -424,8 +460,10 @@ async function loadDashboardData(from: string, to: string, company?: string) {
       houses: competitorTop.map(g => ({ name: g.matchedKeyword, count: g._count._all })),
     },
     competitors,
+    pinnedCompetitors,
     overallTrend,
     sparklabsMentions,
+    sparkLabsFundSummary,
     portfolioTop,
     portfolioNegatives,
     portfolioPositives,
@@ -581,6 +619,60 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           <div className="font-bold mb-4">💬 톤 분석 (스파크랩) <InfoTip text="'스파크랩' 기사의 긍정·중립·부정 논조 비율입니다. 각 논조의 기사 목록이 바로 아래에 표시됩니다." /></div>
           <ToneBreakdown articles={data.toneArticles as any} />
         </div>
+
+        {/* 스파크랩 펀드 현황 */}
+        {data.sparkLabsFundSummary && (
+          <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
+            <div className="font-bold mb-4">🏦 스파크랩 펀드 현황</div>
+            <div className="flex flex-wrap gap-4 mb-4">
+              <div className="flex flex-col items-center px-4 py-3 rounded-xl bg-spark-light-purple/40 min-w-[80px]">
+                <span className="text-2xl font-extrabold text-spark-purple tabular-nums">{data.sparkLabsFundSummary.fundCount}</span>
+                <span className="text-xs text-spark-muted mt-0.5">펀드 수</span>
+              </div>
+              <div className="flex flex-col items-center px-4 py-3 rounded-xl bg-spark-light-purple/40 min-w-[100px]">
+                <span className="text-2xl font-extrabold text-spark-purple tabular-nums">{data.sparkLabsFundSummary.totalAum.toLocaleString()}억</span>
+                <span className="text-xs text-spark-muted mt-0.5">총 AUM</span>
+              </div>
+              {data.sparkLabsFundSummary.latestVintage && (
+                <div className="flex flex-col items-center px-4 py-3 rounded-xl bg-spark-light-purple/40 min-w-[80px]">
+                  <span className="text-2xl font-extrabold text-spark-purple tabular-nums">{data.sparkLabsFundSummary.latestVintage}</span>
+                  <span className="text-xs text-spark-muted mt-0.5">최근 빈티지</span>
+                </div>
+              )}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-spark-border text-spark-muted text-left">
+                    <th className="py-2 pr-4 font-semibold">펀드명</th>
+                    <th className="py-2 pr-4 font-semibold text-right tabular-nums">빈티지</th>
+                    <th className="py-2 pr-4 font-semibold text-right tabular-nums">AUM (억)</th>
+                    <th className="py-2 font-semibold text-right tabular-nums">만기 D-day</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.sparkLabsFundSummary.funds.map((f, i) => {
+                    const dday = f.maturityDate ? computeDday(f.maturityDate) : null;
+                    return (
+                      <tr key={i} className="border-b border-spark-border/50 last:border-0 hover:bg-spark-subtle">
+                        <td className="py-2 pr-4 text-spark-ink">{f.name}</td>
+                        <td className="py-2 pr-4 text-right tabular-nums text-spark-muted">{f.vintage ?? '—'}</td>
+                        <td className="py-2 pr-4 text-right tabular-nums">{f.aum > 0 ? f.aum.toLocaleString() : '—'}</td>
+                        <td className="py-2 text-right tabular-nums">
+                          {dday !== null ? (
+                            <span className={`font-semibold ${dday <= 0 ? 'text-red-500' : dday <= 180 ? 'text-amber-500' : 'text-indigo-500'}`}>
+                              {dday <= 0 ? `D+${Math.abs(dday)}` : `D-${dday}`}
+                            </span>
+                          ) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
       </>}
 
@@ -632,9 +724,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         <div className="mb-6">
           <CompetitorPanel
             competitors={data.competitors}
+            cardCompetitors={data.pinnedCompetitors}
             sparklabsMentions={data.sparklabsMentions}
             rangeLabel={range.label}
             overallTrend={data.overallTrend}
+            sparkLabsAum={data.sparkLabsFundSummary?.totalAum}
           />
         </div>
       )}
@@ -693,6 +787,14 @@ function SpikeBanner({ s }: { s: SpikeCard }) {
       <span className="text-xs text-gray-500">(최근 3일 {s.recentCount}건)</span>
     </div>
   );
+}
+
+function computeDday(maturityDateIso: string): number {
+  const mat = new Date(maturityDateIso);
+  mat.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((mat.getTime() - today.getTime()) / 86400000);
 }
 
 function SectionTitle({ title, sub }: { title: string; sub?: string }) {

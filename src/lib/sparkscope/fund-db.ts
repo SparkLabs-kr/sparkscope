@@ -1,9 +1,10 @@
-import { Client } from 'pg';
+import { Pool } from 'pg';
 
 export interface FundItem {
   name: string;
   vintage: number | null;
   aum: number; // 억 원
+  maturityDate: string | null; // ISO date string (YYYY-MM-DD)
 }
 
 export interface CompetitorFundSummary {
@@ -66,25 +67,22 @@ const INVESTOR_NAME_MAP: Record<string, string> = {
   '스마트스터디벤처스': '스마트스터디벤처스',
   '효성벤처스': '효성벤처스',
   'GS벤처스': '500글로벌매니지먼트코리아',
+  'IMM인베스트먼트': '아이엠엠인베스트먼트',
+  '프라이머': '프라이머시즌5',
 };
 
-let clientCache: Client | null = null;
+// dev HMR 시 module이 재로드되어도 기존 연결을 재사용하도록 global에 보관
+declare global { var __fundPool: Pool | undefined }
 
-async function getFundClient(): Promise<Client | null> {
+function getFundPool(): Pool | null {
   const url = process.env.FUND_DB_URL;
   if (!url) return null;
 
-  if (clientCache) return clientCache;
+  if (global.__fundPool) return global.__fundPool;
 
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-  const client = new Client({ connectionString: url });
-  try {
-    await client.connect();
-    clientCache = client;
-    return client;
-  } catch {
-    return null;
-  }
+  global.__fundPool = new Pool({ connectionString: url, max: 2, idleTimeoutMillis: 5000 });
+  return global.__fundPool;
 }
 
 export async function getCompetitorFundSummaries(
@@ -92,8 +90,8 @@ export async function getCompetitorFundSummaries(
 ): Promise<Map<string, CompetitorFundSummary>> {
   const result = new Map<string, CompetitorFundSummary>();
 
-  const client = await getFundClient();
-  if (!client) return result;
+  const pool = getFundPool();
+  if (!pool) return result;
 
   await Promise.all(competitorNames.map(async (name) => {
     const investorName = INVESTOR_NAME_MAP[name];
@@ -101,21 +99,21 @@ export async function getCompetitorFundSummaries(
 
     try {
       const [summaryRes, sectorRes, fundsRes] = await Promise.all([
-        client.query(
+        pool.query(
           `SELECT COUNT(*) AS cnt, COALESCE(SUM(aum), 0) AS total_aum
            FROM shared_ro.external_funds
            WHERE investor_name = $1`,
           [investorName],
         ),
-        client.query(
+        pool.query(
           `SELECT unnest(sector_focus) AS sector, COUNT(*) AS cnt
            FROM shared_ro.external_funds
            WHERE investor_name = $1 AND sector_focus IS NOT NULL
            GROUP BY sector ORDER BY cnt DESC LIMIT 3`,
           [investorName],
         ),
-        client.query(
-          `SELECT name, vintage, COALESCE(aum, 0) AS aum
+        pool.query(
+          `SELECT name, vintage, COALESCE(aum, 0) AS aum, TO_CHAR(maturity_date, 'YYYY-MM-DD') AS maturity_date
            FROM shared_ro.external_funds
            WHERE investor_name = $1
            ORDER BY vintage DESC NULLS LAST, aum DESC`,
@@ -126,18 +124,54 @@ export async function getCompetitorFundSummaries(
       const fundCount = parseInt(summaryRes.rows[0].cnt, 10);
       const totalAum = Math.round(parseFloat(summaryRes.rows[0].total_aum) / 1e8);
       const topSectors = sectorRes.rows.map((r: { sector: string }) => r.sector);
-      const funds: FundItem[] = fundsRes.rows.map((r: { name: string; vintage: number | null; aum: string }) => ({
+      const funds: FundItem[] = fundsRes.rows.map((r: { name: string; vintage: number | null; aum: string; maturity_date: string | null }) => ({
         name: r.name,
         vintage: r.vintage,
         aum: Math.round(parseFloat(r.aum) / 1e8),
+        maturityDate: r.maturity_date ?? null,
       }));
 
       result.set(name, { investorName, fundCount, totalAum, topSectors, funds });
-    } catch {
-      // 개별 실패는 무시
+    } catch (e) {
+      console.error('[fund-db] query failed for', name, (e as Error).message);
     }
   }));
 
   return result;
 }
 
+export interface SparkLabsFundSummary {
+  fundCount: number;
+  totalAum: number; // 억 원
+  latestVintage: number | null;
+  funds: FundItem[];
+}
+
+export async function getSparkLabsFundSummary(): Promise<SparkLabsFundSummary | null> {
+  const pool = getFundPool();
+  if (!pool) return null;
+
+  try {
+    const res = await pool.query(
+      `SELECT name, vintage, COALESCE(aum, 0) AS aum, TO_CHAR(maturity_date, 'YYYY-MM-DD') AS maturity_date
+       FROM shared_ro.external_funds
+       WHERE investor_name IN ('스파크랩', '스파크랩파트너스')
+       ORDER BY vintage DESC NULLS LAST, aum DESC`,
+    );
+
+    const funds: FundItem[] = res.rows.map((r: { name: string; vintage: number | null; aum: string; maturity_date: string | null }) => ({
+      name: r.name,
+      vintage: r.vintage,
+      aum: Math.round(parseFloat(r.aum) / 1e8),
+      maturityDate: r.maturity_date ?? null,
+    }));
+
+    const totalAum = funds.reduce((s, f) => s + f.aum, 0);
+    const latestVintage = funds.find(f => f.vintage)?.vintage ?? null;
+
+    return { fundCount: funds.length, totalAum, latestVintage, funds };
+  } catch (e) {
+    console.error('[fund-db] sparklab query failed:', (e as Error).message);
+    return null;
+  }
+}

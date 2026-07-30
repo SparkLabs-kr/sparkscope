@@ -27,6 +27,14 @@ export interface CompetitorStatView {
   fundSummary?: CompetitorFundSummary | null;
 }
 
+function computeDday(maturityDateIso: string): number {
+  const mat = new Date(maturityDateIso);
+  mat.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((mat.getTime() - today.getTime()) / 86400000);
+}
+
 function cardId(name: string) {
   // 한글·공백이 섞인 회사명을 DOM id로 쓰기 위해 인코딩
   return `comp-card-${encodeURIComponent(name)}`;
@@ -34,15 +42,20 @@ function cardId(name: string) {
 
 export function CompetitorPanel({
   competitors,
+  cardCompetitors,
   sparklabsMentions,
   rangeLabel,
   overallTrend,
+  sparkLabsAum,
 }: {
   competitors: CompetitorStatView[];
+  cardCompetitors?: CompetitorStatView[];
   sparklabsMentions: number;
   rangeLabel: string;
   overallTrend: string[] | null;
+  sparkLabsAum?: number;
 }) {
+  const cards = cardCompetitors ?? competitors;
   const [selected, setSelected] = useState<string | null>(null);
   const max = Math.max(sparklabsMentions, ...competitors.map(c => c.count), 1);
   const totalComp = competitors.reduce((s, c) => s + c.count, 0);
@@ -59,7 +72,7 @@ export function CompetitorPanel({
       <div className="flex flex-wrap justify-between items-center gap-2 mb-1">
         <div className="font-bold text-xl">🏁 경쟁사 모니터링 — 언론 노출 상위</div>
         <span className="px-2.5 py-1 bg-spark-light-purple/50 text-spark-purple rounded-full text-sm font-semibold whitespace-nowrap">
-          TOP {competitors.length} · {rangeLabel}
+          TOP {cards.length} · {rangeLabel}
         </span>
       </div>
       <p className="text-base text-gray-500 mb-4">
@@ -98,7 +111,7 @@ export function CompetitorPanel({
 
       {totalComp > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
-          {competitors.map(c => (
+          {cards.map(c => (
             <CompetitorCard key={c.name} c={c} selected={selected === c.name} />
           ))}
         </div>
@@ -107,6 +120,48 @@ export function CompetitorPanel({
           선택 기간에 집계된 경쟁사 기사가 아직 없습니다. 뉴스 수집이 진행되면 경쟁사별 언급량과 최근 이슈가 여기에 표시됩니다.
         </div>
       )}
+
+      {/* AUM 비교 — 스파크랩 기준 + 카드 경쟁사 펀드 AUM */}
+      {(() => {
+        const aumItems = [
+          ...(sparkLabsAum !== undefined ? [{ name: '스파크랩', aum: sparkLabsAum, isSelf: true }] : []),
+          ...cards
+            .filter(c => c.fundSummary && c.fundSummary.totalAum > 0)
+            .map(c => ({ name: c.name, aum: c.fundSummary!.totalAum, isSelf: false }))
+            .sort((a, b) => b.aum - a.aum),
+        ];
+        const maxAum = Math.max(...aumItems.map(i => i.aum), 1);
+        if (aumItems.length === 0) return null;
+        return (
+          <div className="mt-6 pt-5 border-t border-spark-border">
+            <div className="font-bold mb-3">📊 경쟁사 AUM 비교</div>
+            <div className="space-y-1.5">
+              {aumItems.map(item => (
+                <div key={item.name} className="flex items-center gap-2 text-sm min-w-0">
+                  <div className={`flex-shrink-0 w-28 sm:w-44 truncate text-left ${item.isSelf ? 'font-bold text-spark-purple' : 'text-gray-600'}`}>
+                    {item.name}
+                  </div>
+                  <div className="flex-1 h-5 rounded overflow-hidden min-w-0 bg-gray-100">
+                    <div
+                      className={`h-full rounded ${item.isSelf ? 'bg-spark-purple' : 'bg-slate-400'}`}
+                      style={{ width: `${Math.round((item.aum / maxAum) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex-shrink-0 w-20 text-right tabular-nums font-semibold text-spark-muted">
+                    {item.aum.toLocaleString()}억
+                  </div>
+                </div>
+              ))}
+              {cards.filter(c => !c.fundSummary || c.fundSummary.totalAum === 0).map(c => (
+                <div key={c.name} className="flex items-center gap-2 text-sm min-w-0 opacity-50">
+                  <div className="flex-shrink-0 w-28 sm:w-44 truncate text-gray-400">{c.name}</div>
+                  <div className="flex-1 text-xs text-gray-400 italic">미등록</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
