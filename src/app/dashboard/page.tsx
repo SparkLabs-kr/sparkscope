@@ -772,7 +772,8 @@ function SpikeBanner({ s }: { s: SpikeCard }) {
   );
 }
 
-function computeDday(maturityDateIso: string): number {
+function computeDday(maturityDateIso: string): number | null {
+  if (maturityDateIso.startsWith('9999')) return null; // 만기 미정 placeholder
   const mat = new Date(maturityDateIso);
   mat.setHours(0, 0, 0, 0);
   const today = new Date();
