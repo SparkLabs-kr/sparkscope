@@ -2,6 +2,7 @@
 // 실시간 위기 감지 카드 목록 — 위기 카드가 많으면 개별 카드 대신 AI 종합요약을 먼저 보여주고
 // "더보기"로 접어서 화면 공간을 아낀다 (카드 수가 적으면 그냥 다 펼쳐서 보여준다).
 import { useState } from 'react';
+import { safeArticleHref } from '@/lib/sparkscope/article-link';
 
 interface CrisisArticle { title: string; source: string; pubDate: Date | string; link: string }
 interface Crisis {
@@ -85,7 +86,7 @@ function CrisisCardView({ c, windowDays }: { c: Crisis; windowDays: number }) {
       {/* 대표 부정기사 1건 */}
       <div className="mt-3 rounded-lg bg-white/70 border border-red-100 p-2.5">
         <div className="text-[10px] font-semibold text-red-400 mb-1">대표 부정기사</div>
-        <a href={c.article.link} target="_blank" rel="noopener noreferrer" className="block text-sm text-gray-800 hover:text-spark-purple font-medium">
+        <a href={safeArticleHref(c.article.link, c.article.title, c.article.source)} target="_blank" rel="noopener noreferrer" className="block text-sm text-gray-800 hover:text-spark-purple font-medium">
           {c.article.title}
         </a>
         <div className="text-xs text-gray-500 mt-1">{c.article.source} · {d.getFullYear()}.{d.getMonth() + 1}.{d.getDate()}</div>

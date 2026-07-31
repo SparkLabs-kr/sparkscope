@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { RISK_FLAGS } from '@/lib/sparkscope/risk-flags';
 import { clusterArticles } from '@/lib/sparkscope/cluster';
+import { safeArticleHref } from '@/lib/sparkscope/article-link';
 
 interface ToneArticle {
   id: string;
@@ -78,7 +79,7 @@ export function ToneBreakdown({ articles }: { articles: ToneArticle[] }) {
                 const isOpen = expanded.has(c.rep.id);
                 return (
                   <div key={c.rep.id} className={`rounded-lg border border-transparent ${g.soft} transition`}>
-                    <a href={c.rep.link} target="_blank" rel="noopener noreferrer" className="block p-2">
+                    <a href={safeArticleHref(c.rep.link, c.rep.title, c.rep.source)} target="_blank" rel="noopener noreferrer" className="block p-2">
                       {c.rep.riskFlag && RISK_FLAGS[c.rep.riskFlag] && (
                         <span className={`inline-block mb-1 px-1.5 py-0.5 rounded text-[9px] font-semibold ${RISK_FLAGS[c.rep.riskFlag].cls}`}>
                           {RISK_FLAGS[c.rep.riskFlag].label}
@@ -101,7 +102,7 @@ export function ToneBreakdown({ articles }: { articles: ToneArticle[] }) {
                             {c.others.map(o => {
                               const od = new Date(o.pubDate);
                               return (
-                                <a key={o.id} href={o.link} target="_blank" rel="noopener noreferrer" className="block text-[10px] text-spark-muted hover:text-spark-ink">
+                                <a key={o.id} href={safeArticleHref(o.link, o.title, o.source)} target="_blank" rel="noopener noreferrer" className="block text-[10px] text-spark-muted hover:text-spark-ink">
                                   {o.source} · {od.getMonth() + 1}.{od.getDate()}
                                 </a>
                               );
