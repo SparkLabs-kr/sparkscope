@@ -19,6 +19,7 @@ import { summarizeCrisisCause, summarizeCrisisOverview } from '@/lib/sparkscope/
 import { summarizeCompetitorTrend, summarizeOverallTrend } from '@/lib/sparkscope/competitor-insights';
 import { CompetitorPanel, type CompetitorStatView } from '@/components/CompetitorPanel';
 import { getCompetitorFundSummaries, getSparkLabsFundSummary } from '@/lib/sparkscope/fund-db';
+import { safeArticleHref } from '@/lib/sparkscope/article-link';
 import type { SparkLabsFundSummary } from '@/lib/sparkscope/fund-db';
 import { RISK_FLAGS } from '@/lib/sparkscope/risk-flags';
 
@@ -840,7 +841,7 @@ function PortfolioPositives({ items, rangeLabel }: { items: { company: string; t
           {items.map((a, i) => {
             const d = new Date(a.pubDate);
             return (
-              <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" className="block rounded-lg border border-emerald-100 bg-emerald-50/50 p-2.5 hover:bg-emerald-50 transition-colors">
+              <a key={i} href={safeArticleHref(a.link, a.title, a.source)} target="_blank" rel="noopener noreferrer" className="block rounded-lg border border-emerald-100 bg-emerald-50/50 p-2.5 hover:bg-emerald-50 transition-colors">
                 <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold whitespace-nowrap">{a.company}</span>
                   {a.mediaCount && a.mediaCount > 1 ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-600/10 text-emerald-700 font-semibold whitespace-nowrap">{a.mediaCount}개 매체</span> : null}
@@ -868,7 +869,7 @@ function PortfolioNegatives({ items, rangeLabel }: { items: { company: string; t
           {items.map((a, i) => {
             const d = new Date(a.pubDate);
             return (
-              <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" className="block rounded-lg border border-red-100 bg-red-50/50 p-2.5 hover:bg-red-50">
+              <a key={i} href={safeArticleHref(a.link, a.title, a.source)} target="_blank" rel="noopener noreferrer" className="block rounded-lg border border-red-100 bg-red-50/50 p-2.5 hover:bg-red-50">
                 <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold whitespace-nowrap">{a.company}</span>
                   {a.riskFlag && RISK_FLAGS[a.riskFlag] && (

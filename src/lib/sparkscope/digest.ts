@@ -8,6 +8,7 @@
  */
 import type { AnalyzedArticle, DigestData } from './types';
 import { isPolitical, normalizeTitleKey } from './relevance';
+import { safeArticleHref } from './article-link';
 
 const TOP_3_LIMIT = 3;
 const PORTFOLIO_LIMIT = 8;
@@ -215,7 +216,7 @@ function renderTopCard(a: AnalyzedArticle, rank: number): string {
       <div class="top-rank">${escape(rankLabel)}</div>
       <div class="top-headline">${escape(a.title)}</div>
       ${take ? `<div class="top-take">${escape(take)}</div>` : ''}
-      <div class="top-meta">${escape(a.source)} · ${formatDate(a.pubDate)}${citation} · <a href="${escape(a.link)}" target="_blank">기사 보기 →</a></div>
+      <div class="top-meta">${escape(a.source)} · ${formatDate(a.pubDate)}${citation} · <a href="${escape(safeArticleHref(a.link, a.title, a.source))}" target="_blank">기사 보기 →</a></div>
     </div>`;
 }
 
@@ -234,7 +235,7 @@ function renderArticle(a: AnalyzedArticle, opts: { citation?: boolean; keyword?:
     <div class="article">
       <div>${toneTag}${citationTag}${pitchTag}${kwTag}</div>
       <div class="article-headline" style="margin-top:8px;">
-        <a href="${escape(a.link)}" target="_blank">${escape(a.title)}</a>
+        <a href="${escape(safeArticleHref(a.link, a.title, a.source))}" target="_blank">${escape(a.title)}</a>
       </div>
       ${take ? `<div class="article-take">${escape(take)}</div>` : ''}
       <div class="article-meta">${escape(a.source)} · ${formatFullDate(a.pubDate)}</div>

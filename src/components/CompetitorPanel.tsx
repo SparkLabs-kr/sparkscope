@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import type { CompetitorFundSummary } from '@/lib/sparkscope/fund-db';
 import type { FundItem } from '@/lib/sparkscope/fund-db';
+import { safeArticleHref } from '@/lib/sparkscope/article-link';
 
 export interface CompetitorArticleView {
   title: string;
@@ -260,7 +261,7 @@ function CompetitorCard({ c, selected }: { c: CompetitorStatView; selected: bool
             {c.negatives.map((a, i) => {
               const d = new Date(a.pubDate);
               return (
-                <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" className="block hover:opacity-80">
+                <a key={i} href={safeArticleHref(a.link, a.title, a.source)} target="_blank" rel="noopener noreferrer" className="block hover:opacity-80">
                   <div className="text-sm text-spark-ink leading-snug line-clamp-2">{a.title}</div>
                   <div className="text-xs text-spark-muted mt-0.5">{a.source} · {d.getMonth() + 1}.{d.getDate()}</div>
                 </a>
@@ -310,7 +311,7 @@ function CompetitorCard({ c, selected }: { c: CompetitorStatView; selected: bool
             {c.top3.map((a, i) => {
               const d = new Date(a.pubDate);
               return (
-                <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" className="block group">
+                <a key={i} href={safeArticleHref(a.link, a.title, a.source)} target="_blank" rel="noopener noreferrer" className="block group">
                   <div className={`text-sm leading-snug line-clamp-2 group-hover:text-spark-purple ${a.neg ? 'text-red-700' : 'text-spark-ink-soft'}`}>
                     {a.title}
                   </div>
