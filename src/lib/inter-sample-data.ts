@@ -64,12 +64,21 @@ async function getRelevantVerdictsForDomain(domain: InterDomain, since?: Date) {
   return verdicts.filter(v => (v.domain ?? legacyDomainGuess(v.news.source)) === domain);
 }
 
-export async function getDomainStats(domain: InterDomain, since?: Date): Promise<InterStat[]> {
+// 도메인+기간에 대한 verdict/match를 한 번만 조회해서 stats·sectors 양쪽에 재사용
+export interface InterData {
+  verdicts: Awaited<ReturnType<typeof getRelevantVerdictsForDomain>>;
+  matches: { id: string; verdictId: string; companyName: string; reason: string }[];
+}
+
+export async function loadInterData(domain: InterDomain, since?: Date): Promise<InterData> {
   const verdicts = await getRelevantVerdictsForDomain(domain, since);
   const matches = await prisma.interPortfolioMatch.findMany({
     where: { verdictId: { in: verdicts.map(v => v.id) } },
   });
+  return { verdicts, matches };
+}
 
+export function getDomainStats({ verdicts, matches }: InterData): InterStat[] {
   return [
     { label: '필터링됨 (관련)', value: String(verdicts.length) },
     { label: '포트폴리오 매치', value: String(matches.length) },
@@ -127,13 +136,7 @@ function truncate(s: string): string {
   return s.length > 70 ? s.slice(0, 67) + '…' : s;
 }
 
-export async function getSectorData(domain: InterDomain, since?: Date): Promise<SectorBlock[]> {
-  // 1. 필터링된 기사들(해당 도메인만, 기간 내) + 매칭 조회
-  const verdicts = await getRelevantVerdictsForDomain(domain, since);
-
-  const matches = await prisma.interPortfolioMatch.findMany({
-    where: { verdictId: { in: verdicts.map(v => v.id) } },
-  });
+export function getSectorData(domain: InterDomain, { verdicts, matches }: InterData): SectorBlock[] {
   const matchesByVerdictId = new Map<string, typeof matches>();
   matches.forEach(m => {
     const arr = matchesByVerdictId.get(m.verdictId) ?? [];
