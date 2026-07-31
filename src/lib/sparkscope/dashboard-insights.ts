@@ -19,7 +19,7 @@
 import { prisma } from '@/lib/prisma';
 import { normalizeSource } from './media';
 import { isBlockedNoise } from './relevance';
-import { NEGATIVE_KEYWORDS, INDUSTRY_TREND_KEYWORDS, detectCrises, type ArticleLite } from './insights';
+import { NEGATIVE_KEYWORDS, INDUSTRY_TREND_KEYWORDS, PINNED_COMPETITORS, detectCrises, type ArticleLite } from './insights';
 import { summarizeCrisisCause } from './analyzer';
 import { summarizeCompetitorTrend, summarizeOverallTrend } from './competitor-insights';
 
@@ -168,6 +168,14 @@ async function computeCompetitorTrends() {
   const top10 = Array.from(statMap.entries()).sort((a, b) => b[1].count - a[1].count).slice(0, 10);
   if (top10.length === 0) return;
 
+  // 고정 12개 카드(page.tsx의 PINNED_COMPETITORS)도 top10과 함께 사전계산 대상에 포함 —
+  // 안 그러면 카드 12개가 대시보드 로드마다 실시간 LLM 호출로 남아 느려진다.
+  const pinnedNames = PINNED_COMPETITORS.map(p => p.displayName ?? p.keyword).filter(name => statMap.has(name));
+  const trendTargets = new Map(top10);
+  for (const name of pinnedNames) {
+    if (!trendTargets.has(name)) trendTargets.set(name, statMap.get(name)!);
+  }
+
   const periodPhrase = '3개월간';
   const cacheKey = `precompute_${kstDateKey(now)}`;
 
@@ -186,7 +194,7 @@ async function computeCompetitorTrends() {
     });
   }
 
-  for (const [name, s] of top10) {
+  for (const [name, s] of trendTargets) {
     const points = await summarizeCompetitorTrend(name, s.titles, sparklabsMentions, s.count, cacheKey, periodPhrase);
     if (!points) continue;
     await prisma.dashboardInsight.upsert({

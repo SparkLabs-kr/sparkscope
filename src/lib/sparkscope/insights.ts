@@ -73,6 +73,23 @@ export const INDUSTRY_TREND_KEYWORDS = [
   '한국초기투자기관협회',
 ];
 
+// 경쟁사 모니터링 카드: 고정 12개 (순서 고정, 기사 수와 무관) — 대시보드 렌더링과
+// 사전계산(dashboard-insights.ts)이 같은 목록을 봐야 사전계산이 이 12개를 빠짐없이 커버한다.
+export const PINNED_COMPETITORS: { keyword: string; displayName?: string }[] = [
+  { keyword: '프라이머' },
+  { keyword: '씨엔티테크' },
+  { keyword: '블루포인트파트너스' },
+  { keyword: '아산나눔재단' },
+  { keyword: '와이앤아처' },
+  { keyword: '캡스톤파트너스' },
+  { keyword: '해시드' },
+  { keyword: '디캠프' },
+  { keyword: '알토스벤처스' },
+  { keyword: '카카오벤처스' },
+  { keyword: 'IMM인베스트먼트' },
+  { keyword: '에이티넘인베스트먼트' },
+];
+
 export interface ArticleLite {
   id: string;
   title: string;

@@ -14,7 +14,7 @@ import { OPEN_ACCESS } from '@/lib/flags';
 import { canScrap as canScrapEmail } from '@/lib/scrap';
 import { normalizeSource } from '@/lib/sparkscope/media';
 import { matchesAsToken, isBlockedNoise, normalizeTitleKey } from '@/lib/sparkscope/relevance';
-import { NEGATIVE_KEYWORDS, INDUSTRY_TREND_KEYWORDS, detectCrises, crisisFallbackCause, detectSpikes, type ArticleLite, type SpikeCard } from '@/lib/sparkscope/insights';
+import { NEGATIVE_KEYWORDS, INDUSTRY_TREND_KEYWORDS, PINNED_COMPETITORS, detectCrises, crisisFallbackCause, detectSpikes, type ArticleLite, type SpikeCard } from '@/lib/sparkscope/insights';
 import { getPrecomputedCrisisCauses, getPrecomputedCompetitorInsights, wasInsightsBatchFreshToday, type InsightSource } from '@/lib/sparkscope/dashboard-insights';
 import { summarizeCrisisCause, summarizeCrisisOverview } from '@/lib/sparkscope/analyzer';
 import { summarizeCompetitorTrend, summarizeOverallTrend } from '@/lib/sparkscope/competitor-insights';
@@ -191,21 +191,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
   // 바차트·AI 총평: 건수 내림차순 상위 10곳 (기존 동작 유지)
   const competitorAggs = Array.from(competitorStatMap.values()).sort((a, b) => b.count - a.count).slice(0, 10);
 
-  // 카드: 고정 12개 (순서 고정, 기사 수와 무관)
-  const PINNED_COMPETITORS: { keyword: string; displayName?: string }[] = [
-    { keyword: '프라이머' },
-    { keyword: '씨엔티테크' },
-    { keyword: '블루포인트파트너스' },
-    { keyword: '아산나눔재단' },
-    { keyword: '와이앤아처' },
-    { keyword: '캡스톤파트너스' },
-    { keyword: '해시드' },
-    { keyword: '디캠프' },
-    { keyword: '알토스벤처스' },
-    { keyword: '카카오벤처스' },
-    { keyword: 'IMM인베스트먼트' },
-    { keyword: '에이티넘인베스트먼트' },
-  ];
+  // 카드: 고정 12개 (순서 고정, 기사 수와 무관) — 목록은 insights.ts에서 가져옴(사전계산과 공유)
   const pinnedAggs = PINNED_COMPETITORS.map(({ keyword, displayName }) => {
     const agg = competitorStatMap.get(keyword);
     const name = displayName ?? keyword;
@@ -218,13 +204,15 @@ async function loadDashboardData(from: string, to: string, company: string | und
   // 배치가 안 돌았으면(크론 실패) 예전처럼 그 자리에서 실시간 AI 호출로 자동 대체한다.
   const batchFresh = await wasInsightsBatchFreshToday();
 
-  // AI 트렌드 요약(대시보드 상위 10곳) — 기본 기간(최근 3개월)일 때만 사전계산 결과를 쓴다.
-  // 사용자가 기간을 직접 고르면(비기본 범위) 그 조합은 크론이 미리 계산해두지 않으므로
-  // 예전처럼 그 자리에서 계산한다. 고정 12개 카드(pinnedAggs)는 사전계산 대상이 아니라 항상
-  // 아래에서 실시간으로 계산한다(daily-collect 사전계산은 top10만 커버).
+  // AI 트렌드 요약(대시보드 상위 10곳 + 고정 12개 카드) — 기본 기간(최근 3개월)일 때만
+  // 사전계산 결과를 쓴다. 사용자가 기간을 직접 고르면(비기본 범위) 그 조합은 크론이 미리
+  // 계산해두지 않으므로 예전처럼 그 자리에서 계산한다.
+  // (2026-07-31: 고정 12개 카드도 top10과 함께 사전계산 대상에 포함 — 예전엔 카드 12개가
+  //  매 로드마다 실시간 LLM 호출이라 대시보드가 여전히 느렸다.)
   // 요약 실패는 화면을 막지 않는다(해당 블록만 빠짐).
   let overallTrend: string[] | null;
   let companyTrends: (string[] | null)[];
+  let pinnedCompanyTrends: (string[] | null)[];
   // 하루 한 번만 재계산 — 오늘 날짜(KST)를 키에 포함해 같은 날엔 몇 번을 봐도 캐시 재사용
   const trendCacheKey = `${from}_${to}_${fmt(getKstNow())}`;
   // 프롬프트에 "이 기간" 대신 실제 기간을 쓰게 — 일수를 보기 좋은 단위로 변환 (예: 3개월간, 7일간)
@@ -236,8 +224,9 @@ async function loadDashboardData(from: string, to: string, company: string | und
     const pre = await getPrecomputedCompetitorInsights();
     overallTrend = pre.overall?.lines ?? null;
     companyTrends = competitorAggs.map(c => pre.byCompany.get(c.name)?.points ?? null);
+    pinnedCompanyTrends = pinnedAggs.map(c => pre.byCompany.get(c.name)?.points ?? null);
   } else {
-    [overallTrend, companyTrends] = await Promise.all([
+    [overallTrend, companyTrends, pinnedCompanyTrends] = await Promise.all([
       summarizeOverallTrend(
         competitorAggs.map(c => ({ name: c.name, count: c.count, negCount: c.negCount })),
         competitorAggs.flatMap(c => c.titles.slice(0, 6)),
@@ -250,17 +239,16 @@ async function loadDashboardData(from: string, to: string, company: string | und
           summarizeCompetitorTrend(c.name, c.titles, sparklabsMentions, c.count, trendCacheKey, periodPhrase),
         ),
       ),
+      Promise.all(
+        pinnedAggs.map(c =>
+          summarizeCompetitorTrend(c.name, c.titles, sparklabsMentions, c.count, trendCacheKey, periodPhrase),
+        ),
+      ),
     ]);
   }
-  // 고정 12개 카드(pinnedAggs)는 사전계산 대상이 아니므로 항상 실시간으로 계산한다.
-  const [fundSummaries, sparkLabsFundSummary, pinnedCompanyTrends] = await Promise.all([
+  const [fundSummaries, sparkLabsFundSummary] = await Promise.all([
     getCompetitorFundSummaries(pinnedAggs.map(c => c.name)),
     getSparkLabsFundSummary(),
-    Promise.all(
-      pinnedAggs.map(c =>
-        summarizeCompetitorTrend(c.name, c.titles, sparklabsMentions, c.count, trendCacheKey, periodPhrase),
-      ),
-    ),
   ]);
   const competitors: CompetitorStatView[] = competitorAggs.map(({ titles, ...c }, i) => ({
     ...c,
