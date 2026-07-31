@@ -26,6 +26,10 @@ import { InterPanel } from '@/components/InterPanel';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
+// DB(Supabase)가 서울(ap-northeast-2)에 있는데 이 함수가 기본 리전(iad1, 미국 동부)에서
+// 실행되고 있어서 쿼리마다 태평양을 왕복하는 지연이 있었다(x-vercel-id: icn1::iad1::...로 확인).
+// 함수 실행 리전을 서울(icn1)로 고정해 DB와 같은 리전에서 돌게 한다.
+export const preferredRegion = 'icn1';
 
 // 대시보드 섹션 탭 — 스크롤 대신 URL(?tab=)로 화면을 나눈다.
 const TABS = [
@@ -91,14 +95,6 @@ function resolveRange(searchParams: { from?: string; to?: string }) {
 }
 
 async function loadDashboardData(from: string, to: string, company: string | undefined, isDefaultRange: boolean) {
-  const _t0 = Date.now();
-  const _timing: Record<string, number> = {};
-  async function _timed<T>(label: string, p: Promise<T>): Promise<T> {
-    const s = Date.now();
-    const v = await p;
-    _timing[label] = Date.now() - s;
-    return v;
-  }
   const since = new Date(`${from}T00:00:00`);
   const until = new Date(`${to}T23:59:59`);
   const where = { pubDate: { gte: since, lte: until }, isNoise: false };
@@ -128,40 +124,39 @@ async function loadDashboardData(from: string, to: string, company: string | und
     spikeRecent, spikeBaseline, crisisNeg, portfolioTargets, competitorTop,
     competitorArticles, sparklabsMentions, portfolioTop15, portfolioNeg, sparklabsArticles, portfolioPos,
   ] = await Promise.all([
-    _timed('q1_total', prisma.article.count({ where })),
-    _timed('q2_sparklabsCount', prisma.article.count({ where: { ...where, category: 'sparklabs_self' } })),
-    _timed('q3_portfolioCount', prisma.article.count({ where: portfolioWhere })),
-    _timed('q4_pitchCount', prisma.article.count({ where: { ...where, pitchScore: { gte: 75 } } })),
-    _timed('q5_mentionCount', prisma.article.count({ where: { ...portfolioWhere, title: { contains: '스파크랩' } } })),
-    _timed('q6_prevPortfolioCount', prisma.article.count({ where: prevPortfolioWhere })),
-    _timed('q7_prevMentionCount', prisma.article.count({ where: { ...prevPortfolioWhere, title: { contains: '스파크랩' } } })),
-    _timed('q8_articles', prisma.article.findMany({ where, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], take: 400 })),
+    prisma.article.count({ where }),
+    prisma.article.count({ where: { ...where, category: 'sparklabs_self' } }),
+    prisma.article.count({ where: portfolioWhere }),
+    prisma.article.count({ where: { ...where, pitchScore: { gte: 75 } } }),
+    prisma.article.count({ where: { ...portfolioWhere, title: { contains: '스파크랩' } } }),
+    prisma.article.count({ where: prevPortfolioWhere }),
+    prisma.article.count({ where: { ...prevPortfolioWhere, title: { contains: '스파크랩' } } }),
+    prisma.article.findMany({ where, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], take: 400 }),
     // 톤 분석 — 스파크랩 기준
-    _timed('q9_toneGroups', prisma.article.groupBy({ by: ['tone'], where: sparklabsWhere, _count: { _all: true } })),
-    _timed('q10_pitches', prisma.article.findMany({ where: { ...where, pitchScore: { gte: 60 } }, orderBy: { pitchScore: 'desc' }, take: 20 })),
-    _timed('q11_trendArticles', prisma.article.findMany({ where: portfolioWhere, select: { matchedKeyword: true, pubDate: true }, take: 20000 })),
-    _timed('q12_spikeRecent', prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'portfolio_company' }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true } })),
-    _timed('q13_spikeBaseline', prisma.article.findMany({ where: { pubDate: { gte: bl, lt: rc }, isNoise: false, category: 'portfolio_company' }, select: { matchedKeyword: true } })),
+    prisma.article.groupBy({ by: ['tone'], where: sparklabsWhere, _count: { _all: true } }),
+    prisma.article.findMany({ where: { ...where, pitchScore: { gte: 60 } }, orderBy: { pitchScore: 'desc' }, take: 20 }),
+    prisma.article.findMany({ where: portfolioWhere, select: { matchedKeyword: true, pubDate: true }, take: 20000 }),
+    prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'portfolio_company' }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true } }),
+    prisma.article.findMany({ where: { pubDate: { gte: bl, lt: rc }, isNoise: false, category: 'portfolio_company' }, select: { matchedKeyword: true } }),
     // 실시간 위기 감지용: 기간 선택과 무관하게 "최근 3일" 포트폴리오 부정 기사
-    _timed('q14_crisisNeg', prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'portfolio_company', OR: negOr }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true }, take: 800 })),
+    prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'portfolio_company', OR: negOr }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true }, take: 800 }),
     // 표시 단계 관련성 가드용: 포트폴리오 감시대상 키워드맵 (primaryKeyword → [이름·영문·보조])
-    _timed('q15_portfolioTargets', prisma.monitoringTarget.findMany({ where: { category: 'portfolio_company', status: 'ACTIVE' }, select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true, portfolioStatus: true } })),
+    prisma.monitoringTarget.findMany({ where: { category: 'portfolio_company', status: 'ACTIVE' }, select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true, portfolioStatus: true } }),
     // 포트폴리오 vs 타 하우스 비교용: competitor(타 AC·VC 하우스) 노출 상위 3개 (실제 이름) — 업계 키워드 제외
-    _timed('q16_competitorTop', prisma.article.groupBy({ by: ['matchedKeyword'], where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor', matchedKeyword: { notIn: INDUSTRY_TREND_KEYWORDS } }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 3 })),
+    prisma.article.groupBy({ by: ['matchedKeyword'], where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor', matchedKeyword: { notIn: INDUSTRY_TREND_KEYWORDS } }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 3 }),
     // 경쟁사 모니터링 섹션용: 기간 내 competitor 기사 전체(matchedKeyword=실제 경쟁사명별 집계)
-    _timed('q17_competitorArticles', prisma.article.findMany({ where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor' }, orderBy: { pubDate: 'desc' }, select: { title: true, source: true, pubDate: true, link: true, tone: true, matchedKeyword: true }, take: 3000 })),
+    prisma.article.findMany({ where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor' }, orderBy: { pubDate: 'desc' }, select: { title: true, source: true, pubDate: true, link: true, tone: true, matchedKeyword: true }, take: 3000 }),
     // 경쟁사 비교 기준선: 기간 내 '스파크랩' 언급 기사 수 (엔티티 자체 + 제목 언급)
-    _timed('q18_sparklabsMentions', prisma.article.count({ where: { pubDate: { gte: since, lte: until }, isNoise: false, OR: [{ category: 'sparklabs_self' }, { title: { contains: '스파크랩' } }] } })),
+    prisma.article.count({ where: { pubDate: { gte: since, lte: until }, isNoise: false, OR: [{ category: 'sparklabs_self' }, { title: { contains: '스파크랩' } }] } }),
     // 가장 많이 언급된 포트폴리오사 TOP 15 (기간 내 노출 건수) — 업계 키워드 제외
-    _timed('q19_portfolioTop15', prisma.article.groupBy({ by: ['matchedKeyword'], where: { ...portfolioWhere, matchedKeyword: { notIn: INDUSTRY_TREND_KEYWORDS } }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 15 })),
+    prisma.article.groupBy({ by: ['matchedKeyword'], where: { ...portfolioWhere, matchedKeyword: { notIn: INDUSTRY_TREND_KEYWORDS } }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 15 }),
     // 포트폴리오 부정 기사 (기간 내 부정 논조 — 회사·제목 확인용)
-    _timed('q20_portfolioNeg', prisma.article.findMany({ where: { ...portfolioWhere, OR: negOr }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true, riskFlag: true }, take: 80 })),
+    prisma.article.findMany({ where: { ...portfolioWhere, OR: negOr }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true, riskFlag: true }, take: 80 }),
     // 스파크랩 자사 기사 (톤 분석 클릭 시 펼쳐볼 목록)
-    _timed('q21_sparklabsArticles', prisma.article.findMany({ where: sparklabsWhere, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, link: true, source: true, pubDate: true, tone: true, matchedKeyword: true, category: true, riskFlag: true }, take: 300 })),
+    prisma.article.findMany({ where: sparklabsWhere, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, link: true, source: true, pubDate: true, tone: true, matchedKeyword: true, category: true, riskFlag: true }, take: 300 }),
     // 포트폴리오 긍정 하이라이트 (호재 기사)
-    _timed('q22_portfolioPos', prisma.article.findMany({ where: { ...portfolioWhere, OR: posOr }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true }, take: 120 })),
+    prisma.article.findMany({ where: { ...portfolioWhere, OR: posOr }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true }, take: 120 }),
   ]);
-  _timing.queriesTotal = Date.now() - _t0;
 
   // 스포츠·게임·연예·광고 강제 제외 (제목·URL·매체) — 표시되는 모든 기사 리스트에 공통 적용
   const notNoise = (a: { title: string; link: string; source: string }) =>
@@ -416,9 +411,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
     return true;
   });
 
-  _timing.total = Date.now() - _t0;
   return {
-    _timing,
     range: { from, to },
     kpi: { total, sparklabsCount: sparklabsCountFiltered, portfolioCount, pitchCount, mentionRate, mentionDelta: mentionRate - prevMentionRate },
     articles: enrichedArticles,
@@ -539,8 +532,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
   return (
     <>
-      {/* TEMP DEBUG TIMING */}
-      <div dangerouslySetInnerHTML={{ __html: `<!-- TIMING:${JSON.stringify(data._timing)} -->` }} />
       {/* 스코프 전환 — Intra(내부 생태계) / Inter(해외 트렌드) */}
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <div className="flex gap-0.5 rounded-lg bg-spark-cream p-0.5">
