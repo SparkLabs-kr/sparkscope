@@ -23,3 +23,6 @@ _backup_before_clone/
 # reclassify 진행상황 파일
 .reclassify-progress.json
 .env*
+
+# GCP 서비스 계정 키 (비밀정보, 커밋 금지)
+google-service-account.json

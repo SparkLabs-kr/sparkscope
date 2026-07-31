@@ -5,7 +5,20 @@ import { useState } from 'react';
 import { safeArticleHref } from '@/lib/sparkscope/article-link';
 
 interface CrisisArticle { title: string; source: string; pubDate: Date | string; link: string }
-interface Crisis { company: string; negCount: number; cause: string; article: CrisisArticle }
+interface Crisis {
+  company: string;
+  negCount: number;
+  cause: string;
+  article: CrisisArticle;
+  causeSource: 'ai' | 'fallback';
+  causeComputedAt: Date | string | null;
+}
+
+// 원인 문장 계산 시각은 KST 기준 HH:MM으로 표시 (사전계산 배치가 KST 하루 1회 도는 것과 맞춤)
+function fmtKstTime(d: Date | string) {
+  const kst = new Date(new Date(d).toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+  return `${String(kst.getHours()).padStart(2, '0')}:${String(kst.getMinutes()).padStart(2, '0')}`;
+}
 
 export function CrisisPanel({ crises, overview, windowDays, summaryThreshold }: {
   crises: Crisis[];
@@ -62,6 +75,14 @@ function CrisisCardView({ c, windowDays }: { c: Crisis; windowDays: number }) {
       </div>
       {/* 2줄: AI 원인 요약 (두괄식) */}
       <div className="text-sm text-gray-700 mt-1.5 leading-relaxed">{c.cause}</div>
+      {/* AI가 실제로 읽고 요약한 건지, 아직 분석 전이라 키워드 매칭 기본 문구인지 구분 표시 */}
+      <div className="text-[10px] text-gray-400 mt-0.5">
+        {c.causeSource === 'fallback'
+          ? '⚙️ 기본 요약 · AI 분석 대기 중(다음 수집 때 자동 갱신)'
+          : c.causeComputedAt
+          ? `🤖 AI 요약 · ${fmtKstTime(c.causeComputedAt)} 기준`
+          : '🤖 AI 요약 · 실시간'}
+      </div>
       {/* 대표 부정기사 1건 */}
       <div className="mt-3 rounded-lg bg-white/70 border border-red-100 p-2.5">
         <div className="text-[10px] font-semibold text-red-400 mb-1">대표 부정기사</div>

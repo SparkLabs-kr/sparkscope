@@ -7,8 +7,12 @@ import type { RawArticle, AnalyzedArticle } from './types';
 import { collectAllArticles } from './collector';
 import { normalizeTitleKey } from './relevance';
 import { analyzeArticles, generateEditorIntro } from './analyzer';
+import { computeAndStoreDashboardInsights } from './dashboard-insights';
 import { buildDigestData, renderDigestHtml } from './digest';
 import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } from './mailer';
+import { collectInterNews } from './inter-collect';
+import { filterInterNewsWithGemini } from './inter-filter';
+import { matchInterNewsWithPortfolio } from './inter-portfolio-match';
 
 export interface RunOptions {
   send?: boolean;            // 실제 메일 발송 여부 (false면 DB 저장까지만)
@@ -68,6 +72,29 @@ export async function runDailyDigest(opts: RunOptions = {}) {
       const maxPerCat = process.env.COLLECT_MAX_PER_CATEGORY ? Number(process.env.COLLECT_MAX_PER_CATEGORY) : 30;
       const daysBack = process.env.COLLECT_DAYS_BACK ? Number(process.env.COLLECT_DAYS_BACK) : undefined;
       raw = await collectAllArticles({ maxKeywordsPerCategory: maxPerCat, daysBack });
+    }
+
+    // 1.5 Inter(해외 트렌드) 탭 — RSS 수집 + Gemini 필터링 (skipCollect 모드에서는 건너뜀)
+    if (!opts.skipCollect) {
+      try {
+        const { newsIds } = await collectInterNews();
+        if (newsIds.length > 0) {
+          const filterResult = await filterInterNewsWithGemini(newsIds);
+          console.log(`[runner] Inter filtered: ${filterResult.relevant}/${filterResult.filtered} relevant`);
+
+          if (filterResult.relevant > 0) {
+            const relevantVerdicts = await prisma.interNewsVerdict.findMany({
+              where: { newsId: { in: newsIds }, relevant: true },
+              select: { id: true },
+            });
+            const matchResult = await matchInterNewsWithPortfolio(relevantVerdicts.map(v => v.id));
+            console.log(`[runner] Inter portfolio matched: ${matchResult.matched}건, ${matchResult.failed.length}개 오류`);
+          }
+        }
+      } catch (e: any) {
+        console.error('[runner] Inter collection/filtering failed:', e?.message ?? e);
+        // Inter 실패는 포트폴리오 다이제스트에 영향 안 줌
+      }
     }
 
     // 2. 분석에 필요한 컨텍스트
@@ -160,6 +187,10 @@ export async function runDailyDigest(opts: RunOptions = {}) {
       if (saveFailures > 0) {
         console.error(`[runner] ${saveFailures}/${analyzed.length} articles failed to save this run`);
       }
+
+      // 4.5 대시보드 AI 요약(위기 원인·경쟁사 트렌드) 사전계산 — 하루 1회, 실제 수집 실행 때만
+      // (skipCollect=발송 전용 모드에서는 돌리지 않음). 내부적으로 실패를 삼키므로 발송에는 영향 없음.
+      await computeAndStoreDashboardInsights();
     }
 
     // 5. 편집자 인사
