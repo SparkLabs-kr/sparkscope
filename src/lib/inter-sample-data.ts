@@ -46,14 +46,11 @@ export interface InterStat {
   value: string;
 }
 
-// 피드 소스 → 도메인. 학술지·종합 경제지는 두 도메인 모두에 걸쳐 있어 cross-cutting으로 둘 다 포함.
+// 피드 소스 → 도메인 (Gemini 필터링이 domain을 못 채운 구버전 판정 데이터에 대한 fallback).
 const BIO_SOURCES = /Endpoints News|STAT News|Fierce Biotech|BioCentury|BioPharma Dive/i;
-const AI_SOURCES = /TechCrunch|The Information|VentureBeat|CB Insights|Wired|The Verge|Ars Technica/i;
-const CROSS_CUTTING_SOURCES = /MIT Tech Review|Nature|Cell|Science|Scientific American|Bloomberg|Wall Street Journal|Financial Times|Reuters|New York Times|CNN|Washington Post/i;
 
-function matchesDomain(domain: InterDomain, source: string): boolean {
-  if (CROSS_CUTTING_SOURCES.test(source)) return true;
-  return domain === 'bio' ? BIO_SOURCES.test(source) : AI_SOURCES.test(source);
+function legacyDomainGuess(source: string): InterDomain {
+  return BIO_SOURCES.test(source) ? 'bio' : 'ai';
 }
 
 async function getRelevantVerdictsForDomain(domain: InterDomain) {
@@ -61,7 +58,7 @@ async function getRelevantVerdictsForDomain(domain: InterDomain) {
     where: { relevant: true },
     include: { news: true },
   });
-  return verdicts.filter(v => matchesDomain(domain, v.news.source));
+  return verdicts.filter(v => (v.domain ?? legacyDomainGuess(v.news.source)) === domain);
 }
 
 export async function getDomainStats(domain: InterDomain): Promise<InterStat[]> {
@@ -85,7 +82,9 @@ export interface PortfolioMatch {
 
 export interface SourceItem {
   badge: SourceKind;
-  title: string;
+  title: string;       // 한국어 번역 제목 (없으면 원문)
+  titleOriginal: string;
+  url: string;
   media: string;
   date: string;
   alert: AlertLevel;
@@ -121,43 +120,56 @@ function formatDate(date: Date): string {
   return `${y}.${m}.${d}`;
 }
 
+function truncate(s: string): string {
+  return s.length > 70 ? s.slice(0, 67) + '…' : s;
+}
+
 export async function getSectorData(domain: InterDomain): Promise<SectorBlock[]> {
-  // 1. 필터링된 기사들(해당 도메인 소스만) + 매칭 조회
+  // 1. 필터링된 기사들(해당 도메인만) + 매칭 조회
   const verdicts = await getRelevantVerdictsForDomain(domain);
 
   const matches = await prisma.interPortfolioMatch.findMany({
     where: { verdictId: { in: verdicts.map(v => v.id) } },
-    include: { verdict: { include: { news: true } } },
+  });
+  const matchesByVerdictId = new Map<string, typeof matches>();
+  matches.forEach(m => {
+    const arr = matchesByVerdictId.get(m.verdictId) ?? [];
+    arr.push(m);
+    matchesByVerdictId.set(m.verdictId, arr);
   });
 
-  // 2. 기사를 섹터별로 그룹화 (간단하게 키워드 매칭)
+  // 2. 고정 섹터 목록 기준으로 그룹화 — verdict.sector가 그 섹터 key와 일치하는 기사만 포함
+  //    (구버전 판정 데이터처럼 sector가 비어 있으면 어느 섹터에도 들어가지 않음)
   const sectors = trendSectorsFor(domain === 'ai' ? 'AI' : '바이오');
 
   const sectorData: SectorBlock[] = sectors.map((sector, idx) => {
-    // 해당 섹터와 관련된 기사/매칭 찾기
+    const sectorVerdicts = verdicts.filter(v => v.sector === sector.key);
+
     const sectorMatches: PortfolioMatch[] = [];
     const matchesSet = new Set<string>();
-
-    matches.forEach(m => {
-      const key = `${m.companyName}|${m.reason}`;
-      if (!matchesSet.has(key)) {
-        sectorMatches.push({ co: m.companyName, desc: m.reason });
-        matchesSet.add(key);
-      }
+    sectorVerdicts.forEach(v => {
+      (matchesByVerdictId.get(v.id) ?? []).forEach(m => {
+        const key = `${m.companyName}|${m.reason}`;
+        if (!matchesSet.has(key)) {
+          sectorMatches.push({ co: m.companyName, desc: m.reason });
+          matchesSet.add(key);
+        }
+      });
     });
 
-    // 기사를 종류별로 분류
     const items: Record<SourceKind, SourceItem[]> = {
       news: [],
       paper: [],
       opinion: [],
     };
 
-    verdicts.slice(0, 8).forEach(v => {
+    sectorVerdicts.forEach(v => {
       const kind = getSourceKind(v.news.source);
       items[kind].push({
         badge: kind,
-        title: v.news.title.length > 70 ? v.news.title.slice(0, 67) + '…' : v.news.title,
+        title: truncate(v.titleKo || v.news.title),
+        titleOriginal: v.news.title,
+        url: v.news.url,
         media: v.news.source,
         date: formatDate(v.news.publishedAt),
         alert: getAlertLevel(v.relevant),
@@ -169,7 +181,9 @@ export async function getSectorData(domain: InterDomain): Promise<SectorBlock[]>
       icon: sector.icon,
       name: sector.key,
       sub: sector.sub,
-      badge: { cls: idx % 2 === 0 ? 'urgent' : 'watch', label: idx % 3 === 0 ? '긴급' : '모니터링' },
+      badge: sectorVerdicts.length > 0
+        ? { cls: idx % 2 === 0 ? 'urgent' as const : 'watch' as const, label: idx % 3 === 0 ? '긴급' : '모니터링' }
+        : { cls: 'neu' as const, label: '데이터 없음' },
       matches: sectorMatches.slice(0, 5),
       items,
     };

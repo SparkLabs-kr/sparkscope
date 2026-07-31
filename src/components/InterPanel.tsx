@@ -274,14 +274,23 @@ function SectorAccordion({
               <div className="py-4 text-center text-xs text-spark-muted">해당 탭에 항목이 없습니다</div>
             ) : (
               items.map((it, i) => (
-                <div key={i} className="flex items-start gap-2.5 border-b border-spark-cream/60 px-4 py-2.5 last:border-0 hover:bg-spark-subtle">
+                <a
+                  key={i}
+                  href={it.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-start gap-2.5 border-b border-spark-cream/60 px-4 py-2.5 last:border-0 hover:bg-spark-subtle"
+                >
                   <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${SRC_BADGE_CLS[it.badge]}`}>{SRC_LABEL[it.badge]}</span>
                   <div className="flex-1">
                     <div className="text-xs font-semibold leading-snug text-spark-ink">{it.title}</div>
+                    {it.titleOriginal !== it.title && (
+                      <div className="mt-0.5 text-[11px] leading-snug text-spark-muted">{it.titleOriginal}</div>
+                    )}
                     <div className="mt-0.5 text-[11px] text-spark-muted">{it.media} · {it.date}</div>
                   </div>
                   <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${ALERT_CLS[it.alert]}`}>{ALERT_LABEL[it.alert]}</span>
-                </div>
+                </a>
               ))
             )}
           </div>
