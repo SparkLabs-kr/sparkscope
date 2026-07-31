@@ -143,3 +143,30 @@ model DashboardInsight {
   @@unique([kind, key])
   @@index([kind])
 }
+
+// ===== Inter(해외 트렌드) 탭 =====
+model InterNews {
+  id        String   @id @default(cuid())
+  source    String   // TechCrunch, Ars Technica, Wired, MIT Tech Review
+  title     String
+  url       String   @unique
+  publishedAt DateTime
+  rawText   String?  // 기사 본문 (선택, 나중에 포트폴리오 매칭에서 쓸 수 있음)
+  collectedAt DateTime @default(now())
+  verdicts  InterNewsVerdict[]
+  @@index([collectedAt])
+  @@index([source])
+}
+
+model InterNewsVerdict {
+  id        String   @id @default(cuid())
+  newsId    String
+  news      InterNews @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  relevant  Boolean
+  reason    String   // "AI 인프라 트렌드", "노이즈: 쿠폰 행사" 등
+  model     String   @default("gemini-3.1-flash-lite") // 판정한 모델
+  filteredAt DateTime @default(now())
+  @@unique([newsId, model])
+  @@index([filteredAt])
+  @@index([relevant])
+}
