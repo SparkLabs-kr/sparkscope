@@ -1881,10 +1881,8 @@
     "category": "competitor",
     "status": "ACTIVE",
     "tier": "1",
-    "primaryKeyword": "SBVA, 소프트뱅크벤처스 (사명변경 이력)",
-    "helperKeywords": "이준표",
-    "excludeWords": null,
-    "contextWords": null,
+    "primaryKeyword": "SBVA",
+    "helperKeywords": "소프트뱅크벤처스, 이준표",
     "notes": null
   },
   {
@@ -1997,9 +1995,7 @@
     "portfolioStatus": "Written-off",
     "tier": "C",
     "primaryKeyword": "핀솜",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "Hai Nguyen",
     "notes": null
   },
   {
@@ -2141,8 +2137,6 @@
     "tier": "A",
     "primaryKeyword": "올거나이즈",
     "helperKeywords": "이창수 LLM",
-    "excludeWords": null,
-    "contextWords": null,
     "notes": "엔터프라이즈 AI/LLM 솔루션 기업. 기업용 AI 업무자동화 플랫폼 '알리(Alli)' 운영"
   },
   {
@@ -2193,8 +2187,6 @@
     "tier": "A",
     "primaryKeyword": "앰버로드",
     "helperKeywords": "임언호, AI",
-    "excludeWords": null,
-    "contextWords": null,
     "notes": "포스코 사내벤처 출신 제조 AI 솔루션 기업. 공정 최적화 AI '마이너 리포트(Miner Report)' 개발"
   },
   {
@@ -2232,7 +2224,6 @@
     "tier": "B",
     "primaryKeyword": "아라블",
     "helperKeywords": "짐 에싱턴 기후테크",
-    "excludeWords": null,
     "contextWords": "IoT센서, 기후테크, 농업, AI, 농지 데이터, 짐 에싱턴",
     "notes": "올인원 IoT 센서로 농지 데이터를 실시간 수집·분석하여 농업의 생산성을 높이고 수자원을 최적화하는 AI 기후 테크 플랫폼"
   },
@@ -2271,7 +2262,6 @@
     "tier": "C",
     "primaryKeyword": "아스타",
     "helperKeywords": "이재원, 마케팅, AI",
-    "excludeWords": null,
     "contextWords": "디지털 콘텐츠 마케팅, AI 크리에이터 엔진, AVICA, 브랜드 마케팅 솔루션",
     "notes": "AI 디지털 콘텐츠 마케팅 기업. AI 크리에이터 엔진 'AVICA' 기반 브랜드 마케팅 솔루션"
   },
@@ -2284,8 +2274,7 @@
     "tier": "C",
     "primaryKeyword": "증강지능",
     "helperKeywords": "조근식 항공정비",
-    "excludeWords": null,
-    "contextWords": "VR, SaaS, 학습, AI, 디지털 트윈, 항공 정비, 가상 교육, AK VIEW, 조근식",
+    "contextWords": "VR, SaaS, 학습, AI, 디지털 트윈, 항공 정비,  가상 교육, AK VIEW, 조근식",
     "notes": "고가의 VR 장비 없이 웹(SaaS) 기반으로 시공간 제약 없이 학습 가능한 AI 및 디지털 트윈 융합 항공정비 몰입형 가상 교육 솔루션(AK VIEW)"
   },
   {
@@ -2297,7 +2286,6 @@
     "tier": "C",
     "primaryKeyword": "액스",
     "helperKeywords": "오연주, 여행",
-    "excludeWords": null,
     "contextWords": "현지 여행사, 여행상품 퍼블리싱, 예약관리",
     "notes": "전세계 현지 여행사를 위해 여행상품 퍼블리싱과 예약관리 솔루션을 개발하는 스타트업"
   },
@@ -2374,9 +2362,7 @@
     "portfolioStatus": "Live",
     "tier": "A",
     "primaryKeyword": "베러먼데이코리아",
-    "helperKeywords": "도경백 라이프스타일",
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "베러먼데이, 도경백 라이프스타일",
     "notes": "F&B·라이프스타일 플랫폼 기업. 커피 프랜차이즈 '베러먼데이커피' 및 친환경 커머스 '비베러' 운영"
   },
   {
@@ -2479,7 +2465,6 @@
     "tier": "C",
     "primaryKeyword": "박스풀",
     "helperKeywords": "성정학, 창고",
-    "excludeWords": null,
     "contextWords": "무인 관리, 데이터, 공유창고, 풀필먼트, 성정학, Boxful, 셀프스토리지",
     "notes": "IoT 기반의 무인 관리 시스템과 데이터 기술을 활용한 공유창고(셀프스토리지) 및 풀필먼트 서비스"
   },
@@ -2518,7 +2503,6 @@
     "tier": "C",
     "primaryKeyword": "브로츠",
     "helperKeywords": "로렌츠 미리 음악발견",
-    "excludeWords": null,
     "contextWords": "뮤직, 음악, Web3, 웹3, 블록체인, 팬, 플랫폼, 이탈리아, 아티스트, 로렌츠 미리",
     "notes": "음악 취향 기반 아티스트 발견·팬 교류 모바일 앱 (이탈리아 기반, 스파크랩 17기)"
   },
@@ -2583,7 +2567,6 @@
     "tier": "B",
     "primaryKeyword": "까리용",
     "helperKeywords": "오경원 AI",
-    "excludeWords": null,
     "contextWords": "판례, 법률, 법, 리서치, 리걸엔진, 빅데이터, AI, 오경원",
     "notes": "대규모 국내 판례 빅데이터 기반의 AI 법률 리서치 솔루션 '리걸엔진'"
   },
@@ -2604,12 +2587,11 @@
     "name": "캐스팅",
     "englishName": "Casting",
     "category": "portfolio_company",
-    "status": "ACTIVE",
+    "status": "PAUSED",
     "portfolioStatus": "Exit",
     "tier": "C",
     "primaryKeyword": "캐스팅",
     "helperKeywords": "허성욱, 마케팅",
-    "excludeWords": null,
     "contextWords": "캐스팅, 플랫폼, 인플루언서, 구독자, 구독, DM, 소통, 오현민",
     "notes": "다양한 분야의 인플루언서들과 개인적으로 소통할 수 있는 플랫폼"
   },
@@ -2621,9 +2603,7 @@
     "portfolioStatus": "Live",
     "tier": "A",
     "primaryKeyword": "차트메트릭",
-    "helperKeywords": "조성문 음악데이터",
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "조성문 음악데이터 빅브레인랩",
     "notes": "음악 산업 데이터 분석 플랫폼. 아티스트·음원 성과 통합 데이터 서비스 빅브레인랩 Bigbrainlab.kr"
   },
   {
@@ -2635,7 +2615,6 @@
     "tier": "B",
     "primaryKeyword": "클로아",
     "helperKeywords": "임성은, 데이터, AI",
-    "excludeWords": null,
     "contextWords": "데이터 파이프라인, 대용량 데이터, 인프라, 임성은",
     "notes": "데이터 파이프라인 솔루션 기업. 실시간 대용량 데이터 처리 인프라 개발"
   },
@@ -2907,9 +2886,8 @@
     "portfolioStatus": "Written-off",
     "tier": "C",
     "primaryKeyword": "드랍비트",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "박일수, 문화, 컨텐츠",
+    "contextWords": "EDM, 스트리밍 서비스,  박일수, 검색엔진, 스타트업",
     "notes": null
   },
   {
@@ -2921,7 +2899,6 @@
     "tier": "C",
     "primaryKeyword": "이어가다",
     "helperKeywords": "최자인, 박현아, 오디오",
-    "excludeWords": null,
     "contextWords": "나디오, Nadio, 오디오, 음성, 에세이, 숏폼, 최자인, 박현아, TTS",
     "notes": "AI 음성 합성 기술을 활용해 오디오 콘텐츠 플랫폼 나디오 (nadio)를 운영하는 오디오테크 스타트업"
   },
@@ -2960,8 +2937,6 @@
     "tier": "A",
     "primaryKeyword": "엣지크로스",
     "helperKeywords": "백훈 스마트머신",
-    "excludeWords": null,
-    "contextWords": null,
     "notes": "산업용 AIoT 스마트머신 전환 솔루션 기업 (구 빛컨/VITCON)"
   },
   {
@@ -2973,7 +2948,6 @@
     "tier": "B",
     "primaryKeyword": "엘리멘탈머신",
     "helperKeywords": "에드세귄 스마트랩",
-    "excludeWords": null,
     "contextWords": "IoT센서, 실험실, 바이오, 환경 데이터, 손실방지, LapOps, 모니터링, 에드세귄",
     "notes": "IoT 센서로 바이오 실험실의 온·습도 등 환경 데이터를 실시간 모니터링하여 기기 고장과 연구 손실을 방지하는 서비스"
   },
@@ -2999,7 +2973,6 @@
     "tier": "C",
     "primaryKeyword": "이멀전트브이알",
     "helperKeywords": "피터 윌킨스, 가상 현실(VR)",
-    "excludeWords": null,
     "contextWords": "스마트폰, 360도 가상현실, 공유, 모바일 VR, 피터 윌킨스",
     "notes": "일반 스마트폰으로 360도 가상현실 영상을 직접 촬영·공유하고, 모바일 VR 기기로 이를 탐험하는 'VR 전용 소셜 플랫폼'"
   },
@@ -3077,7 +3050,6 @@
     "tier": "C",
     "primaryKeyword": "이퀼브리엄월드",
     "helperKeywords": "프랭크 미한, ESG, AI 플랫폼",
-    "excludeWords": null,
     "contextWords": "탄소 배출량, ESG, 클라우드, 탄소 회계, 프랭크 미한, AI, 탄소, SaaS, 자동화",
     "notes": "AI 기반으로 탄소 배출량을 자동 추적하고 ESG 공시를 지원하는 클라우드 탄소 회계 솔루션"
   },
@@ -3155,8 +3127,7 @@
     "tier": "C",
     "primaryKeyword": "피처링",
     "helperKeywords": "장지훈 인플루언서",
-    "excludeWords": null,
-    "contextWords": "데이터 분석, AI, SNS, 인플루언서, 영향력, 마케팅, 장지훈",
+    "contextWords": "피처링 AI, SNS 마케팅, SNS 콘텐츠, 브랜드 점유, 인플루언서, 인플루언서 영향력, 장지훈",
     "notes": "AI 기반 데이터 분석으로 SNS 인플루언서의 실제 영향력을 측정하고, 브랜드의 인플루언서 마케팅을 지원하는 플랫폼"
   },
   {
@@ -3168,7 +3139,6 @@
     "tier": "C",
     "primaryKeyword": "필유",
     "helperKeywords": "아드리안 척, 웨어러블",
-    "excludeWords": null,
     "contextWords": "감정, 연인, 가족, 반지, 웨어러블, 링유, 디바이스",
     "notes": "멀리 떨어져 있는 연인이나 가족이 서로의 감정을 실시간으로 공유할 수 있도록 만든 반지 형태의 스마트 웨어러블 기기 '링유(Ringyou)'"
   },
@@ -3232,9 +3202,8 @@
     "portfolioStatus": "Written-off",
     "tier": "C",
     "primaryKeyword": "플로우스테이트미디어",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "칸 제갈, 게임 개발",
+    "contextWords": "캐주얼 게임, 게임, 실시간, 칸 제갈, 스타트업, 스파크랩, 실리콘밸리, Kahn Jekarl, 레터업",
     "notes": null
   },
   {
@@ -3246,7 +3215,6 @@
     "tier": "B",
     "primaryKeyword": "플루언트",
     "helperKeywords": "전예찬, AI",
-    "excludeWords": null,
     "contextWords": "3D, 아바타, 디지털 휴먼, 스피치 모션, AI, 데이터, 버츄얼 휴먼, 전예찬, 톡모션, TalkMotion.ai",
     "notes": "텍스트나 음성 데이터를 기반으로 자연스러운 3D 아바타(디지털 휴먼) 및 스피치 모션을 생성하는 AI 솔루션 기업"
   },
@@ -3259,7 +3227,6 @@
     "tier": "C",
     "primaryKeyword": "플루이드",
     "helperKeywords": "샤라드 쿠마르, 자동화",
-    "excludeWords": null,
     "contextWords": "클라우드, 인프라, 자동화, 마이그레이션, SaaS, 샤라드 쿠마르",
     "notes": "복잡한 클라우드 시스템 전체를 읽어내 다른 클라우드 환경으로 똑같이 복제하고 이전해 주는 인프라 자동화 플랫폼"
   },
@@ -3297,9 +3264,8 @@
     "portfolioStatus": "Written-off",
     "tier": "C",
     "primaryKeyword": "푸드블록체인",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "앙겔 버세티, 슈테판 마이어, 푸드테크",
+    "contextWords": "앙겔 버세티, 슈테판 마이어, 푸드코인, foodcoin, IoT, 푸드테크, 블록체인",
     "notes": null
   },
   {
@@ -3440,9 +3406,7 @@
     "portfolioStatus": "Live",
     "tier": "A",
     "primaryKeyword": "지지큐",
-    "helperKeywords": "이용수 게임코칭",
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "지지큐컴퍼니, 이용수 게임코칭",
     "notes": "e스포츠 코칭·트레이닝 서비스 플랫폼 (AI 기반 게임 경기 분석)"
   },
   {
@@ -3488,12 +3452,11 @@
     "name": "GMG",
     "englishName": "GMG",
     "category": "portfolio_company",
-    "status": "PAUSED",
-    "portfolioStatus": "Written-off",
+    "status": "ACTIVE",
+    "portfolioStatus": "Live",
     "tier": "C",
     "primaryKeyword": "GMG",
-    "helperKeywords": "도널드 클립, 로버트 채드윅, 부동산",
-    "excludeWords": null,
+    "helperKeywords": "도널드 클립, 로버트 채드윅, 부동산, 지엠지, 글로벌모기지그룹",
     "contextWords": "프롭테크, 비시민권자, 해외 주거, 부동산, 도널드 클립, 로버트 채드윅, 글로벌모기지그룹, 중개, 투자, 담보, 대출",
     "notes": "프롭테크. 비시민권자 해외 주거용 부동산 구매 지원"
   },
@@ -3553,13 +3516,11 @@
     "name": "H2O호스피탈리티",
     "englishName": "H2O Hospitality",
     "category": "portfolio_company",
-    "status": "ACTIVE",
+    "status": "PAUSED",
     "portfolioStatus": "Exit",
     "tier": "A",
     "primaryKeyword": "H2O호스피탈리티",
-    "helperKeywords": "이웅희, 호스피탈리티",
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "에이치투오호스피탈리티, 이웅희, 호스피탈리티",
     "notes": "숙박·레저 산업의 디지털 전환, 운영 자동화, 호스피탈리티 테크 기업"
   },
   {
@@ -3597,7 +3558,6 @@
     "tier": "C",
     "primaryKeyword": "해브잇",
     "helperKeywords": "서수아, 쇼핑, 커머스",
-    "excludeWords": null,
     "contextWords": "인스타그램, SNS, 인플루언서, 패션, 명품, 정보 연계, 판매, 커머스, 서수아",
     "notes": "인스타그램 등 SNS 인플루언서들이 착용하는 패션 및 명품 아이템 정보를 연계하여 선별 판매하는 큐레이션 기반 명품 커머스 플랫폼"
   },
@@ -3636,7 +3596,6 @@
     "tier": "B",
     "primaryKeyword": "헤이브레드",
     "helperKeywords": "유민주, 배달",
-    "excludeWords": null,
     "contextWords": "베이커리, 정기배송, 유민주, 장인, 큐레이션, 배달, 빵배달",
     "notes": "경쟁력 있는 동네 장인 베이커리의 빵을 큐레이션하여 소비자에게 정기 배송 및 묶음 배송"
   },
@@ -3714,7 +3673,6 @@
     "tier": "C",
     "primaryKeyword": "아이디엘",
     "helperKeywords": "김상현, 헬스케어, IoT",
-    "excludeWords": null,
     "contextWords": "아이, 활동량, 측정, 부모, 건강 데이터, 카롱, 김상현, 웨어러블",
     "notes": "아이의 활동량을 실시간으로 측정하고 부모에게 또래 평균과 비교한 건강 데이터를 제공하는 IoT 기반 서비스 '카롱(Caron)'"
   },
@@ -3831,7 +3789,6 @@
     "tier": "C",
     "primaryKeyword": "캐드호",
     "helperKeywords": "카베 아자르타시, AI, 뇌과학",
-    "excludeWords": null,
     "contextWords": "두뇌, 신경과학, 언어교육, 에듀테크, 뇌훈련, AI, 카베 아자르타시",
     "notes": "신경과학과 AI 및 머신러닝 결합하여 두뇌 훈련 커리큘럼과 언어 교육을 제공하는 에듀테크 스타트업"
   },
@@ -3844,8 +3801,7 @@
     "tier": "C",
     "primaryKeyword": "카도",
     "helperKeywords": "에메리 앤드루, 빈스 다우들, 결제",
-    "excludeWords": null,
-    "contextWords": "에메리 앤드루, 빈스 다우들, Kado, Kado Ramp, Emery Andrew",
+    "contextWords": "웹3, 암호화폐, 이커머스, 결제 인프라, 멀티체인, 에메리 앤드루, 빈스 다우들, Kado, Kado Ramp, Emery Andrew",
     "notes": "웹3(Web3) 및 암호화폐 생태계를 위한 이커머스 결제 인프라 및 멀티체인 결제 서비스"
   },
   {
@@ -3909,7 +3865,6 @@
     "tier": "C",
     "primaryKeyword": "노리",
     "helperKeywords": "김용재, 수학교육",
-    "excludeWords": null,
     "contextWords": "KnowRe, 김용재, 수학, 교육, 이러닝, 에듀테크, 학습",
     "notes": "에듀테크 스타트업. 수학 교육 콘텐츠·이러닝 서비스 (現 매각/폐업)"
   },
@@ -4013,8 +3968,6 @@
     "tier": "A",
     "primaryKeyword": "랜딩인터내셔널",
     "helperKeywords": "정새라 뷰티유통",
-    "excludeWords": null,
-    "contextWords": null,
     "notes": "K-뷰티 등 브랜드의 글로벌(미국) 유통 진출을 돕는 B2B 뷰티 플랫폼"
   },
   {
@@ -4051,9 +4004,8 @@
     "portfolioStatus": "Live",
     "tier": "C",
     "primaryKeyword": "레터럴",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "라파엘 도이치만, 인공지능",
+    "contextWords": "라파엘 도이치만, Raphael Deutschmann, 인공지능, 머신러닝, Lateral API, 스타트업",
     "notes": null
   },
   {
@@ -4116,9 +4068,9 @@
     "portfolioStatus": "Exit",
     "tier": "C",
     "primaryKeyword": "라이다에이아이",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "김현석, 물류, 유통",
+    "excludeWords": "레이저",
+    "contextWords": "라이다, RIDA, 김현석, 싱가포르, 플레이터블, 배송, 네트워크, 중소기업, 당일배송",
     "notes": null
   },
   {
@@ -4156,7 +4108,6 @@
     "tier": "C",
     "primaryKeyword": "로브스터",
     "helperKeywords": "양주영 소셜네트워킹",
-    "excludeWords": null,
     "contextWords": "양주영, 소셜, 네트워크, 친구, 앱, 커뮤니티",
     "notes": "소셜 인프라 스타트업. 사람들이 진짜 친구를 만들도록 돕는 네트워크·앱 개발"
   },
@@ -4182,8 +4133,7 @@
     "tier": "B",
     "primaryKeyword": "로커스랩",
     "helperKeywords": "무함마드 아르살란 아르샤드, AI",
-    "excludeWords": null,
-    "contextWords": "AI, 인스타그램, 왓츠앱, 엡사이트, DM, Md Arsalan Arshad, 고객",
+    "contextWords": "AI, 인스타그램, 왓츠앱, 엡사이트, DM,  Md Arsalan Arshad, 고객",
     "notes": "인공지능(AI) 고객 응대 자동화 플랫폼"
   },
   {
@@ -4313,7 +4263,7 @@
     "primaryKeyword": "마스크모먼트",
     "helperKeywords": "소피아 홍 스킨케어",
     "excludeWords": "방역, KF94, 미세먼지",
-    "contextWords": "소피아 홍, 이커머스, Mask Moments, 바이오셀룰로스, 코코넛, 구독, 시트마스크, getjelly",
+    "contextWords": "소피아 홍, 이커머스, Mask Moments, 바이오셀룰로스, 코코넛, 구독, 시트마스크, getjelly,",
     "notes": "2018년에 설립된 미국 기반의 뷰티 및 스킨케어 전문 전자상거래 스타트업. 유통 마진 줄이고 맞춤형 스킨케어 제공"
   },
   {
@@ -4415,9 +4365,8 @@
     "portfolioStatus": "Written-off",
     "tier": "C",
     "primaryKeyword": "민트엔에프티",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "제임스 선, 블록체인",
+    "contextWords": "mintNFT,  제임스선, James Sun, Web3, 블록체인",
     "notes": null
   },
   {
@@ -4494,7 +4443,6 @@
     "tier": "B",
     "primaryKeyword": "문리버",
     "helperKeywords": "문승우 이커머스데이터",
-    "excludeWords": null,
     "contextWords": "온라인 쇼핑몰, 데이터 분석, 아이템스카우트, 문승우, 쇼핑, 솔루션",
     "notes": "온라인 쇼핑몰 판매자를 위한 데이터 분석 플랫폼인 '아이템스카우트'를 운영하는 소프트웨어 개발 기업"
   },
@@ -4502,13 +4450,11 @@
     "name": "모티브인텔리전스",
     "englishName": "Motiv Intelligence",
     "category": "portfolio_company",
-    "status": "ACTIVE",
+    "status": "PAUSED",
     "portfolioStatus": "Exit",
     "tier": "A",
     "primaryKeyword": "모티브인텔리전스",
     "helperKeywords": "양준모 애드테크",
-    "excludeWords": null,
-    "contextWords": null,
     "notes": "국내 대표 애드테크 기업, 다양한 기기 연결해 맞춤형 광고를 자동으로 집행하고 분석하는 기술 제공"
   },
   {
@@ -4585,7 +4531,6 @@
     "tier": "B",
     "primaryKeyword": "엔사이어티",
     "helperKeywords": "김태현, 플랫폼, SNS",
-    "excludeWords": null,
     "contextWords": "글로벌, 청소년, SNS, 놀이터, 판타스틴닷컴, 김태현, 플랫폼",
     "notes": "글로벌 청소년을 타깃으로 한 SNS 놀이터 플랫폼 '판타스틴닷컴(Fatasteen.com)'"
   },
@@ -4727,9 +4672,7 @@
     "portfolioStatus": "Live",
     "tier": "A",
     "primaryKeyword": "오리지널이노베이션그룹",
-    "helperKeywords": "최용원 디지털콜렉터블",
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "픽잇, 오닝, 최용원 디지털콜렉터블",
     "notes": "전 세계 K팝 팬덤을 위한 디지털 포토카드 및 콜렉터블 플랫폼인 '픽잇(PICKIT)'"
   },
   {
@@ -4741,7 +4684,6 @@
     "tier": "C",
     "primaryKeyword": "온도",
     "helperKeywords": "심동현, 패션",
-    "excludeWords": null,
     "contextWords": "신소재, 기술특허, 북미타겟, 윤리적 패션",
     "notes": "신소재 및 기술특허로 D2C로 판매하는 북미타겟 윤리적 패션 브랜드"
   },
@@ -4757,19 +4699,6 @@
     "excludeWords": null,
     "contextWords": null,
     "notes": "모바일 헬스케어 기업. 휴대용 체성분·혈압·수면 측정 디바이스 '피트러스(Fitrus)' 개발"
-  },
-  {
-    "name": "오닝",
-    "englishName": "ONING",
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Live",
-    "tier": "C",
-    "primaryKeyword": "오닝, 픽잇",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
   },
   {
     "name": "오이좀",
@@ -4793,8 +4722,6 @@
     "tier": "A",
     "primaryKeyword": "페이워치",
     "helperKeywords": "김리차드에이치, 조강연, 급여선지급",
-    "excludeWords": null,
-    "contextWords": null,
     "notes": "근로자가 이미 일한 만큼의 급여를 월급일 전에 미리 받을 수 있는 유연급여 솔루션 (급여 선지급 서비스)을 B2B SaaS 형태로 제공"
   },
   {
@@ -4833,7 +4760,7 @@
     "primaryKeyword": "피치스",
     "helperKeywords": "여인택, 자동차",
     "excludeWords": "복숭아, 과일, 디저트",
-    "contextWords": "자동차문화, 스트리트, 튜닝, 라이프스타일, 카컬처, 여인택, 자동차",
+    "contextWords": "자동차문화, 스트리트, 튜닝, 라이프스타일, 카컬처, 여인택, 자동차,",
     "notes": "자동차 스트리트 문화 기반의 라이프스타일 브랜드"
   },
   {
@@ -4845,7 +4772,6 @@
     "tier": "C",
     "primaryKeyword": "펜타프레스",
     "helperKeywords": "이석용 보도사진",
-    "excludeWords": null,
     "contextWords": "사진 전문 뉴스, 네트워크, 사진 제작, 사진가, 이석용",
     "notes": "국내 최초 글로벌 사진 전문 뉴스 통신사, 글로벌 사진가들과 네트워크 구축해 다양한 분야의 고품질 보도사진 제작 및 배포"
   },
@@ -4884,8 +4810,6 @@
     "tier": "A",
     "primaryKeyword": "퍼스널에이아이",
     "helperKeywords": "이재영 마이데이터",
-    "excludeWords": null,
-    "contextWords": null,
     "notes": "구 에스앤피랩(SNPLab). 온디바이스 마이데이터 플랫폼 'my:D' ? 개인정보 주권·데이터 자산화 서비스"
   },
   {
@@ -4944,13 +4868,11 @@
     "name": "폴리머라이즈",
     "englishName": "Polymerize Korea LLC",
     "category": "portfolio_company",
-    "status": "ACTIVE",
+    "status": "PAUSED",
     "portfolioStatus": "Exit",
     "tier": "A",
     "primaryKeyword": "폴리머라이즈",
-    "helperKeywords": "박은규 소재AI",
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "폴리머라이즈코리아, 박은규 소재AI",
     "notes": null
   },
   {
@@ -4975,7 +4897,6 @@
     "tier": "C",
     "primaryKeyword": "프로파운드",
     "helperKeywords": "이유경, 비즈니스, 플랫폼",
-    "excludeWords": null,
     "contextWords": "컨설팅, 전문가, 인사이트, 비즈니스, 네트워크, 지식, 이유경",
     "notes": "전세계 다양한 비즈니스 전문가들을 연결해 그들의 지식과 인사이트를 제공하는 '비즈니스 스팟 컨설팅 마켓 네트워크'"
   },
@@ -5365,8 +5286,6 @@
     "tier": "A",
     "primaryKeyword": "소프트먼트",
     "helperKeywords": "장하일, 정재훈, 스마트오더",
-    "excludeWords": null,
-    "contextWords": null,
     "notes": "핀테크 기업. QR/NFC 스마트오더 결제 서비스 '테이블로' 운영, PG업 진출"
   },
   {
@@ -5508,7 +5427,6 @@
     "tier": "B",
     "primaryKeyword": "스타일메이트",
     "helperKeywords": "한상희 패션인플루언서",
-    "excludeWords": null,
     "contextWords": "AI, 패션, 인플루언서, 브랜드, 협찬, 매칭, 마케팅, 한상희, 플랫폼",
     "notes": "AI 기반 패션 인플루언서-브랜드 협찬 매칭 마케팅 플랫폼"
   },
@@ -5599,7 +5517,6 @@
     "tier": "C",
     "primaryKeyword": "텔라",
     "helperKeywords": "진유하, 교육",
-    "excludeWords": null,
     "contextWords": "영어, 교육, 튜터, 회화, 진유하, 에듀테크, 학습",
     "notes": "채팅 기반 영어교육 스타트업. 텍스트 학습 데이터 분석 기반 개인화 영어 커리큘럼 (최근 AI 호텔예약 자동화로도 확장)"
   },
@@ -5833,7 +5750,6 @@
     "tier": "C",
     "primaryKeyword": "벨루가브루어리",
     "helperKeywords": "김상민, 주류 유통 플랫폼",
-    "excludeWords": null,
     "contextWords": "오프라인, 주류 도매, 유통 과정, 디지털화, 벨루가브루어리, 김상민",
     "notes": "오프라인 중심의 주류 도매 유통 과정을 디지털화하는 B2B 주류 유통 플랫폼인 '벨루가 비즈니스'"
   },
@@ -5960,11 +5876,10 @@
     "category": "portfolio_company",
     "status": "ACTIVE",
     "portfolioStatus": "Live",
-    "tier": "A",
+    "tier": "C",
     "primaryKeyword": "웨이브코퍼레이션",
     "helperKeywords": "채정훈 영상통화",
-    "excludeWords": null,
-    "contextWords": null,
+    "contextWords": "영상통화, 그룹통화, 영상플랫폼, 채정훈, 채팅, 영상채팅, MZ세대",
     "notes": "MZ세대 그룹 영상통화 플랫폼 'WAVE' 운영"
   },
   {
@@ -6101,11 +6016,11 @@
     "name": "와이오엘",
     "englishName": "yolcargo",
     "category": "portfolio_company",
-    "status": "ACTIVE",
+    "status": "PAUSED",
     "portfolioStatus": "Exit",
     "tier": "C",
     "primaryKeyword": "와이오엘",
-    "helperKeywords": "정현웅, IT 물류 플랫폼",
+    "helperKeywords": "욜카고, 정현웅, IT 물류 플랫폼",
     "excludeWords": "황유미",
     "contextWords": "수출입, 기업, 견적, 위치 추적, 디지털 국제 물류, 욜카고, 스마트 운송, 정현웅",
     "notes": "수출입 기업에 투명한 견적과 실시간 위치 추적을 제공하는 디지털 국제 물류 서비스 '욜카고'"
@@ -6142,11 +6057,10 @@
     "category": "portfolio_company",
     "status": "ACTIVE",
     "portfolioStatus": "Live",
-    "tier": "A",
+    "tier": "C",
     "primaryKeyword": "제스트",
     "helperKeywords": "정호건 녹색건축",
-    "excludeWords": null,
-    "contextWords": null,
+    "contextWords": "그린북, 정호건, 녹색건축, 제로에너지건축, 친환경 건설",
     "notes": "AI 기반 녹색건축인증, 제로에너지건축물 컨설팅 및 친환경 건설 자재 플랫폼 '그린북' 운영"
   },
   {
@@ -6176,19 +6090,6 @@
     "notes": "소상공인 대상 매장관리 솔루션 '캐시노트' 운영"
   },
   {
-    "name": "벨루가",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Live",
-    "tier": "C",
-    "primaryKeyword": "벨루가",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
     "name": "별별선생",
     "englishName": null,
     "category": "portfolio_company",
@@ -6207,63 +6108,10 @@
     "category": "portfolio_company",
     "status": "ACTIVE",
     "portfolioStatus": "Live",
-    "tier": "C",
+    "tier": "A",
     "primaryKeyword": "본작",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
-    "name": "엣지크로스(빛컨)",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Live",
-    "tier": "C",
-    "primaryKeyword": "엣지크로스(빛컨)",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
-    "name": "욜카고",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Live",
-    "tier": "C",
-    "primaryKeyword": "욜카고",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
-    "name": "인스턴트타투",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Live",
-    "tier": "C",
-    "primaryKeyword": "인스턴트타투",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
-    "name": "지엠지",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Live",
-    "tier": "C",
-    "primaryKeyword": "지엠지",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "배형진 이커머스",
+    "excludeWords": "영화, 드라마, 웹툰",
     "notes": null
   },
   {
@@ -6274,45 +6122,6 @@
     "portfolioStatus": "Live",
     "tier": "C",
     "primaryKeyword": "페이먼스",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
-    "name": "폴리머라이즈코리아",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Live",
-    "tier": "C",
-    "primaryKeyword": "폴리머라이즈코리아",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
-    "name": "픽잇",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Live",
-    "tier": "C",
-    "primaryKeyword": "픽잇",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
-    "name": "베러먼데이",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Live",
-    "tier": "C",
-    "primaryKeyword": "베러먼데이",
     "helperKeywords": null,
     "excludeWords": null,
     "contextWords": null,
@@ -6339,9 +6148,7 @@
     "portfolioStatus": "Live",
     "tier": "C",
     "primaryKeyword": "제트커머스코퍼레이션",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "패스켓",
     "notes": null
   },
   {
@@ -6352,22 +6159,8 @@
     "portfolioStatus": "Written-off",
     "tier": "C",
     "primaryKeyword": "엑싱크",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
-    "name": "세린컴퍼니",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Live",
-    "tier": "C",
-    "primaryKeyword": "세린컴퍼니",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "송보근, B2B SaaS",
+    "contextWords": "이벤트, 오프라인 행사, 네트워킹, 참가자,  송보근, 스타트업",
     "notes": null
   },
   {
@@ -6391,74 +6184,8 @@
     "portfolioStatus": "Live",
     "tier": "C",
     "primaryKeyword": "트랙인베스트",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
-    "name": "에스앤피랩",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Live",
-    "tier": "C",
-    "primaryKeyword": "에스앤피랩",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
-    "name": "피치스그룹코리아",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Exit",
-    "tier": "C",
-    "primaryKeyword": "피치스그룹코리아",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
-    "name": "온누리디엠씨",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Exit",
-    "tier": "C",
-    "primaryKeyword": "온누리디엠씨",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
-    "name": "마스크모멘트",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Live",
-    "tier": "C",
-    "primaryKeyword": "마스크모멘트",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
-    "name": "랜딩인터네셔널",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Live",
-    "tier": "C",
-    "primaryKeyword": "랜딩인터네셔널",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "바비 바티아, 바티아 산디프 싱, 핀테크",
+    "contextWords": "가상 투자, TrakInvest, 주식거래, 포트폴리오, Bobby Bhatia, Bhatia Sandeep Singh",
     "notes": null
   },
   {
@@ -6469,61 +6196,8 @@
     "portfolioStatus": "Live",
     "tier": "C",
     "primaryKeyword": "시티스푸너스",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
-    "name": "에이치투오호스피탈리티",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Exit",
-    "tier": "C",
-    "primaryKeyword": "에이치투오호스피탈리티",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
-    "name": "글로벌모기지그룹",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Live",
-    "tier": "C",
-    "primaryKeyword": "글로벌모기지그룹",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
-    "name": "지지큐컴퍼니",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Live",
-    "tier": "C",
-    "primaryKeyword": "지지큐컴퍼니",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
-    "name": "엠마우스",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Exit",
-    "tier": "C",
-    "primaryKeyword": "엠마우스",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "인스턴트타투, 김남숙, 인스턴트타투",
+    "contextWords": "타투, 인스턴트타투, 김남숙",
     "notes": null
   },
   {
@@ -6553,19 +6227,6 @@
     "notes": null
   },
   {
-    "name": "창업인",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Live",
-    "tier": "C",
-    "primaryKeyword": "창업인",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
     "name": "칼릭스",
     "englishName": null,
     "category": "portfolio_company",
@@ -6586,22 +6247,9 @@
     "portfolioStatus": "Live",
     "tier": "C",
     "primaryKeyword": "비에스피케이",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
-    "name": "빅브레인랩",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Exit",
-    "tier": "C",
-    "primaryKeyword": "빅브레인랩",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "조르니차 스테파노바, 고객관리",
+    "excludeWords": "치어리딩, 무신사, 비에스종합병원,",
+    "contextWords": "인공지능, 럭셔리, 고객관리, AI, VIP, 조르니차 스테파노바, Zornitza Stefanova",
     "notes": null
   },
   {
@@ -6612,22 +6260,8 @@
     "portfolioStatus": "Exit",
     "tier": "C",
     "primaryKeyword": "비트윈잡",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
-    "notes": null
-  },
-  {
-    "name": "알가나이즈",
-    "englishName": null,
-    "category": "portfolio_company",
-    "status": "ACTIVE",
-    "portfolioStatus": "Live",
-    "tier": "C",
-    "primaryKeyword": "알가나이즈",
-    "helperKeywords": null,
-    "excludeWords": null,
-    "contextWords": null,
+    "helperKeywords": "강경민, 구인구직",
+    "contextWords": "강경민, 구인구직, 기업",
     "notes": null
   }
 ]
