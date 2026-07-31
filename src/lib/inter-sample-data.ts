@@ -4,7 +4,7 @@
 // GPT 포트폴리오 매칭(inter-portfolio-match) 파이프라인에서 데이터 생성
 
 import { prisma } from '@/lib/prisma';
-import { trendSectorsFor } from './inter-taxonomy';
+import { trendSectorsFor } from './sparkscope/inter-taxonomy';
 
 export type InterDomain = 'bio' | 'ai';
 export type InterCountry = 'us' | 'cn' | 'jp' | 'sa' | 'all';
@@ -46,19 +46,35 @@ export interface InterStat {
   value: string;
 }
 
-export async function getDomainStats(domain: InterDomain): Promise<InterStat[]> {
+// 피드 소스 → 도메인. 학술지·종합 경제지는 두 도메인 모두에 걸쳐 있어 cross-cutting으로 둘 다 포함.
+const BIO_SOURCES = /Endpoints News|STAT News|Fierce Biotech|BioCentury|BioPharma Dive/i;
+const AI_SOURCES = /TechCrunch|The Information|VentureBeat|CB Insights|Wired|The Verge|Ars Technica/i;
+const CROSS_CUTTING_SOURCES = /MIT Tech Review|Nature|Cell|Science|Scientific American|Bloomberg|Wall Street Journal|Financial Times|Reuters|New York Times|CNN|Washington Post/i;
+
+function matchesDomain(domain: InterDomain, source: string): boolean {
+  if (CROSS_CUTTING_SOURCES.test(source)) return true;
+  return domain === 'bio' ? BIO_SOURCES.test(source) : AI_SOURCES.test(source);
+}
+
+async function getRelevantVerdictsForDomain(domain: InterDomain) {
   const verdicts = await prisma.interNewsVerdict.findMany({
     where: { relevant: true },
+    include: { news: true },
   });
-  const matches = await prisma.interPortfolioMatch.findMany();
+  return verdicts.filter(v => matchesDomain(domain, v.news.source));
+}
 
-  const relevant = verdicts.filter(v => v.relevant).length;
+export async function getDomainStats(domain: InterDomain): Promise<InterStat[]> {
+  const verdicts = await getRelevantVerdictsForDomain(domain);
+  const matches = await prisma.interPortfolioMatch.findMany({
+    where: { verdictId: { in: verdicts.map(v => v.id) } },
+  });
 
   return [
-    { label: '수집된 기사', value: String(verdicts.length) },
-    { label: '필터링됨 (관련)', value: String(relevant) },
+    { label: '필터링됨 (관련)', value: String(verdicts.length) },
     { label: '포트폴리오 매치', value: String(matches.length) },
     { label: '매칭 기업 수', value: String(new Set(matches.map(m => m.companyName)).size) },
+    { label: '데이터 소스', value: String(new Set(verdicts.map(v => v.news.source)).size) },
   ];
 }
 
@@ -106,13 +122,11 @@ function formatDate(date: Date): string {
 }
 
 export async function getSectorData(domain: InterDomain): Promise<SectorBlock[]> {
-  // 1. 필터링된 기사들 + 매칭 조회
-  const verdicts = await prisma.interNewsVerdict.findMany({
-    where: { relevant: true },
-    include: { news: true },
-  });
+  // 1. 필터링된 기사들(해당 도메인 소스만) + 매칭 조회
+  const verdicts = await getRelevantVerdictsForDomain(domain);
 
   const matches = await prisma.interPortfolioMatch.findMany({
+    where: { verdictId: { in: verdicts.map(v => v.id) } },
     include: { verdict: { include: { news: true } } },
   });
 

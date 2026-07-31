@@ -2,20 +2,25 @@
 
 // Inter(해외 트렌드) 탭 — 바이오/AI 도메인별 해외 기사·논문·오피니언 트렌드 + 포트폴리오 매치.
 //
-// ⚠️ 아직 해외 소스 수집 파이프라인이 없어 전부 샘플 데이터로 UI만 구현한 상태다.
-// (src/lib/sparkscope/inter-sample-data.ts 참고 — 실제 수집 연동 시 그 파일만 교체하면 됨)
+// /api/inter?domain=bio|ai 에서 실제 DB 데이터(RSS 수집 → Gemini 필터링 → GPT 포트폴리오 매칭
+// 파이프라인 결과)를 받아온다. 국가/기간 필터는 아직 UI만 있고 실제 조회에는 반영 안 됨.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   COUNTRY_TABS,
-  DOMAIN_SUMMARY,
-  DOMAIN_STATS,
-  SECTOR_DATA,
+  type DomainSummary,
   type InterCountry,
   type InterDomain,
+  type InterStat,
   type SourceKind,
   type SectorBlock,
-} from '@/lib/sparkscope/inter-sample-data';
+} from '@/lib/inter-sample-data';
+
+interface InterApiResponse {
+  summary: DomainSummary;
+  stats: InterStat[];
+  sectors: SectorBlock[];
+}
 
 const SECTOR_BADGE_CLS: Record<string, string> = {
   urgent: 'bg-red-100 text-red-600',
@@ -48,10 +53,27 @@ export function InterPanel() {
   const [period, setPeriod] = useState(20);
   const [openSectors, setOpenSectors] = useState<Set<string>>(new Set());
   const [activeSrcTab, setActiveSrcTab] = useState<Record<string, SourceKind>>({});
+  const [data, setData] = useState<InterApiResponse | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const summary = DOMAIN_SUMMARY[domain];
-  const stats = DOMAIN_STATS[domain];
-  const sectors = SECTOR_DATA[domain];
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/inter?domain=${domain}`)
+      .then(res => res.json())
+      .then((json: InterApiResponse) => {
+        if (!cancelled) setData(json);
+      })
+      .catch(() => {
+        if (!cancelled) setData(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [domain]);
 
   function switchDomain(d: InterDomain) {
     setDomain(d);
@@ -117,19 +139,23 @@ export function InterPanel() {
 
       <div className="h-px bg-spark-border mb-6" />
 
+      {loading || !data ? (
+        <div className="py-16 text-center text-sm text-spark-muted">불러오는 중...</div>
+      ) : (
+        <>
       {/* AI 요약 */}
       <div className="bg-white border-[1.5px] border-spark-border rounded-2xl p-5 mb-6">
         <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-emerald-600 mb-3">
-          ✦ <span>{summary.label} 주요 요약</span>
+          ✦ <span>{data.summary.label} 주요 요약</span>
         </div>
-        <SummaryItem n={1} k="트렌드 1줄 요약" v={summary.trend} />
-        <SummaryItem n={2} k="스파크랩의 포지션" v={summary.position} />
-        <SummaryItem n={3} k="취해야 할 가장 중요한 액션" v={summary.action} last />
+        <SummaryItem n={1} k="트렌드 1줄 요약" v={data.summary.trend} />
+        <SummaryItem n={2} k="스파크랩의 포지션" v={data.summary.position} />
+        <SummaryItem n={3} k="취해야 할 가장 중요한 액션" v={data.summary.action} last />
       </div>
 
       {/* 통계 */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-6">
-        {stats.map(s => (
+        {data.stats.map(s => (
           <div key={s.label} className="bg-white border border-spark-border rounded-xl px-4 py-3.5">
             <div className="text-[11px] text-spark-muted mb-1">{s.label}</div>
             <div className="text-xl font-extrabold tabular-nums text-spark-ink">{s.value}</div>
@@ -139,7 +165,7 @@ export function InterPanel() {
 
       {/* 분야별 아코디언 */}
       <div>
-        {sectors.map(s => (
+        {data.sectors.map(s => (
           <SectorAccordion
             key={s.id}
             sector={s}
@@ -150,6 +176,8 @@ export function InterPanel() {
           />
         ))}
       </div>
+        </>
+      )}
     </div>
   );
 }

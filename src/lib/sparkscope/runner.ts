@@ -12,6 +12,7 @@ import { buildDigestData, renderDigestHtml } from './digest';
 import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } from './mailer';
 import { collectInterNews } from './inter-collect';
 import { filterInterNewsWithGemini } from './inter-filter';
+import { matchInterNewsWithPortfolio } from './inter-portfolio-match';
 
 export interface RunOptions {
   send?: boolean;            // 실제 메일 발송 여부 (false면 DB 저장까지만)
@@ -80,6 +81,15 @@ export async function runDailyDigest(opts: RunOptions = {}) {
         if (newsIds.length > 0) {
           const filterResult = await filterInterNewsWithGemini(newsIds);
           console.log(`[runner] Inter filtered: ${filterResult.relevant}/${filterResult.filtered} relevant`);
+
+          if (filterResult.relevant > 0) {
+            const relevantVerdicts = await prisma.interNewsVerdict.findMany({
+              where: { newsId: { in: newsIds }, relevant: true },
+              select: { id: true },
+            });
+            const matchResult = await matchInterNewsWithPortfolio(relevantVerdicts.map(v => v.id));
+            console.log(`[runner] Inter portfolio matched: ${matchResult.matched}건, ${matchResult.failed.length}개 오류`);
+          }
         }
       } catch (e: any) {
         console.error('[runner] Inter collection/filtering failed:', e?.message ?? e);
