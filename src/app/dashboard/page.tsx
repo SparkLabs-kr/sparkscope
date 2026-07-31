@@ -91,6 +91,8 @@ function resolveRange(searchParams: { from?: string; to?: string }) {
 }
 
 async function loadDashboardData(from: string, to: string, company: string | undefined, isDefaultRange: boolean) {
+  const _t0 = Date.now();
+  const _timing: Record<string, number> = {};
   const since = new Date(`${from}T00:00:00`);
   const until = new Date(`${to}T23:59:59`);
   const where = { pubDate: { gte: since, lte: until }, isNoise: false };
@@ -153,6 +155,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
     // 포트폴리오 긍정 하이라이트 (호재 기사)
     prisma.article.findMany({ where: { ...portfolioWhere, OR: posOr }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true }, take: 120 }),
   ]);
+  _timing.queries = Date.now() - _t0;
 
   // 스포츠·게임·연예·광고 강제 제외 (제목·URL·매체) — 표시되는 모든 기사 리스트에 공통 적용
   const notNoise = (a: { title: string; link: string; source: string }) =>
@@ -246,10 +249,12 @@ async function loadDashboardData(from: string, to: string, company: string | und
       ),
     ]);
   }
+  _timing.trend = Date.now() - _t0;
   const [fundSummaries, sparkLabsFundSummary] = await Promise.all([
     getCompetitorFundSummaries(pinnedAggs.map(c => c.name)),
     getSparkLabsFundSummary(),
   ]);
+  _timing.fund = Date.now() - _t0;
   const competitors: CompetitorStatView[] = competitorAggs.map(({ titles, ...c }, i) => ({
     ...c,
     trend: companyTrends[i],
@@ -338,6 +343,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
   const crisisOverview = crises.length > CRISIS_SUMMARY_THRESHOLD
     ? await summarizeCrisisOverview(crises.map(c => ({ company: c.company, negCount: c.negCount, cause: c.cause })))
     : null;
+  _timing.crisis = Date.now() - _t0;
 
   // 포트폴리오사 선택 필터: 드롭다운 목록 + (선택 시) 해당 회사의 기간 내 기사 전체.
   const portfolioNames = portfolioTargets
@@ -407,7 +413,9 @@ async function loadDashboardData(from: string, to: string, company: string | und
     return true;
   });
 
+  _timing.total = Date.now() - _t0;
   return {
+    _timing,
     range: { from, to },
     kpi: { total, sparklabsCount: sparklabsCountFiltered, portfolioCount, pitchCount, mentionRate, mentionDelta: mentionRate - prevMentionRate },
     articles: enrichedArticles,
@@ -528,6 +536,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
   return (
     <>
+      {/* TEMP DEBUG TIMING */}
+      <div dangerouslySetInnerHTML={{ __html: `<!-- TIMING:${JSON.stringify(data._timing)} -->` }} />
       {/* 스코프 전환 — Intra(내부 생태계) / Inter(해외 트렌드) */}
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <div className="flex gap-0.5 rounded-lg bg-spark-cream p-0.5">
