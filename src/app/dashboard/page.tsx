@@ -206,6 +206,9 @@ async function loadDashboardData(from: string, to: string, company: string | und
   // 이 값 하나로 두 섹션(경쟁사 트렌드/아래 위기 카드) 모두 "사전계산 신뢰 여부"를 판단한다.
   // 배치가 안 돌았으면(크론 실패) 예전처럼 그 자리에서 실시간 AI 호출로 자동 대체한다.
   const batchFresh = await wasInsightsBatchFreshToday();
+  _timing.batchFresh = batchFresh ? 1 : 0;
+  _timing.isDefaultRange = isDefaultRange ? 1 : 0;
+  _timing.afterBatchFreshCheck = Date.now() - _t0;
 
   // AI 트렌드 요약(대시보드 상위 10곳 + 고정 12개 카드) — 기본 기간(최근 3개월)일 때만
   // 사전계산 결과를 쓴다. 사용자가 기간을 직접 고르면(비기본 범위) 그 조합은 크론이 미리
@@ -225,6 +228,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
     : `${periodDays}일간`;
   if (isDefaultRange && batchFresh) {
     const pre = await getPrecomputedCompetitorInsights();
+    _timing.afterPrecomputedRead = Date.now() - _t0;
     overallTrend = pre.overall?.lines ?? null;
     companyTrends = competitorAggs.map(c => pre.byCompany.get(c.name)?.points ?? null);
     pinnedCompanyTrends = pinnedAggs.map(c => pre.byCompany.get(c.name)?.points ?? null);
@@ -250,11 +254,13 @@ async function loadDashboardData(from: string, to: string, company: string | und
     ]);
   }
   _timing.trend = Date.now() - _t0;
+  const _tFundStart = Date.now();
   const [fundSummaries, sparkLabsFundSummary] = await Promise.all([
     getCompetitorFundSummaries(pinnedAggs.map(c => c.name)),
     getSparkLabsFundSummary(),
   ]);
   _timing.fund = Date.now() - _t0;
+  _timing.fundOnly = Date.now() - _tFundStart;
   const competitors: CompetitorStatView[] = competitorAggs.map(({ titles, ...c }, i) => ({
     ...c,
     trend: companyTrends[i],
