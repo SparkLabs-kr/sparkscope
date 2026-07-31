@@ -64,7 +64,7 @@ async function analyzeArticleForPortfolio(
   try {
     const resp = await client.chat.completions.create({
       model: 'gpt-5.4-mini',
-      max_completion_tokens: 1000,
+      max_completion_tokens: 3000,
       messages: [
         { role: 'system', content: SYSTEM },
         { role: 'user', content: buildUserPrompt(articleTitle, articleReason, companies) },

@@ -47,10 +47,19 @@ const ALERT_LABEL: Record<string, string> = { urgent: '⚠ 긴급', watch: '👁
 
 const SOURCE_KINDS: SourceKind[] = ['news', 'paper', 'opinion'];
 
+type PeriodKey = '7d' | '1m' | '3m' | '1y' | '3y';
+const PERIOD_PRESETS: { key: PeriodKey; label: string }[] = [
+  { key: '7d', label: '7일' },
+  { key: '1m', label: '1개월' },
+  { key: '3m', label: '3개월' },
+  { key: '1y', label: '1년' },
+  { key: '3y', label: '3년' },
+];
+
 export function InterPanel() {
   const [domain, setDomain] = useState<InterDomain>('bio');
   const [country, setCountry] = useState<InterCountry>('us');
-  const [period, setPeriod] = useState(20);
+  const [period, setPeriod] = useState<PeriodKey>('3m');
   const [openSectors, setOpenSectors] = useState<Set<string>>(new Set());
   const [activeSrcTab, setActiveSrcTab] = useState<Record<string, SourceKind>>({});
   const [data, setData] = useState<InterApiResponse | null>(null);
@@ -59,7 +68,7 @@ export function InterPanel() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch(`/api/inter?domain=${domain}`)
+    fetch(`/api/inter?domain=${domain}&period=${period}`)
       .then(res => res.json())
       .then((json: InterApiResponse) => {
         if (!cancelled) setData(json);
@@ -73,7 +82,7 @@ export function InterPanel() {
     return () => {
       cancelled = true;
     };
-  }, [domain]);
+  }, [domain, period]);
 
   function switchDomain(d: InterDomain) {
     setDomain(d);
@@ -115,25 +124,21 @@ export function InterPanel() {
             ))}
           </div>
         </div>
-        <div className="flex flex-wrap items-end gap-4">
-          <span className="w-full sm:w-24 shrink-0 self-center text-xs font-semibold text-spark-ink-soft">기간</span>
-          <div className="flex-1 min-w-[200px]">
-            <div className="flex justify-between text-[11px] text-spark-muted mb-1.5">
-              <span>7일 (short term)</span>
-              <span>3년 (long term)</span>
-            </div>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={period}
-              onChange={e => setPeriod(Number(e.target.value))}
-              className="w-full accent-emerald-600"
-            />
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="w-full sm:w-24 shrink-0 text-xs font-semibold text-spark-ink-soft">기간</span>
+          <div className="flex flex-wrap gap-1.5">
+            {PERIOD_PRESETS.map(p => (
+              <button
+                key={p.key}
+                onClick={() => setPeriod(p.key)}
+                className={`rounded-lg border-[1.5px] px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                  period === p.key ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-spark-subtle border-spark-border text-spark-ink-soft hover:bg-spark-cream'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
           </div>
-          <button className="whitespace-nowrap rounded-lg border-[1.5px] border-spark-border bg-white px-5 py-1.5 text-xs font-bold text-spark-ink-soft hover:bg-spark-subtle">
-            확인
-          </button>
         </div>
       </div>
 
