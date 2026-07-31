@@ -17,6 +17,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
     "@auth/prisma-adapter": "^2.7.4",
+    "@google-cloud/vertexai": "^1.12.0",
     "@prisma/client": "^5.22.0",
     "@types/pg": "^8.20.0",
     "chart.js": "^4.4.6",
