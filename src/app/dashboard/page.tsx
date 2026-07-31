@@ -91,8 +91,6 @@ function resolveRange(searchParams: { from?: string; to?: string }) {
 }
 
 async function loadDashboardData(from: string, to: string, company: string | undefined, isDefaultRange: boolean) {
-  const _t0 = Date.now();
-  const _timing: Record<string, number> = {};
   const since = new Date(`${from}T00:00:00`);
   const until = new Date(`${to}T23:59:59`);
   const where = { pubDate: { gte: since, lte: until }, isNoise: false };
@@ -155,7 +153,6 @@ async function loadDashboardData(from: string, to: string, company: string | und
     // 포트폴리오 긍정 하이라이트 (호재 기사)
     prisma.article.findMany({ where: { ...portfolioWhere, OR: posOr }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true }, take: 120 }),
   ]);
-  _timing.queries = Date.now() - _t0;
 
   // 스포츠·게임·연예·광고 강제 제외 (제목·URL·매체) — 표시되는 모든 기사 리스트에 공통 적용
   const notNoise = (a: { title: string; link: string; source: string }) =>
@@ -206,9 +203,6 @@ async function loadDashboardData(from: string, to: string, company: string | und
   // 이 값 하나로 두 섹션(경쟁사 트렌드/아래 위기 카드) 모두 "사전계산 신뢰 여부"를 판단한다.
   // 배치가 안 돌았으면(크론 실패) 예전처럼 그 자리에서 실시간 AI 호출로 자동 대체한다.
   const batchFresh = await wasInsightsBatchFreshToday();
-  _timing.batchFresh = batchFresh ? 1 : 0;
-  _timing.isDefaultRange = isDefaultRange ? 1 : 0;
-  _timing.afterBatchFreshCheck = Date.now() - _t0;
 
   // AI 트렌드 요약(대시보드 상위 10곳 + 고정 12개 카드) — 기본 기간(최근 3개월)일 때만
   // 사전계산 결과를 쓴다. 사용자가 기간을 직접 고르면(비기본 범위) 그 조합은 크론이 미리
@@ -228,7 +222,6 @@ async function loadDashboardData(from: string, to: string, company: string | und
     : `${periodDays}일간`;
   if (isDefaultRange && batchFresh) {
     const pre = await getPrecomputedCompetitorInsights();
-    _timing.afterPrecomputedRead = Date.now() - _t0;
     overallTrend = pre.overall?.lines ?? null;
     companyTrends = competitorAggs.map(c => pre.byCompany.get(c.name)?.points ?? null);
     pinnedCompanyTrends = pinnedAggs.map(c => pre.byCompany.get(c.name)?.points ?? null);
@@ -253,14 +246,10 @@ async function loadDashboardData(from: string, to: string, company: string | und
       ),
     ]);
   }
-  _timing.trend = Date.now() - _t0;
-  const _tFundStart = Date.now();
   const [fundSummaries, sparkLabsFundSummary] = await Promise.all([
     getCompetitorFundSummaries(pinnedAggs.map(c => c.name)),
     getSparkLabsFundSummary(),
   ]);
-  _timing.fund = Date.now() - _t0;
-  _timing.fundOnly = Date.now() - _tFundStart;
   const competitors: CompetitorStatView[] = competitorAggs.map(({ titles, ...c }, i) => ({
     ...c,
     trend: companyTrends[i],
@@ -349,7 +338,6 @@ async function loadDashboardData(from: string, to: string, company: string | und
   const crisisOverview = crises.length > CRISIS_SUMMARY_THRESHOLD
     ? await summarizeCrisisOverview(crises.map(c => ({ company: c.company, negCount: c.negCount, cause: c.cause })))
     : null;
-  _timing.crisis = Date.now() - _t0;
 
   // 포트폴리오사 선택 필터: 드롭다운 목록 + (선택 시) 해당 회사의 기간 내 기사 전체.
   const portfolioNames = portfolioTargets
@@ -419,9 +407,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
     return true;
   });
 
-  _timing.total = Date.now() - _t0;
   return {
-    _timing,
     range: { from, to },
     kpi: { total, sparklabsCount: sparklabsCountFiltered, portfolioCount, pitchCount, mentionRate, mentionDelta: mentionRate - prevMentionRate },
     articles: enrichedArticles,
@@ -542,8 +528,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
   return (
     <>
-      {/* TEMP DEBUG TIMING */}
-      <div dangerouslySetInnerHTML={{ __html: `<!-- TIMING:${JSON.stringify(data._timing)} -->` }} />
       {/* 스코프 전환 — Intra(내부 생태계) / Inter(해외 트렌드) */}
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <div className="flex gap-0.5 rounded-lg bg-spark-cream p-0.5">
