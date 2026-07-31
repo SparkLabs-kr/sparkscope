@@ -98,6 +98,37 @@ export function InterPanel() {
     });
   }
 
+  const [badgeReasons, setBadgeReasons] = useState<Record<string, string | null>>({});
+  const [reasonsLoading, setReasonsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!data) return;
+    const pending = data.sectors.filter(s => !(s.id in badgeReasons));
+    if (pending.length === 0) return;
+    setReasonsLoading(true);
+    fetch('/api/inter/sector-urgency', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sectors: pending.map(s => ({
+          id: s.id,
+          name: s.name,
+          badgeLabel: s.badge.label,
+          titles: SOURCE_KINDS.flatMap(k => s.items[k].map(it => it.title)).slice(0, 8),
+        })),
+      }),
+    })
+      .then(r => (r.ok ? r.json() : Promise.reject(r)))
+      .then(({ results }: { results: Record<string, string | null> }) => {
+        setBadgeReasons(prev => ({ ...prev, ...results }));
+      })
+      .catch(() => {
+        setBadgeReasons(prev => ({ ...prev, ...Object.fromEntries(pending.map(s => [s.id, null])) }));
+      })
+      .finally(() => setReasonsLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
   return (
     <div>
       {/* 바이오 / AI 도메인 탭 */}
@@ -168,6 +199,17 @@ export function InterPanel() {
         ))}
       </div>
 
+      {/* 섹터 히트맵 — 어디가 뜨거운지 한눈에 */}
+      <SectorHeatmap
+        sectors={data.sectors}
+        badgeReasons={badgeReasons}
+        reasonsLoading={reasonsLoading}
+        onSelect={id => {
+          setOpenSectors(prev => new Set(prev).add(id));
+          document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }}
+      />
+
       {/* 분야별 아코디언 */}
       <div>
         {data.sectors.map(s => (
@@ -229,7 +271,7 @@ function SectorAccordion({
 }) {
   const items = sector.items[activeTab];
   return (
-    <div className="mb-2.5">
+    <div id={sector.id} className="mb-2.5 scroll-mt-4">
       <div
         onClick={onToggle}
         className={`flex cursor-pointer items-center gap-3 border border-spark-border bg-white px-4 py-3.5 transition-colors hover:bg-spark-subtle ${
@@ -301,6 +343,82 @@ function SectorAccordion({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+const HEAT_BAR_CLS: Record<string, string> = {
+  urgent: 'bg-red-500',
+  watch: 'bg-amber-500',
+  pos: 'bg-emerald-500',
+  neu: 'bg-gray-300',
+};
+
+function SectorHeatmap({
+  sectors,
+  badgeReasons,
+  reasonsLoading,
+  onSelect,
+}: {
+  sectors: SectorBlock[];
+  badgeReasons: Record<string, string | null>;
+  reasonsLoading: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const rows = sectors.map(s => ({
+    sector: s,
+    volume: SOURCE_KINDS.reduce((sum, k) => sum + s.items[k].length, 0),
+  }));
+  const maxVolume = Math.max(1, ...rows.map(r => r.volume));
+
+  return (
+    <div className="bg-white border border-spark-border rounded-2xl p-5 mb-6">
+      <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-spark-ink-soft mb-4">
+        📊 <span>분야별 이슈 강도</span>
+        <span className="ml-auto flex items-center gap-3 text-[10px] font-medium normal-case text-spark-muted">
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" />긴급</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" />모니터링</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" />기회</span>
+        </span>
+      </div>
+      <div className="flex flex-col gap-2.5">
+        {rows.map(({ sector, volume }) => {
+          const reason = badgeReasons[sector.id];
+          const reasonKnown = sector.id in badgeReasons;
+          return (
+            <div key={sector.id} className="rounded-lg px-2 py-1.5 hover:bg-spark-subtle">
+              <button onClick={() => onSelect(sector.id)} className="flex w-full items-center gap-3 text-left">
+                <span className="w-8 shrink-0 text-center text-[15px]">{sector.icon}</span>
+                <span className="w-24 shrink-0 text-xs font-bold text-spark-ink">{sector.name}</span>
+                <div className="relative h-5 flex-1 overflow-hidden rounded-md bg-spark-cream">
+                  <div
+                    className={`h-full rounded-md ${HEAT_BAR_CLS[sector.badge.cls]}`}
+                    style={{ width: `${Math.max(6, (volume / maxVolume) * 100)}%` }}
+                  />
+                </div>
+                <span className="w-6 shrink-0 text-right text-[11px] font-bold tabular-nums text-spark-ink-soft">{volume}</span>
+                {sector.matches.length > 0 ? (
+                  <span className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                    📎 {sector.matches[0].co}
+                    {sector.matches.length > 1 ? ` 외 ${sector.matches.length - 1}` : ''}
+                  </span>
+                ) : (
+                  <span className="w-[88px] shrink-0" />
+                )}
+              </button>
+              <div className="mt-1 pl-11 pr-6 text-[11px] leading-snug text-spark-ink-soft">
+                {!reasonKnown && reasonsLoading ? (
+                  <span className="text-spark-muted">🤖 사유 분석 중…</span>
+                ) : reason ? (
+                  <span><span className="font-semibold text-emerald-600">🤖 AI 요약</span> · {reason}</span>
+                ) : (
+                  <span className="text-spark-muted">⚙️ 기본 요약 · {sector.badge.label} 상태 (사유 분석 실패)</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
