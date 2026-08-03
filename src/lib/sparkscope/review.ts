@@ -91,12 +91,14 @@ export async function loadDigestCandidates(): Promise<ReviewArticle[]> {
   }
 
   return rows
-    // 포폴·자사는 매체 무관(전문지 부정기사 포착), 그 외 카테고리는 확정 매체 26개만 + 스포츠·광고 제외
+    // 포폴·자사·경쟁사는 매체 무관(collector.ts와 동일 기준), 업계동향만 확정 매체 26개 + 스포츠·광고 제외
     .filter(a => NAME_MATCH_CATEGORIES.has(a.category) || isKnownMedia(a.source))
     .filter(a => !isBlockedNoise({ title: a.title, link: a.link, source: a.source }))
-    // 회사/조직명(강한 식별자)이 제목에 등장해야 통과 (포트폴리오+스파크랩)
+    // 회사/조직명(강한 식별자)이 제목에 등장해야 통과 (포트폴리오+스파크랩 한정).
+    // competitor는 제외 — Article엔 본문이 없어 제목만으로 재검증하면, 수집 시점엔 본문 직접언급으로
+    // 통과했던(제목엔 투자사명이 없는) 정상 기사까지 여기서 다시 걸러지는 문제가 생긴다.
     .filter(a => {
-      if (!NAME_MATCH_CATEGORIES.has(a.category)) return true;
+      if (!NAME_MATCH_CATEGORIES.has(a.category) || a.category === 'competitor') return true;
       const keys = keyMap.get(a.matchedKeyword) ?? [a.matchedKeyword];
       return keys.some(k => matchesAsToken(a.title, k));
     })

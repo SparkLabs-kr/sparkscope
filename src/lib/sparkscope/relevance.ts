@@ -148,17 +148,22 @@ function isListMentionAt(text: string, idx: number): boolean {
  * 문장의 항목 하나일 뿐인 경우는 제외. 제목은 나열문일 가능성이 희박해 이 검사를 안 함.
  * 예: "노틸러스인베스트먼트, iM투자파트너스, 심산벤처스, 스파크랩파트너스, 와이앤아처,
  *      에트리홀딩스, 포스코기술투자, 파트너스라운지는 발표 심사에 이어..." → 나열의 일부, 제외.
+ *
+ * competitor(투자사)는 예외 — "A, B, C 등 5개 기관이 공동투자했다"처럼 여러 투자사가
+ * 나열된 문장이 오히려 원하는 신호(공동투자 참여)라서, skipListCheck=true로 나열문도 인정한다.
  */
-export function matchesAsDirectMention(body: string, name: string): boolean {
+export function matchesAsDirectMention(body: string, name: string, opts?: { skipListCheck?: boolean }): boolean {
   if (!body || !name) return false;
-  return findTokenIndices(body, name).some(idx => !isListMentionAt(body, idx));
+  return findTokenIndices(body, name).some(idx => opts?.skipListCheck || !isListMentionAt(body, idx));
 }
 
 // 회사명 매칭(관련성)을 적용할 카테고리.
 // portfolio_company + sparklabs_self — 회사/조직명이 제목의 주어여야 정밀도 높음.
 // (sparklabs_self는 임원 동명이인·"스파크랩" 광역매칭 노이즈가 심해 매칭 필수)
-// competitor(투자사)는 제목에 피투자 스타트업만 나오는 경우가 많아 제외.
-export const NAME_MATCH_CATEGORIES = new Set(['portfolio_company', 'sparklabs_self']);
+// competitor(투자사) — 2026-08-03부터 포함. 원래는 "제목에 피투자 스타트업만 나오는 경우가
+// 많다"는 이유로 뺐었는데, 그건 본문까지 직접언급 검사(matchesAsDirectMention)로 커버되므로
+// 이름매칭 자체를 빼는 대신 26개 확정매체 제한을 풀기 위해 여기 포함시켰다.
+export const NAME_MATCH_CATEGORIES = new Set(['portfolio_company', 'sparklabs_self', 'competitor']);
 
 export interface RelevanceInput {
   title: string;
@@ -237,7 +242,8 @@ export function filterReason(a: RelevanceInput): FilterReason | null {
   if (applyNameMatch && keys.length > 0) {
     nameMatchedInTitle = keys.some(k => matchesAsToken(title, k));
     // 본문 매칭은 "직접 언급"만 인정 — 참여기관 나열문의 항목 하나일 뿐인 경우는 제외.
-    const inBody = body.length > 0 && keys.some(k => matchesAsDirectMention(body, k));
+    // (competitor는 예외 — 공동투자 나열문도 유효한 신호이므로 나열문 검사를 건너뛴다.)
+    const inBody = body.length > 0 && keys.some(k => matchesAsDirectMention(body, k, { skipListCheck: a.category === 'competitor' }));
     // 강한 식별자(회사명 자체)가 전혀 없으면, 진짜 보조 식별자(대표자명·별칭)만 있어도 불통과.
     // 예: 대표자명 "버나드문"만 있고 "스파크랩 그룹"/"SparkLabs Group" 자체는 없는 기사는 제외.
     if (!nameMatchedInTitle && !inBody) return 'irrelevant';

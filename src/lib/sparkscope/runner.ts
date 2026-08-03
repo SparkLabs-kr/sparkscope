@@ -8,6 +8,7 @@ import { collectAllArticles } from './collector';
 import { normalizeTitleKey } from './relevance';
 import { analyzeArticles, generateEditorIntro } from './analyzer';
 import { computeAndStoreDashboardInsights } from './dashboard-insights';
+import { checkConfigDrift, formatDriftReport } from './config-drift';
 import { buildDigestData, renderDigestHtml } from './digest';
 import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } from './mailer';
 import { collectInterNews } from './inter-collect';
@@ -191,6 +192,27 @@ export async function runDailyDigest(opts: RunOptions = {}) {
       // 4.5 대시보드 AI 요약(위기 원인·경쟁사 트렌드) 사전계산 — 하루 1회, 실제 수집 실행 때만
       // (skipCollect=발송 전용 모드에서는 돌리지 않음). 내부적으로 실패를 삼키므로 발송에는 영향 없음.
       await computeAndStoreDashboardInsights();
+
+      // 4.6 master-keywords.json ↔ DB 불일치 확인 — 하루 1회, 다를 때만 관리자에게 메일.
+      // (7/31~8/3에 파일은 고쳤는데 DB엔 반영 안 된 채로 몇 주 방치된 사고 재발 방지)
+      try {
+        const drift = await checkConfigDrift();
+        if (drift.total > 0) {
+          console.warn(`[runner] config drift ${drift.total}건 발견`);
+          if (process.env.ADMIN_ALERT_EMAIL) {
+            const notified = await sendOwnerAlert(
+              process.env.ADMIN_ALERT_EMAIL,
+              `[SparkScope] 감시대상 설정 불일치 ${drift.total}건 발견`,
+              formatDriftReport(drift),
+            );
+            console.warn(`[runner] 관리자 알림 ${notified ? '발송 완료' : '발송 실패'}`);
+          } else {
+            console.warn('[runner] ADMIN_ALERT_EMAIL 미설정 — 메일 알림 스킵');
+          }
+        }
+      } catch (e) {
+        console.error('[runner] config drift check failed:', e);
+      }
     }
 
     // 5. 편집자 인사

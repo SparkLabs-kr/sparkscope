@@ -6,7 +6,7 @@
 import { parseStringPromise } from 'xml2js';
 import { prisma } from '@/lib/prisma';
 import type { RawArticle, Category } from './types';
-import { isRelevant, normalizeTitleKey, matchesAsToken } from './relevance';
+import { isRelevant, normalizeTitleKey, matchesAsToken, matchesAsDirectMention, resolveMainKeys } from './relevance';
 import { isKnownMedia } from './media';
 import { NEGATIVE_KEYWORDS_DATA, CRISIS_KEYWORDS_DATA } from './keywords-data';
 import { scrapeArticleBody, type ScrapedBody } from './scraper';
@@ -33,6 +33,8 @@ function naverEnabled(): boolean {
 }
 
 const NOISE_SOURCES = new Set(['주달', '뉴스봇', 'Auto News', '주간시세', '시세분석']);
+// 사진설명·바이라인이 실제 기사 제목 대신 잡히는 경우 방지 (예: "...발표하고 있다. 김민수기자 mskim@etnews.com").
+const EMAIL_IN_TITLE_RE = /@[a-zA-Z0-9.]+\.[a-zA-Z]{2,}/;
 const MAX_DAYS_AGO = 3; // 월·수·금 발송 시 최근 3일 수집 (공휴일 대응용 백업 없음)
 const NAVER_DELAY_MS = 150; // 전역 직렬 간격 (병렬 대상이 동시에 때려 429 나는 것 방지)
 
@@ -97,24 +99,51 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
 
   console.log(`[collector] querying ${limited.length} targets across ${grouped.size} categories (Naver: ${naverEnabled() ? 'ON' : 'OFF'})`);
 
+  // 스파크랩 자사 언급 기사 중 실제 주인공이 포트폴리오사인 경우 교차 확인용
+  // (예: "...스파크랩, 씨엔티테크 등으로부터 투자를 유치했다"처럼 투자자 목록에 스파크랩이
+  // 한 줄 끼어있을 뿐, 기사 전체 주인공은 포트폴리오사인 케이스 — sparklabs_self 오분류 방지).
+  // 포폴사가 매칭되면 포폴사로, 아니면 원래대로 스파크랩 기사로 본다.
+  const portfolioTargetsForCrosscheck = (grouped.get('portfolio_company') ?? []).map(p => ({
+    target: p,
+    keys: resolveMainKeys({
+      title: '', primaryKeyword: p.primaryKeyword, name: p.name, englishName: p.englishName,
+      helperKeywords: p.helperKeywords, category: p.category,
+    }).mainKeys,
+  }));
+  function findPortfolioSubject(title: string, body: string): Target | null {
+    for (const { target, keys } of portfolioTargetsForCrosscheck) {
+      if (keys.some(k => matchesAsToken(title, k) || (body.length > 0 && matchesAsDirectMention(body, k)))) {
+        return target;
+      }
+    }
+    return null;
+  }
+
   const allArticles: RawArticle[] = [];
   const CONCURRENCY = 5;
   for (let i = 0; i < limited.length; i += CONCURRENCY) {
     const batch = limited.slice(i, i + CONCURRENCY);
     const results = await Promise.all(batch.map(async target => {
       const items = await fetchForTarget(target);
-      // 포폴사·자사는 회사명이 제목에 강하게 토큰 매칭되면(=isRelevant 통과) 매체 무관 수집.
-      // (약사공론·의학신문 등 업종 전문지의 포폴사 부정기사를 놓치지 않기 위함)
-      // 경쟁사·업계동향은 기존대로 확정 매체 26개(media.ts)만.
-      const strongCat = target.category === 'portfolio_company' || target.category === 'sparklabs_self';
+      // 포폴사·자사·경쟁사는 회사명이 제목/본문에 강하게 토큰 매칭되면(=isRelevant 통과) 매체 무관 수집.
+      // (약사공론·의학신문 등 업종 전문지의 포폴사 부정기사, 26개 매체 밖의 경쟁사 투자 기사를
+      // 놓치지 않기 위함 — 2026-08-03, 경쟁사도 이름매칭 대상에 포함시키며 매체 제한 해제.)
+      // 업계동향(industry_trend)만 여전히 확정 매체 26개(media.ts)로 제한.
+      const strongCat = target.category === 'portfolio_company' || target.category === 'sparklabs_self' || target.category === 'competitor';
       const excludeList = splitCsv((target as any).excludeWords);
       const contextList = splitCsv((target as any).contextWords);
       const tier = (target as any).tier as string | null | undefined;
+      // 스파크랩 자사 언급 대상 자신의 강한 식별자 — "스파크랩, OOO에 투자" 식으로 제목 자체가
+      // 스파크랩 행위 기사인 경우는 포폴사명이 같이 있어도 재분류하지 않기 위한 기준.
+      const ownKeys = target.category === 'sparklabs_self'
+        ? resolveMainKeys({ title: '', primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, category: target.category }).mainKeys
+        : [];
 
       const mediaFiltered = items.filter(item => strongCat || isKnownMedia(item.source));
 
-      // 제외어/문맥어가 설정된 대상만 본문까지 스크래핑해서 title+본문 기준으로 판단.
-      const needsBody = excludeList.length > 0 || contextList.length > 0;
+      // 제외어/문맥어가 설정된 대상, 또는 경쟁사(제목에 투자사명이 없는 경우가 많아 본문까지
+      // 봐야 이름매칭이 가능)는 본문까지 스크래핑해서 title+본문 기준으로 판단.
+      const needsBody = excludeList.length > 0 || contextList.length > 0 || target.category === 'competitor';
       const bodyMap = needsBody ? await scrapeBodiesFor(mediaFiltered) : new Map<string, ScrapedBody | null>();
 
       return mediaFiltered
@@ -138,14 +167,28 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
           }
           return true;
         })
-        .map<RawArticle>(item => ({
-          ...item,
-          matchedKeyword: target.primaryKeyword,
-          category: target.category as Category,
-          basePriority: (CATEGORY_PRIORITY[target.category] ?? 50) + (TIER_BONUS[target.tier ?? ''] ?? 0),
-          companyDesc: (target as any).notes ?? undefined,
-          body: bodyMap.get(item.link)?.text,
-        }));
+        .map<RawArticle>(item => {
+          let matchedTarget: Target = target;
+          let category = target.category;
+
+          // 제목 자체가 스파크랩 행위 기사("스파크랩, OOO에 투자")면 포폴사명이 같이 있어도 그대로 유지.
+          // 제목에 스파크랩 자체가 없을 때만(=투자자 목록 등 본문 언급뿐) 포폴사 주인공 여부를 확인.
+          const sparklabsInTitle = ownKeys.some(k => matchesAsToken(item.title, k));
+          if (target.category === 'sparklabs_self' && !sparklabsInTitle) {
+            const body = bodyMap.get(item.link)?.text ?? '';
+            const subject = findPortfolioSubject(item.title, body);
+            if (subject) { matchedTarget = subject; category = 'portfolio_company'; }
+          }
+
+          return {
+            ...item,
+            matchedKeyword: matchedTarget.primaryKeyword,
+            category: category as Category,
+            basePriority: (CATEGORY_PRIORITY[category] ?? 50) + (TIER_BONUS[matchedTarget.tier ?? ''] ?? 0),
+            companyDesc: (matchedTarget as any).notes ?? undefined,
+            body: bodyMap.get(item.link)?.text,
+          };
+        });
     }));
     results.forEach(arr => allArticles.push(...arr));
   }
@@ -256,6 +299,7 @@ async function fetchGoogleNews(keyword: string): Promise<SourceItem[]> {
     if (NOISE_SOURCES.has(source)) continue;
 
     const title = titleRaw.replace(/\s+-\s+[^-]+$/, '').trim();
+    if (EMAIL_IN_TITLE_RE.test(title)) continue;
     let pubDate: Date;
     try {
       pubDate = new Date(pubDateStr);
@@ -295,7 +339,7 @@ async function fetchNaverNews(keyword: string): Promise<SourceItem[]> {
 
     const source = domainToSource(link);
     if (NOISE_SOURCES.has(source)) continue;
-    if (/@[a-zA-Z0-9.]+\.[a-zA-Z]{2,}/.test(title)) continue;
+    if (EMAIL_IN_TITLE_RE.test(title)) continue;
     out.push({ title, link, source, pubDate });
   }
   return out;

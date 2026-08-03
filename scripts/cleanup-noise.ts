@@ -15,11 +15,15 @@ async function main() {
   const targets = await prisma.monitoringTarget.findMany({ select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true, excludeWords: true, contextWords: true, category: true } });
   const byKw = new Map(targets.map(t => [t.primaryKeyword, t]));
 
+  // competitor는 2026-08-03부터 이름매칭 대상이 됐는데, 그 판단은 본문까지 봐야 정확함.
+  // 이 스크립트는 본문을 안 갖고 있어서(Article엔 본문 컬럼이 없음) 제목만으로 재검사하면,
+  // 예전에 26개 매체 제한만으로 통과했던 정상 기사(제목엔 투자사명이 없는 경우가 흔함)까지
+  // 대량으로 노이즈 처리될 위험이 있음 — 그래서 competitor는 이 소급 검사에서 제외한다.
   const articles = await prisma.article.findMany({
-    where: { isNoise: false, link: { startsWith: 'http' } },
+    where: { isNoise: false, link: { startsWith: 'http' }, category: { not: 'competitor' } },
     select: { id: true, title: true, matchedKeyword: true },
   });
-  console.log(`검사 대상(수집분, isNoise=false): ${articles.length}건`);
+  console.log(`검사 대상(수집분, isNoise=false, competitor 제외): ${articles.length}건`);
 
   const REASONS = ['exclude_word', 'missing_context', 'sports_ad', 'ad_noise', 'irrelevant'] as const;
   const byReason: Record<string, string[]> = { exclude_word: [], missing_context: [], sports_ad: [], ad_noise: [], irrelevant: [] };
