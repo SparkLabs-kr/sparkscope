@@ -125,10 +125,11 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
     const batch = limited.slice(i, i + CONCURRENCY);
     const results = await Promise.all(batch.map(async target => {
       const items = await fetchForTarget(target);
-      // 포폴사·자사는 회사명이 제목에 강하게 토큰 매칭되면(=isRelevant 통과) 매체 무관 수집.
-      // (약사공론·의학신문 등 업종 전문지의 포폴사 부정기사를 놓치지 않기 위함)
-      // 경쟁사·업계동향은 기존대로 확정 매체 26개(media.ts)만.
-      const strongCat = target.category === 'portfolio_company' || target.category === 'sparklabs_self';
+      // 포폴사·자사·경쟁사는 회사명이 제목/본문에 강하게 토큰 매칭되면(=isRelevant 통과) 매체 무관 수집.
+      // (약사공론·의학신문 등 업종 전문지의 포폴사 부정기사, 26개 매체 밖의 경쟁사 투자 기사를
+      // 놓치지 않기 위함 — 2026-08-03, 경쟁사도 이름매칭 대상에 포함시키며 매체 제한 해제.)
+      // 업계동향(industry_trend)만 여전히 확정 매체 26개(media.ts)로 제한.
+      const strongCat = target.category === 'portfolio_company' || target.category === 'sparklabs_self' || target.category === 'competitor';
       const excludeList = splitCsv((target as any).excludeWords);
       const contextList = splitCsv((target as any).contextWords);
       const tier = (target as any).tier as string | null | undefined;
@@ -140,8 +141,9 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
 
       const mediaFiltered = items.filter(item => strongCat || isKnownMedia(item.source));
 
-      // 제외어/문맥어가 설정된 대상만 본문까지 스크래핑해서 title+본문 기준으로 판단.
-      const needsBody = excludeList.length > 0 || contextList.length > 0;
+      // 제외어/문맥어가 설정된 대상, 또는 경쟁사(제목에 투자사명이 없는 경우가 많아 본문까지
+      // 봐야 이름매칭이 가능)는 본문까지 스크래핑해서 title+본문 기준으로 판단.
+      const needsBody = excludeList.length > 0 || contextList.length > 0 || target.category === 'competitor';
       const bodyMap = needsBody ? await scrapeBodiesFor(mediaFiltered) : new Map<string, ScrapedBody | null>();
 
       return mediaFiltered
