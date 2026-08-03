@@ -63,15 +63,16 @@ export async function isSendDomainVerified(): Promise<{ verified: boolean; statu
   }
 }
 
-/** 정식 발송이 막힐 때(도메인 미인증 등) 담당자에게 onboarding 발신으로 최선노력 알림. */
-export async function sendOwnerAlert(to: string, subject: string, text: string): Promise<boolean> {
+/** 정식 발송이 막힐 때(도메인 미인증 등) 담당자에게 onboarding 발신으로 최선노력 알림. 콤마로 여러 명 지정 가능. */
+export async function sendOwnerAlert(to: string | string[], subject: string, text: string): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey || !to) return false;
+  const toList = (Array.isArray(to) ? to : to.split(',')).map(s => s.trim()).filter(Boolean);
+  if (!apiKey || toList.length === 0) return false;
   try {
     const resend = new Resend(apiKey);
     const { error } = await resend.emails.send({
       from: 'SparkScope <onboarding@resend.dev>',
-      to: [to],
+      to: toList,
       subject,
       html: `<pre style="font-family:sans-serif;white-space:pre-wrap">${text}</pre>`,
     });
