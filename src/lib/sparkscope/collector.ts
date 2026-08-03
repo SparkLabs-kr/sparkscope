@@ -6,7 +6,7 @@
 import { parseStringPromise } from 'xml2js';
 import { prisma } from '@/lib/prisma';
 import type { RawArticle, Category } from './types';
-import { isRelevant, normalizeTitleKey, matchesAsToken } from './relevance';
+import { isRelevant, normalizeTitleKey, matchesAsToken, matchesAsDirectMention, resolveMainKeys } from './relevance';
 import { isKnownMedia } from './media';
 import { NEGATIVE_KEYWORDS_DATA, CRISIS_KEYWORDS_DATA } from './keywords-data';
 import { scrapeArticleBody, type ScrapedBody } from './scraper';
@@ -99,6 +99,26 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
 
   console.log(`[collector] querying ${limited.length} targets across ${grouped.size} categories (Naver: ${naverEnabled() ? 'ON' : 'OFF'})`);
 
+  // 스파크랩 자사 언급 기사 중 실제 주인공이 포트폴리오사인 경우 교차 확인용
+  // (예: "...스파크랩, 씨엔티테크 등으로부터 투자를 유치했다"처럼 투자자 목록에 스파크랩이
+  // 한 줄 끼어있을 뿐, 기사 전체 주인공은 포트폴리오사인 케이스 — sparklabs_self 오분류 방지).
+  // 포폴사가 매칭되면 포폴사로, 아니면 원래대로 스파크랩 기사로 본다.
+  const portfolioTargetsForCrosscheck = (grouped.get('portfolio_company') ?? []).map(p => ({
+    target: p,
+    keys: resolveMainKeys({
+      title: '', primaryKeyword: p.primaryKeyword, name: p.name, englishName: p.englishName,
+      helperKeywords: p.helperKeywords, category: p.category,
+    }).mainKeys,
+  }));
+  function findPortfolioSubject(title: string, body: string): Target | null {
+    for (const { target, keys } of portfolioTargetsForCrosscheck) {
+      if (keys.some(k => matchesAsToken(title, k) || (body.length > 0 && matchesAsDirectMention(body, k)))) {
+        return target;
+      }
+    }
+    return null;
+  }
+
   const allArticles: RawArticle[] = [];
   const CONCURRENCY = 5;
   for (let i = 0; i < limited.length; i += CONCURRENCY) {
@@ -112,6 +132,11 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
       const excludeList = splitCsv((target as any).excludeWords);
       const contextList = splitCsv((target as any).contextWords);
       const tier = (target as any).tier as string | null | undefined;
+      // 스파크랩 자사 언급 대상 자신의 강한 식별자 — "스파크랩, OOO에 투자" 식으로 제목 자체가
+      // 스파크랩 행위 기사인 경우는 포폴사명이 같이 있어도 재분류하지 않기 위한 기준.
+      const ownKeys = target.category === 'sparklabs_self'
+        ? resolveMainKeys({ title: '', primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, category: target.category }).mainKeys
+        : [];
 
       const mediaFiltered = items.filter(item => strongCat || isKnownMedia(item.source));
 
@@ -140,14 +165,28 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
           }
           return true;
         })
-        .map<RawArticle>(item => ({
-          ...item,
-          matchedKeyword: target.primaryKeyword,
-          category: target.category as Category,
-          basePriority: (CATEGORY_PRIORITY[target.category] ?? 50) + (TIER_BONUS[target.tier ?? ''] ?? 0),
-          companyDesc: (target as any).notes ?? undefined,
-          body: bodyMap.get(item.link)?.text,
-        }));
+        .map<RawArticle>(item => {
+          let matchedTarget: Target = target;
+          let category = target.category;
+
+          // 제목 자체가 스파크랩 행위 기사("스파크랩, OOO에 투자")면 포폴사명이 같이 있어도 그대로 유지.
+          // 제목에 스파크랩 자체가 없을 때만(=투자자 목록 등 본문 언급뿐) 포폴사 주인공 여부를 확인.
+          const sparklabsInTitle = ownKeys.some(k => matchesAsToken(item.title, k));
+          if (target.category === 'sparklabs_self' && !sparklabsInTitle) {
+            const body = bodyMap.get(item.link)?.text ?? '';
+            const subject = findPortfolioSubject(item.title, body);
+            if (subject) { matchedTarget = subject; category = 'portfolio_company'; }
+          }
+
+          return {
+            ...item,
+            matchedKeyword: matchedTarget.primaryKeyword,
+            category: category as Category,
+            basePriority: (CATEGORY_PRIORITY[category] ?? 50) + (TIER_BONUS[matchedTarget.tier ?? ''] ?? 0),
+            companyDesc: (matchedTarget as any).notes ?? undefined,
+            body: bodyMap.get(item.link)?.text,
+          };
+        });
     }));
     results.forEach(arr => allArticles.push(...arr));
   }
