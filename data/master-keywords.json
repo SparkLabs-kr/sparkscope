@@ -1318,19 +1318,19 @@
     "status": "ACTIVE",
     "tier": "1",
     "primaryKeyword": "알토스벤처스",
-    "helperKeywords": "한킴 (김한준)",
+    "helperKeywords": "한킴, 김한준",
     "excludeWords": null,
     "contextWords": null,
     "notes": null
   },
   {
     "name": "에이티넘인베스트먼트",
-    "englishName": null,
+    "englishName": "Atinum Investment",
     "category": "competitor",
     "status": "ACTIVE",
     "tier": null,
     "primaryKeyword": "에이티넘인베스트먼트",
-    "helperKeywords": null,
+    "helperKeywords": "신기천, 이승용, 맹두진",
     "excludeWords": null,
     "contextWords": null,
     "notes": null
@@ -1620,7 +1620,7 @@
     "primaryKeyword": "프라이머",
     "helperKeywords": "권도균",
     "excludeWords": "프레이머, 도장재, 화장품, DNA, 메이크업",
-    "contextWords": "투자",
+    "contextWords": "투자, 액셀러레이터, 스타트업, 벤처캐피탈, 벤처캐피털",
     "notes": null
   },
   {
@@ -1728,7 +1728,7 @@
     "primaryKeyword": "해시드",
     "helperKeywords": "김서준",
     "excludeWords": null,
-    "contextWords": null,
+    "contextWords": "투자, 블록체인, 웹3, 크립토, 가상자산, 투자사, 벤처캐피털, 벤처캐피탈",
     "notes": "블록체인 / 웹3 전문"
   },
   {
@@ -6319,7 +6319,7 @@
     "status": "ACTIVE",
     "tier": null,
     "primaryKeyword": "IMM인베스트먼트",
-    "helperKeywords": null,
+    "helperKeywords": "장동우, 지성배, 정일부, 변재천",
     "excludeWords": null,
     "contextWords": null,
     "notes": "Korea"
@@ -6463,7 +6463,7 @@
     "status": "ACTIVE",
     "tier": null,
     "primaryKeyword": "카카오벤처스",
-    "helperKeywords": null,
+    "helperKeywords": "김기준",
     "excludeWords": null,
     "contextWords": null,
     "notes": null
