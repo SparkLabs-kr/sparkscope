@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 // 소스 목록은 팀에서 정한 4개 카테고리 기준(2026-07-31). 여기 딱 한 곳만 고치면 전체 파이프라인에 반영됨.
 // 검증일 기준으로 공개 RSS가 없거나(구독 전용/봇 차단/공식 종료) 살릴 방법을 못 찾은 3곳은 주석으로 남겨둠 —
 // 대체 피드를 찾으면 그때 추가.
-const FEEDS: Record<string, string> = {
+export const FEEDS: Record<string, string> = {
   // === [AI, 스타트업 버티컬 전문지] ===
   'TechCrunch': 'https://techcrunch.com/feed/',
   // 'The Information': 구독자 전용 RSS라 봇 요청은 403 — 대체 피드 없음
@@ -37,7 +37,7 @@ const FEEDS: Record<string, string> = {
   // 'Washington Post': RSS 엔드포인트가 전부 홈페이지 HTML로 리다이렉트됨(자체 RSS 서비스 종료) — 대체 피드 없음
 };
 
-function decodeEntities(s: string): string {
+export function decodeEntities(s: string): string {
   return s
     .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(parseInt(d, 10)))
     .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
@@ -48,7 +48,7 @@ function decodeEntities(s: string): string {
 // 둘 다 지원. <channel>/<feed> 레벨에도 title·link가 한 번씩 나오는데 그건 <item>/<entry> 블록 밖이라 여기 안 걸림 —
 // 예전엔 title/link/pubDate를 각각 배열로 뽑아서 index로 짝지었는데, channel 레벨 title·link 때문에
 // item들이 한 칸씩 밀려서 (예: Washington Post 채널 제목이 첫 "기사"로 잘못 들어가는) 버그가 있었음.
-function parseFeedItems(xml: string): Array<{ title: string; url: string; pubDate: string }> {
+export function parseFeedItems(xml: string): Array<{ title: string; url: string; pubDate: string }> {
   const blocks = [...xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>|<entry\b[^>]*>([\s\S]*?)<\/entry>/g)];
   return blocks.map(b => {
     const block = b[1] ?? b[2] ?? '';
@@ -88,6 +88,29 @@ async function fetchTitles(name: string, url: string, limit = 6): Promise<Array<
   }
 }
 
+// URL로 중복 체크 후 없으면 저장. 이미 있으면 null 반환.
+export async function saveInterNewsIfNew(article: { source: string; title: string; url: string; publishedAt: Date }): Promise<string | null> {
+  const existing = await prisma.interNews.findUnique({
+    where: { url: article.url },
+  });
+
+  if (existing) {
+    return null;
+  }
+
+  const news = await prisma.interNews.create({
+    data: {
+      source: article.source,
+      title: article.title,
+      url: article.url,
+      publishedAt: article.publishedAt,
+      collectedAt: new Date(),
+    },
+  });
+
+  return news.id;
+}
+
 export async function collectInterNews(): Promise<{ newsIds: string[]; count: number; failed: string[] }> {
   console.log('[Inter] RSS 수집 시작...');
 
@@ -99,27 +122,8 @@ export async function collectInterNews(): Promise<{ newsIds: string[]; count: nu
 
     for (const article of articles) {
       try {
-        // 중복 체크: URL로 이미 있는지 확인
-        const existing = await prisma.interNews.findUnique({
-          where: { url: article.url },
-        });
-
-        if (existing) {
-          continue; // 이미 있으면 건너뛰기
-        }
-
-        // DB에 저장
-        const news = await prisma.interNews.create({
-          data: {
-            source: article.source,
-            title: article.title,
-            url: article.url,
-            publishedAt: article.publishedAt,
-            collectedAt: new Date(),
-          },
-        });
-
-        newsIds.push(news.id);
+        const newsId = await saveInterNewsIfNew(article);
+        if (newsId) newsIds.push(newsId);
       } catch (e: any) {
         console.error(`[Inter] ${article.source} 저장 실패: ${e.message}`);
         failed.push(article.source);

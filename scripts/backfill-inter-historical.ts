@@ -84,18 +84,20 @@ async function main() {
       for (const item of items) {
         await sleep(SLEEP_MS);
         const realUrl = await resolveGoogleNewsUrl(item.url);
-        if (!realUrl) continue; // 해석 실패 시 건너뜀 (원문 링크 없는 기사는 저장하지 않음)
-        resolvedCount++;
+        // 해석 실패(예: 구글 리졸버 429) 시에도 건너뛰지 않고 구글 뉴스 링크 그대로 저장 —
+        // 인트라 탭의 titleOnlyFallback 배지와 같은 취지: 조용히 누락시키지 않는다.
+        const finalUrl = realUrl ?? item.url;
+        if (realUrl) resolvedCount++;
 
         if (dryRun) {
-          console.log(`[dry-run] ${name} | ${item.title} | ${realUrl} | ${item.pubDate}`);
+          console.log(`[dry-run] ${name} | ${item.title} | ${finalUrl}${realUrl ? '' : ' (원문 해석 실패, 구글 링크로 저장)'} | ${item.pubDate}`);
           continue;
         }
 
         const newsId = await saveInterNewsIfNew({
           source: name,
           title: item.title,
-          url: realUrl,
+          url: finalUrl,
           publishedAt: item.pubDate ? new Date(item.pubDate) : before,
         });
         if (newsId) newNewsIds.push(newsId);

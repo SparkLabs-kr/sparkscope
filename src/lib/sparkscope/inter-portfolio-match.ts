@@ -12,6 +12,12 @@ const SYSTEM = `당신은 SparkScope 포트폴리오팀의 트렌드 영향 분�
 - 기술 기반: 새 기술의 기초 기술이 우리 회사의 핵심 분야
 - 투자 영역: 투자 자금 흐름 변화로 인한 펀딩 환경 변화
 
+기준을 엄격하게 적용하세요. "~할 수도 있다", "간접적으로 확대될 가능성" 같은
+막연한 개연성만으로는 매칭하지 마세요 — 같은 논리를 아무 회사에나 갖다 붙일 수 있다면
+매칭 대상이 아닙니다. 기사 내용과 회사의 실제 사업 사이에 구체적이고 설명 가능한
+연결고리가 있는 경우만 포함하세요. 대부분의 기사는 매칭되는 포트폴리오사가 0~2개인 것이
+정상입니다.
+
 응답은 반드시 valid JSON 배열만.`;
 
 interface CompanyProfile {
@@ -37,11 +43,12 @@ ${companies.map((c, i) => `${i + 1}. ${c.name} (${c.sector}) — ${c.description
 === 분석 ===
 각 회사가 이 뉴스로부터 받을 영향을 분석하세요.
 - 직접 영향: 회사명 언급, 기술/제품 직접 관련
-- 간접 영향: 같은 섹터 트렌드, 경쟁사 발표, 규제 변화
-- 기회: 이 트렌드가 우리 회사의 강점을 강화하거나 시장 확대 가능
+- 간접 영향: 같은 섹터의 구체적 경쟁사 발표, 이 기사와 직접 연결되는 규제 변화 —
+  "관련 산업이니까 언젠가 영향 있을 수 있다" 수준은 제외
+
+가장 관련 높은 회사 **최대 3개까지만** 반환하세요. 억지로 채우지 말고, 진짜 없으면 빈 배열을 반환하세요.
 
 출력 스키마: [{ "company": "<회사명>", "reason": "<구체적 영향 한 줄>" }]
-영향 있는 회사만 추천. 빈 배열 가능.
 JSON만 반환 (마크다운 없음):`;
 }
 
@@ -73,7 +80,12 @@ async function analyzeArticleForPortfolio(
 
     const text = resp.choices[0]?.message?.content ?? '';
     const parsed = JSON.parse(extractJson(text)) as PortfolioMatch[];
-    return parsed.filter(m => m.company && m.reason);
+    const seen = new Set<string>();
+    return parsed.filter(m => {
+      if (!m.company || !m.reason || seen.has(m.company)) return false;
+      seen.add(m.company);
+      return true;
+    });
   } catch (e: any) {
     console.error(`[Inter] Portfolio matching 실패: ${e.message}`);
     return [];
