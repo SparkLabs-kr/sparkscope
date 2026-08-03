@@ -33,6 +33,8 @@ function naverEnabled(): boolean {
 }
 
 const NOISE_SOURCES = new Set(['주달', '뉴스봇', 'Auto News', '주간시세', '시세분석']);
+// 사진설명·바이라인이 실제 기사 제목 대신 잡히는 경우 방지 (예: "...발표하고 있다. 김민수기자 mskim@etnews.com").
+const EMAIL_IN_TITLE_RE = /@[a-zA-Z0-9.]+\.[a-zA-Z]{2,}/;
 const MAX_DAYS_AGO = 3; // 월·수·금 발송 시 최근 3일 수집 (공휴일 대응용 백업 없음)
 const NAVER_DELAY_MS = 150; // 전역 직렬 간격 (병렬 대상이 동시에 때려 429 나는 것 방지)
 
@@ -256,6 +258,7 @@ async function fetchGoogleNews(keyword: string): Promise<SourceItem[]> {
     if (NOISE_SOURCES.has(source)) continue;
 
     const title = titleRaw.replace(/\s+-\s+[^-]+$/, '').trim();
+    if (EMAIL_IN_TITLE_RE.test(title)) continue;
     let pubDate: Date;
     try {
       pubDate = new Date(pubDateStr);
@@ -295,7 +298,7 @@ async function fetchNaverNews(keyword: string): Promise<SourceItem[]> {
 
     const source = domainToSource(link);
     if (NOISE_SOURCES.has(source)) continue;
-    if (/@[a-zA-Z0-9.]+\.[a-zA-Z]{2,}/.test(title)) continue;
+    if (EMAIL_IN_TITLE_RE.test(title)) continue;
     out.push({ title, link, source, pubDate });
   }
   return out;
