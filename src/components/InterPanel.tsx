@@ -2,8 +2,9 @@
 
 // Inter(해외 트렌드) 탭 — 바이오/AI 도메인별 해외 기사·논문·오피니언 트렌드 + 포트폴리오 매치.
 //
-// /api/inter?domain=bio|ai 에서 실제 DB 데이터(RSS 수집 → Gemini 필터링 → GPT 포트폴리오 매칭
-// 파이프라인 결과)를 받아온다. 국가/기간 필터는 아직 UI만 있고 실제 조회에는 반영 안 됨.
+// /api/inter?domain=bio|ai&country=..&period=.. 에서 실제 DB 데이터(RSS 수집 → Gemini
+// 필터링(국가 판별 포함) → GPT 포트폴리오 매칭 파이프라인 결과)를 받아온다. 상단 AI 요약은
+// daily-collect 크론이 하루 1회 미리 계산(inter-summary.ts)해 둔 것을 읽기만 한다.
 
 import { useEffect, useState } from 'react';
 import {
@@ -47,6 +48,12 @@ const ALERT_LABEL: Record<string, string> = { urgent: '⚠ 긴급', watch: '👁
 
 const SOURCE_KINDS: SourceKind[] = ['news', 'paper', 'opinion'];
 
+// 요약 계산 시각은 KST 기준 HH:MM으로 표시 (daily-collect 사전계산 배치가 KST 하루 1회 도는 것과 맞춤)
+function fmtKstTime(d: Date | string) {
+  const kst = new Date(new Date(d).toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+  return `${String(kst.getHours()).padStart(2, '0')}:${String(kst.getMinutes()).padStart(2, '0')}`;
+}
+
 type PeriodKey = '7d' | '1m' | '3m' | '1y' | '3y';
 const PERIOD_PRESETS: { key: PeriodKey; label: string }[] = [
   { key: '7d', label: '7일' },
@@ -68,7 +75,7 @@ export function InterPanel() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch(`/api/inter?domain=${domain}&period=${period}`)
+    fetch(`/api/inter?domain=${domain}&period=${period}&country=${country}`)
       .then(res => res.json())
       .then((json: InterApiResponse) => {
         if (!cancelled) setData(json);
@@ -82,7 +89,7 @@ export function InterPanel() {
     return () => {
       cancelled = true;
     };
-  }, [domain, period]);
+  }, [domain, period, country]);
 
   function switchDomain(d: InterDomain) {
     setDomain(d);
@@ -156,6 +163,11 @@ export function InterPanel() {
         <SummaryItem n={1} k="트렌드 1줄 요약" v={data.summary.trend} />
         <SummaryItem n={2} k="스파크랩의 포지션" v={data.summary.position} />
         <SummaryItem n={3} k="취해야 할 가장 중요한 액션" v={data.summary.action} last />
+        <div className="mt-2 text-[10px] text-gray-400">
+          {data.summary.source === 'fallback'
+            ? '⚙️ 기본 요약 · AI 분석 대기 중(다음 수집 때 자동 갱신)'
+            : `🤖 AI 요약 · ${fmtKstTime(data.summary.computedAt!)} 기준`}
+        </div>
       </div>
 
       {/* 통계 */}
