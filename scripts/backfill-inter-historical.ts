@@ -74,6 +74,14 @@ function parseYmd(s: string | undefined, label: string): Date | null {
   return d;
 }
 
+/**
+ * 구글이 우리를 레이트리밋하면 RSS가 아니라 503 "Sorry..." HTML을 돌려준다.
+ * 예전엔 그걸 그대로 parseFeedItems에 넘겨 "후보 0건"으로 조용히 넘어갔고,
+ * 결과적으로 "그 기간엔 기사가 없다"로 오진하게 만들었다(2026-08-04 실제로 겪음).
+ * 지금은 차단을 구분해서 위로 던지고, main이 즉시 중단한다.
+ */
+class RateLimitedError extends Error {}
+
 async function fetchGoogleNewsWindow(domain: string, after: Date, before: Date, itemsPerWindow: number) {
   const q = `site:${domain} after:${fmt(after)} before:${fmt(before)}`;
   const url = `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`;
@@ -81,11 +89,17 @@ async function fetchGoogleNewsWindow(domain: string, after: Date, before: Date, 
   try {
     const res = await fetch(url, { headers: { 'User-Agent': UA } });
     const xml = await res.text();
+    if (res.status === 429 || res.status === 503 || /^\s*<html/i.test(xml)) {
+      throw new RateLimitedError(
+        `구글 뉴스가 요청을 차단했습니다 (HTTP ${res.status}). 잠시(수십 분~수 시간) 기다렸다가 다시 실행하세요.`
+      );
+    }
     return parseFeedItems(xml)
       .map(t => ({ ...t, title: decodeEntities(t.title) }))
       .filter(t => t.title && t.url)
       .slice(0, itemsPerWindow);
   } catch (e: any) {
+    if (e instanceof RateLimitedError) throw e; // 차단은 조용히 넘기지 않는다
     console.error(`[Backfill] ${domain} ${fmt(after)}~${fmt(before)} 검색 실패: ${e.message}`);
     return [];
   }
@@ -119,11 +133,24 @@ async function main() {
   let candidateCount = 0;
   let resolvedCount = 0;
 
+  let rateLimited: string | null = null;
+
+  outer:
   for (const [name, feedUrl] of Object.entries(FEEDS)) {
     const domain = outletDomain(feedUrl);
 
     for (const { after, before } of windows) {
-      const items = await fetchGoogleNewsWindow(domain, after, before, itemsPerWindow);
+      let items;
+      try {
+        items = await fetchGoogleNewsWindow(domain, after, before, itemsPerWindow);
+      } catch (e: any) {
+        if (e instanceof RateLimitedError) {
+          // 여기까지 모은 건 그대로 필터링·저장까지 진행하고, 수집만 멈춘다.
+          rateLimited = e.message;
+          break outer;
+        }
+        throw e;
+      }
       candidateCount += items.length;
 
       for (const item of items) {
@@ -155,9 +182,14 @@ async function main() {
 
   console.log(`[Backfill] 검색된 후보 ${candidateCount}건, URL 해석 성공 ${resolvedCount}건, 신규 저장 ${newNewsIds.length}건`);
 
+  if (rateLimited) {
+    console.error(`\n🔴 [Backfill] 수집이 중간에 끊겼습니다 — ${rateLimited}`);
+    console.error('   이 실행의 결과는 해당 구간을 전부 덮지 못했습니다. "기사가 없다"고 해석하지 마세요.');
+  }
+
   if (dryRun || newNewsIds.length === 0) {
     console.log('[Backfill] dry-run이거나 신규 기사 없음 — 필터링/매칭 생략');
-    process.exit(0);
+    process.exit(rateLimited ? 1 : 0);
   }
 
   console.log('[Backfill] Gemini 관련성 필터링 시작...');
