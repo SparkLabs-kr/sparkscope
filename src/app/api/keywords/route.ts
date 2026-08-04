@@ -4,16 +4,16 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { OPEN_ACCESS } from '@/lib/flags';
+import { canScrap } from '@/lib/scrap';
 
 export const runtime = 'nodejs';
 
 const CATEGORIES = ['sparklabs_self', 'portfolio_company', 'competitor', 'industry_trend'];
 
+// 키워드 관리는 ★ 스크랩과 동일하게 지정된 관리자 계정만 (OPEN_ACCESS 협업모드에선 canScrap이 알아서 허용).
 async function authorized(): Promise<boolean> {
-  if (OPEN_ACCESS) return true;
   const session = await getServerSession(authOptions);
-  return !!session?.user?.email;
+  return canScrap(session?.user?.email ?? null);
 }
 
 function bad(msg: string, status = 400) {
@@ -80,6 +80,7 @@ export async function PATCH(req: Request) {
   if (b.name?.trim()) data.name = b.name.trim();
   if (b.category) data.category = b.category;
   if (b.status && ['ACTIVE', 'PAUSED', 'EXIT'].includes(b.status)) data.status = b.status;
+  if ('portfolioStatus' in b) data.portfolioStatus = ['Live', 'Exit', 'Written-off'].includes(b.portfolioStatus) ? b.portfolioStatus : null;
 
   const target = await prisma.monitoringTarget.update({ where: { id: b.id }, data });
   return NextResponse.json({ target });

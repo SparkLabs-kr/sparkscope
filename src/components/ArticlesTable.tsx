@@ -1,6 +1,8 @@
 'use client';
 import { useState } from 'react';
 import { ScrapStar } from '@/components/ScrapStar';
+import { BookmarkIcon } from '@/components/BookmarkIcon';
+import { NoiseReportButton } from '@/components/NoiseReportButton';
 import { clusterArticles } from '@/lib/sparkscope/cluster';
 
 interface Article {
@@ -15,6 +17,8 @@ interface Article {
   tone: string | null;
   pitchScore: number | null;
   isScrapped?: boolean;
+  isBookmarked?: boolean;
+  isNoise?: boolean;
   companyName?: string;
   portfolioStatus?: string | null;
   titleOnlyFallback?: boolean;
@@ -68,7 +72,7 @@ function TitleOnlyBadge() {
   );
 }
 
-export function ArticlesTable({ articles, canScrap = false, emptyText, showCategoryColumn = true }: { articles: Article[]; canScrap?: boolean; emptyText?: string; showCategoryColumn?: boolean }) {
+export function ArticlesTable({ articles, canScrap = false, canBookmark = false, canReport = false, emptyText, showCategoryColumn = true }: { articles: Article[]; canScrap?: boolean; canBookmark?: boolean; canReport?: boolean; emptyText?: string; showCategoryColumn?: boolean }) {
   if (articles.length === 0) {
     return <p className="text-sm text-gray-400 py-8 text-center">{emptyText ?? '선택 기간 내 기사가 없습니다.'}</p>;
   }
@@ -102,6 +106,7 @@ export function ArticlesTable({ articles, canScrap = false, emptyText, showCateg
           <thead>
             <tr className="bg-spark-subtle text-spark-muted text-[10px] uppercase tracking-wider border-b border-spark-border">
               {canScrap && <th className="text-center px-2 py-2 w-8">★</th>}
+              {canBookmark && <th className="text-center px-2 py-2 w-8" title="내 북마크">🔖</th>}
               <th className="text-left px-3 py-2 w-20">날짜</th>
               {showCategoryColumn && <th className="text-left px-3 py-2 w-24">분류</th>}
               {hasCompanyName && <th className="text-left px-3 py-2 w-28">회사명</th>}
@@ -110,6 +115,7 @@ export function ArticlesTable({ articles, canScrap = false, emptyText, showCateg
               <th className="text-left px-3 py-2 w-28">매체</th>
               <th className="text-center px-3 py-2 w-16">중요도</th>
               <th className="text-center px-3 py-2 w-16">피칭</th>
+              {canReport && <th className="text-center px-2 py-2 w-8 border-l border-spark-border" title="노이즈 신고(관리자)">🚫</th>}
             </tr>
           </thead>
           <tbody>
@@ -121,6 +127,7 @@ export function ArticlesTable({ articles, canScrap = false, emptyText, showCateg
               return (
                 <tr key={a.id} className="border-b border-spark-border/60 hover:bg-spark-subtle transition-colors">
                   {canScrap && <td className="px-2 py-3 text-center"><ScrapStar id={a.id} initial={!!a.isScrapped} /></td>}
+                  {canBookmark && <td className="px-2 py-3 text-center"><BookmarkIcon id={a.id} initial={!!a.isBookmarked} /></td>}
                   <td className="px-3 py-3 text-xs text-gray-500">{date.getMonth() + 1}/{date.getDate()}</td>
                   {showCategoryColumn && <td className="px-3 py-3"><span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${cat.cls}`}>{cat.label}</span></td>}
                   {hasCompanyName && <td className="px-3 py-3 text-xs font-medium text-gray-800 whitespace-nowrap">{a.companyName ?? a.matchedKeyword}</td>}
@@ -163,6 +170,7 @@ export function ArticlesTable({ articles, canScrap = false, emptyText, showCateg
                   <td className="px-3 py-3 text-xs text-gray-600">{a.source}{others.length > 0 && ` 외 ${others.length}`}</td>
                   <td className={`px-3 py-3 text-center text-xs ${IMP_STYLE[a.importance ?? 'LOW']}`}>{a.importance === 'HIGH' || a.importance === 'CRITICAL' ? '높음' : a.importance === 'MEDIUM' ? '중' : '낮음'}</td>
                   <td className="px-3 py-3 text-center text-xs font-bold text-amber-700">{a.pitchScore && a.pitchScore >= 60 ? a.pitchScore : '—'}</td>
+                  {canReport && <td className="px-2 py-3 text-center border-l border-spark-border"><NoiseReportButton id={a.id} initial={!!a.isNoise} /></td>}
                 </tr>
               );
             })}
@@ -187,7 +195,12 @@ export function ArticlesTable({ articles, canScrap = false, emptyText, showCateg
                   {statusCls && <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${statusCls}`}>{a.portfolioStatus}</span>}
                   <span className="text-xs text-gray-500 whitespace-nowrap">{date.getMonth() + 1}/{date.getDate()}</span>
                 </div>
-                {canScrap && <div className="flex-shrink-0"><ScrapStar id={a.id} initial={!!a.isScrapped} /></div>}
+                {(canScrap || canBookmark) && (
+                  <div className="flex-shrink-0 flex items-center gap-2">
+                    {canScrap && <ScrapStar id={a.id} initial={!!a.isScrapped} />}
+                    {canBookmark && <BookmarkIcon id={a.id} initial={!!a.isBookmarked} />}
+                  </div>
+                )}
               </div>
 
               {/* 제목 */}
@@ -235,6 +248,11 @@ export function ArticlesTable({ articles, canScrap = false, emptyText, showCateg
                 <div className="flex items-center gap-1.5 flex-shrink-0">
                   {(a.importance === 'HIGH' || a.importance === 'CRITICAL') && <span className={IMP_STYLE[a.importance]}>높</span>}
                   {a.pitchScore && a.pitchScore >= 60 && <span className="text-amber-700 font-bold">{a.pitchScore}점</span>}
+                  {canReport && (
+                    <span className="pl-1.5 ml-0.5 border-l border-spark-border">
+                      <NoiseReportButton id={a.id} initial={!!a.isNoise} />
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

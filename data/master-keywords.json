@@ -5320,11 +5320,11 @@
     "category": "portfolio_company",
     "status": "ACTIVE",
     "portfolioStatus": "Exit",
-    "tier": "A",
+    "tier": "C",
     "primaryKeyword": "스펙터",
     "helperKeywords": "윤경욱 인재검증",
     "excludeWords": null,
-    "contextWords": null,
+    "contextWords": "HR테크, 인재검증, 경력조회, 평판조회, 채용",
     "notes": "HR테크 기업. 경력·평판 조회 기반 인재검증 B2B SaaS"
   },
   {

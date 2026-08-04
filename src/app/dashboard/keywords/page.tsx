@@ -1,10 +1,17 @@
-// 키워드 셀프 관리 — 감시대상(MonitoringTarget) 추가/편집/삭제
+// 키워드 셀프 관리 — 감시대상(MonitoringTarget) 추가/편집/삭제. ★ 스크랩과 동일한 관리자 계정만.
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { canScrap } from '@/lib/scrap';
 import { KeywordManager } from '@/components/KeywordManager';
 
 export const dynamic = 'force-dynamic';
 
-export default function KeywordsPage() {
+export default async function KeywordsPage() {
+  const session = await getServerSession(authOptions);
+  if (!canScrap(session?.user?.email ?? null)) redirect('/dashboard');
+
   return (
     <>
       <div className="flex flex-wrap justify-between items-end gap-4 mb-6">

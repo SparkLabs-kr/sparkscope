@@ -33,7 +33,7 @@ function naverEnabled(): boolean {
   return !!(process.env.NAVER_CLIENT_ID && process.env.NAVER_CLIENT_SECRET);
 }
 
-const NOISE_SOURCES = new Set(['주달', '뉴스봇', 'Auto News', '주간시세', '시세분석']);
+const NOISE_SOURCES = new Set(['주달', 'judal.co.kr', '뉴스봇', 'Auto News', '주간시세', '시세분석', '브런치']);
 // 사진설명·바이라인이 실제 기사 제목 대신 잡히는 경우 방지 (예: "...발표하고 있다. 김민수기자 mskim@etnews.com").
 const EMAIL_IN_TITLE_RE = /@[a-zA-Z0-9.]+\.[a-zA-Z]{2,}/;
 const MAX_DAYS_AGO = 3; // 월·수·금 발송 시 최근 3일 수집 (공휴일 대응용 백업 없음)

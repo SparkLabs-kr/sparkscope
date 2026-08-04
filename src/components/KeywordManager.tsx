@@ -11,6 +11,7 @@ interface Target {
   helperKeywords: string | null;
   excludeWords: string | null;
   contextWords: string | null;
+  portfolioStatus: string | null;
 }
 
 const CATS = [
@@ -34,6 +35,13 @@ export function KeywordManager() {
   const [form, setForm] = useState(emptyForm);
   const [editId, setEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Target>>({});
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 8000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   async function load() {
     setLoading(true);
@@ -58,26 +66,31 @@ export function KeywordManager() {
     return list;
   }, [targets, filter, search]);
 
+  const JSON_REMINDER = 'data/master-keywords.json에도 같은 내용을 반영해주세요 — 안 하면 나중에 재시딩될 때 이 변경이 조용히 되돌아갈 수 있어요.';
+
   async function add() {
     setErr('');
     if (!form.name.trim()) { setErr('기업/키워드명을 입력하세요.'); return; }
     const res = await fetch('/api/keywords', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
     if (!res.ok) { setErr((await res.json()).error ?? '추가 실패'); return; }
+    setNotice(`'${form.name}' 추가됨. ${JSON_REMINDER}`);
     setForm(emptyForm);
     load();
   }
 
   async function saveEdit() {
     if (!editId) return;
+    const name = targets.find(t => t.id === editId)?.name ?? '';
     const res = await fetch('/api/keywords', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editId, ...editForm }) });
     if (!res.ok) { setErr((await res.json()).error ?? '수정 실패'); return; }
+    setNotice(`'${name}' 수정됨. ${JSON_REMINDER}`);
     setEditId(null); setEditForm({}); load();
   }
 
   async function remove(t: Target) {
     if (!confirm(`'${t.name}'을(를) 모니터링 대상에서 삭제할까요?\n(소프트 삭제 — 복구 가능, 수집에서 자동 제외됩니다)`)) return;
     const res = await fetch(`/api/keywords?id=${t.id}`, { method: 'DELETE' });
-    if (res.ok) load();
+    if (res.ok) { setNotice(`'${t.name}' 삭제(일시중지)됨. ${JSON_REMINDER}`); load(); }
   }
 
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
@@ -85,6 +98,12 @@ export function KeywordManager() {
 
   return (
     <div>
+      {notice && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-3 py-2 mb-4">
+          <span className="flex-1">📄 {notice}</span>
+          <button onClick={() => setNotice(null)} className="text-xs font-semibold text-amber-700 border border-amber-300 rounded px-2 py-0.5 hover:bg-amber-100 whitespace-nowrap">확인</button>
+        </div>
+      )}
       {/* 추가 폼 */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 mb-4">
         <div className="font-bold mb-3">+ 모니터링 대상 추가</div>
@@ -111,22 +130,25 @@ export function KeywordManager() {
 
       {/* 목록 */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[1000px] text-sm table-fixed">
           <thead>
             <tr className="bg-gray-50 text-gray-500 text-[10px] uppercase tracking-wider">
-              <th className="text-left px-3 py-2">이름</th>
-              <th className="text-left px-3 py-2">영문명</th>
-              <th className="text-left px-3 py-2 w-40">카테고리</th>
-              <th className="text-left px-3 py-2">보조키워드</th>
-              <th className="text-left px-3 py-2">문맥어</th>
-              <th className="text-right px-3 py-2 w-28">관리</th>
+              <th className="text-left px-3 py-2 w-28">이름</th>
+              <th className="text-left px-3 py-2 w-28">영문명</th>
+              <th className="text-left px-3 py-2 w-24">카테고리</th>
+              <th className="text-center px-3 py-2 w-16">상태</th>
+              <th className="text-center px-3 py-2 w-20">포폴상태</th>
+              <th className="text-left px-3 py-2 w-32">보조키워드</th>
+              <th className="text-left px-3 py-2 w-32">제외키워드</th>
+              <th className="text-left px-3 py-2 w-40">문맥어</th>
+              <th className="text-right px-3 py-2 w-24">관리</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} className="text-center text-gray-400 py-8">불러오는 중…</td></tr>
+              <tr><td colSpan={9} className="text-center text-gray-400 py-8">불러오는 중…</td></tr>
             ) : shown.length === 0 ? (
-              <tr><td colSpan={6} className="text-center text-gray-400 py-8">결과 없음</td></tr>
+              <tr><td colSpan={9} className="text-center text-gray-400 py-8">결과 없음</td></tr>
             ) : shown.map(t => editId === t.id ? (
               <tr key={t.id} className="border-b border-gray-100 bg-amber-50">
                 <td className="px-3 py-2"><input className={inputCls} defaultValue={t.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} /></td>
@@ -136,7 +158,22 @@ export function KeywordManager() {
                     {CATS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
                   </select>
                 </td>
+                <td className="px-3 py-2 text-center">
+                  <select className={inputCls} defaultValue={t.status} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}>
+                    <option value="ACTIVE">활성</option>
+                    <option value="PAUSED">일시중지</option>
+                  </select>
+                </td>
+                <td className="px-3 py-2 text-center">
+                  <select className={inputCls} defaultValue={t.portfolioStatus ?? ''} onChange={e => setEditForm(f => ({ ...f, portfolioStatus: e.target.value }))}>
+                    <option value="">—</option>
+                    <option value="Live">Live</option>
+                    <option value="Exit">Exit</option>
+                    <option value="Written-off">Written-off</option>
+                  </select>
+                </td>
                 <td className="px-3 py-2"><input className={`${inputCls} w-full`} defaultValue={t.helperKeywords ?? ''} onChange={e => setEditForm(f => ({ ...f, helperKeywords: e.target.value }))} /></td>
+                <td className="px-3 py-2"><input className={`${inputCls} w-full`} defaultValue={t.excludeWords ?? ''} onChange={e => setEditForm(f => ({ ...f, excludeWords: e.target.value }))} /></td>
                 <td className="px-3 py-2"><input className={`${inputCls} w-full`} defaultValue={t.contextWords ?? ''} onChange={e => setEditForm(f => ({ ...f, contextWords: e.target.value }))} /></td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">
                   <button onClick={saveEdit} className="text-xs font-semibold text-spark-purple mr-2">저장</button>
@@ -145,11 +182,14 @@ export function KeywordManager() {
               </tr>
             ) : (
               <tr key={t.id} className="border-b border-gray-100 hover:bg-gray-50">
-                <td className="px-3 py-2 font-medium">{t.name}</td>
-                <td className="px-3 py-2 text-gray-500">{t.englishName}</td>
-                <td className="px-3 py-2"><span className="text-xs text-gray-600">{CAT_LABEL[t.category] ?? t.category}</span></td>
-                <td className="px-3 py-2 text-xs text-gray-500 max-w-xs truncate">{t.helperKeywords}</td>
-                <td className="px-3 py-2 text-xs text-gray-500 max-w-xs truncate">{t.contextWords}</td>
+                <td className="px-3 py-2 font-medium truncate" title={t.name}>{t.name}</td>
+                <td className="px-3 py-2 text-gray-500 truncate" title={t.englishName ?? ''}>{t.englishName}</td>
+                <td className="px-3 py-2 truncate"><span className="text-xs text-gray-600">{CAT_LABEL[t.category] ?? t.category}</span></td>
+                <td className="px-3 py-2 text-center"><StatusBadge status={t.status} /></td>
+                <td className="px-3 py-2 text-center"><PortfolioStatusBadge status={t.portfolioStatus} /></td>
+                <td className="px-3 py-2 text-xs text-gray-500 truncate" title={t.helperKeywords ?? ''}>{t.helperKeywords}</td>
+                <td className="px-3 py-2 text-xs text-gray-500 truncate" title={t.excludeWords ?? ''}>{t.excludeWords}</td>
+                <td className="px-3 py-2 text-xs text-gray-500 truncate" title={t.contextWords ?? ''}>{t.contextWords}</td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">
                   <button onClick={() => { setEditId(t.id); setEditForm({}); }} className="text-xs font-semibold text-gray-600 mr-2">편집</button>
                   <button onClick={() => remove(t)} className="text-xs text-red-500">삭제</button>
@@ -165,4 +205,18 @@ export function KeywordManager() {
 
 function tabCls(active: boolean) {
   return `rounded-full px-3 py-1 text-xs font-semibold border ${active ? 'bg-spark-purple text-white border-spark-purple' : 'text-gray-600 border-gray-200 hover:bg-gray-50'}`;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const cls = status === 'PAUSED' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700';
+  const label = status === 'PAUSED' ? '일시중지' : status === 'EXIT' ? 'EXIT' : '활성';
+  return <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${cls}`}>{label}</span>;
+}
+
+function PortfolioStatusBadge({ status }: { status: string | null }) {
+  if (!status) return <span className="text-xs text-gray-300">—</span>;
+  const cls = status === 'Live' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    : status === 'Exit' ? 'bg-blue-50 text-blue-600 border-blue-200'
+    : 'bg-gray-100 text-gray-500 border-gray-200';
+  return <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold border whitespace-nowrap ${cls}`}>{status}</span>;
 }
