@@ -11,6 +11,7 @@ import { isKnownMedia } from './media';
 import { NEGATIVE_KEYWORDS_DATA, CRISIS_KEYWORDS_DATA } from './keywords-data';
 import { scrapeArticleBody, type ScrapedBody } from './scraper';
 import { resolveGoogleNewsUrl } from './google-news-resolver';
+import { PINNED_COMPETITORS } from './insights';
 
 // C 티어 폴백: 문맥어 없어도 이 키워드가 제목에 있으면 수집 (이벤트·부정 기사 누락 방지)
 const C_TIER_FALLBACK_KEYWORDS: string[] = [
@@ -93,8 +94,24 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
   const limited: Target[] = [];
   // portfolio_company는 카테고리당 캡을 적용하지 않는다 — 297개(Live+Exit) 중 가나다순 30개만
   // 매번 조회되고 나머지는 영영 검색되지 않던 문제(2026-07-28)를 막기 위함.
+  const pinnedKeywords = new Set(PINNED_COMPETITORS.map(p => p.keyword));
   for (const [category, list] of grouped) {
-    limited.push(...list.slice(0, category === 'portfolio_company' ? Infinity : max));
+    if (category === 'portfolio_company') {
+      limited.push(...list);
+      continue;
+    }
+    if (category === 'competitor') {
+      // 대시보드에 고정 노출되는 12개 카드(PINNED_COMPETITORS)는 가나다순 캡과 무관하게
+      // 항상 포함시킨다 — 안 그러면 이름이 캡(기본 30) 밖에 있는 카드는 영영 기사가 안 쌓인다
+      // (경쟁사 114개 중 앞 30개만 매번 조회되던 문제, portfolio_company와 동일한 유형).
+      // 나머지 슬롯은 기존처럼 캡 안에서 채운다 — 전체 캡을 풀지 않아 실행시간·네이버 호출량은 그대로.
+      const pinned = list.filter(t => pinnedKeywords.has(t.primaryKeyword));
+      const rest = list.filter(t => !pinnedKeywords.has(t.primaryKeyword));
+      const restSlots = Number.isFinite(max) ? Math.max(0, max - pinned.length) : max;
+      limited.push(...pinned, ...rest.slice(0, restSlots));
+      continue;
+    }
+    limited.push(...list.slice(0, max));
   }
 
   console.log(`[collector] querying ${limited.length} targets across ${grouped.size} categories (Naver: ${naverEnabled() ? 'ON' : 'OFF'})`);
