@@ -80,6 +80,7 @@ export async function PATCH(req: Request) {
   if (b.name?.trim()) data.name = b.name.trim();
   if (b.category) data.category = b.category;
   if (b.status && ['ACTIVE', 'PAUSED', 'EXIT'].includes(b.status)) data.status = b.status;
+  if ('portfolioStatus' in b) data.portfolioStatus = ['Live', 'Exit', 'Written-off'].includes(b.portfolioStatus) ? b.portfolioStatus : null;
 
   const target = await prisma.monitoringTarget.update({ where: { id: b.id }, data });
   return NextResponse.json({ target });

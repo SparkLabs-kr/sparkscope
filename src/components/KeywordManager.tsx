@@ -11,6 +11,7 @@ interface Target {
   helperKeywords: string | null;
   excludeWords: string | null;
   contextWords: string | null;
+  portfolioStatus: string | null;
 }
 
 const CATS = [
@@ -118,6 +119,7 @@ export function KeywordManager() {
               <th className="text-left px-3 py-2">영문명</th>
               <th className="text-left px-3 py-2 w-40">카테고리</th>
               <th className="text-center px-3 py-2 w-16">상태</th>
+              <th className="text-center px-3 py-2 w-20">포폴상태</th>
               <th className="text-left px-3 py-2">보조키워드</th>
               <th className="text-left px-3 py-2">제외키워드</th>
               <th className="text-left px-3 py-2">문맥어</th>
@@ -126,9 +128,9 @@ export function KeywordManager() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} className="text-center text-gray-400 py-8">불러오는 중…</td></tr>
+              <tr><td colSpan={9} className="text-center text-gray-400 py-8">불러오는 중…</td></tr>
             ) : shown.length === 0 ? (
-              <tr><td colSpan={8} className="text-center text-gray-400 py-8">결과 없음</td></tr>
+              <tr><td colSpan={9} className="text-center text-gray-400 py-8">결과 없음</td></tr>
             ) : shown.map(t => editId === t.id ? (
               <tr key={t.id} className="border-b border-gray-100 bg-amber-50">
                 <td className="px-3 py-2"><input className={inputCls} defaultValue={t.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} /></td>
@@ -142,6 +144,14 @@ export function KeywordManager() {
                   <select className={inputCls} defaultValue={t.status} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}>
                     <option value="ACTIVE">활성</option>
                     <option value="PAUSED">일시중지</option>
+                  </select>
+                </td>
+                <td className="px-3 py-2 text-center">
+                  <select className={inputCls} defaultValue={t.portfolioStatus ?? ''} onChange={e => setEditForm(f => ({ ...f, portfolioStatus: e.target.value }))}>
+                    <option value="">—</option>
+                    <option value="Live">Live</option>
+                    <option value="Exit">Exit</option>
+                    <option value="Written-off">Written-off</option>
                   </select>
                 </td>
                 <td className="px-3 py-2"><input className={`${inputCls} w-full`} defaultValue={t.helperKeywords ?? ''} onChange={e => setEditForm(f => ({ ...f, helperKeywords: e.target.value }))} /></td>
@@ -158,6 +168,7 @@ export function KeywordManager() {
                 <td className="px-3 py-2 text-gray-500">{t.englishName}</td>
                 <td className="px-3 py-2"><span className="text-xs text-gray-600">{CAT_LABEL[t.category] ?? t.category}</span></td>
                 <td className="px-3 py-2 text-center"><StatusBadge status={t.status} /></td>
+                <td className="px-3 py-2 text-center"><PortfolioStatusBadge status={t.portfolioStatus} /></td>
                 <td className="px-3 py-2 text-xs text-gray-500 max-w-xs truncate">{t.helperKeywords}</td>
                 <td className="px-3 py-2 text-xs text-gray-500 max-w-xs truncate">{t.excludeWords}</td>
                 <td className="px-3 py-2 text-xs text-gray-500 max-w-xs truncate">{t.contextWords}</td>
@@ -182,4 +193,12 @@ function StatusBadge({ status }: { status: string }) {
   const cls = status === 'PAUSED' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700';
   const label = status === 'PAUSED' ? '일시중지' : status === 'EXIT' ? 'EXIT' : '활성';
   return <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${cls}`}>{label}</span>;
+}
+
+function PortfolioStatusBadge({ status }: { status: string | null }) {
+  if (!status) return <span className="text-xs text-gray-300">—</span>;
+  const cls = status === 'Live' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    : status === 'Exit' ? 'bg-blue-50 text-blue-600 border-blue-200'
+    : 'bg-gray-100 text-gray-500 border-gray-200';
+  return <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold border whitespace-nowrap ${cls}`}>{status}</span>;
 }
