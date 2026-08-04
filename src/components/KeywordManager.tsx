@@ -117,16 +117,18 @@ export function KeywordManager() {
               <th className="text-left px-3 py-2">이름</th>
               <th className="text-left px-3 py-2">영문명</th>
               <th className="text-left px-3 py-2 w-40">카테고리</th>
+              <th className="text-center px-3 py-2 w-16">상태</th>
               <th className="text-left px-3 py-2">보조키워드</th>
+              <th className="text-left px-3 py-2">제외키워드</th>
               <th className="text-left px-3 py-2">문맥어</th>
               <th className="text-right px-3 py-2 w-28">관리</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} className="text-center text-gray-400 py-8">불러오는 중…</td></tr>
+              <tr><td colSpan={8} className="text-center text-gray-400 py-8">불러오는 중…</td></tr>
             ) : shown.length === 0 ? (
-              <tr><td colSpan={6} className="text-center text-gray-400 py-8">결과 없음</td></tr>
+              <tr><td colSpan={8} className="text-center text-gray-400 py-8">결과 없음</td></tr>
             ) : shown.map(t => editId === t.id ? (
               <tr key={t.id} className="border-b border-gray-100 bg-amber-50">
                 <td className="px-3 py-2"><input className={inputCls} defaultValue={t.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} /></td>
@@ -136,7 +138,9 @@ export function KeywordManager() {
                     {CATS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
                   </select>
                 </td>
+                <td className="px-3 py-2 text-center"><StatusBadge status={t.status} /></td>
                 <td className="px-3 py-2"><input className={`${inputCls} w-full`} defaultValue={t.helperKeywords ?? ''} onChange={e => setEditForm(f => ({ ...f, helperKeywords: e.target.value }))} /></td>
+                <td className="px-3 py-2"><input className={`${inputCls} w-full`} defaultValue={t.excludeWords ?? ''} onChange={e => setEditForm(f => ({ ...f, excludeWords: e.target.value }))} /></td>
                 <td className="px-3 py-2"><input className={`${inputCls} w-full`} defaultValue={t.contextWords ?? ''} onChange={e => setEditForm(f => ({ ...f, contextWords: e.target.value }))} /></td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">
                   <button onClick={saveEdit} className="text-xs font-semibold text-spark-purple mr-2">저장</button>
@@ -148,7 +152,9 @@ export function KeywordManager() {
                 <td className="px-3 py-2 font-medium">{t.name}</td>
                 <td className="px-3 py-2 text-gray-500">{t.englishName}</td>
                 <td className="px-3 py-2"><span className="text-xs text-gray-600">{CAT_LABEL[t.category] ?? t.category}</span></td>
+                <td className="px-3 py-2 text-center"><StatusBadge status={t.status} /></td>
                 <td className="px-3 py-2 text-xs text-gray-500 max-w-xs truncate">{t.helperKeywords}</td>
+                <td className="px-3 py-2 text-xs text-gray-500 max-w-xs truncate">{t.excludeWords}</td>
                 <td className="px-3 py-2 text-xs text-gray-500 max-w-xs truncate">{t.contextWords}</td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">
                   <button onClick={() => { setEditId(t.id); setEditForm({}); }} className="text-xs font-semibold text-gray-600 mr-2">편집</button>
@@ -165,4 +171,10 @@ export function KeywordManager() {
 
 function tabCls(active: boolean) {
   return `rounded-full px-3 py-1 text-xs font-semibold border ${active ? 'bg-spark-purple text-white border-spark-purple' : 'text-gray-600 border-gray-200 hover:bg-gray-50'}`;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const cls = status === 'PAUSED' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700';
+  const label = status === 'PAUSED' ? '일시중지' : status === 'EXIT' ? 'EXIT' : '활성';
+  return <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${cls}`}>{label}</span>;
 }
