@@ -12,7 +12,11 @@
 // 지금은 아래 computeBadge()가 실제 건수·증감률·포트폴리오 매치 수로 배지를 정한다.
 
 import { prisma } from '@/lib/prisma';
-import { trendSectorsFor } from './sparkscope/inter-taxonomy';
+import {
+  INTER_EVENT_TYPES,
+  legacySectorToTopic,
+  topicSectorsFor,
+} from './sparkscope/inter-taxonomy';
 
 export type InterDomain = 'bio' | 'ai';
 export type InterCountry = 'us' | 'cn' | 'jp' | 'sa' | 'other' | 'all';
@@ -96,11 +100,18 @@ type VerdictRow = {
   relevant: boolean;
   domain: string | null;
   sector: string | null;
+  topicSector: string | null;
+  eventType: string | null;
   country: string | null;
   titleKo: string | null;
   isScrapped: boolean;
   news: { id: string; title: string; url: string; source: string; publishedAt: Date };
 };
+
+/** 주제 축 값 — 백필된 topicSector 우선, 없으면 레거시 sector에서 매핑(규제·투자는 매핑 불가 → null). */
+function topicOf(v: VerdictRow): string | null {
+  return v.topicSector ?? legacySectorToTopic(v.sector);
+}
 
 async function getRelevantVerdicts(
   domain: InterDomain,
@@ -119,7 +130,8 @@ async function getRelevantVerdicts(
       ...(country && country !== 'all' ? { country } : {}),
     },
     select: {
-      id: true, relevant: true, domain: true, sector: true, country: true, titleKo: true, isScrapped: true,
+      id: true, relevant: true, domain: true, sector: true, topicSector: true, eventType: true,
+      country: true, titleKo: true, isScrapped: true,
       news: { select: { id: true, title: true, url: true, source: true, publishedAt: true } },
     },
   });
@@ -284,14 +296,14 @@ export function getSectorData(domain: InterDomain, data: InterData): SectorBlock
     matchesByVerdictId.set(m.verdictId, arr);
   });
 
-  // 고정 섹터 목록 기준으로 그룹화 — verdict.sector가 그 섹터 key와 일치하는 기사만 포함
-  // (구버전 판정 데이터처럼 sector가 비어 있으면 어느 섹터에도 들어가지 않음)
-  const sectors = trendSectorsFor(domain === 'ai' ? 'AI' : '바이오');
+  // 주제 축(topicSector) 기준으로 그룹화 — 매트릭스의 행과 동일한 축이라야 화면이 일관된다.
+  // 예전엔 레거시 sector로 묶어서 '투자·산업동향'(사건유형)이 한 줄을 차지하고 남의 기사를 빨아들였다.
+  const sectors = topicSectorsFor(domain === 'ai' ? 'AI' : '바이오');
   const total = verdicts.length;
 
   const sectorData: SectorBlock[] = sectors.map(sector => {
-    const sectorVerdicts = verdicts.filter(v => v.sector === sector.key);
-    const prevCount = prevVerdicts.filter(v => v.sector === sector.key).length;
+    const sectorVerdicts = verdicts.filter(v => topicOf(v) === sector.key);
+    const prevCount = prevVerdicts.filter(v => topicOf(v) === sector.key).length;
 
     const sectorMatches: PortfolioMatch[] = [];
     const matchesSet = new Set<string>();
@@ -379,7 +391,7 @@ export function buildOverview(domain: InterDomain, data: InterData, sectors: Sec
   const total = verdicts.length;
 
   const byCompany = new Map<string, { count: number; sectors: Set<string> }>();
-  const sectorOfVerdict = new Map(verdicts.map(v => [v.id, v.sector ?? '기타']));
+  const sectorOfVerdict = new Map(verdicts.map(v => [v.id, topicOf(v) ?? '분류 전']));
   for (const m of matches) {
     let e = byCompany.get(m.companyName);
     if (!e) { e = { count: 0, sectors: new Set() }; byCompany.set(m.companyName, e); }
@@ -444,6 +456,192 @@ export function buildOverview(domain: InterDomain, data: InterData, sectors: Sec
     byCountry: COUNTRY_TABS.filter(c => c.id !== 'all').map(c => ({ id: c.id, label: c.label, count: countryCount.get(c.id) ?? 0 })),
     timeline,
     emptySectors: sectors.filter(s => s.metrics.count === 0).map(s => s.name),
+  };
+}
+
+// ── 주제 × 사건유형 매트릭스 ──────────────────────────────────────────
+// 셀 하나가 "항암 × 투자·딜" 조합이고, 클릭하면 그 조합의 판정 근거·매치기업·대표기사가 열린다.
+// 전부 실제 집계값이며 AI 호출 없음(문장을 지어내지 않는다).
+
+export interface MatrixCell {
+  id: string;                 // "cell-항암-투자·딜"
+  topicKey: string;
+  eventKey: string;
+  count: number;
+  prevCount: number;
+  deltaPct: number | null;
+  matchCount: number;
+  matchedCompanies: string[];
+  badge: { kind: BadgeKind; label: string; why: string };
+  topItems: SourceItem[];     // 대표 기사 (최신 3건)
+}
+
+export interface MatrixRow {
+  topicKey: string;
+  icon: string;
+  sub: string;
+  total: number;
+  prevTotal: number;
+  deltaPct: number | null;
+  cells: MatrixCell[];
+}
+
+export interface InterMatrix {
+  eventTypes: { key: string; icon: string; sub: string }[];
+  rows: MatrixRow[];
+  maxCell: number;
+  /** 백필이 아직 안 닿아 주제/사건유형이 비어 매트릭스에 못 들어간 건수 */
+  untagged: number;
+  headline: {
+    total: number;
+    prevTotal: number;
+    deltaPct: number | null;
+    hottest: { label: string; count: number; prevCount: number; deltaPct: number | null } | null;
+    matchCount: number;
+    matchedCompanyCount: number;
+    /** 포트폴리오 매치가 하나라도 있는 셀 수 / 전체 셀 수 */
+    overlapCells: number;
+    totalCells: number;
+    overlapTopics: string[];
+  };
+}
+
+/**
+ * 셀 배지 — 셀은 건수가 작으므로 섹터(computeBadge)보다 문턱을 낮춘다.
+ * why에는 판정 근거 숫자를 그대로 담아 화면에서 되짚을 수 있게 한다.
+ */
+function computeCellBadge(m: { count: number; prevCount: number; deltaPct: number | null; matchCount: number; matchedCompanies: string[] }): { kind: BadgeKind; label: string; why: string } {
+  if (m.count === 0) return { kind: 'none', label: '데이터 없음', why: '이 조합에 해당하는 기사가 없습니다' };
+  // '급증'은 비교 기준이 실제로 있을 때만 붙인다(prevCount > 0).
+  // 직전 기간이 0건인 건 "폭증"이 아니라 "비교할 게 없음"인 경우가 대부분이다 —
+  // 수집 백필이 기간마다 고르지 않으면 직전이 0으로 잡혀서 거의 모든 칸이 급증으로 물든다.
+  if (m.prevCount > 0 && m.deltaPct !== null && m.deltaPct >= 50 && m.count >= 3)
+    return { kind: 'surge', label: '급증', why: `직전 동일 기간 ${m.prevCount}건 → ${m.count}건 (+${m.deltaPct}%)` };
+  if (m.matchCount >= 2)
+    return { kind: 'opportunity', label: '기회', why: `포트폴리오 매치 ${m.matchCount}건 (${m.matchedCompanies.slice(0, 3).join(', ')})` };
+  if (m.count >= 4)
+    return { kind: 'major', label: '주요 흐름', why: `${m.count}건 · 직전 ${m.prevCount}건` };
+  return { kind: 'quiet', label: '관측 중', why: `${m.count}건, 직전 대비 ${m.deltaPct === null ? '비교 불가' : `${m.deltaPct > 0 ? '+' : ''}${m.deltaPct}%`}` };
+}
+
+export function buildMatrix(domain: InterDomain, data: InterData): InterMatrix {
+  const { verdicts, prevVerdicts, matches } = data;
+  const topics = topicSectorsFor(domain === 'ai' ? 'AI' : '바이오');
+  const events = INTER_EVENT_TYPES;
+
+  const matchesByVerdictId = new Map<string, typeof matches>();
+  matches.forEach(m => {
+    const arr = matchesByVerdictId.get(m.verdictId) ?? [];
+    arr.push(m);
+    matchesByVerdictId.set(m.verdictId, arr);
+  });
+
+  const rows: MatrixRow[] = topics.map(topic => {
+    const topicVerdicts = verdicts.filter(v => topicOf(v) === topic.key);
+    const prevTopicVerdicts = prevVerdicts.filter(v => topicOf(v) === topic.key);
+
+    const cells: MatrixCell[] = events.map(ev => {
+      const cellVerdicts = topicVerdicts.filter(v => v.eventType === ev.key);
+      const prevCount = prevTopicVerdicts.filter(v => v.eventType === ev.key).length;
+
+      const companies = new Set<string>();
+      let matchCount = 0;
+      cellVerdicts.forEach(v => {
+        (matchesByVerdictId.get(v.id) ?? []).forEach(m => {
+          matchCount += 1;
+          companies.add(m.companyName);
+        });
+      });
+
+      const topItems: SourceItem[] = cellVerdicts
+        .slice()
+        .sort((a, b) => b.news.publishedAt.getTime() - a.news.publishedAt.getTime())
+        .slice(0, 3)
+        .map(v => {
+          const kind = getSourceKind(v.news.source);
+          return {
+            id: v.id,
+            badge: kind,
+            title: truncate(v.titleKo || v.news.title),
+            titleOriginal: v.news.title,
+            url: v.news.url,
+            media: v.news.source,
+            date: formatDate(v.news.publishedAt),
+            alert: getAlertLevel(v.relevant),
+            isScrapped: v.isScrapped,
+          };
+        });
+
+      const base = {
+        count: cellVerdicts.length,
+        prevCount,
+        deltaPct: prevCount > 0 ? Math.round(((cellVerdicts.length - prevCount) / prevCount) * 100) : null,
+        matchCount,
+        matchedCompanies: Array.from(companies),
+      };
+
+      return {
+        id: `cell-${topic.key}-${ev.key}`,
+        topicKey: topic.key,
+        eventKey: ev.key,
+        ...base,
+        badge: computeCellBadge(base),
+        topItems,
+      };
+    });
+
+    return {
+      topicKey: topic.key,
+      icon: topic.icon,
+      sub: topic.sub,
+      total: topicVerdicts.length,
+      prevTotal: prevTopicVerdicts.length,
+      deltaPct: prevTopicVerdicts.length > 0
+        ? Math.round(((topicVerdicts.length - prevTopicVerdicts.length) / prevTopicVerdicts.length) * 100)
+        : null,
+      cells,
+    };
+  });
+
+  const allCells = rows.flatMap(r => r.cells);
+  const filled = allCells.filter(c => c.count > 0);
+
+  // 가장 뜨거운 칸 — 증감률로 고르되 (1) 최소 3건, (2) 직전 기간에 비교할 값이 있어야 한다.
+  // 직전 0건을 "무한대 증가"로 치면, 수집 백필이 기간마다 고르지 않을 때 아무 의미 없는
+  // 1~2건 칸이 1위를 차지한다. 비교 가능한 칸이 하나도 없으면 그냥 건수 1위로 대체한다.
+  const MIN_HOT = 3;
+  const comparable = filled.filter(c => c.count >= MIN_HOT && c.prevCount > 0 && c.deltaPct !== null);
+  const hottestCell = comparable.length > 0
+    ? comparable.slice().sort((a, b) => (b.deltaPct ?? 0) - (a.deltaPct ?? 0) || b.count - a.count)[0]
+    : filled.slice().sort((a, b) => b.count - a.count)[0];
+
+  const overlap = filled.filter(c => c.matchCount > 0);
+
+  return {
+    eventTypes: events.map(e => ({ key: e.key, icon: e.icon, sub: e.sub })),
+    rows,
+    maxCell: Math.max(1, ...allCells.map(c => c.count)),
+    untagged: verdicts.filter(v => !topicOf(v) || !v.eventType).length,
+    headline: {
+      total: verdicts.length,
+      prevTotal: prevVerdicts.length,
+      deltaPct: prevVerdicts.length > 0
+        ? Math.round(((verdicts.length - prevVerdicts.length) / prevVerdicts.length) * 100)
+        : null,
+      hottest: hottestCell
+        ? {
+            label: `${hottestCell.topicKey} × ${hottestCell.eventKey}`,
+            count: hottestCell.count,
+            prevCount: hottestCell.prevCount,
+            deltaPct: hottestCell.deltaPct,
+          }
+        : null,
+      matchCount: matches.length,
+      matchedCompanyCount: new Set(matches.map(m => m.companyName)).size,
+      overlapCells: overlap.length,
+      totalCells: allCells.length,
+      overlapTopics: Array.from(new Set(overlap.map(c => c.topicKey))).slice(0, 3),
+    },
   };
 }
 

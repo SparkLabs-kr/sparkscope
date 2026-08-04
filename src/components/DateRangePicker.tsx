@@ -16,17 +16,50 @@ const PRESETS = [
   { label: '3년', shift: (d: Date) => d.setFullYear(d.getFullYear() - 3) },
 ];
 
+// 색 계열 — Intra는 보라, Inter는 초록으로 계속 간다(2026-08-04 결정).
+const ACCENT = {
+  purple: {
+    active: 'bg-spark-purple border-spark-purple text-white',
+    idle: 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-spark-purple/40',
+    focus: 'focus:border-spark-purple',
+  },
+  green: {
+    active: 'bg-emerald-600 border-emerald-600 text-white',
+    idle: 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-emerald-500/40',
+    focus: 'focus:border-emerald-500',
+  },
+} as const;
+
 // scope: Intra/Inter 스코프 유지용. Inter 탭에서도 이 컴포넌트를 그대로 써서
 // 기간 선택 UI가 두 탭에서 완전히 동일하게 보이도록 한다(별도 구현 금지).
-export function DateRangePicker({ from, to, min, max, company, tab, scope, extraParams }: { from: string; to: string; min: string; max: string; company?: string; tab?: string; scope?: string; extraParams?: Record<string, string> }) {
+//
+// onStage가 주어지면 "선택만 하고 조회는 나중에" 모드로 동작한다 — 클릭 즉시 URL을 바꾸지 않고
+// 고른 기간만 위로 올려보낸다(Inter 탭은 기간·국가를 다 고른 뒤 '확인'을 눌러야 조회된다).
+// 이때 하이라이트는 부모가 넘겨주는 from/to(=선택 중인 값) 기준으로 그려지므로 즉시 반응한다.
+export function DateRangePicker({
+  from, to, min, max, company, tab, scope, extraParams, accent = 'purple', onStage, hideLabel,
+}: {
+  from: string; to: string; min: string; max: string;
+  company?: string; tab?: string; scope?: string; extraParams?: Record<string, string>;
+  accent?: keyof typeof ACCENT;
+  onStage?: (from: string, to: string) => void;
+  /** 부모가 이미 "조회 기간" 라벨을 그리는 경우(Inter 조회 조건 카드) 중복 표시를 막는다. */
+  hideLabel?: boolean;
+}) {
   const router = useRouter();
   const [f, setF] = useState(from);
   const [t, setT] = useState(to);
+  const cls = ACCENT[accent];
 
   // 프리셋(7일·1개월·3개월·1년)이나 조회로 기간이 바뀌면 입력칸도 실제 날짜로 갱신.
   useEffect(() => { setF(from); setT(to); }, [from, to]);
 
   const go = (nf: string, nt: string) => {
+    // 선택만 올려보내는 모드 — 조회는 부모의 '확인' 버튼이 담당한다.
+    if (onStage) {
+      onStage(nf, nt);
+      return;
+    }
     const params = new URLSearchParams({ from: nf, to: nt });
     if (company) params.set('company', company); // 회사 필터가 걸려 있으면 기간을 바꿔도 유지
     if (tab) params.set('tab', tab); // 보고 있던 탭 유지
@@ -45,13 +78,13 @@ export function DateRangePicker({ from, to, min, max, company, tab, scope, extra
     return computed < min ? min : computed;
   };
 
-  const inputCls = 'rounded-lg border border-spark-border px-2 py-1 text-sm focus:border-spark-purple focus:outline-none';
+  const inputCls = `rounded-lg border border-spark-border px-2 py-1 text-sm ${cls.focus} focus:outline-none`;
 
   return (
     <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2">
       {/* 모바일: 세로 스택, 타블릿 이상: 가로 배치 */}
       <div className="flex w-full sm:w-auto items-center gap-1 sm:gap-2">
-        <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">조회 기간</span>
+        {!hideLabel && <span className="text-[13px] font-semibold text-gray-500 whitespace-nowrap">조회 기간</span>}
         <input
           type="date" value={f} min={min} max={max}
           onChange={e => { setF(e.target.value); go(e.target.value, t); }}
@@ -65,21 +98,17 @@ export function DateRangePicker({ from, to, min, max, company, tab, scope, extra
         />
       </div>
 
-      {/* 프리셋 버튼: 현재 조회 중인 기간과 일치하는 버튼만 보라색으로 하이라이트 */}
+      {/* 프리셋 버튼: 선택된 기간과 일치하는 버튼만 강조 (Intra 보라 / Inter 초록) */}
       <div className="flex gap-1 flex-wrap">
         {PRESETS.map(p => {
           const start = presetFrom(p.shift);
-          const active = to === max && from === start;
+          const active = t === max && f === start;
           return (
             <button
               key={p.label}
-              onClick={() => go(start, max)}
+              onClick={() => { setF(start); setT(max); go(start, max); }}
               aria-pressed={active}
-              className={`rounded-lg px-2.5 py-1 text-xs font-semibold border transition-colors ${
-                active
-                  ? 'bg-spark-purple border-spark-purple text-white'
-                  : 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-spark-purple/40'
-              }`}
+              className={`rounded-lg px-3 py-1 text-[13px] font-semibold border transition-colors ${active ? cls.active : cls.idle}`}
             >
               {p.label}
             </button>

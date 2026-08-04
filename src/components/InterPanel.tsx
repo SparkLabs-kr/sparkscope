@@ -16,18 +16,22 @@ import {
   type DomainSummary,
   type InterCountry,
   type InterDomain,
+  type InterMatrix,
   type InterOverview,
   type InterStat,
+  type MatrixCell,
   type SourceKind,
   type SectorBlock,
 } from '@/lib/inter-sample-data';
 import { InterScrapStar } from '@/components/InterScrapStar';
+import { DateRangePicker } from '@/components/DateRangePicker';
 
 interface InterApiResponse {
   summary: DomainSummary;
   overview: InterOverview;
   stats: InterStat[];
   sectors: SectorBlock[];
+  matrix: InterMatrix;
 }
 
 // 배지 색 — 라벨과 의미가 1:1로 맞는다(가짜 인덱스 배지 시절과 달리 실제 지표에서 계산됨).
@@ -41,7 +45,7 @@ const BADGE_CLS: Record<string, string> = {
 
 const SRC_BADGE_CLS: Record<SourceKind, string> = {
   news: 'bg-blue-100 text-blue-700',
-  paper: 'bg-violet-100 text-violet-700',
+  paper: 'bg-teal-100 text-teal-700',
   opinion: 'bg-amber-100 text-amber-700',
 };
 
@@ -54,11 +58,22 @@ function fmtKstTime(d: Date | string) {
   return `${String(kst.getHours()).padStart(2, '0')}:${String(kst.getMinutes()).padStart(2, '0')}`;
 }
 
-export function InterPanel({ from, to, canScrap }: { from: string; to: string; canScrap: boolean }) {
+export function InterPanel({
+  from, to, min, max, canScrap,
+}: { from: string; to: string; min: string; max: string; canScrap: boolean }) {
   const router = useRouter();
   const sp = useSearchParams();
   const domain: InterDomain = sp.get('domain') === 'ai' ? 'ai' : 'bio';
   const country = (COUNTRY_TABS.find(c => c.id === sp.get('country'))?.id ?? 'all') as InterCountry;
+
+  // 조회에 실제로 쓰이는 값은 URL(from/to/country)이고, 아래 draft는 "고르는 중"인 값이다.
+  // 기간·국가를 클릭할 때마다 화면이 새로 뜨면 여러 개를 바꿔 볼 수가 없어서,
+  // 선택은 draft에만 반영(하이라이트는 즉시)하고 '확인'을 눌러야 URL이 바뀌며 조회된다.
+  const [draftFrom, setDraftFrom] = useState(from);
+  const [draftTo, setDraftTo] = useState(to);
+  const [draftCountry, setDraftCountry] = useState<InterCountry>(country);
+  useEffect(() => { setDraftFrom(from); setDraftTo(to); setDraftCountry(country); }, [from, to, country]);
+  const dirty = draftFrom !== from || draftTo !== to || draftCountry !== country;
 
   const [openSectors, setOpenSectors] = useState<Set<string>>(new Set());
   const [activeSrcTab, setActiveSrcTab] = useState<Record<string, SourceKind>>({});
@@ -68,6 +83,14 @@ export function InterPanel({ from, to, canScrap }: { from: string; to: string; c
   // URL 갱신 — 기간(DateRangePicker)과 같은 방식으로 도메인·국가도 URL에 남긴다.
   function pushParams(next: Record<string, string>) {
     const params = new URLSearchParams({ scope: 'inter', from, to, domain, country, ...next });
+    router.push(`/dashboard?${params.toString()}`, { scroll: false });
+  }
+
+  // '확인' — 고른 기간·국가를 한 번에 적용한다. 도메인(바이오/AI)은 즉시 전환이라 여기 안 낀다.
+  function applyDraft() {
+    const params = new URLSearchParams({
+      scope: 'inter', from: draftFrom, to: draftTo, domain, country: draftCountry,
+    });
     router.push(`/dashboard?${params.toString()}`, { scroll: false });
   }
 
@@ -142,23 +165,41 @@ export function InterPanel({ from, to, canScrap }: { from: string; to: string; c
       {/* 바이오 / AI 도메인 탭 */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
         <DomainTabBig label="바이오" active={domain === 'bio'} activeCls="bg-cyan-50 border-cyan-600 text-cyan-700" onClick={() => pushParams({ domain: 'bio' })} />
-        <DomainTabBig label="AI" active={domain === 'ai'} activeCls="bg-violet-50 border-violet-600 text-violet-700" onClick={() => pushParams({ domain: 'ai' })} />
+        <DomainTabBig label="AI" active={domain === 'ai'} activeCls="bg-emerald-50 border-emerald-600 text-emerald-700" onClick={() => pushParams({ domain: 'ai' })} />
       </div>
 
-      {/* 국가 필터 — 실제 조회에 반영된다(InterNewsVerdict.country) */}
+      {/* 조회 조건 — 기간·국가를 고른 뒤 '확인'을 눌러야 조회된다(클릭마다 화면이 새로 뜨지 않게) */}
       <div className="bg-white border border-spark-border rounded-2xl p-5 mb-6">
+        {/* 조회 기간 */}
         <div className="flex flex-wrap items-center gap-3">
-          <span className="w-full sm:w-24 shrink-0 text-xs font-semibold text-spark-ink-soft">국가별 트렌드</span>
+          <span className="w-full sm:w-24 shrink-0 text-[14px] font-semibold text-spark-ink-soft">조회 기간</span>
+          <DateRangePicker
+            from={draftFrom}
+            to={draftTo}
+            min={min}
+            max={max}
+            scope="inter"
+            accent="green"
+            hideLabel
+            onStage={(nf, nt) => { setDraftFrom(nf); setDraftTo(nt); }}
+          />
+        </div>
+
+        <div className="my-3.5 border-t border-spark-cream" />
+
+        {/* 국가 필터 — 실제 조회에 반영된다(InterNewsVerdict.country) */}
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="w-full sm:w-24 shrink-0 text-[14px] font-semibold text-spark-ink-soft">국가별 트렌드</span>
           <div className="flex flex-wrap gap-1.5">
             {COUNTRY_TABS.map(c => {
               const n = data?.overview.byCountry.find(b => b.id === c.id)?.count;
               return (
                 <button
                   key={c.id}
-                  onClick={() => pushParams({ country: c.id })}
-                  aria-pressed={country === c.id}
-                  className={`rounded-lg border-[1.5px] px-3.5 py-1.5 text-xs font-semibold transition-colors ${
-                    country === c.id ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-spark-subtle border-spark-border text-spark-ink-soft hover:bg-spark-cream'
+                  onClick={() => setDraftCountry(c.id)}
+                  aria-pressed={draftCountry === c.id}
+                  className={`rounded-lg border-[1.5px] px-3.5 py-1.5 text-[14px] font-semibold transition-colors ${
+                    draftCountry === c.id ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-spark-subtle border-spark-border text-spark-ink-soft hover:bg-spark-cream'
                   }`}
                 >
                   {c.label}
@@ -168,30 +209,40 @@ export function InterPanel({ from, to, canScrap }: { from: string; to: string; c
             })}
           </div>
         </div>
-        <p className="mt-2 text-[11px] text-spark-muted">
-          국가는 기사 판정 단계에서 분류된 값입니다. 분류 이전에 수집된 과거 기사는 국가값이 없어 <b>전체</b>에서만 보입니다.
-        </p>
+
+        <div className="mt-3.5 flex flex-wrap items-end justify-between gap-3 border-t border-spark-cream pt-3.5">
+          <p className="max-w-[62ch] text-[13px] leading-snug text-spark-muted">
+            기간과 국가를 하나씩 고른 뒤 <b className="text-spark-ink-soft">확인</b>을 누르면 해당 조건의 데이터가 표시됩니다.
+            국가는 기사 판정 단계에서 분류된 값이라, 분류 이전에 수집된 과거 기사는 <b className="text-spark-ink-soft">전체</b>에서만 보입니다.
+          </p>
+          <button
+            onClick={applyDraft}
+            disabled={!dirty}
+            className={`shrink-0 rounded-lg px-6 py-2 text-[14px] font-bold transition-colors ${
+              dirty
+                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                : 'bg-spark-subtle text-spark-muted cursor-default border border-spark-border'
+            }`}
+          >
+            확인
+          </button>
+        </div>
       </div>
 
       {loading || !data ? (
-        <div className="py-16 text-center text-sm text-spark-muted">불러오는 중...</div>
+        <div className="py-16 text-center text-[15px] text-spark-muted">불러오는 중...</div>
       ) : (
         <>
-          {/* 통계 */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-6">
-            {data.stats.map(s => (
-              <div key={s.label} className="bg-white border border-spark-border rounded-xl px-4 py-3.5" title={s.hint}>
-                <div className="text-[11px] text-spark-muted mb-1">{s.label}</div>
-                <div className="text-xl font-extrabold tabular-nums text-spark-ink">{s.value}</div>
-              </div>
-            ))}
-          </div>
+          {/* 헤드라인 4지표 — 매트릭스를 읽는 데 필요한 값들(총량·증감, 가장 뜨거운 칸, 포트폴리오 접점) */}
+          <HeadlineStats headline={data.matrix.headline} />
 
-          {/* A(매트릭스) + C(포지셔닝 맵) 2분할 — 개요 요약을 대체 */}
+          {/* 주제×사건유형 매트릭스 + 인사이트 패널 2분할 */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
             <SectorMatrix
-              sectors={data.sectors}
-              onSelect={id => {
+              matrix={data.matrix}
+              canScrap={canScrap}
+              onSelect={topicKey => {
+                const id = `sec-${topicKey}`;
                 setOpenSectors(prev => new Set(prev).add(id));
                 document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
               }}
@@ -234,7 +285,7 @@ function DomainTabBig({ label, active, activeCls, onClick }: { label: string; ac
     <button
       onClick={onClick}
       aria-pressed={active}
-      className={`rounded-xl border-2 px-8 py-3.5 text-[15px] font-bold transition-colors ${
+      className={`rounded-xl border-2 px-8 py-3.5 text-[16px] font-bold transition-colors ${
         active ? activeCls : 'bg-white border-spark-border text-spark-muted hover:bg-spark-subtle hover:text-spark-ink-soft'
       }`}
     >
@@ -244,13 +295,13 @@ function DomainTabBig({ label, active, activeCls, onClick }: { label: string; ac
 }
 
 function DeltaChip({ deltaPct, count }: { deltaPct: number | null; count?: number }) {
-  if (count === 0) return <span className="text-[10px] text-spark-muted">—</span>;
+  if (count === 0) return <span className="text-[11px] text-spark-muted">—</span>;
   // 직전 동일 기간이 0건이면 증감률을 낼 수 없다 — 이 기간에 처음 잡힌 흐름.
-  if (deltaPct === null) return <span className="text-[10px] font-bold text-emerald-600">신규</span>;
+  if (deltaPct === null) return <span className="text-[11px] font-bold text-emerald-600">신규</span>;
   const up = deltaPct > 0;
   const flat = deltaPct === 0;
   return (
-    <span className={`text-[10px] font-bold tabular-nums ${flat ? 'text-spark-muted' : up ? 'text-red-500' : 'text-blue-500'}`}>
+    <span className={`text-[11px] font-bold tabular-nums ${flat ? 'text-spark-muted' : up ? 'text-red-500' : 'text-blue-500'}`}>
       {flat ? '±0%' : `${up ? '▲' : '▼'}${Math.abs(deltaPct)}%`}
     </span>
   );
@@ -280,31 +331,31 @@ function SectorAccordion({
           open ? 'rounded-t-xl border-b-spark-cream' : 'rounded-xl'
         }`}
       >
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-spark-cream text-[15px]">{sector.icon}</div>
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-spark-cream text-[16px]">{sector.icon}</div>
         <div className="min-w-0">
-          <div className="text-[13px] font-bold text-spark-ink">{sector.name}</div>
-          <div className="text-[11px] text-spark-muted">{sector.sub}</div>
+          <div className="text-[14px] font-bold text-spark-ink">{sector.name}</div>
+          <div className="text-[12px] text-spark-muted">{sector.sub}</div>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          <span className="text-[11px] tabular-nums text-spark-muted">{sector.metrics.count}건</span>
+          <span className="text-[12px] tabular-nums text-spark-muted">{sector.metrics.count}건</span>
           <DeltaChip deltaPct={sector.metrics.deltaPct} count={sector.metrics.count} />
-          <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${BADGE_CLS[sector.badge.kind]}`} title={sector.badge.why}>
+          <span className={`rounded px-2 py-0.5 text-[11px] font-bold ${BADGE_CLS[sector.badge.kind]}`} title={sector.badge.why}>
             {sector.badge.label}
           </span>
         </div>
-        <span className={`shrink-0 text-[11px] text-gray-300 transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
+        <span className={`shrink-0 text-[12px] text-gray-300 transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
       </div>
 
       {open && (
         <div className="rounded-b-xl border border-t-0 border-spark-border bg-white overflow-hidden">
-          <div className="border-b border-spark-cream bg-spark-subtle px-4 py-2 text-[11px] text-spark-ink-soft">
+          <div className="border-b border-spark-cream bg-spark-subtle px-4 py-2 text-[12px] text-spark-ink-soft">
             <b className="text-spark-ink">{sector.badge.label}</b> 판정 근거 · {sector.badge.why}
           </div>
 
           {sector.matches.length > 0 && (
             <div className="flex flex-col gap-1.5 border-b border-spark-cream bg-spark-subtle px-4 py-2.5">
               {sector.matches.map(m => (
-                <div key={`${m.co}-${m.desc}`} className="flex items-center gap-2.5 text-xs">
+                <div key={`${m.co}-${m.desc}`} className="flex items-center gap-2.5 text-[13px]">
                   <span className="w-28 shrink-0 font-bold text-spark-ink">📎 {m.co}</span>
                   <span className="flex-1 text-spark-ink-soft">{m.desc}</span>
                 </div>
@@ -317,7 +368,7 @@ function SectorAccordion({
               <button
                 key={k}
                 onClick={() => onTabChange(k)}
-                className={`border-b-2 px-3.5 py-2 text-[11px] font-semibold transition-colors ${
+                className={`border-b-2 px-3.5 py-2 text-[12px] font-semibold transition-colors ${
                   activeTab === k ? 'border-spark-ink text-spark-ink' : 'border-transparent text-spark-muted hover:text-spark-ink-soft'
                 }`}
               >
@@ -328,18 +379,18 @@ function SectorAccordion({
 
           <div className="py-1">
             {items.length === 0 ? (
-              <div className="py-4 text-center text-xs text-spark-muted">해당 탭에 항목이 없습니다</div>
+              <div className="py-4 text-center text-[13px] text-spark-muted">해당 탭에 항목이 없습니다</div>
             ) : (
               items.map(it => (
                 <div key={it.id} className="flex items-start gap-2.5 border-b border-spark-cream/60 px-4 py-2.5 last:border-0 hover:bg-spark-subtle">
                   <a href={it.url} target="_blank" rel="noopener noreferrer" className="flex flex-1 items-start gap-2.5 min-w-0">
-                    <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${SRC_BADGE_CLS[it.badge]}`}>{SRC_LABEL[it.badge]}</span>
+                    <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[11px] font-bold ${SRC_BADGE_CLS[it.badge]}`}>{SRC_LABEL[it.badge]}</span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs font-semibold leading-snug text-spark-ink">{it.title}</div>
+                      <div className="text-[13px] font-semibold leading-snug text-spark-ink">{it.title}</div>
                       {it.titleOriginal !== it.title && (
-                        <div className="mt-0.5 text-[11px] leading-snug text-spark-muted">{it.titleOriginal}</div>
+                        <div className="mt-0.5 text-[12px] leading-snug text-spark-muted">{it.titleOriginal}</div>
                       )}
-                      <div className="mt-0.5 text-[11px] text-spark-muted">{it.media} · {it.date}</div>
+                      <div className="mt-0.5 text-[12px] text-spark-muted">{it.media} · {it.date}</div>
                     </div>
                   </a>
                   {canScrap && <InterScrapStar id={it.id} initial={it.isScrapped} />}
@@ -357,8 +408,8 @@ type SummaryChip = { label: string; cls: string };
 
 function ColoredSummaryItem({ n, k, v, chips, last }: { n: number; k: string; v: string; chips?: SummaryChip[]; last?: boolean }) {
   return (
-    <div className={`flex gap-2.5 py-2.5 text-[13px] leading-relaxed text-spark-ink-soft ${last ? '' : 'border-b border-spark-cream'}`}>
-      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-700">
+    <div className={`flex gap-2.5 py-2.5 text-[14px] leading-relaxed text-spark-ink-soft ${last ? '' : 'border-b border-spark-cream'}`}>
+      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-bold text-emerald-700">
         {n}
       </span>
       <div className="min-w-0 flex-1">
@@ -369,7 +420,7 @@ function ColoredSummaryItem({ n, k, v, chips, last }: { n: number; k: string; v:
         {chips && chips.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {chips.map((c, i) => (
-              <span key={i} className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${c.cls}`}>{c.label}</span>
+              <span key={i} className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${c.cls}`}>{c.label}</span>
             ))}
           </div>
         )}
@@ -384,9 +435,9 @@ function ColoredSummaryCard({ summary, overview }: { summary: DomainSummary; ove
   const top = overview.topSectors[0];
   return (
     <div className="bg-white border-[1.5px] border-spark-border rounded-2xl p-5 mb-6">
-      <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-emerald-600 mb-3">
+      <div className="flex flex-wrap items-center gap-1.5 text-[12px] font-bold uppercase tracking-wide text-emerald-600 mb-3">
         ✦ <span>{summary.label} 종합 요약</span>
-        <span className="ml-auto text-[10px] font-medium normal-case text-spark-muted">집계값 + AI 한 줄 · {overview.domainLabel} 기준</span>
+        <span className="ml-auto text-[11px] font-medium normal-case text-spark-muted">집계값 + AI 한 줄 · {overview.domainLabel} 기준</span>
       </div>
       <ColoredSummaryItem
         n={1}
@@ -406,7 +457,7 @@ function ColoredSummaryCard({ summary, overview }: { summary: DomainSummary; ove
         chips={overview.topCompanies.slice(0, 4).map(c => ({ label: `📎 ${c.name} ${c.count}`, cls: 'bg-emerald-50 text-emerald-700' }))}
       />
       <ColoredSummaryItem n={3} k="취해야 할 가장 중요한 액션" v={summary.action} last />
-      <div className="mt-2 text-[10px] text-gray-400">
+      <div className="mt-2 text-[11px] text-gray-400">
         {summary.source === 'fallback'
           ? '⚙️ 기본 요약 · AI 분석 대기 중(다음 수집 때 자동 갱신)'
           : `🤖 AI 요약 · ${fmtKstTime(summary.computedAt!)} 기준`}
@@ -415,19 +466,82 @@ function ColoredSummaryCard({ summary, overview }: { summary: DomainSummary; ove
   );
 }
 
-// A안 — 주제(섹터) × 사건 유형 매트릭스.
-// ⚠ 임시 축: InterNewsVerdict에 "사건 유형"(투자·딜/규제·승인/연구성과…) 태그가 아직 없어서,
-// 지금 있는 SourceKind(뉴스/논문/오피니언)를 자리표시자 열로 대신 쓴다. 사건유형 판정이
-// 붙으면(프롬프트 확장 + 백필) 이 컬럼만 그 값으로 교체하면 된다 — 행 구조는 그대로 재사용 가능.
-function SectorMatrix({ sectors, onSelect }: { sectors: SectorBlock[]; onSelect: (id: string) => void }) {
-  const rows = sectors.slice().sort((a, b) => b.metrics.count - a.metrics.count);
-  const maxCell = Math.max(1, ...rows.flatMap(r => SOURCE_KINDS.map(k => r.items[k].length)));
+// 헤드라인 4지표 — 매트릭스를 읽는 데 필요한 값만. 전부 실제 집계값.
+function HeadlineStats({ headline: h }: { headline: InterMatrix['headline'] }) {
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-6">
+      <div className="bg-white border border-spark-border rounded-xl px-4 py-3.5">
+        <div className="text-[12px] text-spark-muted mb-1">선별 기사</div>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-2xl font-extrabold tabular-nums text-spark-ink">{h.total}</span>
+          <DeltaChip deltaPct={h.deltaPct} count={h.total} />
+        </div>
+        <div className="text-[11px] text-spark-muted mt-0.5">직전 동일 기간 {h.prevTotal}건</div>
+      </div>
+
+      <div className="bg-white border border-spark-border rounded-xl px-4 py-3.5">
+        <div className="text-[12px] text-spark-muted mb-1">가장 뜨거운 칸</div>
+        <div className="truncate text-[15px] font-extrabold text-spark-ink" title={h.hottest?.label}>
+          {h.hottest?.label ?? '—'}
+        </div>
+        <div className="text-[11px] text-spark-muted mt-0.5">
+          {h.hottest ? (
+            <>
+              {h.hottest.count}건 · 직전 {h.hottest.prevCount}건
+              {h.hottest.deltaPct !== null ? (
+                <> → <span className="font-bold text-red-500">▲{h.hottest.deltaPct}%</span></>
+              ) : h.hottest.prevCount === 0 ? (
+                <> → <span className="font-bold text-emerald-600">신규</span></>
+              ) : null}
+            </>
+          ) : (
+            '데이터 없음'
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white border border-spark-border rounded-xl px-4 py-3.5">
+        <div className="text-[12px] text-spark-muted mb-1">포트폴리오 연결</div>
+        <div className="flex items-baseline gap-0.5">
+          <span className="text-2xl font-extrabold tabular-nums text-emerald-700">{h.matchedCompanyCount}</span>
+          <span className="text-[13px] font-semibold text-emerald-700">개사</span>
+        </div>
+        <div className="text-[11px] text-spark-muted mt-0.5">매치 {h.matchCount}건</div>
+      </div>
+
+      <div className="bg-white border border-spark-border rounded-xl px-4 py-3.5">
+        <div className="text-[12px] text-spark-muted mb-1">우리와 겹치는 칸</div>
+        <div className="flex items-baseline">
+          <span className="text-2xl font-extrabold tabular-nums text-spark-ink">{h.overlapCells}</span>
+          <span className="text-[15px] font-bold text-spark-muted">/{h.totalCells}</span>
+        </div>
+        <div className="truncate text-[11px] text-spark-muted mt-0.5">
+          {h.overlapTopics.length > 0 ? `${h.overlapTopics.join('·')} 중심` : '겹치는 칸 없음'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// A안 — 주제 × 사건유형 매트릭스.
+// 행은 주제(topicSector), 열은 사건유형(eventType) — 축이 분리돼 있어서 "항암에서 투자·딜이 터졌다"가
+// 한 칸으로 읽힌다. 칸을 누르면 그 조합의 판정 근거·매치기업·대표기사가 바로 아래에 열린다.
+function SectorMatrix({
+  matrix,
+  canScrap,
+  onSelect,
+}: {
+  matrix: InterMatrix;
+  canScrap: boolean;
+  onSelect: (topicKey: string) => void;
+}) {
   const [activeId, setActiveId] = useState<string | null>(null);
-  const active = rows.find(r => r.id === activeId) ?? null;
+  const rows = matrix.rows.slice().sort((a, b) => b.total - a.total);
+  const active: MatrixCell | null = rows.flatMap(r => r.cells).find(c => c.id === activeId) ?? null;
 
   function cellShade(n: number) {
-    if (n === 0) return 'bg-transparent text-spark-border';
-    const ratio = n / maxCell;
+    if (n === 0) return 'bg-spark-subtle text-spark-border';
+    const ratio = n / matrix.maxCell;
     if (ratio > 0.66) return 'bg-emerald-600 text-white';
     if (ratio > 0.33) return 'bg-emerald-200 text-emerald-900';
     return 'bg-emerald-50 text-emerald-800';
@@ -435,86 +549,120 @@ function SectorMatrix({ sectors, onSelect }: { sectors: SectorBlock[]; onSelect:
 
   return (
     <div className="bg-white border border-spark-border rounded-2xl p-5">
-      <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-spark-ink-soft mb-1">
+      <div className="flex flex-wrap items-center gap-1.5 text-[12px] font-bold uppercase tracking-wide text-spark-ink-soft mb-1">
         📊 <span>주제 × 사건 유형</span>
-        <span className="ml-auto text-[10px] font-medium normal-case text-amber-600">임시: 소스 유형으로 대체 표시</span>
+        <span className="ml-auto flex items-center gap-2.5 text-[11px] font-medium normal-case text-spark-muted">
+          <span className="flex items-center gap-1">
+            <span className="h-2.5 w-2.5 rounded-sm bg-emerald-50" />
+            <span className="h-2.5 w-2.5 rounded-sm bg-emerald-200" />
+            <span className="h-2.5 w-2.5 rounded-sm bg-emerald-600" />
+            기사 적음→많음
+          </span>
+          <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm ring-2 ring-red-500" />급증 칸</span>
+        </span>
       </div>
-      <p className="mb-3 text-[11px] text-spark-muted">
-        사건 유형(투자·딜/규제·승인 등) 태깅이 아직 없어, 지금은 뉴스·논문·오피니언 구성으로 대신 봅니다.
-        분야를 누르면 판정 근거와 대표 기사가 아래에 열립니다.
+      <p className="mb-3 text-[12px] text-spark-muted">
+        행은 <b>무엇에 관한 기사</b>, 열은 <b>무슨 일이 일어났는가</b>입니다. 칸을 누르면 그 조합의 판정 근거와 대표 기사가 아래에서 열립니다.
       </p>
+
       <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+        <table className="w-full text-[13px]">
           <thead>
-            <tr className="text-[10px] text-spark-muted">
-              <th className="text-left font-semibold pb-1.5 pr-2">분야</th>
-              {SOURCE_KINDS.map(k => (
-                <th key={k} className="font-semibold pb-1.5 px-1 text-center">{SRC_LABEL[k]}</th>
+            <tr className="text-[11px] text-spark-muted">
+              <th className="text-left font-semibold pb-1.5 pr-2">주제</th>
+              {matrix.eventTypes.map(e => (
+                <th key={e.key} className="font-semibold pb-1.5 px-1 text-center whitespace-nowrap" title={e.sub}>{e.key}</th>
               ))}
               <th className="text-right font-semibold pb-1.5 pl-2">계</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map(sector => (
-              <tr
-                key={sector.id}
-                onClick={() => setActiveId(prev => (prev === sector.id ? null : sector.id))}
-                className={`cursor-pointer transition-colors ${activeId === sector.id ? 'bg-spark-subtle' : 'hover:bg-spark-subtle'}`}
-              >
+            {rows.map(row => (
+              <tr key={row.topicKey}>
                 <td className="py-1 pr-2 whitespace-nowrap">
-                  <span className="mr-1">{sector.icon}</span>
-                  <span className="font-bold text-spark-ink">{sector.name}</span>
+                  <button onClick={() => onSelect(row.topicKey)} className="text-left hover:underline">
+                    <span className="mr-1">{row.icon}</span>
+                    <span className="font-bold text-spark-ink">{row.topicKey}</span>
+                  </button>
                 </td>
-                {SOURCE_KINDS.map(k => {
-                  const n = sector.items[k].length;
-                  return (
-                    <td key={k} className="px-1 py-1">
-                      <div className={`mx-auto flex h-7 w-10 items-center justify-center rounded-md font-bold tabular-nums ${cellShade(n)} ${
-                        sector.badge.kind === 'surge' && n === Math.max(...SOURCE_KINDS.map(kk => sector.items[kk].length)) && n > 0
-                          ? 'ring-2 ring-red-500'
-                          : ''
-                      }`}>
-                        {n === 0 ? '·' : n}
-                      </div>
-                    </td>
-                  );
-                })}
-                <td className="py-1 pl-2 text-right font-bold tabular-nums text-spark-muted">{sector.metrics.count}</td>
+                {row.cells.map(cell => (
+                  <td key={cell.id} className="px-1 py-1">
+                    <button
+                      onClick={() => setActiveId(prev => (prev === cell.id ? null : cell.id))}
+                      disabled={cell.count === 0}
+                      aria-pressed={activeId === cell.id}
+                      title={cell.count === 0 ? '해당 기사 없음' : `${cell.topicKey} × ${cell.eventKey} · ${cell.badge.why}`}
+                      className={`mx-auto flex h-7 w-full min-w-[38px] items-center justify-center rounded-md font-bold tabular-nums transition-all ${cellShade(cell.count)} ${
+                        cell.badge.kind === 'surge' ? 'ring-2 ring-red-500' : ''
+                      } ${activeId === cell.id ? 'ring-2 ring-spark-ink ring-offset-1' : ''} ${
+                        cell.count === 0 ? 'cursor-default' : 'cursor-pointer hover:brightness-95'
+                      }`}
+                    >
+                      {cell.count === 0 ? '·' : cell.count}
+                    </button>
+                  </td>
+                ))}
+                <td className="py-1 pl-2 text-right font-bold tabular-nums text-spark-muted">{row.total}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {active && (
+      {/* 칸 클릭 시 그 조합만의 부연설명 */}
+      {active ? (
         <div className="mt-3 rounded-xl border border-spark-border bg-spark-subtle p-3.5">
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-sm">{active.icon}</span>
-            <span className="text-xs font-bold text-spark-ink">{active.name}</span>
-            <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${BADGE_CLS[active.badge.kind]}`}>{active.badge.label}</span>
-            <button onClick={() => onSelect(active.id)} className="ml-auto text-[11px] font-semibold text-emerald-700 hover:underline">
-              전체 기사 보기 →
+          <div className="flex flex-wrap items-center gap-2 mb-1.5">
+            <span className={`rounded px-2 py-0.5 text-[11px] font-bold ${BADGE_CLS[active.badge.kind]}`}>{active.badge.label}</span>
+            <span className="text-[13px] font-extrabold text-spark-ink">{active.topicKey} × {active.eventKey}</span>
+            <button onClick={() => onSelect(active.topicKey)} className="ml-auto text-[12px] font-semibold text-emerald-700 hover:underline">
+              {active.topicKey} 전체 기사 →
             </button>
           </div>
-          <p className="text-[11px] leading-snug text-spark-ink-soft">{active.badge.why}</p>
-          {active.matches.length > 0 && (
+          <p className="text-[12px] leading-snug text-spark-ink-soft">{active.badge.why}</p>
+
+          {active.matchedCompanies.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {active.matches.slice(0, 4).map(m => (
-                <span key={`${m.co}-${m.desc}`} className="rounded-full bg-white border border-spark-border px-2 py-0.5 text-[10px] font-bold text-spark-ink-soft">
-                  📎 {m.co}
-                </span>
+              {active.matchedCompanies.slice(0, 5).map(co => (
+                <span key={co} className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">📎 {co}</span>
+              ))}
+              {active.matchedCompanies.length > 5 && (
+                <span className="text-[11px] text-spark-muted self-center">외 {active.matchedCompanies.length - 5}개사</span>
+              )}
+            </div>
+          )}
+
+          {active.topItems.length > 0 && (
+            <div className="mt-2.5 flex flex-col gap-1.5 border-t border-spark-border pt-2.5">
+              {active.topItems.map(it => (
+                <div key={it.id} className="flex items-start gap-2">
+                  <a href={it.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 group">
+                    <div className="text-[12px] font-semibold leading-snug text-spark-ink group-hover:underline">{it.title}</div>
+                    <div className="text-[11px] text-spark-muted">{it.media} · {it.date}</div>
+                  </a>
+                  {canScrap && <InterScrapStar id={it.id} initial={it.isScrapped} />}
+                </div>
               ))}
             </div>
           )}
         </div>
+      ) : (
+        <p className="mt-3 text-[12px] text-spark-muted">
+          칸을 누르면 그 조합의 판정 근거·포트폴리오 매치·대표 기사가 여기에 열립니다.
+        </p>
+      )}
+
+      {matrix.untagged > 0 && (
+        <p className="mt-2.5 border-t border-spark-cream pt-2.5 text-[11px] text-spark-muted">
+          이 기간 기사 중 {matrix.untagged}건은 주제·사건유형이 아직 분류되지 않아 격자에 포함되지 않았습니다
+          (도메인 전반 기사이거나 백필 대상).
+        </p>
       )}
     </div>
   );
 }
 
-// C안 — 포지셔닝 맵. x=도메인 내 비중(share), y=직전 대비 증감률(deltaPct), 버블 크기=포트폴리오 매치 수.
-// 전부 SectorMetrics에 이미 있는 실제 집계값이라 별도 백필 없이 바로 그릴 수 있다.
-// C안 자리를 대신하는 인사이트 패널 — 그래프 대신, 실제 집계값에서 뽑아낸 한줄·포지션·놓치기 쉬운 곳·액션
+// 인사이트 패널 — 산점도 대신, 실제 집계값에서 뽑아낸 한줄·포지션·놓치기 쉬운 곳·액션
 // 4줄 문장 + 포트폴리오 매치 바 리스트. 전부 SectorMetrics/InterOverview에 이미 있는 값이라 AI 호출 없음.
 function InsightPanel({
   sectors,
@@ -543,7 +691,7 @@ function InsightPanel({
   return (
     <div className="bg-white border border-spark-border rounded-2xl p-5 flex flex-col gap-4">
       <div>
-        <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-spark-ink-soft mb-3">
+        <div className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-wide text-spark-ink-soft mb-3">
           ✦ <span>이 화면이 말하는 것</span>
         </div>
         <div className="flex flex-col gap-3">
@@ -592,10 +740,10 @@ function InsightPanel({
 
       {overview.topCompanies.length > 0 && (
         <div className="border-t border-spark-cream pt-3.5">
-          <div className="text-[11px] font-bold text-spark-ink-soft mb-2">📎 가장 많이 걸린 포트폴리오사</div>
+          <div className="text-[12px] font-bold text-spark-ink-soft mb-2">📎 가장 많이 걸린 포트폴리오사</div>
           <div className="flex flex-col gap-1.5">
             {overview.topCompanies.map(c => (
-              <div key={c.name} className="grid grid-cols-[88px_1fr_28px] items-center gap-2 text-xs">
+              <div key={c.name} className="grid grid-cols-[88px_1fr_28px] items-center gap-2 text-[13px]">
                 <span className="truncate font-semibold text-spark-ink-soft" title={c.sectors.join(', ')}>{c.name}</span>
                 <span className="h-2 rounded-full bg-spark-cream overflow-hidden">
                   <span className="block h-full rounded-full bg-emerald-500" style={{ width: `${Math.max(6, (c.count / maxCompanyCount) * 100)}%` }} />
@@ -613,8 +761,8 @@ function InsightPanel({
 function InsightRow({ k, children }: { k: string; children: ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] font-bold text-spark-muted mb-0.5">{k}</div>
-      <p className="text-[13px] leading-relaxed text-spark-ink-soft">{children}</p>
+      <div className="text-[12px] font-bold text-spark-muted mb-0.5">{k}</div>
+      <p className="text-[14px] leading-relaxed text-spark-ink-soft">{children}</p>
     </div>
   );
 }

@@ -580,24 +580,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       </div>
 
       {scope === 'inter' ? (
-        <>
-          {/* 기간 선택 — Intra와 완전히 같은 컴포넌트. domain/country는 URL로 유지된다. */}
-          <div className="mb-6">
-            <DateRangePicker
-              key={`inter_${range.from}_${range.to}`}
-              from={range.from}
-              to={range.to}
-              min={MIN_DATE}
-              max={fmt(getKstNow())}
-              scope="inter"
-              extraParams={{
-                domain: searchParams.domain === 'ai' ? 'ai' : 'bio',
-                country: typeof searchParams.country === 'string' && searchParams.country ? searchParams.country : 'all',
-              }}
-            />
-          </div>
-          <InterPanel from={range.from} to={range.to} canScrap={canScrap} />
-        </>
+        // 기간 선택은 InterPanel 안(국가 필터 바로 위)에서 렌더된다 — 기간·국가를 같이 고르고
+        // '확인'을 눌러야 조회되는 흐름이라 두 컨트롤이 한 카드에 있어야 한다.
+        <InterPanel from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())} canScrap={canScrap} />
       ) : (
       <>
       {/* 섹션 탭 — 스크롤 대신 화면 전환. 선택된 탭만 보라색으로 강조. */}
