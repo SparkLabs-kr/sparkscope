@@ -35,6 +35,13 @@ export function KeywordManager() {
   const [form, setForm] = useState(emptyForm);
   const [editId, setEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Target>>({});
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 8000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   async function load() {
     setLoading(true);
@@ -59,26 +66,31 @@ export function KeywordManager() {
     return list;
   }, [targets, filter, search]);
 
+  const JSON_REMINDER = 'data/master-keywords.json에도 같은 내용을 반영해주세요 — 안 하면 나중에 재시딩될 때 이 변경이 조용히 되돌아갈 수 있어요.';
+
   async function add() {
     setErr('');
     if (!form.name.trim()) { setErr('기업/키워드명을 입력하세요.'); return; }
     const res = await fetch('/api/keywords', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
     if (!res.ok) { setErr((await res.json()).error ?? '추가 실패'); return; }
+    setNotice(`'${form.name}' 추가됨. ${JSON_REMINDER}`);
     setForm(emptyForm);
     load();
   }
 
   async function saveEdit() {
     if (!editId) return;
+    const name = targets.find(t => t.id === editId)?.name ?? '';
     const res = await fetch('/api/keywords', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editId, ...editForm }) });
     if (!res.ok) { setErr((await res.json()).error ?? '수정 실패'); return; }
+    setNotice(`'${name}' 수정됨. ${JSON_REMINDER}`);
     setEditId(null); setEditForm({}); load();
   }
 
   async function remove(t: Target) {
     if (!confirm(`'${t.name}'을(를) 모니터링 대상에서 삭제할까요?\n(소프트 삭제 — 복구 가능, 수집에서 자동 제외됩니다)`)) return;
     const res = await fetch(`/api/keywords?id=${t.id}`, { method: 'DELETE' });
-    if (res.ok) load();
+    if (res.ok) { setNotice(`'${t.name}' 삭제(일시중지)됨. ${JSON_REMINDER}`); load(); }
   }
 
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
@@ -86,6 +98,12 @@ export function KeywordManager() {
 
   return (
     <div>
+      {notice && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-3 py-2 mb-4">
+          <span className="flex-1">📄 {notice}</span>
+          <button onClick={() => setNotice(null)} className="text-amber-500 hover:text-amber-700 font-bold px-1">✕</button>
+        </div>
+      )}
       {/* 추가 폼 */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 mb-4">
         <div className="font-bold mb-3">+ 모니터링 대상 추가</div>
