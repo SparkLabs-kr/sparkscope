@@ -138,7 +138,12 @@ export function KeywordManager() {
                     {CATS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
                   </select>
                 </td>
-                <td className="px-3 py-2 text-center"><StatusBadge status={t.status} /></td>
+                <td className="px-3 py-2 text-center">
+                  <select className={inputCls} defaultValue={t.status} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}>
+                    <option value="ACTIVE">활성</option>
+                    <option value="PAUSED">일시중지</option>
+                  </select>
+                </td>
                 <td className="px-3 py-2"><input className={`${inputCls} w-full`} defaultValue={t.helperKeywords ?? ''} onChange={e => setEditForm(f => ({ ...f, helperKeywords: e.target.value }))} /></td>
                 <td className="px-3 py-2"><input className={`${inputCls} w-full`} defaultValue={t.excludeWords ?? ''} onChange={e => setEditForm(f => ({ ...f, excludeWords: e.target.value }))} /></td>
                 <td className="px-3 py-2"><input className={`${inputCls} w-full`} defaultValue={t.contextWords ?? ''} onChange={e => setEditForm(f => ({ ...f, contextWords: e.target.value }))} /></td>
