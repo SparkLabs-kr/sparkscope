@@ -507,7 +507,7 @@ function buildTrendData(records: { matchedKeyword: string; pubDate: Date }[], si
   return { labels, datasets };
 }
 
-export default async function DashboardPage({ searchParams }: { searchParams: { from?: string; to?: string; company?: string; tab?: string; scope?: string } }) {
+export default async function DashboardPage({ searchParams }: { searchParams: { from?: string; to?: string; company?: string; tab?: string; scope?: string; domain?: string; country?: string } }) {
   const range = resolveRange(searchParams);
   const company = typeof searchParams.company === 'string' && searchParams.company ? searchParams.company : undefined;
   const tab = resolveTab(searchParams.tab);
@@ -553,15 +553,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         <span className="text-[11px] text-spark-muted">{activeScope.desc}</span>
       </div>
 
-      {scope === 'inter' ? (
-        <InterPanel />
-      ) : (
-      <>
+      {/* 헤더(오늘 날짜 · 제목 · 스크랩함) — Intra/Inter 두 스코프에서 동일하게 보인다.
+          Inter에도 같은 헤더를 두어 "지금 며칠 기준 화면인지"가 항상 같은 자리에 있게 한다. */}
       <div className="flex flex-wrap justify-between items-end gap-4 mb-5">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-spark-purple mb-1.5">Daily Media Intelligence</div>
+          <div className={`text-[11px] font-semibold uppercase tracking-[0.18em] mb-1.5 ${scope === 'inter' ? 'text-emerald-600' : 'text-spark-purple'}`}>
+            {scope === 'inter' ? 'Global Trend Intelligence' : 'Daily Media Intelligence'}
+          </div>
           <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight text-spark-ink leading-none">{todayLabel}</h1>
-          <p className="text-[13px] text-spark-muted mt-2">{range.label} 데이터 기준</p>
+          <p className="text-[13px] text-spark-muted mt-2">
+            {scope === 'inter' ? `${range.label} 해외 매체·논문 데이터 기준` : `${range.label} 데이터 기준`}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {canScrap && <Link href="/dashboard/scraps" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⭐ 스크랩함</Link>}
@@ -569,6 +571,27 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         </div>
       </div>
 
+      {scope === 'inter' ? (
+        <>
+          {/* 기간 선택 — Intra와 완전히 같은 컴포넌트. domain/country는 URL로 유지된다. */}
+          <div className="mb-6">
+            <DateRangePicker
+              key={`inter_${range.from}_${range.to}`}
+              from={range.from}
+              to={range.to}
+              min={MIN_DATE}
+              max={fmt(getKstNow())}
+              scope="inter"
+              extraParams={{
+                domain: searchParams.domain === 'ai' ? 'ai' : 'bio',
+                country: typeof searchParams.country === 'string' && searchParams.country ? searchParams.country : 'all',
+              }}
+            />
+          </div>
+          <InterPanel from={range.from} to={range.to} canScrap={canScrap} />
+        </>
+      ) : (
+      <>
       {/* 섹션 탭 — 스크롤 대신 화면 전환. 선택된 탭만 보라색으로 강조. */}
       <nav className="flex flex-wrap gap-2 mb-3" aria-label="대시보드 섹션">
         {TABS.map(t => {
