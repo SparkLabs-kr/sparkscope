@@ -13,6 +13,7 @@ interface SectorInput {
   id: string;
   name: string;
   badgeLabel: string;
+  metricsLine: string; // 배지 판정 근거 숫자 (computeBadge의 why + 건수·매치 수)
   titles: string[];
 }
 
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
 
   const entries = await Promise.all(
     sectors.map(async s => {
-      const reason = await summarizeSectorBadgeReason(s.name, s.badgeLabel, s.titles);
+      const reason = await summarizeSectorBadgeReason(s.name, s.badgeLabel, s.metricsLine ?? '', s.titles);
       return [s.id, reason] as const;
     })
   );

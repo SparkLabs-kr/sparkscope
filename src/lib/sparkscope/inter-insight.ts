@@ -10,28 +10,40 @@ const openai = new OpenAI({
 const MODEL = 'gpt-4o-mini';
 
 const BADGE_URGENCY_SYSTEM =
-  '너는 스타트업 액셀러레이터의 해외 트렌드 분석가다. 주어진 분야명과 최근 기사 제목들, 그리고 이 분야에 매겨진 상태 배지를 보고 ' +
-  '왜 그 배지가 매겨졌는지를 한국어 한 문장으로 설명한다. 반드시 JSON 객체 하나만 반환한다.';
+  '너는 스타트업 액셀러레이터의 해외 트렌드 분석가다. 주어진 분야의 실제 집계 지표와 최근 기사 제목을 보고, ' +
+  '이 분야에서 지금 무슨 일이 일어나고 있는지를 한국어 한 문장으로 설명한다. ' +
+  '주어진 지표와 제목에 없는 사실을 만들어내지 마라. 반드시 JSON 객체 하나만 반환한다.';
 
 function extractJson(text: string): string {
   const match = text.match(/\{[\s\S]*\}/);
   return match ? match[0] : text;
 }
 
+/**
+ * 섹터 한 줄 요약.
+ *
+ * 예전엔 배지 라벨("긴급"/"모니터링")만 넘기고 "왜 이 배지인지 설명하라"고 시켰는데,
+ * 그 배지 자체가 배열 인덱스로 정해진 가짜였다(inter-sample-data.ts 주석 참고).
+ * 결과적으로 모델이 없는 근거를 지어내고 있었다. 지금은 실제 집계 지표(metricsLine)를
+ * 함께 넘기고, 그 숫자와 제목 범위 안에서만 서술하게 한다.
+ */
 export async function summarizeSectorBadgeReason(
   sectorName: string,
   badgeLabel: string,
+  metricsLine: string,
   titles: string[]
 ): Promise<string | null> {
   if (titles.length === 0) return null;
   try {
     const userContent = `분야: ${sectorName}
-현재 상태 배지: ${badgeLabel}
+이 분야의 실제 집계 지표: ${metricsLine}
+시스템이 이 지표로 매긴 상태 라벨: ${badgeLabel}
 최근 기사 제목들:
 ${titles.map((t, i) => `${i + 1}. ${t}`).join('\n')}
 
-이 분야가 왜 "${badgeLabel}" 상태인지 그 근거를 한국어 한 문장(60자 이내)으로 요약해주세요.
-"~해서 ${badgeLabel} 상태입니다" 또는 "~로 인해 ~합니다" 형태의 자연스러운 서술을 권장합니다.
+위 지표와 제목만 근거로, 이 분야에서 지금 무슨 흐름이 보이는지 한국어 한 문장(70자 이내)으로 요약해주세요.
+· 기사 제목에 실제로 등장하는 주제·기업·기술을 구체적으로 언급하세요.
+· 지표에 없는 숫자나 제목에 없는 사실을 추가하지 마세요.
 출력 스키마: {"reason": "..."}
 JSON 객체만 반환:`;
     const resp = await openai.chat.completions.create({

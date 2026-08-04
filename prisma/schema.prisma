@@ -181,12 +181,32 @@ model InterNewsVerdict {
   titleKo   String?  // 제목 한국어 번역
   model     String   @default("gemini-3.1-flash-lite") // 판정한 모델
   filteredAt DateTime @default(now())
+  // 스크랩 (Inter 탭) — Article.isScrapped와 같은 패턴. 스크랩 단위를 InterNews가 아닌
+  // verdict로 두는 이유: 화면에 보이는 건 판정 결과(한국어 제목·도메인·섹터)이고,
+  // 스크랩함에서도 그 정보를 그대로 보여줘야 한다.
+  isScrapped Boolean  @default(false)
+  scrappedAt DateTime?
+  scrappedBy String?
   matches   InterPortfolioMatch[]
   @@unique([newsId, model])
   @@index([filteredAt])
   @@index([relevant])
   @@index([domain])
   @@index([sector])
+  @@index([isScrapped])
+}
+
+// 실제 DB에만 존재하던 테이블(행 0건, 이 브랜치 코드에서 참조하는 곳 없음) — 다른 세션에서
+// 진행 중이던 북마크 기능의 결과물로 보인다. `prisma db push`가 DROP하지 않도록 선언만
+// 유지한다. 그쪽 작업이 합류하면 실제 관계·필드를 그 작업 기준으로 맞출 것.
+// Inter 탭 스크랩은 이 테이블을 쓰지 않고 InterNewsVerdict.isScrapped를 쓴다(위 참고).
+model Bookmark {
+  id        String   @id
+  userId    String
+  articleId String
+  createdAt DateTime @default(now())
+  @@unique([userId, articleId])
+  @@index([userId])
 }
 
 model InterPortfolioMatch {

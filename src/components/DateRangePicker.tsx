@@ -16,7 +16,9 @@ const PRESETS = [
   { label: '3년', shift: (d: Date) => d.setFullYear(d.getFullYear() - 3) },
 ];
 
-export function DateRangePicker({ from, to, min, max, company, tab }: { from: string; to: string; min: string; max: string; company?: string; tab?: string }) {
+// scope: Intra/Inter 스코프 유지용. Inter 탭에서도 이 컴포넌트를 그대로 써서
+// 기간 선택 UI가 두 탭에서 완전히 동일하게 보이도록 한다(별도 구현 금지).
+export function DateRangePicker({ from, to, min, max, company, tab, scope, extraParams }: { from: string; to: string; min: string; max: string; company?: string; tab?: string; scope?: string; extraParams?: Record<string, string> }) {
   const router = useRouter();
   const [f, setF] = useState(from);
   const [t, setT] = useState(to);
@@ -28,6 +30,8 @@ export function DateRangePicker({ from, to, min, max, company, tab }: { from: st
     const params = new URLSearchParams({ from: nf, to: nt });
     if (company) params.set('company', company); // 회사 필터가 걸려 있으면 기간을 바꿔도 유지
     if (tab) params.set('tab', tab); // 보고 있던 탭 유지
+    if (scope) params.set('scope', scope); // Intra/Inter 스코프 유지
+    if (extraParams) for (const [k, v] of Object.entries(extraParams)) params.set(k, v); // Inter의 domain/country 등
     router.push(`/dashboard?${params.toString()}`, { scroll: false }); // 현재 스크롤 위치 유지 (맨 위로 안 올라감)
   };
 

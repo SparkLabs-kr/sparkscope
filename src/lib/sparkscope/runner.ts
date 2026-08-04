@@ -201,6 +201,9 @@ export async function runDailyDigest(opts: RunOptions = {}) {
       // (skipCollect=발송 전용 모드에서는 돌리지 않음). 내부적으로 실패를 삼키므로 발송에는 영향 없음.
       await computeAndStoreDashboardInsights();
 
+      // 4.55 Inter(해외 트렌드) 탭 AI 요약 사전계산 — 위와 같은 이유로 하루 1회, 여기서만.
+      await computeAndStoreInterSummaries();
+
       // 4.6 master-keywords.json ↔ DB 불일치 확인 — 하루 1회, 다를 때만 관리자에게 메일.
       // (7/31~8/3에 파일은 고쳤는데 DB엔 반영 안 된 채로 몇 주 방치된 사고 재발 방지)
       try {

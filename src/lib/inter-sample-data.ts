@@ -1,22 +1,31 @@
-// Inter(해외 트렌드) 탭 — DB 실시간 데이터 조회
+// Inter(해외 트렌드) 탭 — DB 실시간 데이터 조회 + 섹터 지표 계산
 //
 // RSS 수집(inter-collect) → Gemini 필터링(inter-filter) →
 // GPT 포트폴리오 매칭(inter-portfolio-match) 파이프라인에서 데이터 생성
+//
+// 파일명이 -sample-data 지만 실제 DB 데이터를 다룬다(초기 목업 시절 이름이 남은 것).
+//
+// ⚠ 2026-08-04 수정: 섹터 배지("긴급"/"모니터링")가 예전엔 배열 인덱스로 정해졌다
+// (`idx % 2 === 0 ? 'urgent' : 'watch'`, `idx % 3 === 0 ? '긴급' : '모니터링'`).
+// 즉 데이터와 아무 관계가 없어서, 항암은 항상 "긴급", 신약발굴은 항상 "모니터링"이 떴고
+// 배지 사유 AI 요약은 그 가짜 배지를 정당화하는 문장을 지어내고 있었다.
+// 지금은 아래 computeBadge()가 실제 건수·증감률·포트폴리오 매치 수로 배지를 정한다.
 
 import { prisma } from '@/lib/prisma';
 import { trendSectorsFor } from './sparkscope/inter-taxonomy';
 
 export type InterDomain = 'bio' | 'ai';
-export type InterCountry = 'us' | 'cn' | 'jp' | 'sa' | 'all';
+export type InterCountry = 'us' | 'cn' | 'jp' | 'sa' | 'other' | 'all';
 export type SourceKind = 'news' | 'paper' | 'opinion';
 export type AlertLevel = 'urgent' | 'watch' | 'pos';
 
 export const COUNTRY_TABS: { id: InterCountry; label: string }[] = [
+  { id: 'all', label: '전체' },
   { id: 'us', label: '미국' },
   { id: 'cn', label: '중국' },
   { id: 'jp', label: '일본' },
   { id: 'sa', label: '사우디' },
-  { id: 'all', label: '전체' },
+  { id: 'other', label: '기타' },
 ];
 
 export interface DomainSummary {
@@ -28,7 +37,7 @@ export interface DomainSummary {
   computedAt: string | null; // ISO — fallback이면 null
 }
 
-const DOMAIN_LABEL: Record<InterDomain, string> = { bio: '바이오', ai: 'AI' };
+export const DOMAIN_LABEL: Record<InterDomain, string> = { bio: '바이오', ai: 'AI' };
 
 // 사전계산(DashboardInsight) 전이거나 실패했을 때만 쓰는 기본값 — 특정 트렌드처럼 보이지 않게 일반적인 문구로.
 const FALLBACK_SUMMARY: Record<InterDomain, Omit<DomainSummary, 'label' | 'source' | 'computedAt'>> = {
@@ -72,6 +81,7 @@ export async function getDomainSummary(domain: InterDomain): Promise<DomainSumma
 export interface InterStat {
   label: string;
   value: string;
+  hint?: string;
 }
 
 // 피드 소스 → 도메인 (Gemini 필터링이 domain을 못 채운 구버전 판정 데이터에 대한 fallback).
@@ -81,13 +91,37 @@ function legacyDomainGuess(source: string): InterDomain {
   return BIO_SOURCES.test(source) ? 'bio' : 'ai';
 }
 
-async function getRelevantVerdictsForDomain(domain: InterDomain, since?: Date, country?: InterCountry) {
+type VerdictRow = {
+  id: string;
+  relevant: boolean;
+  domain: string | null;
+  sector: string | null;
+  country: string | null;
+  titleKo: string | null;
+  isScrapped: boolean;
+  news: { id: string; title: string; url: string; source: string; publishedAt: Date };
+};
+
+async function getRelevantVerdicts(
+  domain: InterDomain,
+  since?: Date,
+  until?: Date,
+  country?: InterCountry,
+): Promise<VerdictRow[]> {
+  const publishedAt =
+    since || until ? { ...(since ? { gte: since } : {}), ...(until ? { lte: until } : {}) } : undefined;
   const verdicts = await prisma.interNewsVerdict.findMany({
     where: {
       relevant: true,
-      ...(since ? { news: { publishedAt: { gte: since } } } : {}),
+      ...(publishedAt ? { news: { publishedAt } } : {}),
+      // country가 아직 안 채워진 구버전 판정 데이터가 537건 있어서, 국가 필터를 걸면
+      // 그 데이터는 빠진다(전체 탭에서만 보인다).
+      ...(country && country !== 'all' ? { country } : {}),
     },
-    include: { news: true },
+    select: {
+      id: true, relevant: true, domain: true, sector: true, country: true, titleKo: true, isScrapped: true,
+      news: { select: { id: true, title: true, url: true, source: true, publishedAt: true } },
+    },
   });
   let filtered = verdicts.filter(v => (v.domain ?? legacyDomainGuess(v.news.source)) === domain);
   // country=undefined/'all'이면 전체. 국가 미판별(레거시) 기사는 특정 국가 탭에는 안 잡히고 '전체'에서만 보인다.
@@ -95,26 +129,47 @@ async function getRelevantVerdictsForDomain(domain: InterDomain, since?: Date, c
   return filtered;
 }
 
-// 도메인+기간에 대한 verdict/match를 한 번만 조회해서 stats·sectors 양쪽에 재사용
+// 도메인+기간에 대한 verdict/match를 한 번만 조회해서 stats·sectors 양쪽에 재사용.
+// prevVerdicts(직전 동일 기간)는 섹터별 증감률(momentum) 계산용.
 export interface InterData {
-  verdicts: Awaited<ReturnType<typeof getRelevantVerdictsForDomain>>;
+  verdicts: VerdictRow[];
+  prevVerdicts: VerdictRow[];
   matches: { id: string; verdictId: string; companyName: string; reason: string }[];
+  range: { since: Date; until: Date } | null;
 }
 
-export async function loadInterData(domain: InterDomain, since?: Date, country?: InterCountry): Promise<InterData> {
-  const verdicts = await getRelevantVerdictsForDomain(domain, since, country);
+export async function loadInterData(
+  domain: InterDomain,
+  since?: Date,
+  until?: Date,
+  country: InterCountry = 'all',
+): Promise<InterData> {
+  // 직전 동일 기간 — "지난 3개월 대비 이번 3개월" 비교용
+  let prevSince: Date | undefined;
+  let prevUntil: Date | undefined;
+  if (since && until) {
+    const span = until.getTime() - since.getTime();
+    prevUntil = new Date(since.getTime() - 1);
+    prevSince = new Date(prevUntil.getTime() - span);
+  }
+
+  const [verdicts, prevVerdicts] = await Promise.all([
+    getRelevantVerdicts(domain, since, until, country),
+    prevSince && prevUntil ? getRelevantVerdicts(domain, prevSince, prevUntil, country) : Promise.resolve([]),
+  ]);
   const matches = await prisma.interPortfolioMatch.findMany({
     where: { verdictId: { in: verdicts.map(v => v.id) } },
+    select: { id: true, verdictId: true, companyName: true, reason: true },
   });
-  return { verdicts, matches };
+  return { verdicts, prevVerdicts, matches, range: since && until ? { since, until } : null };
 }
 
 export function getDomainStats({ verdicts, matches }: InterData): InterStat[] {
   return [
-    { label: '필터링됨 (관련)', value: String(verdicts.length) },
-    { label: '포트폴리오 매치', value: String(matches.length) },
-    { label: '매칭 기업 수', value: String(new Set(matches.map(m => m.companyName)).size) },
-    { label: '데이터 소스', value: String(new Set(verdicts.map(v => v.news.source)).size) },
+    { label: '수집·선별된 기사', value: String(verdicts.length), hint: 'AI 관련성 판정을 통과한 해외 기사·논문 수' },
+    { label: '포트폴리오 매치', value: String(matches.length), hint: '포트폴리오사와 연결된다고 판정된 건수' },
+    { label: '매칭 기업 수', value: String(new Set(matches.map(m => m.companyName)).size), hint: '한 건이라도 매칭된 포트폴리오사 수' },
+    { label: '데이터 소스', value: String(new Set(verdicts.map(v => v.news.source)).size), hint: '기사를 가져온 해외 매체 수' },
   ];
 }
 
@@ -124,21 +179,41 @@ export interface PortfolioMatch {
 }
 
 export interface SourceItem {
+  id: string;            // verdictId — 스크랩 토글 키
   badge: SourceKind;
-  title: string;       // 한국어 번역 제목 (없으면 원문)
+  title: string;         // 한국어 번역 제목 (없으면 원문)
   titleOriginal: string;
   url: string;
   media: string;
   date: string;
   alert: AlertLevel;
+  isScrapped: boolean;
+}
+
+// 섹터 배지 — 실제 데이터에서 계산한다(예전 idx 기반 가짜 배지 대체).
+export type BadgeKind = 'surge' | 'opportunity' | 'major' | 'quiet' | 'none';
+
+export interface SectorMetrics {
+  count: number;
+  prevCount: number;
+  deltaPct: number | null;      // 직전 동일 기간 대비 증감률. 직전 0건이면 비교 불가(null)
+  share: number;                // 도메인 전체 중 이 섹터 비중 (0~1)
+  matchCount: number;
+  matchedCompanies: string[];
+  sourceCount: number;
+  paperCount: number;
+  latestDate: string | null;
+  timeline: number[];           // 기간을 12구간으로 나눈 건수 (스파크라인용)
 }
 
 export interface SectorBlock {
   id: string;
+  sectorKey: string;
   icon: string;
   name: string;
   sub: string;
-  badge: { cls: 'urgent' | 'watch' | 'pos' | 'neu'; label: string };
+  badge: { kind: BadgeKind; label: string; why: string };
+  metrics: SectorMetrics;
   matches: PortfolioMatch[];
   items: Record<SourceKind, SourceItem[]>;
 }
@@ -167,7 +242,41 @@ function truncate(s: string): string {
   return s.length > 70 ? s.slice(0, 67) + '…' : s;
 }
 
-export function getSectorData(domain: InterDomain, { verdicts, matches }: InterData): SectorBlock[] {
+/**
+ * 섹터 배지 판정 규칙 — 화면에 뜬 라벨을 숫자로 되짚을 수 있어야 한다.
+ *  - 0건            → '데이터 없음'
+ *  - 증감 +50% 이상 & 4건 이상 → '급증'   (직전 동일 기간 대비)
+ *  - 포트폴리오 매치 3건 이상   → '기회'   (우리 포트폴리오와 직접 연결)
+ *  - 도메인 내 비중 12% 이상   → '주요 흐름'
+ *  - 그 외                    → '관측 중'
+ * why에는 그 판정의 근거 숫자를 그대로 담는다(AI 요약 프롬프트·툴팁에 재사용).
+ */
+export function computeBadge(m: SectorMetrics): { kind: BadgeKind; label: string; why: string } {
+  if (m.count === 0) return { kind: 'none', label: '데이터 없음', why: '이 기간 수집된 기사 0건' };
+  if (m.deltaPct !== null && m.deltaPct >= 50 && m.count >= 4)
+    return { kind: 'surge', label: '급증', why: `직전 동일 기간 ${m.prevCount}건 → ${m.count}건 (${m.deltaPct > 0 ? '+' : ''}${m.deltaPct}%)` };
+  if (m.matchCount >= 3)
+    return { kind: 'opportunity', label: '기회', why: `포트폴리오 매치 ${m.matchCount}건 (${m.matchedCompanies.slice(0, 3).join(', ')})` };
+  if (m.share >= 0.12)
+    return { kind: 'major', label: '주요 흐름', why: `이 도메인 기사 전체의 ${Math.round(m.share * 100)}% (${m.count}건)` };
+  return { kind: 'quiet', label: '관측 중', why: `${m.count}건, 직전 대비 ${m.deltaPct === null ? '비교 불가' : `${m.deltaPct > 0 ? '+' : ''}${m.deltaPct}%`}` };
+}
+
+function bucketTimeline(dates: Date[], range: { since: Date; until: Date } | null, buckets = 12): number[] {
+  if (!range || dates.length === 0) return new Array(buckets).fill(0);
+  const span = Math.max(1, range.until.getTime() - range.since.getTime());
+  const out = new Array(buckets).fill(0);
+  for (const d of dates) {
+    const t = d.getTime();
+    if (t < range.since.getTime() || t > range.until.getTime()) continue;
+    const i = Math.min(buckets - 1, Math.floor(((t - range.since.getTime()) / span) * buckets));
+    out[i] += 1;
+  }
+  return out;
+}
+
+export function getSectorData(domain: InterDomain, data: InterData): SectorBlock[] {
+  const { verdicts, prevVerdicts, matches, range } = data;
   const matchesByVerdictId = new Map<string, typeof matches>();
   matches.forEach(m => {
     const arr = matchesByVerdictId.get(m.verdictId) ?? [];
@@ -175,17 +284,21 @@ export function getSectorData(domain: InterDomain, { verdicts, matches }: InterD
     matchesByVerdictId.set(m.verdictId, arr);
   });
 
-  // 2. 고정 섹터 목록 기준으로 그룹화 — verdict.sector가 그 섹터 key와 일치하는 기사만 포함
-  //    (구버전 판정 데이터처럼 sector가 비어 있으면 어느 섹터에도 들어가지 않음)
+  // 고정 섹터 목록 기준으로 그룹화 — verdict.sector가 그 섹터 key와 일치하는 기사만 포함
+  // (구버전 판정 데이터처럼 sector가 비어 있으면 어느 섹터에도 들어가지 않음)
   const sectors = trendSectorsFor(domain === 'ai' ? 'AI' : '바이오');
+  const total = verdicts.length;
 
-  const sectorData: SectorBlock[] = sectors.map((sector, idx) => {
+  const sectorData: SectorBlock[] = sectors.map(sector => {
     const sectorVerdicts = verdicts.filter(v => v.sector === sector.key);
+    const prevCount = prevVerdicts.filter(v => v.sector === sector.key).length;
 
     const sectorMatches: PortfolioMatch[] = [];
     const matchesSet = new Set<string>();
+    let matchCount = 0;
     sectorVerdicts.forEach(v => {
       (matchesByVerdictId.get(v.id) ?? []).forEach(m => {
+        matchCount += 1;
         const key = `${m.companyName}|${m.reason}`;
         if (!matchesSet.has(key)) {
           sectorMatches.push({ co: m.companyName, desc: m.reason });
@@ -194,39 +307,144 @@ export function getSectorData(domain: InterDomain, { verdicts, matches }: InterD
       });
     });
 
-    const items: Record<SourceKind, SourceItem[]> = {
-      news: [],
-      paper: [],
-      opinion: [],
-    };
-
-    sectorVerdicts.forEach(v => {
-      const kind = getSourceKind(v.news.source);
-      items[kind].push({
-        badge: kind,
-        title: truncate(v.titleKo || v.news.title),
-        titleOriginal: v.news.title,
-        url: v.news.url,
-        media: v.news.source,
-        date: formatDate(v.news.publishedAt),
-        alert: getAlertLevel(v.relevant),
+    const items: Record<SourceKind, SourceItem[]> = { news: [], paper: [], opinion: [] };
+    sectorVerdicts
+      .slice()
+      .sort((a, b) => b.news.publishedAt.getTime() - a.news.publishedAt.getTime())
+      .forEach(v => {
+        const kind = getSourceKind(v.news.source);
+        items[kind].push({
+          id: v.id,
+          badge: kind,
+          title: truncate(v.titleKo || v.news.title),
+          titleOriginal: v.news.title,
+          url: v.news.url,
+          media: v.news.source,
+          date: formatDate(v.news.publishedAt),
+          alert: getAlertLevel(v.relevant),
+          isScrapped: v.isScrapped,
+        });
       });
-    });
+
+    const dates = sectorVerdicts.map(v => v.news.publishedAt);
+    const latest = dates.length > 0 ? new Date(Math.max(...dates.map(d => d.getTime()))) : null;
+    const metrics: SectorMetrics = {
+      count: sectorVerdicts.length,
+      prevCount,
+      deltaPct: prevCount > 0 ? Math.round(((sectorVerdicts.length - prevCount) / prevCount) * 100) : null,
+      share: total > 0 ? sectorVerdicts.length / total : 0,
+      matchCount,
+      matchedCompanies: Array.from(new Set(sectorMatches.map(m => m.co))),
+      sourceCount: new Set(sectorVerdicts.map(v => v.news.source)).size,
+      paperCount: items.paper.length,
+      latestDate: latest ? formatDate(latest) : null,
+      timeline: bucketTimeline(dates, range),
+    };
 
     return {
       id: `sec-${sector.key}`,
+      sectorKey: sector.key,
       icon: sector.icon,
       name: sector.key,
       sub: sector.sub,
-      badge: sectorVerdicts.length > 0
-        ? { cls: idx % 2 === 0 ? 'urgent' as const : 'watch' as const, label: idx % 3 === 0 ? '긴급' : '모니터링' }
-        : { cls: 'neu' as const, label: '데이터 없음' },
+      badge: computeBadge(metrics),
+      metrics,
       matches: sectorMatches.slice(0, 5),
       items,
     };
   });
 
   return sectorData;
+}
+
+// ── 도메인 전체 개요 (#5 요약 블록용) — 전부 실제 집계값 ──
+export interface InterOverview {
+  domainLabel: string;
+  total: number;
+  prevTotal: number;
+  deltaPct: number | null;
+  sourceCount: number;
+  paperCount: number;
+  matchCount: number;
+  matchedCompanyCount: number;
+  topSectors: { name: string; count: number; deltaPct: number | null; share: number }[];
+  topCompanies: { name: string; count: number; sectors: string[] }[];
+  byCountry: { id: InterCountry; label: string; count: number }[];
+  timeline: { label: string; count: number }[];
+  emptySectors: string[];
+}
+
+export function buildOverview(domain: InterDomain, data: InterData, sectors: SectorBlock[]): InterOverview {
+  const { verdicts, prevVerdicts, matches, range } = data;
+  const total = verdicts.length;
+
+  const byCompany = new Map<string, { count: number; sectors: Set<string> }>();
+  const sectorOfVerdict = new Map(verdicts.map(v => [v.id, v.sector ?? '기타']));
+  for (const m of matches) {
+    let e = byCompany.get(m.companyName);
+    if (!e) { e = { count: 0, sectors: new Set() }; byCompany.set(m.companyName, e); }
+    e.count += 1;
+    e.sectors.add(sectorOfVerdict.get(m.verdictId) ?? '기타');
+  }
+
+  const countryCount = new Map<string, number>();
+  for (const v of verdicts) countryCount.set(v.country ?? 'unknown', (countryCount.get(v.country ?? 'unknown') ?? 0) + 1);
+
+  // 타임라인 — 기간 길이에 따라 주/월 버킷
+  const timeline: { label: string; count: number }[] = [];
+  if (range) {
+    const days = Math.max(1, Math.round((range.until.getTime() - range.since.getTime()) / 86400000));
+    const byMonth = days > 92;
+    const key = (d: Date) => (byMonth ? `${d.getFullYear()}.${d.getMonth() + 1}` : `${d.getMonth() + 1}/${d.getDate()}`);
+    const bucket = new Map<string, number>();
+    const labels: string[] = [];
+    const cur = new Date(range.since);
+    cur.setHours(0, 0, 0, 0);
+    const end = new Date(range.until);
+    let guard = 0;
+    while (cur <= end && guard < 1200) {
+      const k = key(cur);
+      if (labels[labels.length - 1] !== k) { labels.push(k); bucket.set(k, 0); }
+      cur.setDate(cur.getDate() + (byMonth ? 1 : 7));
+      guard++;
+    }
+    for (const v of verdicts) {
+      // 주 단위 버킷은 라벨 간격이 7일이므로 가장 가까운 이전 라벨에 넣는다
+      const d = v.news.publishedAt;
+      if (byMonth) {
+        const k = key(d);
+        if (bucket.has(k)) bucket.set(k, (bucket.get(k) ?? 0) + 1);
+      } else {
+        const idx = Math.min(labels.length - 1, Math.max(0, Math.floor((d.getTime() - range.since.getTime()) / (7 * 86400000))));
+        const k = labels[idx];
+        if (k) bucket.set(k, (bucket.get(k) ?? 0) + 1);
+      }
+    }
+    labels.forEach(l => timeline.push({ label: l, count: bucket.get(l) ?? 0 }));
+  }
+
+  return {
+    domainLabel: DOMAIN_LABEL[domain],
+    total,
+    prevTotal: prevVerdicts.length,
+    deltaPct: prevVerdicts.length > 0 ? Math.round(((total - prevVerdicts.length) / prevVerdicts.length) * 100) : null,
+    sourceCount: new Set(verdicts.map(v => v.news.source)).size,
+    paperCount: sectors.reduce((s, x) => s + x.metrics.paperCount, 0),
+    matchCount: matches.length,
+    matchedCompanyCount: byCompany.size,
+    topSectors: sectors
+      .slice()
+      .sort((a, b) => b.metrics.count - a.metrics.count)
+      .slice(0, 4)
+      .map(s => ({ name: s.name, count: s.metrics.count, deltaPct: s.metrics.deltaPct, share: s.metrics.share })),
+    topCompanies: Array.from(byCompany.entries())
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 6)
+      .map(([name, e]) => ({ name, count: e.count, sectors: Array.from(e.sectors) })),
+    byCountry: COUNTRY_TABS.filter(c => c.id !== 'all').map(c => ({ id: c.id, label: c.label, count: countryCount.get(c.id) ?? 0 })),
+    timeline,
+    emptySectors: sectors.filter(s => s.metrics.count === 0).map(s => s.name),
+  };
 }
 
 // 레거시: 참고용 소스 목록
