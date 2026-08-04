@@ -166,6 +166,7 @@ model InterNewsVerdict {
   reason    String   // "AI 인프라 트렌드", "노이즈: 쿠폰 행사" 등
   domain    String?  // 'bio' | 'ai' — relevant=true인 기사만 채워짐
   sector    String?  // inter-taxonomy.ts BIO_TREND_SECTORS/AI_TREND_SECTORS의 key 중 하나
+  country   String?  // 'us' | 'cn' | 'jp' | 'sa' | 'other' — 기사가 다루는 트렌드의 주요 국가(매체 소속 국가 아님). relevant=true만 채워짐
   titleKo   String?  // 제목 한국어 번역
   model     String   @default("gemini-3.1-flash-lite") // 판정한 모델
   filteredAt DateTime @default(now())

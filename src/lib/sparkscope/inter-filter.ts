@@ -7,10 +7,14 @@ const AI_SECTOR_KEYS = AI_TREND_SECTORS.map(s => s.key).join(', ');
 
 const SYSTEM = `당신은 스파크랩 인터(해외 트렌드) 탭의 AI/바이오 도메인 뉴스 분류기입니다.
 수집된 해외 기사 제목이 "글로벌 AI 업계 트렌드" 또는 "글로벌 바이오 업계 트렌드"와 실제로 관련 있는지 판단하고,
-관련 있다면 도메인(ai/bio)과 세부 섹터를 분류하고, 제목을 한국어로 번역합니다.
+관련 있다면 도메인(ai/bio)과 세부 섹터를 분류하고, 트렌드가 주로 일어나는 국가를 판별하고, 제목을 한국어로 번역합니다.
 
 바이오 세부 섹터: ${BIO_SECTOR_KEYS}
 AI 세부 섹터: ${AI_SECTOR_KEYS}
+
+국가 판별 기준: 기사를 "게재한" 매체의 국적이 아니라, 기사 내용이 다루는 회사·사건의 주요 국가를 본다
+(예: 미국 매체가 중국 스타트업을 다룬 기사면 "cn"). 특정 국가로 좁히기 어렵거나 여러 국가에 걸친 일반 기사는 "other".
+값은 "us"(미국) | "cn"(중국) | "jp"(일본) | "sa"(사우디) | "other" 중 하나.
 
 쿠폰·할인코드, 무관한 소송·노동 분쟁, AI/바이오와 무관한 일반 소비자 리뷰, 지정학/일반 정치 뉴스는 관련 없음(noise)입니다.
 기사가 두 도메인 모두에 걸치면 더 핵심적인 쪽 하나만 고릅니다.
@@ -27,6 +31,7 @@ ${batch.map((a, i) => `${i + 1}. [${a.source}] ${a.title}`).join('\n')}
   "reason": "<한 줄 이유>",
   "domain": "ai"|"bio"|null,   // relevant=false면 null
   "sector": "<위 세부 섹터 목록 중 하나>"|null,   // relevant=false면 null
+  "country": "us"|"cn"|"jp"|"sa"|"other"|null,   // relevant=false면 null
   "titleKo": "<제목 한국어 번역>"|null   // relevant=false면 null
 }]
 JSON 배열만 반환:`;
@@ -46,6 +51,7 @@ type FilterVerdict = {
   reason: string;
   domain?: 'ai' | 'bio' | null;
   sector?: string | null;
+  country?: 'us' | 'cn' | 'jp' | 'sa' | 'other' | null;
   titleKo?: string | null;
 };
 
@@ -112,6 +118,7 @@ export async function filterInterNewsWithGemini(newsIds: string[]): Promise<{ fi
             reason: verdict.reason,
             domain: verdict.relevant ? (verdict.domain ?? null) : null,
             sector: verdict.relevant ? (verdict.sector ?? null) : null,
+            country: verdict.relevant ? (verdict.country ?? null) : null,
             titleKo: verdict.relevant ? (verdict.titleKo ?? null) : null,
             model: 'gemini-3.1-flash-lite',
             filteredAt: new Date(),

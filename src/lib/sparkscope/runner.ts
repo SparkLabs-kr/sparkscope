@@ -14,6 +14,7 @@ import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } f
 import { collectInterNews } from './inter-collect';
 import { filterInterNewsWithGemini } from './inter-filter';
 import { matchInterNewsWithPortfolio } from './inter-portfolio-match';
+import { computeAndStoreInterSummaries } from './inter-summary';
 
 export interface RunOptions {
   send?: boolean;            // 실제 메일 발송 여부 (false면 DB 저장까지만)
@@ -92,6 +93,7 @@ export async function runDailyDigest(opts: RunOptions = {}) {
             console.log(`[runner] Inter portfolio matched: ${matchResult.matched}건, ${matchResult.failed.length}개 오류`);
           }
         }
+        await computeAndStoreInterSummaries();
       } catch (e: any) {
         console.error('[runner] Inter collection/filtering failed:', e?.message ?? e);
         // Inter 실패는 포트폴리오 다이제스트에 영향 안 줌
