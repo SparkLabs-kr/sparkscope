@@ -73,7 +73,13 @@ export async function runDailyDigest(opts: RunOptions = {}) {
       // 일반 수집 모드
       const maxPerCat = process.env.COLLECT_MAX_PER_CATEGORY ? Number(process.env.COLLECT_MAX_PER_CATEGORY) : 30;
       const daysBack = process.env.COLLECT_DAYS_BACK ? Number(process.env.COLLECT_DAYS_BACK) : undefined;
-      raw = await collectAllArticles({ maxKeywordsPerCategory: maxPerCat, daysBack });
+      // 경쟁사(114개)는 매일 다 훑기엔 네이버 호출량·실행시간 부담이 커서, 다이제스트가
+      // 나가는 월·수·금(그 전 새벽 수집)에만 전체를 다 훑고, 나머지 요일엔 대시보드 고정
+      // 12개 카드만 가볍게 갱신한다.
+      const kstDay = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' })).getDay(); // 0=일 ~ 6=토
+      const competitorFullScan = [1, 3, 5].includes(kstDay); // 월(1)·수(3)·금(5)
+      console.log(`[runner] competitor 전체 스캔: ${competitorFullScan ? 'ON(다이제스트 발송일)' : 'OFF(고정 12개만)'}`);
+      raw = await collectAllArticles({ maxKeywordsPerCategory: maxPerCat, daysBack, competitorFullScan });
     }
 
     // 1.5 Inter(해외 트렌드) 탭 — RSS 수집 + Gemini 필터링 (skipCollect 모드에서는 건너뜀)

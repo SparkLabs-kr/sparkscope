@@ -60,6 +60,7 @@ const TIER_BONUS: Record<string, number> = { A: 15, B: 5, C: 0 };
 interface CollectOptions {
   maxKeywordsPerCategory?: number;
   daysBack?: number;
+  competitorFullScan?: boolean; // true면 경쟁사 캡 없이 전체 조회(다이제스트 발송일), false/미지정이면 고정 12개만
 }
 
 function sleep(ms: number) {
@@ -101,14 +102,16 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
       continue;
     }
     if (category === 'competitor') {
-      // 대시보드에 고정 노출되는 12개 카드(PINNED_COMPETITORS)는 가나다순 캡과 무관하게
-      // 항상 포함시킨다 — 안 그러면 이름이 캡(기본 30) 밖에 있는 카드는 영영 기사가 안 쌓인다
-      // (경쟁사 114개 중 앞 30개만 매번 조회되던 문제, portfolio_company와 동일한 유형).
-      // 나머지 슬롯은 기존처럼 캡 안에서 채운다 — 전체 캡을 풀지 않아 실행시간·네이버 호출량은 그대로.
-      const pinned = list.filter(t => pinnedKeywords.has(t.primaryKeyword));
-      const rest = list.filter(t => !pinnedKeywords.has(t.primaryKeyword));
-      const restSlots = Number.isFinite(max) ? Math.max(0, max - pinned.length) : max;
-      limited.push(...pinned, ...rest.slice(0, restSlots));
+      // 경쟁사 114개를 매일 다 훑으면 네이버 호출량·실행시간 부담이 커서, 다이제스트가
+      // 나가는 월·수·금 새벽 수집(opts.competitorFullScan)에만 전체를 다 훑어 다이제스트
+      // 경쟁사 섹션의 커버리지를 확보하고, 나머지 요일엔 대시보드 고정 12개 카드
+      // (PINNED_COMPETITORS)만 가볍게 갱신한다 — 가나다순 캡 밖이라 영영 안 조회되던 문제
+      // (portfolio_company와 동일 유형) 자체를 이 12개는 원천적으로 피해간다.
+      if (opts.competitorFullScan) {
+        limited.push(...list);
+      } else {
+        limited.push(...list.filter(t => pinnedKeywords.has(t.primaryKeyword)));
+      }
       continue;
     }
     limited.push(...list.slice(0, max));
