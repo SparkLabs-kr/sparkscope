@@ -207,6 +207,18 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
             if (subject) { matchedTarget = subject; category = 'portfolio_company'; }
           }
 
+          // 업계동향(예: "스타트업 글로벌 진출") 키워드는 회사명 매칭 없이 폭넓게 검색해서,
+          // 사실은 특정 포트폴리오사 얘기인 기사(예: "엔씽, 158억 AI 수직농장 구축")가
+          // 회사명 체크 없이 그대로 업계동향으로 새서 포폴사 기사와 중복 저장되는 문제가 있었음
+          // (2026-08-04 엔씽 사례). 스파크랩 자사와 동일한 교차검사를 적용해 포폴사가 주인공이면
+          // 포폴사 기사로 정정한다 — 업계동향은 스파크랩처럼 "그대로 유지해야 할 자기 행위 기사"
+          // 개념이 없어서 별도 가드 조건 없이 바로 적용.
+          if (target.category === 'industry_trend') {
+            const body = bodyMap.get(item.link)?.text ?? '';
+            const subject = findPortfolioSubject(item.title, body);
+            if (subject) { matchedTarget = subject; category = 'portfolio_company'; }
+          }
+
           return {
             ...item,
             matchedKeyword: matchedTarget.primaryKeyword,
