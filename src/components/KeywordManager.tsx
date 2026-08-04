@@ -101,7 +101,7 @@ export function KeywordManager() {
       {notice && (
         <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-3 py-2 mb-4">
           <span className="flex-1">📄 {notice}</span>
-          <button onClick={() => setNotice(null)} className="text-amber-500 hover:text-amber-700 font-bold px-1">✕</button>
+          <button onClick={() => setNotice(null)} className="text-xs font-semibold text-amber-700 border border-amber-300 rounded px-2 py-0.5 hover:bg-amber-100 whitespace-nowrap">확인</button>
         </div>
       )}
       {/* 추가 폼 */}
