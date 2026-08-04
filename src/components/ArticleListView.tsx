@@ -18,6 +18,7 @@ interface Article {
   pitchScore: number | null;
   isScrapped?: boolean;
   isBookmarked?: boolean;
+  isNoise?: boolean;
   titleOnlyFallback?: boolean;
 }
 
@@ -50,10 +51,11 @@ function csvCell(v: string): string {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export function ArticleListView({ articles, canScrap = false, canBookmark = false, emptyText, showSearch = false, showCategory = false, csvName = 'sparkscope' }: {
+export function ArticleListView({ articles, canScrap = false, canBookmark = false, canReport = false, emptyText, showSearch = false, showCategory = false, csvName = 'sparkscope' }: {
   articles: Article[];
   canScrap?: boolean;
   canBookmark?: boolean;
+  canReport?: boolean;
   emptyText?: string;
   showSearch?: boolean;
   showCategory?: boolean;
@@ -175,6 +177,7 @@ export function ArticleListView({ articles, canScrap = false, canBookmark = fals
         articles={view as any}
         canScrap={canScrap}
         canBookmark={canBookmark}
+        canReport={canReport}
         showCategoryColumn={!cat}
         emptyText={showSearch && q.trim() ? `‘${q.trim()}’에 맞는 기사가 없습니다.` : emptyText}
       />

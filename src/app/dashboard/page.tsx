@@ -774,6 +774,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             articles={companyArticlesWithBookmark as any}
             canScrap={canScrap}
             canBookmark={canBookmark}
+            canReport={canScrap}
             showSearch={false}
             csvName={data.selectedCompanyName ?? '포트폴리오사'}
             emptyText={`${range.label} 내 ${data.selectedCompanyName} 기사가 없습니다.`}
@@ -783,6 +784,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             articles={articlesWithBookmark as any}
             canScrap={canScrap}
             canBookmark={canBookmark}
+            canReport={canScrap}
             showSearch={true}
             showCategory={true}
             csvName="최근수집기사"
