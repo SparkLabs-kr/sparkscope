@@ -108,6 +108,17 @@ model Article {
   @@index([isScrapped])
 }
 
+// 개인 북마크 — 로그인한 사용자 각자의 북마크 목록. ★ 스크랩(본부 큐레이션·다이제스트용)과 별개로,
+// 누구나 자기 것만 보인다. Article과는 FK 없이 articleId로만 연결(다른 테이블들과 동일한 패턴).
+model Bookmark {
+  id        String   @id @default(cuid())
+  userId    String
+  articleId String
+  createdAt DateTime @default(now())
+  @@unique([userId, articleId])
+  @@index([userId])
+}
+
 model Digest {
   id          String   @id @default(cuid())
   date        DateTime @unique

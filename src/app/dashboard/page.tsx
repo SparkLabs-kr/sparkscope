@@ -515,6 +515,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const data = await loadDashboardData(range.from, range.to, company, range.isDefaultRange);
   const session = await getServerSession(authOptions);
   const canScrap = canScrapEmail(session?.user?.email ?? null);
+  const userId = (session?.user as any)?.id as string | undefined;
+  const canBookmark = !!userId;
+  const bookmarkedIds = userId
+    ? new Set((await prisma.bookmark.findMany({ where: { userId }, select: { articleId: true } })).map(b => b.articleId))
+    : new Set<string>();
+  const articlesWithBookmark = data.articles.map(a => ({ ...a, isBookmarked: bookmarkedIds.has(a.id) }));
+  const companyArticlesWithBookmark = data.companyArticles.map(a => ({ ...a, isBookmarked: bookmarkedIds.has(a.id) }));
   const todayLabel = getKstNow().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
 
   // 탭 링크: 현재 기간·회사 필터를 유지한 채 tab만 바꾼다.
@@ -565,6 +572,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         </div>
         <div className="flex items-center gap-2">
           {canScrap && <Link href="/dashboard/scraps" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⭐ 스크랩함</Link>}
+          {canBookmark && <Link href="/dashboard/bookmarks" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔖 내 북마크</Link>}
           <Link href="/dashboard/keywords" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⚙️ 키워드 관리</Link>
         </div>
       </div>
@@ -763,16 +771,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         </div>
         {data.selectedCompany ? (
           <ArticleListView
-            articles={data.companyArticles as any}
+            articles={companyArticlesWithBookmark as any}
             canScrap={canScrap}
+            canBookmark={canBookmark}
             showSearch={false}
             csvName={data.selectedCompanyName ?? '포트폴리오사'}
             emptyText={`${range.label} 내 ${data.selectedCompanyName} 기사가 없습니다.`}
           />
         ) : (
           <ArticleListView
-            articles={data.articles as any}
+            articles={articlesWithBookmark as any}
             canScrap={canScrap}
+            canBookmark={canBookmark}
             showSearch={true}
             showCategory={true}
             csvName="최근수집기사"
