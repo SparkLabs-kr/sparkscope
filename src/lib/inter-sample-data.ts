@@ -512,10 +512,11 @@ export interface InterMatrix {
  */
 function computeCellBadge(m: { count: number; prevCount: number; deltaPct: number | null; matchCount: number; matchedCompanies: string[] }): { kind: BadgeKind; label: string; why: string } {
   if (m.count === 0) return { kind: 'none', label: '데이터 없음', why: '이 조합에 해당하는 기사가 없습니다' };
-  if (m.deltaPct !== null && m.deltaPct >= 50 && m.count >= 3)
+  // '급증'은 비교 기준이 실제로 있을 때만 붙인다(prevCount > 0).
+  // 직전 기간이 0건인 건 "폭증"이 아니라 "비교할 게 없음"인 경우가 대부분이다 —
+  // 수집 백필이 기간마다 고르지 않으면 직전이 0으로 잡혀서 거의 모든 칸이 급증으로 물든다.
+  if (m.prevCount > 0 && m.deltaPct !== null && m.deltaPct >= 50 && m.count >= 3)
     return { kind: 'surge', label: '급증', why: `직전 동일 기간 ${m.prevCount}건 → ${m.count}건 (+${m.deltaPct}%)` };
-  if (m.prevCount === 0 && m.count >= 3)
-    return { kind: 'surge', label: '급증', why: `직전 동일 기간엔 없던 흐름 — 이번 기간 ${m.count}건` };
   if (m.matchCount >= 2)
     return { kind: 'opportunity', label: '기회', why: `포트폴리오 매치 ${m.matchCount}건 (${m.matchedCompanies.slice(0, 3).join(', ')})` };
   if (m.count >= 4)
@@ -605,14 +606,14 @@ export function buildMatrix(domain: InterDomain, data: InterData): InterMatrix {
   const allCells = rows.flatMap(r => r.cells);
   const filled = allCells.filter(c => c.count > 0);
 
-  // 가장 뜨거운 칸 — 증감률로 고르되 최소 3건은 돼야 한다.
-  // (1건이 0건→1건이 되면 증감률이 무한대라, 문턱이 없으면 의미 없는 칸이 1위를 차지한다)
+  // 가장 뜨거운 칸 — 증감률로 고르되 (1) 최소 3건, (2) 직전 기간에 비교할 값이 있어야 한다.
+  // 직전 0건을 "무한대 증가"로 치면, 수집 백필이 기간마다 고르지 않을 때 아무 의미 없는
+  // 1~2건 칸이 1위를 차지한다. 비교 가능한 칸이 하나도 없으면 그냥 건수 1위로 대체한다.
   const MIN_HOT = 3;
-  const hotScore = (c: MatrixCell) => (c.prevCount === 0 ? 999 : (c.deltaPct ?? -999));
-  const hotCandidates = filled.filter(c => c.count >= MIN_HOT);
-  const hottestCell = (hotCandidates.length > 0 ? hotCandidates : filled)
-    .slice()
-    .sort((a, b) => hotScore(b) - hotScore(a) || b.count - a.count)[0];
+  const comparable = filled.filter(c => c.count >= MIN_HOT && c.prevCount > 0 && c.deltaPct !== null);
+  const hottestCell = comparable.length > 0
+    ? comparable.slice().sort((a, b) => (b.deltaPct ?? 0) - (a.deltaPct ?? 0) || b.count - a.count)[0]
+    : filled.slice().sort((a, b) => b.count - a.count)[0];
 
   const overlap = filled.filter(c => c.matchCount > 0);
 
