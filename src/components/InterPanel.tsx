@@ -9,7 +9,7 @@
 // 도메인·국가·기간은 모두 URL(?scope=inter&domain=&country=&from=&to=)에 담긴다 —
 // 기간 선택은 Intra 탭과 완전히 같은 DateRangePicker를 그대로 재사용하기 위해 URL 기반이어야 한다.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   COUNTRY_TABS,
@@ -37,14 +37,6 @@ const BADGE_CLS: Record<string, string> = {
   major: 'bg-amber-100 text-amber-700',
   quiet: 'bg-gray-100 text-gray-500',
   none: 'bg-gray-50 text-gray-400',
-};
-
-const BAR_CLS: Record<string, string> = {
-  surge: 'bg-red-500',
-  opportunity: 'bg-emerald-500',
-  major: 'bg-amber-500',
-  quiet: 'bg-gray-300',
-  none: 'bg-gray-200',
 };
 
 const SRC_BADGE_CLS: Record<SourceKind, string> = {
@@ -185,24 +177,6 @@ export function InterPanel({ from, to, canScrap }: { from: string; to: string; c
         <div className="py-16 text-center text-sm text-spark-muted">불러오는 중...</div>
       ) : (
         <>
-          {/* AI 요약 */}
-          <div className="bg-white border-[1.5px] border-spark-border rounded-2xl p-5 mb-6">
-            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-emerald-600 mb-3">
-              ✦ <span>{data.summary.label} 주요 요약</span>
-            </div>
-            <SummaryItem n={1} k="트렌드 1줄 요약" v={data.summary.trend} />
-            <SummaryItem n={2} k="스파크랩의 포지션" v={data.summary.position} />
-            <SummaryItem n={3} k="취해야 할 가장 중요한 액션" v={data.summary.action} last />
-            <div className="mt-2 text-[10px] text-gray-400">
-              {data.summary.source === 'fallback'
-                ? '⚙️ 기본 요약 · AI 분석 대기 중(다음 수집 때 자동 갱신)'
-                : `🤖 AI 요약 · ${fmtKstTime(data.summary.computedAt!)} 기준`}
-            </div>
-          </div>
-
-          {/* 개요 요약 — 전부 실제 집계값. (#5 시각화 후보 확정 전 임시 블록) */}
-          <OverviewSummary overview={data.overview} />
-
           {/* 통계 */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-6">
             {data.stats.map(s => (
@@ -213,17 +187,27 @@ export function InterPanel({ from, to, canScrap }: { from: string; to: string; c
             ))}
           </div>
 
-          {/* 분야별 이슈 강도 — 배지는 실제 지표(건수·증감·매치)에서 계산됨 */}
-          <SectorHeatmap
-            sectors={data.sectors}
-            overview={data.overview}
-            badgeReasons={badgeReasons}
-            reasonsLoading={reasonsLoading}
-            onSelect={id => {
-              setOpenSectors(prev => new Set(prev).add(id));
-              document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }}
-          />
+          {/* A(매트릭스) + C(포지셔닝 맵) 2분할 — 개요 요약을 대체 */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
+            <SectorMatrix
+              sectors={data.sectors}
+              onSelect={id => {
+                setOpenSectors(prev => new Set(prev).add(id));
+                document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+            />
+            <InsightPanel
+              sectors={data.sectors}
+              overview={data.overview}
+              onSelect={id => {
+                setOpenSectors(prev => new Set(prev).add(id));
+                document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+            />
+          </div>
+
+          {/* AI 요약 — 위 매트릭스의 숫자를 그대로 되풀이하지 않고, 그래서 뭘 해야 하는지로 마무리 */}
+          <ColoredSummaryCard summary={data.summary} overview={data.overview} />
 
           {/* 분야별 아코디언 */}
           <div>
@@ -268,17 +252,6 @@ function DeltaChip({ deltaPct, count }: { deltaPct: number | null; count?: numbe
   return (
     <span className={`text-[10px] font-bold tabular-nums ${flat ? 'text-spark-muted' : up ? 'text-red-500' : 'text-blue-500'}`}>
       {flat ? '±0%' : `${up ? '▲' : '▼'}${Math.abs(deltaPct)}%`}
-    </span>
-  );
-}
-
-function Sparkline({ values, cls }: { values: number[]; cls: string }) {
-  const max = Math.max(1, ...values);
-  return (
-    <span className="flex h-5 items-end gap-[2px]" aria-hidden>
-      {values.map((v, i) => (
-        <span key={i} className={`w-[3px] rounded-sm ${v === 0 ? 'bg-spark-cream' : cls}`} style={{ height: `${Math.max(12, (v / max) * 100)}%` }} />
-      ))}
     </span>
   );
 }
@@ -380,162 +353,268 @@ function SectorAccordion({
   );
 }
 
-function SummaryItem({ n, k, v, last }: { n: number; k: string; v: string; last?: boolean }) {
+type SummaryChip = { label: string; cls: string };
+
+function ColoredSummaryItem({ n, k, v, chips, last }: { n: number; k: string; v: string; chips?: SummaryChip[]; last?: boolean }) {
   return (
-    <div className={`flex gap-2.5 py-2 text-[13px] leading-relaxed text-spark-ink-soft ${last ? '' : 'border-b border-spark-cream'}`}>
-      <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-spark-cream text-[10px] font-bold text-spark-muted">
+    <div className={`flex gap-2.5 py-2.5 text-[13px] leading-relaxed text-spark-ink-soft ${last ? '' : 'border-b border-spark-cream'}`}>
+      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-700">
         {n}
       </span>
-      <div>
-        <span className="mr-1 font-semibold text-spark-ink">{k}</span>
-        <span>{v}</span>
+      <div className="min-w-0 flex-1">
+        <div>
+          <span className="mr-1 font-semibold text-spark-ink">{k}</span>
+          <span>{v}</span>
+        </div>
+        {chips && chips.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {chips.map((c, i) => (
+              <span key={i} className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${c.cls}`}>{c.label}</span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// 개요 요약 — LLM 문구가 아니라 실제 집계값만 쓴다. 예전 "✦ 주요 요약" 블록은
-// inter-sample-data.ts의 DOMAIN_SUMMARY 상수(하드코딩 3줄)를 그대로 뿌리고 있어서
-// 데이터가 어떻게 바뀌어도 문구가 절대 변하지 않았다.
-function OverviewSummary({ overview: o }: { overview: InterOverview }) {
-  const maxT = Math.max(1, ...o.timeline.map(t => t.count));
+// 3줄 요약 — AI가 쓴 서술 문장은 그대로 두되, 그 밑에 실제 집계값 칩(증감률·매치 기업)을 색깔로 붙여
+// 문장이 숫자로 뒷받침된다는 걸 한눈에 보여준다.
+function ColoredSummaryCard({ summary, overview }: { summary: DomainSummary; overview: InterOverview }) {
+  const top = overview.topSectors[0];
   return (
     <div className="bg-white border-[1.5px] border-spark-border rounded-2xl p-5 mb-6">
-      <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-emerald-600 mb-4">
-        📈 <span>{o.domainLabel} 트렌드 개요</span>
-        <span className="ml-auto text-[10px] font-medium normal-case text-spark-muted">집계값 기준 · AI 생성 문구 아님</span>
+      <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-emerald-600 mb-3">
+        ✦ <span>{summary.label} 종합 요약</span>
+        <span className="ml-auto text-[10px] font-medium normal-case text-spark-muted">집계값 + AI 한 줄 · {overview.domainLabel} 기준</span>
       </div>
+      <ColoredSummaryItem
+        n={1}
+        k="트렌드 1줄 요약"
+        v={summary.trend}
+        chips={[
+          ...(top
+            ? [{ label: `${top.name} ${top.deltaPct === null ? '신규' : `${top.deltaPct > 0 ? '▲' : '▼'}${Math.abs(top.deltaPct)}%`}`, cls: 'bg-red-50 text-red-600' }]
+            : []),
+          { label: `기사 ${overview.total}건 · 매체 ${overview.sourceCount}곳`, cls: 'bg-spark-subtle text-spark-ink-soft' },
+        ]}
+      />
+      <ColoredSummaryItem
+        n={2}
+        k="스파크랩의 포지션"
+        v={summary.position}
+        chips={overview.topCompanies.slice(0, 4).map(c => ({ label: `📎 ${c.name} ${c.count}`, cls: 'bg-emerald-50 text-emerald-700' }))}
+      />
+      <ColoredSummaryItem n={3} k="취해야 할 가장 중요한 액션" v={summary.action} last />
+      <div className="mt-2 text-[10px] text-gray-400">
+        {summary.source === 'fallback'
+          ? '⚙️ 기본 요약 · AI 분석 대기 중(다음 수집 때 자동 갱신)'
+          : `🤖 AI 요약 · ${fmtKstTime(summary.computedAt!)} 기준`}
+      </div>
+    </div>
+  );
+}
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <div>
-          <div className="text-[11px] text-spark-muted">선별 기사</div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-extrabold tabular-nums text-spark-ink">{o.total}</span>
-            <DeltaChip deltaPct={o.deltaPct} count={o.total} />
-          </div>
-          <div className="text-[10px] text-spark-muted">직전 동일 기간 {o.prevTotal}건</div>
-        </div>
-        <div>
-          <div className="text-[11px] text-spark-muted">가장 뜨거운 분야</div>
-          <div className="truncate text-sm font-bold text-spark-ink">{o.topSectors[0]?.name ?? '—'}</div>
-          <div className="text-[10px] text-spark-muted">
-            {o.topSectors[0] ? `${o.topSectors[0].count}건 · 전체의 ${Math.round(o.topSectors[0].share * 100)}%` : '데이터 없음'}
-          </div>
-        </div>
-        <div>
-          <div className="text-[11px] text-spark-muted">포트폴리오 연결</div>
-          <div className="text-2xl font-extrabold tabular-nums text-emerald-700">{o.matchedCompanyCount}</div>
-          <div className="text-[10px] text-spark-muted">매치 {o.matchCount}건</div>
-        </div>
-        <div>
-          <div className="text-[11px] text-spark-muted mb-1">기간 내 추이</div>
-          <span className="flex h-8 items-end gap-[3px]">
-            {o.timeline.map((t, i) => (
-              <span key={i} title={`${t.label} · ${t.count}건`} className={`w-2 rounded-sm ${t.count === 0 ? 'bg-spark-cream' : 'bg-emerald-500'}`} style={{ height: `${Math.max(8, (t.count / maxT) * 100)}%` }} />
+// A안 — 주제(섹터) × 사건 유형 매트릭스.
+// ⚠ 임시 축: InterNewsVerdict에 "사건 유형"(투자·딜/규제·승인/연구성과…) 태그가 아직 없어서,
+// 지금 있는 SourceKind(뉴스/논문/오피니언)를 자리표시자 열로 대신 쓴다. 사건유형 판정이
+// 붙으면(프롬프트 확장 + 백필) 이 컬럼만 그 값으로 교체하면 된다 — 행 구조는 그대로 재사용 가능.
+function SectorMatrix({ sectors, onSelect }: { sectors: SectorBlock[]; onSelect: (id: string) => void }) {
+  const rows = sectors.slice().sort((a, b) => b.metrics.count - a.metrics.count);
+  const maxCell = Math.max(1, ...rows.flatMap(r => SOURCE_KINDS.map(k => r.items[k].length)));
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const active = rows.find(r => r.id === activeId) ?? null;
+
+  function cellShade(n: number) {
+    if (n === 0) return 'bg-transparent text-spark-border';
+    const ratio = n / maxCell;
+    if (ratio > 0.66) return 'bg-emerald-600 text-white';
+    if (ratio > 0.33) return 'bg-emerald-200 text-emerald-900';
+    return 'bg-emerald-50 text-emerald-800';
+  }
+
+  return (
+    <div className="bg-white border border-spark-border rounded-2xl p-5">
+      <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-spark-ink-soft mb-1">
+        📊 <span>주제 × 사건 유형</span>
+        <span className="ml-auto text-[10px] font-medium normal-case text-amber-600">임시: 소스 유형으로 대체 표시</span>
+      </div>
+      <p className="mb-3 text-[11px] text-spark-muted">
+        사건 유형(투자·딜/규제·승인 등) 태깅이 아직 없어, 지금은 뉴스·논문·오피니언 구성으로 대신 봅니다.
+        분야를 누르면 판정 근거와 대표 기사가 아래에 열립니다.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-[10px] text-spark-muted">
+              <th className="text-left font-semibold pb-1.5 pr-2">분야</th>
+              {SOURCE_KINDS.map(k => (
+                <th key={k} className="font-semibold pb-1.5 px-1 text-center">{SRC_LABEL[k]}</th>
+              ))}
+              <th className="text-right font-semibold pb-1.5 pl-2">계</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(sector => (
+              <tr
+                key={sector.id}
+                onClick={() => setActiveId(prev => (prev === sector.id ? null : sector.id))}
+                className={`cursor-pointer transition-colors ${activeId === sector.id ? 'bg-spark-subtle' : 'hover:bg-spark-subtle'}`}
+              >
+                <td className="py-1 pr-2 whitespace-nowrap">
+                  <span className="mr-1">{sector.icon}</span>
+                  <span className="font-bold text-spark-ink">{sector.name}</span>
+                </td>
+                {SOURCE_KINDS.map(k => {
+                  const n = sector.items[k].length;
+                  return (
+                    <td key={k} className="px-1 py-1">
+                      <div className={`mx-auto flex h-7 w-10 items-center justify-center rounded-md font-bold tabular-nums ${cellShade(n)} ${
+                        sector.badge.kind === 'surge' && n === Math.max(...SOURCE_KINDS.map(kk => sector.items[kk].length)) && n > 0
+                          ? 'ring-2 ring-red-500'
+                          : ''
+                      }`}>
+                        {n === 0 ? '·' : n}
+                      </div>
+                    </td>
+                  );
+                })}
+                <td className="py-1 pl-2 text-right font-bold tabular-nums text-spark-muted">{sector.metrics.count}</td>
+              </tr>
             ))}
-          </span>
-        </div>
+          </tbody>
+        </table>
       </div>
 
-      {o.topCompanies.length > 0 && (
-        <div className="mt-4 flex flex-wrap items-center gap-1.5 border-t border-spark-cream pt-3">
-          <span className="mr-1 text-[11px] font-semibold text-spark-ink-soft">가장 많이 걸린 포트폴리오사</span>
-          {o.topCompanies.map(c => (
-            <span key={c.name} className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700" title={c.sectors.join(', ')}>
-              📎 {c.name} <span className="tabular-nums opacity-70">{c.count}</span>
-            </span>
-          ))}
+      {active && (
+        <div className="mt-3 rounded-xl border border-spark-border bg-spark-subtle p-3.5">
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-sm">{active.icon}</span>
+            <span className="text-xs font-bold text-spark-ink">{active.name}</span>
+            <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${BADGE_CLS[active.badge.kind]}`}>{active.badge.label}</span>
+            <button onClick={() => onSelect(active.id)} className="ml-auto text-[11px] font-semibold text-emerald-700 hover:underline">
+              전체 기사 보기 →
+            </button>
+          </div>
+          <p className="text-[11px] leading-snug text-spark-ink-soft">{active.badge.why}</p>
+          {active.matches.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {active.matches.slice(0, 4).map(m => (
+                <span key={`${m.co}-${m.desc}`} className="rounded-full bg-white border border-spark-border px-2 py-0.5 text-[10px] font-bold text-spark-ink-soft">
+                  📎 {m.co}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function SectorHeatmap({
+// C안 — 포지셔닝 맵. x=도메인 내 비중(share), y=직전 대비 증감률(deltaPct), 버블 크기=포트폴리오 매치 수.
+// 전부 SectorMetrics에 이미 있는 실제 집계값이라 별도 백필 없이 바로 그릴 수 있다.
+// C안 자리를 대신하는 인사이트 패널 — 그래프 대신, 실제 집계값에서 뽑아낸 한줄·포지션·놓치기 쉬운 곳·액션
+// 4줄 문장 + 포트폴리오 매치 바 리스트. 전부 SectorMetrics/InterOverview에 이미 있는 값이라 AI 호출 없음.
+function InsightPanel({
   sectors,
   overview,
-  badgeReasons,
-  reasonsLoading,
   onSelect,
 }: {
   sectors: SectorBlock[];
   overview: InterOverview;
-  badgeReasons: Record<string, string | null>;
-  reasonsLoading: boolean;
   onSelect: (id: string) => void;
 }) {
-  // 정렬: 데이터 있는 섹터 먼저, 그 안에서 건수 많은 순. (예전엔 고정 순서라
-  // '데이터 없음' 줄이 화면 중간에 끼어 시선을 끊었다)
-  const rows = sectors
-    .slice()
-    .sort((a, b) => b.metrics.count - a.metrics.count);
-  const maxVolume = Math.max(1, ...rows.map(r => r.metrics.count));
+  const withData = sectors.filter(s => s.metrics.count > 0);
+  const byCount = withData.slice().sort((a, b) => b.metrics.count - a.metrics.count);
+  const top2 = byCount.slice(0, 2);
+  const top2Share = Math.round(top2.reduce((s, x) => s + x.metrics.share, 0) * 100);
+
+  const byMatch = withData.slice().sort((a, b) => b.metrics.matchCount - a.metrics.matchCount);
+  const topMatch = byMatch[0];
+
+  const sneaky = withData
+    .filter(s => !top2.includes(s))
+    .filter(s => s.metrics.deltaPct !== null && s.metrics.deltaPct > 0)
+    .sort((a, b) => (b.metrics.deltaPct ?? 0) - (a.metrics.deltaPct ?? 0))[0];
+
+  const maxCompanyCount = Math.max(1, ...overview.topCompanies.map(c => c.count));
 
   return (
-    <div className="bg-white border border-spark-border rounded-2xl p-5 mb-6">
-      <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-spark-ink-soft mb-1">
-        📊 <span>분야별 이슈 강도</span>
-        <span className="ml-auto flex items-center gap-3 text-[10px] font-medium normal-case text-spark-muted">
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" />급증</span>
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" />기회</span>
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" />주요 흐름</span>
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-gray-300" />관측 중</span>
-        </span>
+    <div className="bg-white border border-spark-border rounded-2xl p-5 flex flex-col gap-4">
+      <div>
+        <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-spark-ink-soft mb-3">
+          ✦ <span>이 화면이 말하는 것</span>
+        </div>
+        <div className="flex flex-col gap-3">
+          <InsightRow k="한 줄">
+            {top2.length > 0 ? (
+              <>
+                자금과 뉴스가 <b className="text-spark-ink">{top2.map(s => s.name).join('·')}</b> 분야로 몰리고 있습니다.
+                {top2Share > 0 && <> (전체의 {top2Share}%)</>}
+              </>
+            ) : (
+              '이 기간·조건에서 두드러진 분야가 없습니다.'
+            )}
+          </InsightRow>
+          <InsightRow k="우리 위치">
+            {topMatch && topMatch.metrics.matchCount > 0 ? (
+              <>
+                가장 큰 매치는 <b className="text-spark-ink">{topMatch.name}</b> — 매치 {topMatch.metrics.matchCount}건, {topMatch.metrics.matchedCompanies.length}개사가 걸려 있습니다.
+              </>
+            ) : (
+              '이 기간 포트폴리오와 직접 연결된 매치가 없습니다.'
+            )}
+          </InsightRow>
+          <InsightRow k="놓치기 쉬운 곳">
+            {sneaky ? (
+              <>
+                <b className="text-spark-ink">{sneaky.name}</b>은 기사량은 적지만({sneaky.metrics.count}건) 증감률은 +{sneaky.metrics.deltaPct}%로 상위권입니다.
+              </>
+            ) : (
+              '눈에 띄게 예외적인 분야는 없습니다.'
+            )}
+          </InsightRow>
+          <InsightRow k="액션">
+            {topMatch && topMatch.metrics.matchCount > 0 ? (
+              <>
+                <b className="text-spark-ink">{topMatch.name}</b> 매치 기업들의 최신 기사부터 확인하세요.{' '}
+                <button onClick={() => onSelect(topMatch.id)} className="font-semibold text-emerald-700 hover:underline">
+                  바로 보기 →
+                </button>
+              </>
+            ) : (
+              '아직 특정할 액션이 없습니다 — 데이터가 더 쌓이면 갱신됩니다.'
+            )}
+          </InsightRow>
+        </div>
       </div>
-      <p className="mb-4 text-[11px] text-spark-muted">
-        상태 라벨은 <b>직전 동일 기간 대비 증감 · 포트폴리오 매치 수 · 도메인 내 비중</b>으로 계산됩니다. 라벨에 마우스를 올리면 판정 근거 숫자가 보입니다.
-      </p>
-      <div className="flex flex-col gap-2.5">
-        {rows.map(sector => {
-          const reason = badgeReasons[sector.id];
-          const reasonKnown = sector.id in badgeReasons;
-          const m = sector.metrics;
-          return (
-            <div key={sector.id} className="rounded-lg px-2 py-1.5 hover:bg-spark-subtle">
-              <button onClick={() => onSelect(sector.id)} className="flex w-full items-center gap-3 text-left">
-                <span className="w-8 shrink-0 text-center text-[15px]">{sector.icon}</span>
-                <span className="w-24 shrink-0 text-xs font-bold text-spark-ink">{sector.name}</span>
-                <div className="relative h-5 flex-1 overflow-hidden rounded-md bg-spark-cream">
-                  <div
-                    className={`h-full rounded-md ${BAR_CLS[sector.badge.kind]}`}
-                    style={{ width: `${m.count === 0 ? 0 : Math.max(6, (m.count / maxVolume) * 100)}%` }}
-                  />
-                </div>
-                <span className="w-7 shrink-0 text-right text-[11px] font-bold tabular-nums text-spark-ink-soft">{m.count}</span>
-                <span className="w-12 shrink-0 text-right"><DeltaChip deltaPct={m.deltaPct} count={m.count} /></span>
-                <span className="hidden shrink-0 sm:block"><Sparkline values={m.timeline} cls={BAR_CLS[sector.badge.kind]} /></span>
-                <span className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-bold ${BADGE_CLS[sector.badge.kind]}`} title={sector.badge.why}>
-                  {sector.badge.label}
+
+      {overview.topCompanies.length > 0 && (
+        <div className="border-t border-spark-cream pt-3.5">
+          <div className="text-[11px] font-bold text-spark-ink-soft mb-2">📎 가장 많이 걸린 포트폴리오사</div>
+          <div className="flex flex-col gap-1.5">
+            {overview.topCompanies.map(c => (
+              <div key={c.name} className="grid grid-cols-[88px_1fr_28px] items-center gap-2 text-xs">
+                <span className="truncate font-semibold text-spark-ink-soft" title={c.sectors.join(', ')}>{c.name}</span>
+                <span className="h-2 rounded-full bg-spark-cream overflow-hidden">
+                  <span className="block h-full rounded-full bg-emerald-500" style={{ width: `${Math.max(6, (c.count / maxCompanyCount) * 100)}%` }} />
                 </span>
-                {m.matchCount > 0 ? (
-                  <span className="flex w-[104px] shrink-0 items-center gap-1 truncate rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                    📎 {m.matchedCompanies[0]}
-                    {m.matchedCompanies.length > 1 ? ` 외 ${m.matchedCompanies.length - 1}` : ''}
-                  </span>
-                ) : (
-                  <span className="w-[104px] shrink-0" />
-                )}
-              </button>
-              <div className="mt-1 pl-11 pr-6 text-[11px] leading-snug text-spark-ink-soft">
-                {m.count === 0 ? (
-                  <span className="text-spark-muted">이 기간·국가 조건에서 수집된 기사가 없습니다</span>
-                ) : !reasonKnown && reasonsLoading ? (
-                  <span className="text-spark-muted">🤖 요약 분석 중…</span>
-                ) : reason ? (
-                  <span><span className="font-semibold text-emerald-600">🤖 AI 요약</span> · {reason}</span>
-                ) : (
-                  <span className="text-spark-muted">⚙️ 기본 요약 · {sector.badge.why}</span>
-                )}
+                <span className="text-right font-bold tabular-nums text-spark-ink-soft">{c.count}</span>
               </div>
-            </div>
-          );
-        })}
-      </div>
-      {overview.emptySectors.length > 0 && (
-        <p className="mt-3 border-t border-spark-cream pt-3 text-[11px] text-spark-muted">
-          이 기간 기사가 0건인 분야: {overview.emptySectors.join(' · ')}
-        </p>
+            ))}
+          </div>
+        </div>
       )}
+    </div>
+  );
+}
+
+function InsightRow({ k, children }: { k: string; children: ReactNode }) {
+  return (
+    <div>
+      <div className="text-[11px] font-bold text-spark-muted mb-0.5">{k}</div>
+      <p className="text-[13px] leading-relaxed text-spark-ink-soft">{children}</p>
     </div>
   );
 }
