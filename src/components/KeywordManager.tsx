@@ -112,18 +112,18 @@ export function KeywordManager() {
 
       {/* 목록 */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[1000px] text-sm table-fixed">
           <thead>
             <tr className="bg-gray-50 text-gray-500 text-[10px] uppercase tracking-wider">
-              <th className="text-left px-3 py-2">이름</th>
-              <th className="text-left px-3 py-2">영문명</th>
-              <th className="text-left px-3 py-2 w-40">카테고리</th>
+              <th className="text-left px-3 py-2 w-28">이름</th>
+              <th className="text-left px-3 py-2 w-28">영문명</th>
+              <th className="text-left px-3 py-2 w-24">카테고리</th>
               <th className="text-center px-3 py-2 w-16">상태</th>
               <th className="text-center px-3 py-2 w-20">포폴상태</th>
-              <th className="text-left px-3 py-2">보조키워드</th>
-              <th className="text-left px-3 py-2">제외키워드</th>
-              <th className="text-left px-3 py-2">문맥어</th>
-              <th className="text-right px-3 py-2 w-28">관리</th>
+              <th className="text-left px-3 py-2 w-32">보조키워드</th>
+              <th className="text-left px-3 py-2 w-32">제외키워드</th>
+              <th className="text-left px-3 py-2 w-40">문맥어</th>
+              <th className="text-right px-3 py-2 w-24">관리</th>
             </tr>
           </thead>
           <tbody>
@@ -164,14 +164,14 @@ export function KeywordManager() {
               </tr>
             ) : (
               <tr key={t.id} className="border-b border-gray-100 hover:bg-gray-50">
-                <td className="px-3 py-2 font-medium">{t.name}</td>
-                <td className="px-3 py-2 text-gray-500">{t.englishName}</td>
-                <td className="px-3 py-2"><span className="text-xs text-gray-600">{CAT_LABEL[t.category] ?? t.category}</span></td>
+                <td className="px-3 py-2 font-medium truncate" title={t.name}>{t.name}</td>
+                <td className="px-3 py-2 text-gray-500 truncate" title={t.englishName ?? ''}>{t.englishName}</td>
+                <td className="px-3 py-2 truncate"><span className="text-xs text-gray-600">{CAT_LABEL[t.category] ?? t.category}</span></td>
                 <td className="px-3 py-2 text-center"><StatusBadge status={t.status} /></td>
                 <td className="px-3 py-2 text-center"><PortfolioStatusBadge status={t.portfolioStatus} /></td>
-                <td className="px-3 py-2 text-xs text-gray-500 max-w-xs truncate">{t.helperKeywords}</td>
-                <td className="px-3 py-2 text-xs text-gray-500 max-w-xs truncate">{t.excludeWords}</td>
-                <td className="px-3 py-2 text-xs text-gray-500 max-w-xs truncate">{t.contextWords}</td>
+                <td className="px-3 py-2 text-xs text-gray-500 truncate" title={t.helperKeywords ?? ''}>{t.helperKeywords}</td>
+                <td className="px-3 py-2 text-xs text-gray-500 truncate" title={t.excludeWords ?? ''}>{t.excludeWords}</td>
+                <td className="px-3 py-2 text-xs text-gray-500 truncate" title={t.contextWords ?? ''}>{t.contextWords}</td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">
                   <button onClick={() => { setEditId(t.id); setEditForm({}); }} className="text-xs font-semibold text-gray-600 mr-2">편집</button>
                   <button onClick={() => remove(t)} className="text-xs text-red-500">삭제</button>
