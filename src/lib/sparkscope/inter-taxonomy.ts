@@ -50,3 +50,65 @@ export const AI_TREND_SECTORS = [
 export function trendSectorsFor(domain: InterDomain) {
   return domain === '바이오' ? BIO_TREND_SECTORS : AI_TREND_SECTORS;
 }
+
+/*
+ * ── 축 분리 (2026-08-04) ──────────────────────────────────────────────
+ * 위 *_TREND_SECTORS는 축이 섞여 있다: 5개는 주제(항암·신약발굴 …)인데
+ * '규제·거버넌스'와 '투자·산업동향'은 주제가 아니라 "무슨 일이 일어났는가"(사건 유형)다.
+ * 그래서 "머크가 항암 신약사를 32조에 인수" 같은 기사가 항암이 아니라 투자로 분류되고,
+ * 실제로 투자·산업동향 혼자 relevant 450건 중 151건(34%)을 먹고 있었다(규제 46건 추가).
+ *
+ * 아래처럼 축을 둘로 분리한다:
+ *   주제(topicSector)   — 무엇에 관한 기사인가
+ *   사건 유형(eventType) — 무슨 일이 일어났는가
+ * 화면에서는 이 둘을 교차한 매트릭스로 보여준다("항암 × 투자·딜").
+ *
+ * 기존 sector 컬럼은 그대로 두고(레거시·되돌리기용) topicSector/eventType을 새로 채운다.
+ */
+
+export const INTER_EVENT_TYPES = [
+  { key: '투자·딜', icon: '💰', sub: '라운드·M&A·IPO' },
+  { key: '규제·승인', icon: '⚖️', sub: 'FDA/EMA·정책·소송' },
+  { key: '연구성과', icon: '🔬', sub: '임상 결과·논문' },
+  { key: '제품·상용화', icon: '🚀', sub: '출시·파트너십' },
+  { key: '시장·인물', icon: '📊', sub: '전망·인사·조직' },
+] as const;
+
+export type InterEventType = (typeof INTER_EVENT_TYPES)[number]['key'];
+
+// 주제 축 — cross-cutting(규제·투자)을 뺀 순수 주제만. 매트릭스의 행이 된다.
+export const BIO_TOPIC_SECTORS = [
+  { key: '항암', icon: '🔬', sub: '면역항암·표적치료·ADC' },
+  { key: '신약발굴', icon: '🧬', sub: 'AI 신약발굴·희귀질환' },
+  { key: '의료기기·진단', icon: '🩺', sub: 'AI 진단·로봇수술·웨어러블' },
+  { key: '디지털헬스', icon: '📱', sub: '원격의료·헬스 데이터·환자관리' },
+  { key: '약물전달·제형', icon: '💊', sub: '나노입자·LNP·경구제형' },
+] as const;
+
+export const AI_TOPIC_SECTORS = [
+  { key: '에이전틱AI', icon: '🤖', sub: '자율 에이전트·멀티에이전트 협업' },
+  { key: '생성형AI·콘텐츠', icon: '🎨', sub: '생성 모델·콘텐츠 제작 도구' },
+  { key: 'AI인프라·데이터', icon: '🗄️', sub: '컴퓨트·데이터 파이프라인·모델 인프라' },
+  { key: 'AI버티컬', icon: '🏢', sub: '산업별 AI 적용·엔터프라이즈' },
+  { key: '온디바이스AI·엣지', icon: '📲', sub: '엣지 추론·경량화 모델' },
+] as const;
+
+export function topicSectorsFor(domain: InterDomain) {
+  return domain === '바이오' ? BIO_TOPIC_SECTORS : AI_TOPIC_SECTORS;
+}
+
+/**
+ * 레거시 sector → 새 주제 축 매핑.
+ * 백필이 아직 안 닿은 verdict(topicSector=null)를 화면에서 최소한 어디엔가 놓기 위한 fallback.
+ * '규제·거버넌스'/'투자·산업동향'은 주제가 아니므로 매핑 불가 → null(백필로만 해결된다).
+ */
+export function legacySectorToTopic(sector: string | null): string | null {
+  if (!sector) return null;
+  const direct: Record<string, string> = {
+    '약물전달': '약물전달·제형',
+    'AI버티컬 SaaS': 'AI버티컬',
+  };
+  if (direct[sector]) return direct[sector];
+  const known = [...BIO_TOPIC_SECTORS, ...AI_TOPIC_SECTORS].some(s => s.key === sector);
+  return known ? sector : null;
+}

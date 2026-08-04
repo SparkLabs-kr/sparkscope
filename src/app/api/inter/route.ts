@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  buildMatrix,
   buildOverview,
   getDomainStats,
   getSectorData,
@@ -49,6 +50,7 @@ export async function GET(req: NextRequest) {
   const stats = getDomainStats(data);
   const sectors = getSectorData(domain, data);
   const overview = buildOverview(domain, data, sectors);
+  const matrix = buildMatrix(domain, data);
 
-  return NextResponse.json({ summary, overview, stats, sectors });
+  return NextResponse.json({ summary, overview, stats, sectors, matrix });
 }

@@ -165,7 +165,11 @@ model InterNewsVerdict {
   relevant  Boolean
   reason    String   // "AI 인프라 트렌드", "노이즈: 쿠폰 행사" 등
   domain    String?  // 'bio' | 'ai' — relevant=true인 기사만 채워짐
-  sector    String?  // inter-taxonomy.ts BIO_TREND_SECTORS/AI_TREND_SECTORS의 key 중 하나
+  sector    String?  // [레거시] inter-taxonomy.ts BIO_TREND_SECTORS/AI_TREND_SECTORS의 key. 축이 섞여 있어(주제+사건유형) 아래 두 컬럼으로 분리됨. 되돌리기용으로 보존.
+  // 축 분리 (2026-08-04) — sector 하나에 주제와 사건유형이 섞여 있어서 "머크가 항암 신약사 인수"가
+  // 항암이 아니라 투자·산업동향으로 분류되고, 그 카테고리 혼자 relevant 450건 중 151건(34%)을 먹고 있었다.
+  topicSector String?  // 무엇에 관한 기사인가 — BIO_TOPIC_SECTORS/AI_TOPIC_SECTORS의 key
+  eventType   String?  // 무슨 일이 일어났는가 — INTER_EVENT_TYPES의 key (투자·딜/규제·승인/연구성과/제품·상용화/시장·인물)
   country   String?  // 'us' | 'cn' | 'jp' | 'sa' | 'other' — 기사가 다루는 트렌드의 주요 국가(매체 소속 국가 아님). relevant=true만 채워짐
   titleKo   String?  // 제목 한국어 번역
   model     String   @default("gemini-3.1-flash-lite") // 판정한 모델
@@ -183,6 +187,8 @@ model InterNewsVerdict {
   @@index([domain])
   @@index([sector])
   @@index([isScrapped])
+  @@index([topicSector])
+  @@index([eventType])
 }
 
 // 실제 DB에만 존재하던 테이블(행 0건, 이 브랜치 코드에서 참조하는 곳 없음) — 다른 세션에서

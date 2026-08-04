@@ -1,16 +1,42 @@
 import { GoogleGenAI } from '@google/genai';
 import { prisma } from '@/lib/prisma';
-import { BIO_TREND_SECTORS, AI_TREND_SECTORS } from './inter-taxonomy';
+import {
+  BIO_TREND_SECTORS,
+  AI_TREND_SECTORS,
+  BIO_TOPIC_SECTORS,
+  AI_TOPIC_SECTORS,
+  INTER_EVENT_TYPES,
+} from './inter-taxonomy';
 
 const BIO_SECTOR_KEYS = BIO_TREND_SECTORS.map(s => s.key).join(', ');
 const AI_SECTOR_KEYS = AI_TREND_SECTORS.map(s => s.key).join(', ');
+const BIO_TOPIC_KEYS = BIO_TOPIC_SECTORS.map(s => s.key).join(', ');
+const AI_TOPIC_KEYS = AI_TOPIC_SECTORS.map(s => s.key).join(', ');
+const EVENT_TYPE_KEYS = INTER_EVENT_TYPES.map(e => `${e.key}(${e.sub})`).join(', ');
 
 const SYSTEM = `당신은 스파크랩 인터(해외 트렌드) 탭의 AI/바이오 도메인 뉴스 분류기입니다.
 수집된 해외 기사 제목이 "글로벌 AI 업계 트렌드" 또는 "글로벌 바이오 업계 트렌드"와 실제로 관련 있는지 판단하고,
-관련 있다면 도메인(ai/bio)과 세부 섹터를 분류하고, 트렌드가 주로 일어나는 국가를 판별하고, 제목을 한국어로 번역합니다.
+관련 있다면 도메인(ai/bio)·주제·사건 유형을 분류하고, 트렌드가 주로 일어나는 국가를 판별하고, 제목을 한국어로 번역합니다.
 
-바이오 세부 섹터: ${BIO_SECTOR_KEYS}
-AI 세부 섹터: ${AI_SECTOR_KEYS}
+■ 분류는 축이 셋입니다. 주제와 사건 유형을 절대 섞지 마세요.
+
+1) topicSector — "무엇에 관한 기사인가"
+   바이오: ${BIO_TOPIC_KEYS}
+   AI: ${AI_TOPIC_KEYS}
+   ⚠ 반드시 위 목록 중 하나를 고릅니다. 투자 기사·규제 기사도 "그래서 어느 분야 이야기인가"로 주제를 정합니다.
+     예) "머크가 항암 신약사를 32조에 인수" → topicSector는 항암 (투자가 아님)
+     예) "FDA가 임상시험 심사 절차를 개편" → 그 정책이 가장 크게 영향을 주는 주제(신약발굴 등)
+   특정 분야로 좁히기 정말 어려운 도메인 전반 기사만 null.
+
+2) eventType — "무슨 일이 일어났는가"
+   ${EVENT_TYPE_KEYS}
+     예) "머크가 항암 신약사를 32조에 인수" → 투자·딜
+     예) "FDA가 임상시험 심사 절차를 개편" → 규제·승인
+     예) "임상 3상에서 유효성 입증" → 연구성과
+
+3) sector — [레거시 호환용] 기존 섹터 목록에서 하나. 여기엔 규제·거버넌스/투자·산업동향이 포함됩니다.
+   바이오: ${BIO_SECTOR_KEYS}
+   AI: ${AI_SECTOR_KEYS}
 
 국가 판별 기준: 기사를 "게재한" 매체의 국적이 아니라, 기사 내용이 다루는 회사·사건의 주요 국가를 본다
 (예: 미국 매체가 중국 스타트업을 다룬 기사면 "cn"). 특정 국가로 좁히기 어렵거나 여러 국가에 걸친 일반 기사는 "other".
@@ -30,7 +56,9 @@ ${batch.map((a, i) => `${i + 1}. [${a.source}] ${a.title}`).join('\n')}
   "relevant": true|false,
   "reason": "<한 줄 이유>",
   "domain": "ai"|"bio"|null,   // relevant=false면 null
-  "sector": "<위 세부 섹터 목록 중 하나>"|null,   // relevant=false면 null
+  "topicSector": "<주제 목록 중 하나>"|null,   // relevant=false면 null
+  "eventType": "<사건 유형 목록 중 하나>"|null,   // relevant=false면 null
+  "sector": "<레거시 섹터 목록 중 하나>"|null,   // relevant=false면 null
   "country": "us"|"cn"|"jp"|"sa"|"other"|null,   // relevant=false면 null
   "titleKo": "<제목 한국어 번역>"|null   // relevant=false면 null
 }]
@@ -51,6 +79,8 @@ type FilterVerdict = {
   reason: string;
   domain?: 'ai' | 'bio' | null;
   sector?: string | null;
+  topicSector?: string | null;
+  eventType?: string | null;
   country?: 'us' | 'cn' | 'jp' | 'sa' | 'other' | null;
   titleKo?: string | null;
 };
@@ -118,6 +148,8 @@ export async function filterInterNewsWithGemini(newsIds: string[]): Promise<{ fi
             reason: verdict.reason,
             domain: verdict.relevant ? (verdict.domain ?? null) : null,
             sector: verdict.relevant ? (verdict.sector ?? null) : null,
+            topicSector: verdict.relevant ? (verdict.topicSector ?? null) : null,
+            eventType: verdict.relevant ? (verdict.eventType ?? null) : null,
             country: verdict.relevant ? (verdict.country ?? null) : null,
             titleKo: verdict.relevant ? (verdict.titleKo ?? null) : null,
             model: 'gemini-3.1-flash-lite',
