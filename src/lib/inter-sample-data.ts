@@ -33,26 +33,50 @@ export interface DomainSummary {
   trend: string;
   position: string;
   action: string;
+  source: 'ai' | 'fallback';
+  computedAt: string | null; // ISO — fallback이면 null
 }
 
-// 고정 문구 — 실제 데이터로 계산한 요약(buildOverview)이 실패했을 때만 쓰는 폴백.
-// 화면에서는 이 문구를 "AI 요약"으로 표시하지 않는다(출처를 구분해서 보여줄 것 — CLAUDE.md).
-export const DOMAIN_SUMMARY: Record<InterDomain, DomainSummary> = {
+export const DOMAIN_LABEL: Record<InterDomain, string> = { bio: '바이오', ai: 'AI' };
+
+// 사전계산(DashboardInsight) 전이거나 실패했을 때만 쓰는 기본값 — 특정 트렌드처럼 보이지 않게 일반적인 문구로.
+const FALLBACK_SUMMARY: Record<InterDomain, Omit<DomainSummary, 'label' | 'source' | 'computedAt'>> = {
   bio: {
-    label: '바이오',
-    trend: 'AI 신약개발 임상 성공률 상승으로 글로벌 바이오 투자 재가속 — 미국 중심 임상 AI 스타트업에 자금 집중.',
-    position: '스파크랩파트너스의 임상전문특화병원 설립이 이 흐름과 직결 — 임상 데이터 허브로서 선점 기회 존재.',
-    action: 'AI 신약 파이프라인 보유 스타트업 발굴 및 임상병원과의 파이프라인 연계 논의 선제적으로 시작.',
+    trend: '아직 AI 요약이 준비되지 않았습니다 (다음 수집 배치에서 자동 생성됩니다).',
+    position: '-',
+    action: '-',
   },
   ai: {
-    label: 'AI',
-    trend: '에이전틱 AI의 엔터프라이즈 도입이 급가속 — SaaS 대체 수요 본격화, 1인 창업자 생산성 도구 시장 급성장.',
-    position: '스파크랩 스파크클로 프로그램이 이 흐름을 선점 — 1인 AI 창업자 육성에서 글로벌 AC 중 가장 빠른 움직임.',
-    action: '에이전틱 AI 포트폴리오사 글로벌 피칭 기회 발굴 및 경쟁 AC 대비 포지셔닝 명확화.',
+    trend: '아직 AI 요약이 준비되지 않았습니다 (다음 수집 배치에서 자동 생성됩니다).',
+    position: '-',
+    action: '-',
   },
 };
 
-export const DOMAIN_LABEL: Record<InterDomain, string> = { bio: '바이오', ai: 'AI' };
+/** DashboardInsight(kind='inter_summary')에서 도메인별 사전계산 요약을 읽는다. 없으면 폴백. */
+export async function getDomainSummary(domain: InterDomain): Promise<DomainSummary> {
+  const row = await prisma.dashboardInsight.findUnique({
+    where: { kind_key: { kind: 'inter_summary', key: domain } },
+  });
+  if (row) {
+    try {
+      const parsed = JSON.parse(row.value);
+      if (parsed?.trend && parsed?.position && parsed?.action) {
+        return {
+          label: DOMAIN_LABEL[domain],
+          trend: parsed.trend,
+          position: parsed.position,
+          action: parsed.action,
+          source: 'ai',
+          computedAt: row.computedAt.toISOString(),
+        };
+      }
+    } catch {
+      // 저장된 값이 깨져 있으면 폴백으로 처리
+    }
+  }
+  return { label: DOMAIN_LABEL[domain], ...FALLBACK_SUMMARY[domain], source: 'fallback', computedAt: null };
+}
 
 export interface InterStat {
   label: string;
@@ -99,7 +123,10 @@ async function getRelevantVerdicts(
       news: { select: { id: true, title: true, url: true, source: true, publishedAt: true } },
     },
   });
-  return verdicts.filter(v => (v.domain ?? legacyDomainGuess(v.news.source)) === domain);
+  let filtered = verdicts.filter(v => (v.domain ?? legacyDomainGuess(v.news.source)) === domain);
+  // country=undefined/'all'이면 전체. 국가 미판별(레거시) 기사는 특정 국가 탭에는 안 잡히고 '전체'에서만 보인다.
+  if (country && country !== 'all') filtered = filtered.filter(v => v.country === country);
+  return filtered;
 }
 
 // 도메인+기간에 대한 verdict/match를 한 번만 조회해서 stats·sectors 양쪽에 재사용.

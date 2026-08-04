@@ -2,8 +2,9 @@
 
 // Inter(해외 트렌드) 탭 — 바이오/AI 도메인별 해외 기사·논문·오피니언 트렌드 + 포트폴리오 매치.
 //
-// /api/inter?domain=bio|ai&from=&to=&country= 에서 실제 DB 데이터(RSS 수집 → Gemini 필터링 →
-// GPT 포트폴리오 매칭 파이프라인 결과)를 받아온다.
+// /api/inter?domain=bio|ai&from=&to=&country= 에서 실제 DB 데이터(RSS 수집 → Gemini
+// 필터링(국가 판별 포함) → GPT 포트폴리오 매칭 파이프라인 결과)를 받아온다. 상단 AI 요약은
+// daily-collect 크론이 하루 1회 미리 계산(inter-summary.ts)해 둔 것을 읽기만 한다.
 //
 // 도메인·국가·기간은 모두 URL(?scope=inter&domain=&country=&from=&to=)에 담긴다 —
 // 기간 선택은 Intra 탭과 완전히 같은 DateRangePicker를 그대로 재사용하기 위해 URL 기반이어야 한다.
@@ -54,6 +55,12 @@ const SRC_BADGE_CLS: Record<SourceKind, string> = {
 
 const SRC_LABEL: Record<SourceKind, string> = { news: '기사', paper: '논문', opinion: '오피니언' };
 const SOURCE_KINDS: SourceKind[] = ['news', 'paper', 'opinion'];
+
+// 요약 계산 시각은 KST 기준 HH:MM으로 표시 (daily-collect 사전계산 배치가 KST 하루 1회 도는 것과 맞춤)
+function fmtKstTime(d: Date | string) {
+  const kst = new Date(new Date(d).toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+  return `${String(kst.getHours()).padStart(2, '0')}:${String(kst.getMinutes()).padStart(2, '0')}`;
+}
 
 export function InterPanel({ from, to, canScrap }: { from: string; to: string; canScrap: boolean }) {
   const router = useRouter();
@@ -178,6 +185,21 @@ export function InterPanel({ from, to, canScrap }: { from: string; to: string; c
         <div className="py-16 text-center text-sm text-spark-muted">불러오는 중...</div>
       ) : (
         <>
+          {/* AI 요약 */}
+          <div className="bg-white border-[1.5px] border-spark-border rounded-2xl p-5 mb-6">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-emerald-600 mb-3">
+              ✦ <span>{data.summary.label} 주요 요약</span>
+            </div>
+            <SummaryItem n={1} k="트렌드 1줄 요약" v={data.summary.trend} />
+            <SummaryItem n={2} k="스파크랩의 포지션" v={data.summary.position} />
+            <SummaryItem n={3} k="취해야 할 가장 중요한 액션" v={data.summary.action} last />
+            <div className="mt-2 text-[10px] text-gray-400">
+              {data.summary.source === 'fallback'
+                ? '⚙️ 기본 요약 · AI 분석 대기 중(다음 수집 때 자동 갱신)'
+                : `🤖 AI 요약 · ${fmtKstTime(data.summary.computedAt!)} 기준`}
+            </div>
+          </div>
+
           {/* 개요 요약 — 전부 실제 집계값. (#5 시각화 후보 확정 전 임시 블록) */}
           <OverviewSummary overview={data.overview} />
 
@@ -354,6 +376,20 @@ function SectorAccordion({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function SummaryItem({ n, k, v, last }: { n: number; k: string; v: string; last?: boolean }) {
+  return (
+    <div className={`flex gap-2.5 py-2 text-[13px] leading-relaxed text-spark-ink-soft ${last ? '' : 'border-b border-spark-cream'}`}>
+      <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-spark-cream text-[10px] font-bold text-spark-muted">
+        {n}
+      </span>
+      <div>
+        <span className="mr-1 font-semibold text-spark-ink">{k}</span>
+        <span>{v}</span>
+      </div>
     </div>
   );
 }

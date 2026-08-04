@@ -4,7 +4,7 @@ import {
   getDomainStats,
   getSectorData,
   loadInterData,
-  DOMAIN_SUMMARY,
+  getDomainSummary,
   type InterCountry,
   type InterDomain,
 } from '@/lib/inter-sample-data';
@@ -42,15 +42,13 @@ export async function GET(req: NextRequest) {
     since = new Date(until.getTime() - days * 86400000);
   }
 
-  const data = await loadInterData(domain, since, until, country);
+  const [data, summary] = await Promise.all([
+    loadInterData(domain, since, until, country),
+    getDomainSummary(domain),
+  ]);
   const stats = getDomainStats(data);
   const sectors = getSectorData(domain, data);
   const overview = buildOverview(domain, data, sectors);
 
-  return NextResponse.json({
-    summary: DOMAIN_SUMMARY[domain], // 고정 폴백 문구 (화면에서 "AI 요약"으로 표시하지 않음)
-    overview,
-    stats,
-    sectors,
-  });
+  return NextResponse.json({ summary, overview, stats, sectors });
 }

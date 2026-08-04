@@ -14,6 +14,7 @@ import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } f
 import { collectInterNews } from './inter-collect';
 import { filterInterNewsWithGemini } from './inter-filter';
 import { matchInterNewsWithPortfolio } from './inter-portfolio-match';
+import { computeAndStoreInterSummaries } from './inter-summary';
 
 export interface RunOptions {
   send?: boolean;            // 실제 메일 발송 여부 (false면 DB 저장까지만)
@@ -72,7 +73,13 @@ export async function runDailyDigest(opts: RunOptions = {}) {
       // 일반 수집 모드
       const maxPerCat = process.env.COLLECT_MAX_PER_CATEGORY ? Number(process.env.COLLECT_MAX_PER_CATEGORY) : 30;
       const daysBack = process.env.COLLECT_DAYS_BACK ? Number(process.env.COLLECT_DAYS_BACK) : undefined;
-      raw = await collectAllArticles({ maxKeywordsPerCategory: maxPerCat, daysBack });
+      // 경쟁사(114개)는 매일 다 훑기엔 네이버 호출량·실행시간 부담이 커서, 다이제스트가
+      // 나가는 월·수·금(그 전 새벽 수집)에만 전체를 다 훑고, 나머지 요일엔 대시보드 고정
+      // 12개 카드만 가볍게 갱신한다.
+      const kstDay = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' })).getDay(); // 0=일 ~ 6=토
+      const digestDayFullScan = [1, 3, 5].includes(kstDay); // 월(1)·수(3)·금(5)
+      console.log(`[runner] 경쟁사·업계동향 전체 스캔: ${digestDayFullScan ? 'ON(다이제스트 발송일)' : 'OFF(경쟁사 고정 12개만·업계동향은 기존 캡)'}`);
+      raw = await collectAllArticles({ maxKeywordsPerCategory: maxPerCat, daysBack, digestDayFullScan });
     }
 
     // 1.5 Inter(해외 트렌드) 탭 — RSS 수집 + Gemini 필터링 (skipCollect 모드에서는 건너뜀)
@@ -92,6 +99,7 @@ export async function runDailyDigest(opts: RunOptions = {}) {
             console.log(`[runner] Inter portfolio matched: ${matchResult.matched}건, ${matchResult.failed.length}개 오류`);
           }
         }
+        await computeAndStoreInterSummaries();
       } catch (e: any) {
         console.error('[runner] Inter collection/filtering failed:', e?.message ?? e);
         // Inter 실패는 포트폴리오 다이제스트에 영향 안 줌
@@ -192,6 +200,9 @@ export async function runDailyDigest(opts: RunOptions = {}) {
       // 4.5 대시보드 AI 요약(위기 원인·경쟁사 트렌드) 사전계산 — 하루 1회, 실제 수집 실행 때만
       // (skipCollect=발송 전용 모드에서는 돌리지 않음). 내부적으로 실패를 삼키므로 발송에는 영향 없음.
       await computeAndStoreDashboardInsights();
+
+      // 4.55 Inter(해외 트렌드) 탭 AI 요약 사전계산 — 위와 같은 이유로 하루 1회, 여기서만.
+      await computeAndStoreInterSummaries();
 
       // 4.6 master-keywords.json ↔ DB 불일치 확인 — 하루 1회, 다를 때만 관리자에게 메일.
       // (7/31~8/3에 파일은 고쳤는데 DB엔 반영 안 된 채로 몇 주 방치된 사고 재발 방지)
