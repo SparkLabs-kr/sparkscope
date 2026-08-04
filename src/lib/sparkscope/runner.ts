@@ -77,9 +77,9 @@ export async function runDailyDigest(opts: RunOptions = {}) {
       // 나가는 월·수·금(그 전 새벽 수집)에만 전체를 다 훑고, 나머지 요일엔 대시보드 고정
       // 12개 카드만 가볍게 갱신한다.
       const kstDay = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' })).getDay(); // 0=일 ~ 6=토
-      const competitorFullScan = [1, 3, 5].includes(kstDay); // 월(1)·수(3)·금(5)
-      console.log(`[runner] competitor 전체 스캔: ${competitorFullScan ? 'ON(다이제스트 발송일)' : 'OFF(고정 12개만)'}`);
-      raw = await collectAllArticles({ maxKeywordsPerCategory: maxPerCat, daysBack, competitorFullScan });
+      const digestDayFullScan = [1, 3, 5].includes(kstDay); // 월(1)·수(3)·금(5)
+      console.log(`[runner] 경쟁사·업계동향 전체 스캔: ${digestDayFullScan ? 'ON(다이제스트 발송일)' : 'OFF(경쟁사 고정 12개만·업계동향은 기존 캡)'}`);
+      raw = await collectAllArticles({ maxKeywordsPerCategory: maxPerCat, daysBack, digestDayFullScan });
     }
 
     // 1.5 Inter(해외 트렌드) 탭 — RSS 수집 + Gemini 필터링 (skipCollect 모드에서는 건너뜀)

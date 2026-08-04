@@ -60,7 +60,7 @@ const TIER_BONUS: Record<string, number> = { A: 15, B: 5, C: 0 };
 interface CollectOptions {
   maxKeywordsPerCategory?: number;
   daysBack?: number;
-  competitorFullScan?: boolean; // true면 경쟁사 캡 없이 전체 조회(다이제스트 발송일), false/미지정이면 고정 12개만
+  digestDayFullScan?: boolean; // true면 경쟁사·업계동향 캡 없이 전체 조회(다이제스트 발송일), false/미지정이면 경쟁사는 고정 12개만·업계동향은 기존 캡
 }
 
 function sleep(ms: number) {
@@ -103,15 +103,22 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
     }
     if (category === 'competitor') {
       // 경쟁사 114개를 매일 다 훑으면 네이버 호출량·실행시간 부담이 커서, 다이제스트가
-      // 나가는 월·수·금 새벽 수집(opts.competitorFullScan)에만 전체를 다 훑어 다이제스트
+      // 나가는 월·수·금 새벽 수집(opts.digestDayFullScan)에만 전체를 다 훑어 다이제스트
       // 경쟁사 섹션의 커버리지를 확보하고, 나머지 요일엔 대시보드 고정 12개 카드
       // (PINNED_COMPETITORS)만 가볍게 갱신한다 — 가나다순 캡 밖이라 영영 안 조회되던 문제
       // (portfolio_company와 동일 유형) 자체를 이 12개는 원천적으로 피해간다.
-      if (opts.competitorFullScan) {
+      if (opts.digestDayFullScan) {
         limited.push(...list);
       } else {
         limited.push(...list.filter(t => pinnedKeywords.has(t.primaryKeyword)));
       }
+      continue;
+    }
+    if (category === 'industry_trend' && opts.digestDayFullScan) {
+      // 업계동향(57개)도 경쟁사와 같은 이유로 캡(기본 30) 밖은 영영 조회 안 되는 문제가 있어서,
+      // 다이제스트 발송일(월수금)엔 캡 없이 전체를 훑어 최소 주 3회는 다 돌게 한다.
+      // 그 외 요일엔 기존처럼 캡 그대로(부담 늘리지 않음).
+      limited.push(...list);
       continue;
     }
     limited.push(...list.slice(0, max));
