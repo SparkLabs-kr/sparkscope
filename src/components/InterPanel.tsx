@@ -58,6 +58,13 @@ function fmtKstTime(d: Date | string) {
   return `${String(kst.getHours()).padStart(2, '0')}:${String(kst.getMinutes()).padStart(2, '0')}`;
 }
 
+function isFullYearRange(from: string, to: string): boolean {
+  const fromDate = new Date(`${from}T00:00:00`);
+  const toDate = new Date(`${to}T23:59:59`);
+  const daysDiff = Math.round((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24));
+  return daysDiff >= 350; // 약 1년 (365일 ± 15일 허용)
+}
+
 export function InterPanel({
   from, to, min, max, canScrap,
 }: { from: string; to: string; min: string; max: string; canScrap: boolean }) {
@@ -65,6 +72,7 @@ export function InterPanel({
   const sp = useSearchParams();
   const domain: InterDomain = sp.get('domain') === 'ai' ? 'ai' : 'bio';
   const country = (COUNTRY_TABS.find(c => c.id === sp.get('country'))?.id ?? 'all') as InterCountry;
+  const isFullYear = isFullYearRange(from, to);
 
   // 조회에 실제로 쓰이는 값은 URL(from/to/country)이고, 아래 draft는 "고르는 중"인 값이다.
   // 기간·국가를 클릭할 때마다 화면이 새로 뜨면 여러 개를 바꿔 볼 수가 없어서,
@@ -233,8 +241,23 @@ export function InterPanel({
         <div className="py-16 text-center text-[15px] text-spark-muted">불러오는 중...</div>
       ) : (
         <>
+          {/* 1년 기간 경고 배너 */}
+          {isFullYear && (
+            <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+              <div className="flex gap-3">
+                <span className="mt-0.5 shrink-0 text-[16px]">⚙️</span>
+                <div className="flex-1">
+                  <div className="text-[14px] font-semibold text-amber-900">데이터 정리 중</div>
+                  <p className="mt-0.5 text-[13px] leading-relaxed text-amber-800">
+                    1년 기간은 직전 비교 기간의 데이터가 충분하지 않아 정확한 성장률 계산이 불가능합니다. 비교 기간 전체를 백필하면 의미 있는 수치가 표시됩니다.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* 헤드라인 4지표 — 매트릭스를 읽는 데 필요한 값들(총량·증감, 가장 뜨거운 칸, 포트폴리오 접점) */}
-          <HeadlineStats headline={data.matrix.headline} />
+          <HeadlineStats headline={data.matrix.headline} isFullYear={isFullYear} />
 
           {/* 주제×사건유형 매트릭스 + 인사이트 패널 2분할 */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
@@ -258,7 +281,7 @@ export function InterPanel({
           </div>
 
           {/* AI 요약 — 위 매트릭스의 숫자를 그대로 되풀이하지 않고, 그래서 뭘 해야 하는지로 마무리 */}
-          <ColoredSummaryCard summary={data.summary} overview={data.overview} />
+          <ColoredSummaryCard summary={data.summary} overview={data.overview} isFullYear={isFullYear} />
 
           {/* 분야별 아코디언 */}
           <div>
@@ -271,6 +294,7 @@ export function InterPanel({
                 onToggle={() => toggleSector(s.id)}
                 activeTab={activeSrcTab[s.id] ?? 'news'}
                 onTabChange={t => setActiveSrcTab(prev => ({ ...prev, [s.id]: t }))}
+                isFullYear={isFullYear}
               />
             ))}
           </div>
@@ -294,7 +318,8 @@ function DomainTabBig({ label, active, activeCls, onClick }: { label: string; ac
   );
 }
 
-function DeltaChip({ deltaPct, count }: { deltaPct: number | null; count?: number }) {
+function DeltaChip({ deltaPct, count, isFullYear }: { deltaPct: number | null; count?: number; isFullYear?: boolean }) {
+  if (isFullYear) return <span className="text-[11px] font-semibold text-amber-600">⚙️ 정리 중</span>;
   if (count === 0) return <span className="text-[11px] text-spark-muted">—</span>;
   // 직전 동일 기간이 0건이면 증감률을 낼 수 없다 — 이 기간에 처음 잡힌 흐름.
   if (deltaPct === null) return <span className="text-[11px] font-bold text-emerald-600">신규</span>;
@@ -314,6 +339,7 @@ function SectorAccordion({
   onToggle,
   activeTab,
   onTabChange,
+  isFullYear,
 }: {
   sector: SectorBlock;
   canScrap: boolean;
@@ -321,6 +347,7 @@ function SectorAccordion({
   onToggle: () => void;
   activeTab: SourceKind;
   onTabChange: (t: SourceKind) => void;
+  isFullYear?: boolean;
 }) {
   const items = sector.items[activeTab];
   return (
@@ -338,7 +365,7 @@ function SectorAccordion({
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <span className="text-[12px] tabular-nums text-spark-muted">{sector.metrics.count}건</span>
-          <DeltaChip deltaPct={sector.metrics.deltaPct} count={sector.metrics.count} />
+          <DeltaChip deltaPct={sector.metrics.deltaPct} count={sector.metrics.count} isFullYear={isFullYear} />
           <span className={`rounded px-2 py-0.5 text-[11px] font-bold ${BADGE_CLS[sector.badge.kind]}`} title={sector.badge.why}>
             {sector.badge.label}
           </span>
@@ -431,7 +458,7 @@ function ColoredSummaryItem({ n, k, v, chips, last }: { n: number; k: string; v:
 
 // 3줄 요약 — AI가 쓴 서술 문장은 그대로 두되, 그 밑에 실제 집계값 칩(증감률·매치 기업)을 색깔로 붙여
 // 문장이 숫자로 뒷받침된다는 걸 한눈에 보여준다.
-function ColoredSummaryCard({ summary, overview }: { summary: DomainSummary; overview: InterOverview }) {
+function ColoredSummaryCard({ summary, overview, isFullYear }: { summary: DomainSummary; overview: InterOverview; isFullYear?: boolean }) {
   const top = overview.topSectors[0];
   return (
     <div className="bg-white border-[1.5px] border-spark-border rounded-2xl p-5 mb-6">
@@ -445,7 +472,7 @@ function ColoredSummaryCard({ summary, overview }: { summary: DomainSummary; ove
         v={summary.trend}
         chips={[
           ...(top
-            ? [{ label: `${top.name} ${top.deltaPct === null ? '신규' : `${top.deltaPct > 0 ? '▲' : '▼'}${Math.abs(top.deltaPct)}%`}`, cls: 'bg-red-50 text-red-600' }]
+            ? [{ label: `${top.name} ${isFullYear ? '⚙️ 정리 중' : top.deltaPct === null ? '신규' : `${top.deltaPct > 0 ? '▲' : '▼'}${Math.abs(top.deltaPct)}%`}`, cls: isFullYear ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-600' }]
             : []),
           { label: `기사 ${overview.total}건 · 매체 ${overview.sourceCount}곳`, cls: 'bg-spark-subtle text-spark-ink-soft' },
         ]}
@@ -467,14 +494,14 @@ function ColoredSummaryCard({ summary, overview }: { summary: DomainSummary; ove
 }
 
 // 헤드라인 4지표 — 매트릭스를 읽는 데 필요한 값만. 전부 실제 집계값.
-function HeadlineStats({ headline: h }: { headline: InterMatrix['headline'] }) {
+function HeadlineStats({ headline: h, isFullYear }: { headline: InterMatrix['headline']; isFullYear?: boolean }) {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-6">
       <div className="bg-white border border-spark-border rounded-xl px-4 py-3.5">
         <div className="text-[12px] text-spark-muted mb-1">선별 기사</div>
         <div className="flex items-baseline gap-1.5">
           <span className="text-2xl font-extrabold tabular-nums text-spark-ink">{h.total}</span>
-          <DeltaChip deltaPct={h.deltaPct} count={h.total} />
+          <DeltaChip deltaPct={h.deltaPct} count={h.total} isFullYear={isFullYear} />
         </div>
         <div className="text-[11px] text-spark-muted mt-0.5">직전 동일 기간 {h.prevTotal}건</div>
       </div>
