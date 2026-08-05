@@ -651,7 +651,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
               {data.spikes.map(s => <SpikeBanner key={s.company} s={s} />)}
             </div>
           )}
-          {(data.categoryPulses.get('competitor') || data.categoryPulses.get('industry_trend')) && (
+          {tab === 'articles' && (data.categoryPulses.get('competitor') || data.categoryPulses.get('industry_trend')) && (
             <div className="mb-6 space-y-2">
               {data.categoryPulses.get('competitor') && (
                 <CategoryPulseBanner label="AC·VC" line={data.categoryPulses.get('competitor')!} color="red" />
