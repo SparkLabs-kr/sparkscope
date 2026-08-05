@@ -16,9 +16,9 @@ import { normalizeSource } from '@/lib/sparkscope/media';
 import { matchesAsToken, isBlockedNoise, normalizeTitleKey } from '@/lib/sparkscope/relevance';
 import { NEGATIVE_KEYWORDS, INDUSTRY_TREND_KEYWORDS, PINNED_COMPETITORS, detectCrises, crisisFallbackCause, detectSpikes, type ArticleLite, type SpikeCard } from '@/lib/sparkscope/insights';
 import { hasNegativeKeyword, hasCrisisKeyword } from '@/lib/sparkscope/keywords-data';
-import { getPrecomputedCrisisCauses, getPrecomputedCompetitorInsights, wasInsightsBatchFreshToday, type InsightSource } from '@/lib/sparkscope/dashboard-insights';
+import { getPrecomputedCrisisCauses, getPrecomputedCompetitorInsights, getPrecomputedCategoryPulses, wasInsightsBatchFreshToday, type InsightSource } from '@/lib/sparkscope/dashboard-insights';
 import { summarizeCrisisCause, summarizeCrisisOverview } from '@/lib/sparkscope/analyzer';
-import { summarizeCompetitorTrend, summarizeOverallTrend } from '@/lib/sparkscope/competitor-insights';
+import { summarizeCompetitorTrend, summarizeOverallTrend, summarizeCategoryPulse } from '@/lib/sparkscope/competitor-insights';
 import { CompetitorPanel, type CompetitorStatView } from '@/components/CompetitorPanel';
 import { getCompetitorFundSummaries, getSparkLabsFundSummary } from '@/lib/sparkscope/fund-db';
 import { safeArticleHref } from '@/lib/sparkscope/article-link';
@@ -258,6 +258,27 @@ async function loadDashboardData(from: string, to: string, company: string | und
       ),
     ]);
   }
+  // AC·VC(경쟁사)/스타트업계(업계동향) "지금 흐름" 한 줄 — 포트폴리오 급증 배너 옆에 나란히 표시.
+  // 급증 배너와 같은 "최근 3일" 창(rc~now)을 그대로 써서 두 배너의 시점이 어긋나 보이지 않게 한다.
+  let categoryPulses: Map<string, string>;
+  if (batchFresh) {
+    const pre = await getPrecomputedCategoryPulses();
+    categoryPulses = new Map([...pre].map(([k, v]) => [k, v.line]));
+  } else {
+    const pulseCacheKey = `pulse_${fmt(getKstNow())}`;
+    const [competitorRecent, industryRecent] = await Promise.all([
+      prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'competitor' }, select: { title: true, link: true, source: true }, take: 300 }),
+      prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'industry_trend' }, select: { title: true, link: true, source: true }, take: 300 }),
+    ]);
+    const [competitorPulse, industryPulse] = await Promise.all([
+      summarizeCategoryPulse('AC·VC(경쟁사)', competitorRecent.filter(a => !isBlockedNoise(a)).map(a => a.title), pulseCacheKey, '최근 3일간'),
+      summarizeCategoryPulse('스타트업계(업계동향)', industryRecent.filter(a => !isBlockedNoise(a)).map(a => a.title), pulseCacheKey, '최근 3일간'),
+    ]);
+    categoryPulses = new Map();
+    if (competitorPulse) categoryPulses.set('competitor', competitorPulse);
+    if (industryPulse) categoryPulses.set('industry_trend', industryPulse);
+  }
+
   const [fundSummaries, sparkLabsFundSummary] = await Promise.all([
     getCompetitorFundSummaries(pinnedAggs.map(c => c.name)),
     getSparkLabsFundSummary(),
@@ -435,6 +456,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
     crises,
     crisisOverview,
     spikes: detectSpikes(spikeRecent as ArticleLite[], spikeBaseline, 3, 60),
+    categoryPulses,
     trendData: buildTrendData(trendArticles, since, until),
     compare: {
       sparkCount: portfolioCount,
@@ -627,6 +649,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           {data.spikes.length > 0 && (
             <div className="mb-6 space-y-2">
               {data.spikes.map(s => <SpikeBanner key={s.company} s={s} />)}
+            </div>
+          )}
+          {(data.categoryPulses.get('competitor') || data.categoryPulses.get('industry_trend')) && (
+            <div className="mb-6 space-y-2">
+              {data.categoryPulses.get('competitor') && (
+                <CategoryPulseBanner label="AC·VC" line={data.categoryPulses.get('competitor')!} color="red" />
+              )}
+              {data.categoryPulses.get('industry_trend') && (
+                <CategoryPulseBanner label="스타트업계" line={data.categoryPulses.get('industry_trend')!} color="amber" />
+              )}
             </div>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -822,6 +854,20 @@ function SpikeBanner({ s }: { s: SpikeCard }) {
       <span className="text-lg">📈</span>
       <span className="text-sm font-semibold text-gray-800">{s.message}</span>
       <span className="text-xs text-gray-500">(최근 3일 {s.recentCount}건)</span>
+    </div>
+  );
+}
+
+// AC·VC/스타트업계 "지금 흐름" 한 줄 — "최근 수집 기사" 탭의 카테고리 배지 색(AC·VC=red, 스타트업계=amber)과 통일.
+function CategoryPulseBanner({ label, line, color }: { label: string; line: string; color: 'red' | 'amber' }) {
+  const cls = color === 'red'
+    ? 'border-red-500 bg-red-50 text-red-700'
+    : 'border-amber-500 bg-amber-50 text-amber-700';
+  return (
+    <div className={`rounded-xl border-l-4 p-3 flex items-center gap-2 ${cls.split(' ').slice(0, 2).join(' ')}`}>
+      <span className="text-lg">📊</span>
+      <span className={`text-xs font-bold flex-shrink-0 ${cls.split(' ')[2]}`}>{label}</span>
+      <span className="text-sm font-semibold text-gray-800">{line}</span>
     </div>
   );
 }
