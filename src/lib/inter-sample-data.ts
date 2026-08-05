@@ -205,6 +205,7 @@ export interface SourceItem {
   url: string;
   media: string;
   date: string;
+  pubDate: Date;          // 클러스터링(같은 사건 다른 매체 묶기)에서 발행일 근접도 판단용
   alert: AlertLevel;
   isScrapped: boolean;
 }
@@ -340,6 +341,7 @@ export function getSectorData(domain: InterDomain, data: InterData): SectorBlock
           url: v.news.url,
           media: v.news.source,
           date: formatDate(v.news.publishedAt),
+          pubDate: v.news.publishedAt,
           alert: getAlertLevel(v.relevant),
           isScrapped: v.isScrapped,
         });
@@ -574,6 +576,7 @@ export function buildMatrix(domain: InterDomain, data: InterData): InterMatrix {
             url: v.news.url,
             media: v.news.source,
             date: formatDate(v.news.publishedAt),
+            pubDate: v.news.publishedAt,
             alert: getAlertLevel(v.relevant),
             isScrapped: v.isScrapped,
           };

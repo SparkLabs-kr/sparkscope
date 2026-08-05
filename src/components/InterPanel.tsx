@@ -25,6 +25,7 @@ import {
 } from '@/lib/inter-sample-data';
 import { InterScrapStar } from '@/components/InterScrapStar';
 import { DateRangePicker } from '@/components/DateRangePicker';
+import { clusterArticles } from '@/lib/sparkscope/cluster';
 
 interface InterApiResponse {
   summary: DomainSummary;
@@ -350,6 +351,21 @@ function SectorAccordion({
   isFullYear?: boolean;
 }) {
   const items = sector.items[activeTab];
+  // 같은 사건을 여러 매체가 각자 제목을 바꿔 보도한 경우(보도자료 픽업 등) 한 줄로 묶는다.
+  // Inter 기사엔 회사명(matchedKeyword)이 없어 clusterArticles는 제목 유사도만으로 판단한다.
+  const clusters = clusterArticles(
+    items.map(it => ({ id: it.id, title: it.titleOriginal, pubDate: it.pubDate })),
+    { maxDateDiffDays: 4 },
+  ).map(({ rep, others }) => ({
+    rep: items.find(it => it.id === rep.id)!,
+    others: others.map(o => items.find(it => it.id === o.id)!),
+  }));
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) => setExpanded(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   return (
     <div id={sector.id} className="mb-2.5 scroll-mt-4">
       <div
@@ -408,21 +424,51 @@ function SectorAccordion({
             {items.length === 0 ? (
               <div className="py-4 text-center text-[13px] text-spark-muted">해당 탭에 항목이 없습니다</div>
             ) : (
-              items.map(it => (
-                <div key={it.id} className="flex items-start gap-2.5 border-b border-spark-cream/60 px-4 py-2.5 last:border-0 hover:bg-spark-subtle">
-                  <a href={it.url} target="_blank" rel="noopener noreferrer" className="flex flex-1 items-start gap-2.5 min-w-0">
-                    <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[11px] font-bold ${SRC_BADGE_CLS[it.badge]}`}>{SRC_LABEL[it.badge]}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-semibold leading-snug text-spark-ink">{it.title}</div>
-                      {it.titleOriginal !== it.title && (
-                        <div className="mt-0.5 text-[12px] leading-snug text-spark-muted">{it.titleOriginal}</div>
-                      )}
-                      <div className="mt-0.5 text-[12px] text-spark-muted">{it.media} · {it.date}</div>
+              clusters.map(({ rep: it, others }) => {
+                const isOpen = expanded.has(it.id);
+                return (
+                  <div key={it.id} className="border-b border-spark-cream/60 px-4 py-2.5 last:border-0 hover:bg-spark-subtle">
+                    <div className="flex items-start gap-2.5">
+                      <a href={it.url} target="_blank" rel="noopener noreferrer" className="flex flex-1 items-start gap-2.5 min-w-0">
+                        <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[11px] font-bold ${SRC_BADGE_CLS[it.badge]}`}>{SRC_LABEL[it.badge]}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[13px] font-semibold leading-snug text-spark-ink">{it.title}</div>
+                          {it.titleOriginal !== it.title && (
+                            <div className="mt-0.5 text-[12px] leading-snug text-spark-muted">{it.titleOriginal}</div>
+                          )}
+                          <div className="mt-0.5 text-[12px] text-spark-muted">
+                            {it.media} · {it.date}{others.length > 0 && ` 외 ${others.length}개 매체`}
+                          </div>
+                        </div>
+                      </a>
+                      {canScrap && <InterScrapStar id={it.id} initial={it.isScrapped} />}
                     </div>
-                  </a>
-                  {canScrap && <InterScrapStar id={it.id} initial={it.isScrapped} />}
-                </div>
-              ))
+                    {others.length > 0 && (
+                      <div className="mt-1 pl-[38px]">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpanded(it.id)}
+                          className="text-[11px] font-semibold text-emerald-700 hover:underline"
+                        >
+                          {isOpen ? '접기 ▲' : `같은 소식을 다룬 다른 매체 +${others.length}건 보기 ▼`}
+                        </button>
+                        {isOpen && (
+                          <div className="mt-1 space-y-1 border-l-2 border-spark-border pl-2">
+                            {others.map(o => (
+                              <div key={o.id} className="flex items-center gap-2">
+                                <a href={o.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 truncate text-[12px] text-spark-ink-soft hover:text-spark-purple">
+                                  {o.title} <span className="text-spark-muted">— {o.media} · {o.date}</span>
+                                </a>
+                                {canScrap && <InterScrapStar id={o.id} initial={o.isScrapped} />}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
