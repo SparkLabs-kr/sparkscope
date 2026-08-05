@@ -4,7 +4,7 @@
  */
 import { prisma } from '@/lib/prisma';
 import type { RawArticle, AnalyzedArticle } from './types';
-import { collectAllArticles } from './collector';
+import { collectAllArticles, CATEGORY_PRIORITY } from './collector';
 import { normalizeTitleKey } from './relevance';
 import { analyzeArticles, generateEditorIntro } from './analyzer';
 import { computeAndStoreDashboardInsights } from './dashboard-insights';
@@ -137,11 +137,12 @@ export async function runDailyDigest(opts: RunOptions = {}) {
       const recentWindow = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
       const recentExisting = await prisma.article.findMany({
         where: { pubDate: { gte: recentWindow } },
-        select: { link: true, title: true, source: true },
+        select: { link: true, title: true, source: true, category: true },
       });
-      const existingByKey = new Map<string, string>(); // `${source}::${titleKey}` -> 기존 link
+      // `${source}::${titleKey}` -> 기존 link·category (분류 승격 판단용 — 아래 참고)
+      const existingByKey = new Map<string, { link: string; category: string }>();
       for (const e of recentExisting) {
-        existingByKey.set(`${e.source}::${normalizeTitleKey(e.title)}`, e.link);
+        existingByKey.set(`${e.source}::${normalizeTitleKey(e.title)}`, { link: e.link, category: e.category });
       }
 
       // 기사 하나가 잘못돼도(NaN 필드·URL 과다 길이 등 예측 못한 제약 위반) 그날 수집분
@@ -151,7 +152,15 @@ export async function runDailyDigest(opts: RunOptions = {}) {
       let saveFailures = 0;
       for (const a of analyzed) {
         const dedupeKey = `${a.source}::${normalizeTitleKey(a.title)}`;
-        const targetLink = existingByKey.get(dedupeKey) ?? a.link;
+        const existing = existingByKey.get(dedupeKey);
+        const targetLink = existing?.link ?? a.link;
+        // 기존 행이 더 낮은 우선순위 분류(예: industry_trend 흔한 키워드)로 먼저 저장돼 있었는데
+        // 오늘 더 구체적인 분류(예: competitor 회사명)로 재매칭됐으면 승격한다. 반대(더 낮은
+        // 우선순위로 재매칭)는 무시해 기존 분류를 지키고, 새로 생기는 행은 항상 create로 붙는다.
+        // (2026-08-05: matchedKeyword/category가 update에 아예 없어 첫날 잘못 붙은 분류가
+        //  영원히 고정되던 버그 — 와이앤아처 관련 기사 대부분이 "데모데이"/"액셀러레이터" 같은
+        //  업계동향 키워드로 묶여 회사 카드에 하나도 안 잡히는 사고로 발견.)
+        const shouldPromote = !existing || (CATEGORY_PRIORITY[a.category] ?? 0) > (CATEGORY_PRIORITY[existing.category] ?? 0);
         try {
           await prisma.article.upsert({
             where: { link: targetLink },
@@ -176,6 +185,7 @@ export async function runDailyDigest(opts: RunOptions = {}) {
               analyzedAt: new Date(),
             },
             update: {
+              ...(shouldPromote ? { matchedKeyword: a.matchedKeyword, category: a.category } : {}),
               importance: a.importance,
               tone: a.tone,
               oneLiner: a.oneLiner,

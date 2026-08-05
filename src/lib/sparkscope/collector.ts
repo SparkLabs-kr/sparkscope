@@ -47,7 +47,7 @@ function throttledNaver(keyword: string): Promise<SourceItem[]> {
   return result;
 }
 
-const CATEGORY_PRIORITY: Record<string, number> = {
+export const CATEGORY_PRIORITY: Record<string, number> = {
   sparklabs_self: 100,
   portfolio_company: 70,
   competitor: 50,
