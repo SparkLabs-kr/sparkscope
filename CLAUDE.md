@@ -46,7 +46,7 @@
 
 **수집:**
 - GitHub Actions: `.github/workflows/daily-collect.yml`
-- 일정: 매일 07:00 KST (UTC 22:00)
+- 일정: 매일 07:07 KST (UTC 22:07) — 정각(0분)은 GitHub 전역 혼잡으로 매일 ~1시간씩 지연돼서 2026-08-05에 정각을 피해 이동함
 - 작업: 수집 → 분석 → DB 저장 → **대시보드 AI 요약 사전계산** (아래 참고)
 - 엔드포인트: `GET /api/cron/daily-collect`
 
