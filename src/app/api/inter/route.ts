@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
 
   const [data, summary] = await Promise.all([
     loadInterData(domain, since, until, country),
-    getDomainSummary(domain),
+    getDomainSummary(domain, since, until),
   ]);
   const stats = getDomainStats(data);
   const sectors = getSectorData(domain, data);
