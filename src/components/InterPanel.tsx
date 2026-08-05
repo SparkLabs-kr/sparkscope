@@ -25,6 +25,7 @@ import {
 } from '@/lib/inter-sample-data';
 import { InterScrapStar } from '@/components/InterScrapStar';
 import { DateRangePicker } from '@/components/DateRangePicker';
+import { clusterArticles } from '@/lib/sparkscope/cluster';
 
 interface InterApiResponse {
   summary: DomainSummary;
@@ -350,6 +351,34 @@ function SectorAccordion({
   isFullYear?: boolean;
 }) {
   const items = sector.items[activeTab];
+  // 같은 사건을 여러 매체가 각자 제목을 바꿔 보도한 경우(보도자료 픽업 등) 한 줄로 묶는다.
+  // Inter 기사엔 회사명(matchedKeyword)이 없어 clusterArticles는 제목 유사도만으로 판단한다.
+  //
+  // ⚠ 일부 RSS 피드(예: BioCentury)는 개별 기사가 아니라 "Bio€quity Europe - BioCentury -
+  // biocentury.com" 같은 행사·카테고리 리스팅 페이지를 통째로 하나의 항목으로 내보낸다.
+  // 이런 제목은 "<제목> - <매체명> - <도메인>" 형태로 짧고 일반적이어서, 제목 유사도만
+  // 보는 clusterArticles가 전혀 다른 기사 여러 건과 잘못 묶어버렸다(2026-08-05 실사례).
+  // 그래서 이 패턴에 걸리는 항목은 클러스터링 후보에서 아예 빼고 항상 단독으로 둔다.
+  const isFeedListingTitle = (title: string) => /\s-\s[a-z0-9][a-z0-9.-]*\.(com|org|net|io|co)\/?$/i.test(title.trim());
+  const clusterablePool = items.filter(it => !isFeedListingTitle(it.titleOriginal));
+  const singletonPool = items.filter(it => isFeedListingTitle(it.titleOriginal));
+  const clusteredPart = clusterArticles(
+    clusterablePool.map(it => ({ id: it.id, title: it.titleOriginal, pubDate: it.pubDate })),
+    { maxDateDiffDays: 4 },
+  ).map(({ rep, others }) => ({
+    rep: clusterablePool.find(it => it.id === rep.id)!,
+    others: others.map(o => clusterablePool.find(it => it.id === o.id)!),
+  }));
+  const singletonPart = singletonPool.map(it => ({ rep: it, others: [] as typeof items }));
+  const clusters = [...clusteredPart, ...singletonPart].sort(
+    (a, b) => items.findIndex(x => x.id === a.rep.id) - items.findIndex(x => x.id === b.rep.id),
+  );
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) => setExpanded(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   return (
     <div id={sector.id} className="mb-2.5 scroll-mt-4">
       <div
@@ -408,21 +437,51 @@ function SectorAccordion({
             {items.length === 0 ? (
               <div className="py-4 text-center text-[13px] text-spark-muted">해당 탭에 항목이 없습니다</div>
             ) : (
-              items.map(it => (
-                <div key={it.id} className="flex items-start gap-2.5 border-b border-spark-cream/60 px-4 py-2.5 last:border-0 hover:bg-spark-subtle">
-                  <a href={it.url} target="_blank" rel="noopener noreferrer" className="flex flex-1 items-start gap-2.5 min-w-0">
-                    <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[11px] font-bold ${SRC_BADGE_CLS[it.badge]}`}>{SRC_LABEL[it.badge]}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-semibold leading-snug text-spark-ink">{it.title}</div>
-                      {it.titleOriginal !== it.title && (
-                        <div className="mt-0.5 text-[12px] leading-snug text-spark-muted">{it.titleOriginal}</div>
-                      )}
-                      <div className="mt-0.5 text-[12px] text-spark-muted">{it.media} · {it.date}</div>
+              clusters.map(({ rep: it, others }) => {
+                const isOpen = expanded.has(it.id);
+                return (
+                  <div key={it.id} className="border-b border-spark-cream/60 px-4 py-2.5 last:border-0 hover:bg-spark-subtle">
+                    <div className="flex items-start gap-2.5">
+                      <a href={it.url} target="_blank" rel="noopener noreferrer" className="flex flex-1 items-start gap-2.5 min-w-0">
+                        <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[11px] font-bold ${SRC_BADGE_CLS[it.badge]}`}>{SRC_LABEL[it.badge]}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[13px] font-semibold leading-snug text-spark-ink">{it.title}</div>
+                          {it.titleOriginal !== it.title && (
+                            <div className="mt-0.5 text-[12px] leading-snug text-spark-muted">{it.titleOriginal}</div>
+                          )}
+                          <div className="mt-0.5 text-[12px] text-spark-muted">
+                            {it.media} · {it.date}{others.length > 0 && ` 외 ${others.length}개 매체`}
+                          </div>
+                        </div>
+                      </a>
+                      {canScrap && <InterScrapStar id={it.id} initial={it.isScrapped} />}
                     </div>
-                  </a>
-                  {canScrap && <InterScrapStar id={it.id} initial={it.isScrapped} />}
-                </div>
-              ))
+                    {others.length > 0 && (
+                      <div className="mt-1 pl-[38px]">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpanded(it.id)}
+                          className="text-[11px] font-semibold text-emerald-700 hover:underline"
+                        >
+                          {isOpen ? '접기 ▲' : `같은 소식을 다룬 다른 매체 +${others.length}건 보기 ▼`}
+                        </button>
+                        {isOpen && (
+                          <div className="mt-1 space-y-1 border-l-2 border-spark-border pl-2">
+                            {others.map(o => (
+                              <div key={o.id} className="flex items-center gap-2">
+                                <a href={o.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 truncate text-[12px] text-spark-ink-soft hover:text-spark-purple">
+                                  {o.title} <span className="text-spark-muted">— {o.media} · {o.date}</span>
+                                </a>
+                                {canScrap && <InterScrapStar id={o.id} initial={o.isScrapped} />}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
@@ -507,12 +566,27 @@ function ColoredSummaryCard({ summary, overview, isFullYear }: { summary: Domain
   );
 }
 
+// Intra 탭 KpiCard와 동일한 호버 툴팁 패턴 — 칸 이름 옆 🔍를 올리면 아래 설명이 뜬다.
+function InfoTip({ text }: { text: string }) {
+  return (
+    <span className="text-[10px] cursor-help select-none opacity-50 group-hover:opacity-100 transition-opacity">
+      🔍
+      <span className="pointer-events-none absolute left-3 right-3 top-full z-20 mt-1 whitespace-pre-line rounded-lg bg-gray-900 px-3 py-2 text-xs font-normal leading-relaxed text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+        {text}
+      </span>
+    </span>
+  );
+}
+
 // 헤드라인 4지표 — 매트릭스를 읽는 데 필요한 값만. 전부 실제 집계값.
 function HeadlineStats({ headline: h, isFullYear }: { headline: InterMatrix['headline']; isFullYear?: boolean }) {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-6">
-      <div className="bg-white border border-spark-border rounded-xl px-4 py-3.5">
-        <div className="text-[12px] text-spark-muted mb-1">선별 기사</div>
+      <div className="relative group bg-white border border-spark-border rounded-xl px-4 py-3.5">
+        <div className="flex items-center gap-1 text-[12px] text-spark-muted mb-1">
+          이 기간 트렌드 기사 수
+          <InfoTip text={`이 조회 기간에 수집·판정된 관련 기사 총량입니다.\n증감률은 바로 직전 같은 길이의 기간과 비교한 값이에요.`} />
+        </div>
         <div className="flex items-baseline gap-1.5">
           <span className="text-2xl font-extrabold tabular-nums text-spark-ink">{h.total}</span>
           <DeltaChip deltaPct={h.deltaPct} count={h.total} isFullYear={isFullYear} />
@@ -520,8 +594,11 @@ function HeadlineStats({ headline: h, isFullYear }: { headline: InterMatrix['hea
         <div className="text-[11px] text-spark-muted mt-0.5">직전 동일 기간 {h.prevTotal}건</div>
       </div>
 
-      <div className="bg-white border border-spark-border rounded-xl px-4 py-3.5">
-        <div className="text-[12px] text-spark-muted mb-1">가장 뜨거운 칸</div>
+      <div className="relative group bg-white border border-spark-border rounded-xl px-4 py-3.5">
+        <div className="flex items-center gap-1 text-[12px] text-spark-muted mb-1">
+          가장 급증한 트렌드 조합
+          <InfoTip text={`아래 매트릭스는 "주제"(예: 항암)와 "사건 유형"(예: 투자·딜)을 교차해서 보여줍니다.\n이 칸은 그중 직전 기간 대비 증가율이 가장 높은 조합이에요 — 최소 3건 이상 쌓인 칸 중에서만 고릅니다.`} />
+        </div>
         <div className="truncate text-[15px] font-extrabold text-spark-ink" title={h.hottest?.label}>
           {h.hottest?.label ?? '—'}
         </div>
@@ -541,23 +618,29 @@ function HeadlineStats({ headline: h, isFullYear }: { headline: InterMatrix['hea
         </div>
       </div>
 
-      <div className="bg-white border border-spark-border rounded-xl px-4 py-3.5">
-        <div className="text-[12px] text-spark-muted mb-1">포트폴리오 연결</div>
+      <div className="relative group bg-white border border-spark-border rounded-xl px-4 py-3.5">
+        <div className="flex items-center gap-1 text-[12px] text-spark-muted mb-1">
+          연결된 포트폴리오사
+          <InfoTip text={`이 기간 해외 트렌드 기사 중, AI가 특정 스파크랩 포트폴리오사와 관련 있다고 판단한 기사가 몇 개 회사에 걸쳐 있는지입니다.\n"관련 기사 매치"는 회사 수가 아니라 그 판정이 내려진 기사·회사 쌍의 건수예요(한 기사가 여러 회사와 매치될 수 있음).`} />
+        </div>
         <div className="flex items-baseline gap-0.5">
           <span className="text-2xl font-extrabold tabular-nums text-emerald-700">{h.matchedCompanyCount}</span>
           <span className="text-[13px] font-semibold text-emerald-700">개사</span>
         </div>
-        <div className="text-[11px] text-spark-muted mt-0.5">매치 {h.matchCount}건</div>
+        <div className="text-[11px] text-spark-muted mt-0.5">관련 기사 매치 {h.matchCount}건</div>
       </div>
 
-      <div className="bg-white border border-spark-border rounded-xl px-4 py-3.5">
-        <div className="text-[12px] text-spark-muted mb-1">우리와 겹치는 칸</div>
+      <div className="relative group bg-white border border-spark-border rounded-xl px-4 py-3.5">
+        <div className="flex items-center gap-1 text-[12px] text-spark-muted mb-1">
+          우리 포트폴리오와 관련된 주제
+          <InfoTip text={`전체 트렌드 주제(예: 항암·신약발굴·의료기기 등, 총 ${h.totalTopicCount}개) 중, 이 기간 포트폴리오사 매치가 하나라도 있었던 주제 수입니다.\n숫자가 낮으면 우리 포트폴리오가 다루지 않는 분야에서 트렌드가 몰리고 있다는 뜻이에요.`} />
+        </div>
         <div className="flex items-baseline">
-          <span className="text-2xl font-extrabold tabular-nums text-spark-ink">{h.overlapCells}</span>
-          <span className="text-[15px] font-bold text-spark-muted">/{h.totalCells}</span>
+          <span className="text-2xl font-extrabold tabular-nums text-spark-ink">{h.overlapTopicCount}</span>
+          <span className="text-[15px] font-bold text-spark-muted">/{h.totalTopicCount}개 주제</span>
         </div>
         <div className="truncate text-[11px] text-spark-muted mt-0.5">
-          {h.overlapTopics.length > 0 ? `${h.overlapTopics.join('·')} 중심` : '겹치는 칸 없음'}
+          {h.overlapTopics.length > 0 ? `${h.overlapTopics.join('·')} 등` : '관련 주제 없음'}
         </div>
       </div>
     </div>

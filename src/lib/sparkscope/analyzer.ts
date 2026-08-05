@@ -1,8 +1,9 @@
 /**
  * OpenAI 기반 기사 분석기
  * 1단계: gpt-4o-mini로 1차 분류 (배치 10건씩)
- * 2단계: gpt-4o로 심층 분석 (needsDeepAnalysis=true인 것만)
- * 3단계: gpt-4o로 편집자 한 줄 인사 생성
+ * 1.5단계: 같은 사건을 다룬 중복 기사 묶기 (story-dedupe.ts) — 그룹당 1건만 심층분석
+ * 2단계: gpt-4.1로 심층 분석 (needsDeepAnalysis=true인 것만)
+ * 3단계: gpt-4.1로 편집자 한 줄 인사 생성
  *
  * OpenAI API 호출 실패 시 휴리스틱 fallback으로 결과 보장.
  */
@@ -17,6 +18,7 @@ import {
 } from './prompts';
 import { hasNegativeKeyword, hasCrisisKeyword, countNegativeSignals } from './keywords-data';
 import { scrapeArticleBody } from './scraper';
+import { groupDuplicateStories } from './story-dedupe';
 import { resolveGoogleNewsUrl } from './google-news-resolver';
 import type { RawArticle, AnalyzedArticle, Importance, Tone, Category } from './types';
 
@@ -25,8 +27,17 @@ const openai = new OpenAI({
 });
 
 // 저비용 분류용 / 품질이 중요한 생성용 — 필요에 따라 모델명만 바꾸면 됨.
+//
+// 2026-08-05 실제 기사 6건으로 gpt-4o / gpt-4.1 / gpt-5.4-mini를 같은 프롬프트로 비교한 결과:
+// - 분류용은 gpt-4o-mini가 후보 중 최저 단가($0.15/$0.60 per Mtok)라 그대로 둔다.
+//   gpt-5.4-nano($0.20/$1.25)로 바꾸면 오히려 비싸진다.
+// - 심층분석은 gpt-4o($2.50/$10) → gpt-4.1($2.00/$8)로 교체. 더 싸면서 ourTake가
+//   구체적이고("금융권 레퍼런스 확보는 …" vs gpt-4o의 "혁신적 진화를 위한 벤치마킹 기회"),
+//   pitchScore도 안정적이었다(같은 사안 기사 4건에 78~87 / gpt-4o는 75~85).
+// - gpt-5.4-mini는 가장 저렴($0.75/$4.50)하고 분석도 풍부했지만, 거의 동일한 기사 4건에
+//   pitchScore를 46~76으로 흔들었다. 이 점수가 다이제스트 피칭 순위를 정하므로 채택하지 않았다.
 const CLASSIFIER_MODEL = 'gpt-4o-mini';
-const DEEP_MODEL = 'gpt-4o';
+const DEEP_MODEL = 'gpt-4.1';
 
 async function chatComplete(model: string, system: string, userContent: string, maxTokens: number): Promise<string> {
   const resp = await openai.chat.completions.create({
@@ -68,10 +79,37 @@ export async function analyzeArticles(raw: RawArticle[], portfolioUniverse: stri
   const withId = raw.map((a, i) => ({ ...a, _id: `${i}` }));
   const classifications = await classifyBatch(withId);
 
+  // 분류 결과는 아래에서 두 번(중복 묶기 + 본 루프) 쓰므로 한 번만 계산해 재사용한다.
+  const clsById = new Map(withId.map(a => [a._id, classifications.get(a._id) ?? heuristicClassify(a)]));
+
+  // 1.5단계: 심층분석 대상을 "사건" 단위로 묶는다.
+  // 하나의 보도자료가 매체 여러 곳에 실리면 제목만 다른 기사가 3~7건 들어오는데,
+  // 예전엔 그걸 각각 심층분석해서 같은 사건을 여러 번 결제했다(2026-08-05 확인,
+  // 위베어소프트 협약 1건이 기사 4건으로 4번 분석됨). 이제 그룹당 대표 1건만 호출하고
+  // 나머지는 결과를 공유한다. 실측 심층분석 호출 약 19% 감소.
+  const deepCandidates = withId
+    .filter(a => {
+      const c = clsById.get(a._id)!;
+      return !c.isNoise && c.category !== 'unrelated' && c.needsDeepAnalysis;
+    })
+    .map(a => ({ index: Number(a._id), title: a.title, matchedKeyword: a.matchedKeyword }));
+  const storyGroups = groupDuplicateStories(deepCandidates);
+  // 기사 id → 그룹 대표 기사 id. 대표는 그룹에서 가장 먼저 수집된 기사이므로
+  // 아래 루프에서 항상 대표를 먼저 만나고, 그때 실제 LLM 호출이 일어난다.
+  const repOf = new Map<string, string>();
+  for (const g of storyGroups) for (const m of g) repOf.set(String(m.index), String(g[0]!.index));
+  const deepCache = new Map<string, DeepResult>();
+  if (deepCandidates.length > 0) {
+    console.log(
+      `[analyzer] 심층분석 대상 ${deepCandidates.length}건 → 사건 ${storyGroups.length}건 ` +
+      `(중복 ${deepCandidates.length - storyGroups.length}건은 대표 분석 재사용)`
+    );
+  }
+
   const analyzed: AnalyzedArticle[] = [];
 
   for (const article of withId) {
-    const cls = classifications.get(article._id) ?? heuristicClassify(article);
+    const cls = clsById.get(article._id)!;
     if (cls.isNoise || cls.category === 'unrelated') continue;
 
     let oneLiner: string;
@@ -85,8 +123,13 @@ export async function analyzeArticles(raw: RawArticle[], portfolioUniverse: stri
     let titleOnlyFallback = false;
 
     if (cls.needsDeepAnalysis) {
-      // 2단계: Sonnet 심층 분석
-      const deep = await analyzeDeep(article, portfolioUniverse, trendingTopics);
+      // 2단계: 심층 분석 — 같은 사건의 첫 기사(대표)만 실제로 호출하고, 나머지는 그 결과를 쓴다.
+      const repId = repOf.get(article._id) ?? article._id;
+      let deep = deepCache.get(repId);
+      if (!deep) {
+        deep = await analyzeDeep(article, portfolioUniverse, trendingTopics);
+        deepCache.set(repId, deep);
+      }
       oneLiner = deep.oneLiner;
       ourTake = deep.ourTake;
       tone = deep.tone;
