@@ -551,13 +551,13 @@ function HeadlineStats({ headline: h, isFullYear }: { headline: InterMatrix['hea
       </div>
 
       <div className="bg-white border border-spark-border rounded-xl px-4 py-3.5">
-        <div className="text-[12px] text-spark-muted mb-1">우리 사업과 겹치는 트렌드</div>
+        <div className="text-[12px] text-spark-muted mb-1">우리 포트폴리오와 관련된 주제</div>
         <div className="flex items-baseline">
-          <span className="text-2xl font-extrabold tabular-nums text-spark-ink">{h.overlapCells}</span>
-          <span className="text-[15px] font-bold text-spark-muted">/{h.totalCells}개 조합</span>
+          <span className="text-2xl font-extrabold tabular-nums text-spark-ink">{h.overlapTopicCount}</span>
+          <span className="text-[15px] font-bold text-spark-muted">/{h.totalTopicCount}개 주제</span>
         </div>
         <div className="truncate text-[11px] text-spark-muted mt-0.5">
-          {h.overlapTopics.length > 0 ? `${h.overlapTopics.join('·')} 중심` : '겹치는 조합 없음'}
+          {h.overlapTopics.length > 0 ? `${h.overlapTopics.join('·')} 등` : '관련 주제 없음'}
         </div>
       </div>
     </div>
