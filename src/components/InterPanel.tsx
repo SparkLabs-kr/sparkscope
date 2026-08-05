@@ -353,13 +353,26 @@ function SectorAccordion({
   const items = sector.items[activeTab];
   // 같은 사건을 여러 매체가 각자 제목을 바꿔 보도한 경우(보도자료 픽업 등) 한 줄로 묶는다.
   // Inter 기사엔 회사명(matchedKeyword)이 없어 clusterArticles는 제목 유사도만으로 판단한다.
-  const clusters = clusterArticles(
-    items.map(it => ({ id: it.id, title: it.titleOriginal, pubDate: it.pubDate })),
+  //
+  // ⚠ 일부 RSS 피드(예: BioCentury)는 개별 기사가 아니라 "Bio€quity Europe - BioCentury -
+  // biocentury.com" 같은 행사·카테고리 리스팅 페이지를 통째로 하나의 항목으로 내보낸다.
+  // 이런 제목은 "<제목> - <매체명> - <도메인>" 형태로 짧고 일반적이어서, 제목 유사도만
+  // 보는 clusterArticles가 전혀 다른 기사 여러 건과 잘못 묶어버렸다(2026-08-05 실사례).
+  // 그래서 이 패턴에 걸리는 항목은 클러스터링 후보에서 아예 빼고 항상 단독으로 둔다.
+  const isFeedListingTitle = (title: string) => /\s-\s[a-z0-9][a-z0-9.-]*\.(com|org|net|io|co)\/?$/i.test(title.trim());
+  const clusterablePool = items.filter(it => !isFeedListingTitle(it.titleOriginal));
+  const singletonPool = items.filter(it => isFeedListingTitle(it.titleOriginal));
+  const clusteredPart = clusterArticles(
+    clusterablePool.map(it => ({ id: it.id, title: it.titleOriginal, pubDate: it.pubDate })),
     { maxDateDiffDays: 4 },
   ).map(({ rep, others }) => ({
-    rep: items.find(it => it.id === rep.id)!,
-    others: others.map(o => items.find(it => it.id === o.id)!),
+    rep: clusterablePool.find(it => it.id === rep.id)!,
+    others: others.map(o => clusterablePool.find(it => it.id === o.id)!),
   }));
+  const singletonPart = singletonPool.map(it => ({ rep: it, others: [] as typeof items }));
+  const clusters = [...clusteredPart, ...singletonPart].sort(
+    (a, b) => items.findIndex(x => x.id === a.rep.id) - items.findIndex(x => x.id === b.rep.id),
+  );
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggleExpanded = (id: string) => setExpanded(prev => {
     const next = new Set(prev);
