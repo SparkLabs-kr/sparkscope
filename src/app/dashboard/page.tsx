@@ -162,6 +162,11 @@ async function loadDashboardData(from: string, to: string, company: string | und
     prisma.article.findMany({ where: { ...portfolioWhere, OR: posOr }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true }, take: 120 }),
   ]);
 
+  // TOP15 증감%(같은 길이 직전 기간 대비) — TOP15 회사로만 범위 좁혀 추가 조회
+  const top15Keywords = portfolioTop15.map(g => g.matchedKeyword);
+  const prevTop15Counts = top15Keywords.length > 0 ? await prisma.article.groupBy({ by: ['matchedKeyword'], where: { pubDate: { gte: prevSince, lte: prevUntil }, isNoise: false, category: 'portfolio_company', matchedKeyword: { in: top15Keywords } }, _count: { _all: true } }) : [];
+  const prevCountOf = new Map(prevTop15Counts.map(g => [g.matchedKeyword, g._count._all]));
+
   // 스포츠·게임·연예·광고 강제 제외 (제목·URL·매체) — 표시되는 모든 기사 리스트에 공통 적용
   const notNoise = (a: { title: string; link: string; source: string }) =>
     !isBlockedNoise({ title: a.title, link: a.link, source: a.source });
@@ -403,7 +408,20 @@ async function loadDashboardData(from: string, to: string, company: string | und
     companyName: portfolioNameOf.get(a.matchedKeyword) ?? a.matchedKeyword,
     portfolioStatus: portfolioStatusOf.get(a.matchedKeyword) ?? null,
   }));
-  const portfolioTop = portfolioTop15.map(g => ({ name: portfolioNameOf.get(g.matchedKeyword) ?? g.matchedKeyword, count: g._count._all, portfolioStatus: portfolioStatusOf.get(g.matchedKeyword) ?? null }));
+  const portfolioTop = portfolioTop15.map(g => {
+    const count = g._count._all;
+    const prevCount = prevCountOf.get(g.matchedKeyword) ?? 0;
+    const changePct = prevCount > 0 ? Math.round(((count - prevCount) / prevCount) * 100) : (count > 0 ? null : 0);
+    return {
+      name: portfolioNameOf.get(g.matchedKeyword) ?? g.matchedKeyword,
+      count,
+      portfolioStatus: portfolioStatusOf.get(g.matchedKeyword) ?? null,
+      changePct,
+    };
+  });
+  // 증감% 비교 기준(직전 동일 기간) 안내용 — "2026.7.22 ~ 2026.7.28 대비" 형태로 표시
+  const prettyUtc = (d: Date) => `${d.getUTCFullYear()}.${d.getUTCMonth() + 1}.${d.getUTCDate()}`;
+  const portfolioTopPrevRangeLabel = `${prettyUtc(prevSince)} ~ ${prettyUtc(prevUntil)}`;
   // 긍정/부정 하이라이트: 회사(matchedKeyword)별로 묶어 "언급 매체 수" 많은 순 → 동률이면 최신순, TOP 3만.
   // (Article에 검색노출도 필드가 없어 매체 다양성을 대리 지표로 사용)
   const top3ByMedia = (rows: { matchedKeyword: string; title: string; source: string; pubDate: Date; link: string; riskFlag?: string | null }[]) => {
@@ -468,6 +486,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
     sparklabsMentions,
     sparkLabsFundSummary,
     portfolioTop,
+    portfolioTopPrevRangeLabel,
     portfolioNegatives,
     portfolioPositives,
     toneArticles: sparklabsArticles.map(a => ({
@@ -760,9 +779,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         <PortfolioNegatives items={data.portfolioNegatives} rangeLabel={range.label} />
       </div>
 
-      {/* 포트폴리오 TOP15 + 기획기사 피칭 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
-        <PortfolioTopList items={data.portfolioTop} rangeLabel={range.label} />
+      {/* 포트폴리오 TOP15 → 기획기사 피칭 (위아래 배치) */}
+      <div className="grid grid-cols-1 gap-4 mb-8">
+        <PortfolioTopList items={data.portfolioTop} rangeLabel={range.label} prevRangeLabel={data.portfolioTopPrevRangeLabel} />
         <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
           <div className="font-bold mb-3">🎯 기획기사 피칭 <InfoTip text={`AI가 각 기사를 0~100점으로 평가한 '기획기사 피칭 점수'입니다.\n이 주제로 우리 포트폴리오사를 엮어 기획기사를 제안하면 성사 가능성이 높은 기사를 뜻합니다.\n· 60점 이상: 아래 목록에 표시\n· 75점 이상: 상단 '피칭 기회' 지표에 집계`} /></div>
           {data.pitches.length > 0 ? (
@@ -902,12 +921,12 @@ function PortfolioStatusBadge({ status }: { status: string | null }) {
   return <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold border ${cls}`}>{status}</span>;
 }
 
-function PortfolioTopList({ items, rangeLabel }: { items: { name: string; count: number; portfolioStatus?: string | null }[]; rangeLabel: string }) {
+function PortfolioTopList({ items, rangeLabel, prevRangeLabel }: { items: { name: string; count: number; portfolioStatus?: string | null; changePct: number | null }[]; rangeLabel: string; prevRangeLabel: string }) {
   const max = Math.max(...items.map(i => i.count), 1);
   return (
     <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
-      <div className="font-bold mb-1">🔥 가장 많이 언급된 포트폴리오사 TOP 15 <InfoTip text={`${rangeLabel} 동안 언론 노출(기사 수)이 많은 포트폴리오사 순위입니다.\n최근 홍보 활동이 활발하거나 이슈가 되고 있는 회사를 보여줍니다.`} /></div>
-      <div className="text-xs text-gray-500 mb-4">{rangeLabel} · 언론 노출 건수 기준</div>
+      <div className="font-bold mb-1">🔥 가장 많이 언급된 포트폴리오사 TOP 15 <InfoTip text={`${rangeLabel} 동안 언론 노출(기사 수)이 많은 포트폴리오사 순위입니다.\n최근 홍보 활동이 활발하거나 이슈가 되고 있는 회사를 보여줍니다.\n증감은 선택한 기간과 같은 길이의 직전 기간 대비입니다 (예: 최근 7일 선택 시 직전 7일과 비교).`} /></div>
+      <div className="text-xs text-gray-500 mb-4">{rangeLabel} · 언론 노출 건수 기준 · 증감은 직전 기간({prevRangeLabel}) 대비</div>
       {items.length > 0 ? (
         <div className="space-y-2">
           {items.map((it, i) => (
@@ -919,6 +938,11 @@ function PortfolioTopList({ items, rangeLabel }: { items: { name: string; count:
                 <div className="h-full rounded bg-spark-purple/80" style={{ width: `${Math.round((it.count / max) * 100)}%` }} />
               </div>
               <span className="w-10 text-right font-bold tabular-nums">{it.count}</span>
+              <span className={`w-14 text-right text-xs font-semibold tabular-nums whitespace-nowrap ${
+                it.changePct === null ? 'text-blue-500' : it.changePct > 0 ? 'text-emerald-600' : it.changePct < 0 ? 'text-red-500' : 'text-gray-400'
+              }`}>
+                {it.changePct === null ? '신규' : it.changePct === 0 ? '0%' : `${it.changePct > 0 ? '+' : ''}${it.changePct}%`}
+              </span>
             </div>
           ))}
         </div>
