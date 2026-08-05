@@ -14,6 +14,7 @@
 // 그래서 --after/--before로 임의 구간을 직접 지정할 수 있게 했다. URL 기준 중복 저장은
 // saveInterNewsIfNew가 막으니 이미 있는 기간과 겹쳐 돌려도 안전하다.
 
+import './_env'; // ← .env.local 로드. 다른 import보다 먼저여야 한다
 import { prisma } from '../src/lib/prisma';
 import { FEEDS, decodeEntities, parseFeedItems, saveInterNewsIfNew } from '../src/lib/sparkscope/inter-collect';
 import { resolveGoogleNewsUrl } from '../src/lib/sparkscope/google-news-resolver';
