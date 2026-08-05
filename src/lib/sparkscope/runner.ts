@@ -240,10 +240,16 @@ export async function runDailyDigest(opts: RunOptions = {}) {
     // 7. DB에 다이제스트 저장 — KST 기준 오늘
     const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     const today = new Date(kstNow.getFullYear(), kstNow.getMonth(), kstNow.getDate(), 0, 0, 0, 0);
+    // 발송 시도가 없는 실행(수집 전용, send=false)은 콘텐츠만 갱신하고 sentAt/errorMsg는 손대지 않는다.
+    // 예전엔 무조건 null로 리셋해서, 발송 크론이 이미 성공시켜둔 sentAt을 그날 나중에 끝나는
+    // 수집 실행이 지워버려 "안 보낸 것"처럼 보이는 문제가 있었음.
+    const willAttemptSend = !!opts.send && !opts.dryRun;
     const digestRecord = await prisma.digest.upsert({
       where: { date: today },
       create: { date: today, subject, htmlBody: html },
-      update: { subject, htmlBody: html, sentAt: null, errorMsg: null },
+      update: willAttemptSend
+        ? { subject, htmlBody: html, sentAt: null, errorMsg: null }
+        : { subject, htmlBody: html },
     });
 
     // 8. 메일 발송 — 발송 직전 발신 도메인 인증 여부 확인(미인증이면 전원 발송 스킵, 담당자 알림)
