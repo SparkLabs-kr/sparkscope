@@ -512,7 +512,7 @@ function HeadlineStats({ headline: h, isFullYear }: { headline: InterMatrix['hea
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-6">
       <div className="bg-white border border-spark-border rounded-xl px-4 py-3.5">
-        <div className="text-[12px] text-spark-muted mb-1">선별 기사</div>
+        <div className="text-[12px] text-spark-muted mb-1">이 기간 트렌드 기사 수</div>
         <div className="flex items-baseline gap-1.5">
           <span className="text-2xl font-extrabold tabular-nums text-spark-ink">{h.total}</span>
           <DeltaChip deltaPct={h.deltaPct} count={h.total} isFullYear={isFullYear} />
@@ -521,7 +521,7 @@ function HeadlineStats({ headline: h, isFullYear }: { headline: InterMatrix['hea
       </div>
 
       <div className="bg-white border border-spark-border rounded-xl px-4 py-3.5">
-        <div className="text-[12px] text-spark-muted mb-1">가장 뜨거운 칸</div>
+        <div className="text-[12px] text-spark-muted mb-1">가장 급증한 트렌드 조합</div>
         <div className="truncate text-[15px] font-extrabold text-spark-ink" title={h.hottest?.label}>
           {h.hottest?.label ?? '—'}
         </div>
@@ -542,22 +542,22 @@ function HeadlineStats({ headline: h, isFullYear }: { headline: InterMatrix['hea
       </div>
 
       <div className="bg-white border border-spark-border rounded-xl px-4 py-3.5">
-        <div className="text-[12px] text-spark-muted mb-1">포트폴리오 연결</div>
+        <div className="text-[12px] text-spark-muted mb-1">연결된 포트폴리오사</div>
         <div className="flex items-baseline gap-0.5">
           <span className="text-2xl font-extrabold tabular-nums text-emerald-700">{h.matchedCompanyCount}</span>
           <span className="text-[13px] font-semibold text-emerald-700">개사</span>
         </div>
-        <div className="text-[11px] text-spark-muted mt-0.5">매치 {h.matchCount}건</div>
+        <div className="text-[11px] text-spark-muted mt-0.5">관련 기사 매치 {h.matchCount}건</div>
       </div>
 
       <div className="bg-white border border-spark-border rounded-xl px-4 py-3.5">
-        <div className="text-[12px] text-spark-muted mb-1">우리와 겹치는 칸</div>
+        <div className="text-[12px] text-spark-muted mb-1">우리 사업과 겹치는 트렌드</div>
         <div className="flex items-baseline">
           <span className="text-2xl font-extrabold tabular-nums text-spark-ink">{h.overlapCells}</span>
-          <span className="text-[15px] font-bold text-spark-muted">/{h.totalCells}</span>
+          <span className="text-[15px] font-bold text-spark-muted">/{h.totalCells}개 조합</span>
         </div>
         <div className="truncate text-[11px] text-spark-muted mt-0.5">
-          {h.overlapTopics.length > 0 ? `${h.overlapTopics.join('·')} 중심` : '겹치는 칸 없음'}
+          {h.overlapTopics.length > 0 ? `${h.overlapTopics.join('·')} 중심` : '겹치는 조합 없음'}
         </div>
       </div>
     </div>
