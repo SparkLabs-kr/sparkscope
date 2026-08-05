@@ -507,12 +507,27 @@ function ColoredSummaryCard({ summary, overview, isFullYear }: { summary: Domain
   );
 }
 
+// Intra 탭 KpiCard와 동일한 호버 툴팁 패턴 — 칸 이름 옆 🔍를 올리면 아래 설명이 뜬다.
+function InfoTip({ text }: { text: string }) {
+  return (
+    <span className="text-[10px] cursor-help select-none opacity-50 group-hover:opacity-100 transition-opacity">
+      🔍
+      <span className="pointer-events-none absolute left-3 right-3 top-full z-20 mt-1 whitespace-pre-line rounded-lg bg-gray-900 px-3 py-2 text-xs font-normal leading-relaxed text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+        {text}
+      </span>
+    </span>
+  );
+}
+
 // 헤드라인 4지표 — 매트릭스를 읽는 데 필요한 값만. 전부 실제 집계값.
 function HeadlineStats({ headline: h, isFullYear }: { headline: InterMatrix['headline']; isFullYear?: boolean }) {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-6">
-      <div className="bg-white border border-spark-border rounded-xl px-4 py-3.5">
-        <div className="text-[12px] text-spark-muted mb-1">선별 기사</div>
+      <div className="relative group bg-white border border-spark-border rounded-xl px-4 py-3.5">
+        <div className="flex items-center gap-1 text-[12px] text-spark-muted mb-1">
+          이 기간 트렌드 기사 수
+          <InfoTip text={`이 조회 기간에 수집·판정된 관련 기사 총량입니다.\n증감률은 바로 직전 같은 길이의 기간과 비교한 값이에요.`} />
+        </div>
         <div className="flex items-baseline gap-1.5">
           <span className="text-2xl font-extrabold tabular-nums text-spark-ink">{h.total}</span>
           <DeltaChip deltaPct={h.deltaPct} count={h.total} isFullYear={isFullYear} />
@@ -520,8 +535,11 @@ function HeadlineStats({ headline: h, isFullYear }: { headline: InterMatrix['hea
         <div className="text-[11px] text-spark-muted mt-0.5">직전 동일 기간 {h.prevTotal}건</div>
       </div>
 
-      <div className="bg-white border border-spark-border rounded-xl px-4 py-3.5">
-        <div className="text-[12px] text-spark-muted mb-1">가장 뜨거운 칸</div>
+      <div className="relative group bg-white border border-spark-border rounded-xl px-4 py-3.5">
+        <div className="flex items-center gap-1 text-[12px] text-spark-muted mb-1">
+          가장 급증한 트렌드 조합
+          <InfoTip text={`아래 매트릭스는 "주제"(예: 항암)와 "사건 유형"(예: 투자·딜)을 교차해서 보여줍니다.\n이 칸은 그중 직전 기간 대비 증가율이 가장 높은 조합이에요 — 최소 3건 이상 쌓인 칸 중에서만 고릅니다.`} />
+        </div>
         <div className="truncate text-[15px] font-extrabold text-spark-ink" title={h.hottest?.label}>
           {h.hottest?.label ?? '—'}
         </div>
@@ -541,23 +559,29 @@ function HeadlineStats({ headline: h, isFullYear }: { headline: InterMatrix['hea
         </div>
       </div>
 
-      <div className="bg-white border border-spark-border rounded-xl px-4 py-3.5">
-        <div className="text-[12px] text-spark-muted mb-1">포트폴리오 연결</div>
+      <div className="relative group bg-white border border-spark-border rounded-xl px-4 py-3.5">
+        <div className="flex items-center gap-1 text-[12px] text-spark-muted mb-1">
+          연결된 포트폴리오사
+          <InfoTip text={`이 기간 해외 트렌드 기사 중, AI가 특정 스파크랩 포트폴리오사와 관련 있다고 판단한 기사가 몇 개 회사에 걸쳐 있는지입니다.\n"관련 기사 매치"는 회사 수가 아니라 그 판정이 내려진 기사·회사 쌍의 건수예요(한 기사가 여러 회사와 매치될 수 있음).`} />
+        </div>
         <div className="flex items-baseline gap-0.5">
           <span className="text-2xl font-extrabold tabular-nums text-emerald-700">{h.matchedCompanyCount}</span>
           <span className="text-[13px] font-semibold text-emerald-700">개사</span>
         </div>
-        <div className="text-[11px] text-spark-muted mt-0.5">매치 {h.matchCount}건</div>
+        <div className="text-[11px] text-spark-muted mt-0.5">관련 기사 매치 {h.matchCount}건</div>
       </div>
 
-      <div className="bg-white border border-spark-border rounded-xl px-4 py-3.5">
-        <div className="text-[12px] text-spark-muted mb-1">우리와 겹치는 칸</div>
+      <div className="relative group bg-white border border-spark-border rounded-xl px-4 py-3.5">
+        <div className="flex items-center gap-1 text-[12px] text-spark-muted mb-1">
+          우리 포트폴리오와 관련된 주제
+          <InfoTip text={`전체 트렌드 주제(예: 항암·신약발굴·의료기기 등, 총 ${h.totalTopicCount}개) 중, 이 기간 포트폴리오사 매치가 하나라도 있었던 주제 수입니다.\n숫자가 낮으면 우리 포트폴리오가 다루지 않는 분야에서 트렌드가 몰리고 있다는 뜻이에요.`} />
+        </div>
         <div className="flex items-baseline">
-          <span className="text-2xl font-extrabold tabular-nums text-spark-ink">{h.overlapCells}</span>
-          <span className="text-[15px] font-bold text-spark-muted">/{h.totalCells}</span>
+          <span className="text-2xl font-extrabold tabular-nums text-spark-ink">{h.overlapTopicCount}</span>
+          <span className="text-[15px] font-bold text-spark-muted">/{h.totalTopicCount}개 주제</span>
         </div>
         <div className="truncate text-[11px] text-spark-muted mt-0.5">
-          {h.overlapTopics.length > 0 ? `${h.overlapTopics.join('·')} 중심` : '겹치는 칸 없음'}
+          {h.overlapTopics.length > 0 ? `${h.overlapTopics.join('·')} 등` : '관련 주제 없음'}
         </div>
       </div>
     </div>

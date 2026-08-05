@@ -506,9 +506,9 @@ export interface InterMatrix {
     hottest: { label: string; count: number; prevCount: number; deltaPct: number | null } | null;
     matchCount: number;
     matchedCompanyCount: number;
-    /** 포트폴리오 매치가 하나라도 있는 셀 수 / 전체 셀 수 */
-    overlapCells: number;
-    totalCells: number;
+    /** 포트폴리오 매치가 하나라도 있는 주제 수 / 전체 주제 수 (칸 단위가 아니라 주제 단위) */
+    overlapTopicCount: number;
+    totalTopicCount: number;
     overlapTopics: string[];
   };
 }
@@ -623,6 +623,7 @@ export function buildMatrix(domain: InterDomain, data: InterData): InterMatrix {
     : filled.slice().sort((a, b) => b.count - a.count)[0];
 
   const overlap = filled.filter(c => c.matchCount > 0);
+  const overlapTopicSet = new Set(overlap.map(c => c.topicKey));
 
   return {
     eventTypes: events.map(e => ({ key: e.key, icon: e.icon, sub: e.sub })),
@@ -645,9 +646,11 @@ export function buildMatrix(domain: InterDomain, data: InterData): InterMatrix {
         : null,
       matchCount: matches.length,
       matchedCompanyCount: new Set(matches.map(m => m.companyName)).size,
-      overlapCells: overlap.length,
-      totalCells: allCells.length,
-      overlapTopics: Array.from(new Set(overlap.map(c => c.topicKey))).slice(0, 3),
+      // "칸" 단위(주제×사건유형, 25개)는 매트릭스 구조를 몰라야 이해가 안 되는 숫자라
+      // 화면에는 사람이 바로 아는 단위인 "주제"(항암, 신약발굴 등, topics.length개) 기준으로 노출한다.
+      overlapTopicCount: overlapTopicSet.size,
+      totalTopicCount: rows.length,
+      overlapTopics: Array.from(overlapTopicSet).slice(0, 3),
     },
   };
 }
