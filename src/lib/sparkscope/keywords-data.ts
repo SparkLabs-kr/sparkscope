@@ -131,6 +131,12 @@ export function hasCrisisKeyword(title: string): string | null {
     if (keyword === '적자' && /인적자원/.test(title)) {
       continue;
     }
+    // "수사" 예외: "우수사례/우수사업"처럼 "우수" 뒤에 우연히 "사"가 이어지는 부분일치는
+    // 수사기관 조사와 무관함(2026-08-05, 와이앤아처 백필 중 발견 — 우수사례집 발간 기사가
+    // 부정 기사로 잘못 분류됨).
+    if (keyword === '수사' && /우수사/.test(title)) {
+      continue;
+    }
 
     return category;
   }
