@@ -25,12 +25,20 @@ import { summarizeCompetitorTrend, summarizeOverallTrend } from './competitor-in
 
 export type InsightSource = 'ai' | 'fallback';
 
+// KST(UTC+9, DST 없음) 계산 — 실행 환경의 시스템 시간대(TZ)와 무관하게 항상 같은 결과를 내야 한다.
+// 기존엔 toLocaleString으로 KST 문자열을 만든 뒤 다시 Date로 파싱했는데, 이 재파싱이 시스템 TZ를
+// 타서 로컬(KST로 설정된 PC)에서 서버(UTC)와 다른 값이 나왔다(2026-08-05, 로컬 대시보드 기사 수가
+// 프로덕션과 안 맞던 원인). 시스템 TZ와 무관하도록, 항상 실제 epoch에 9시간을 더한 뒤 UTC getter로만
+// 읽는 방식으로 통일한다.
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
 function getKstNow() {
-  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+  return new Date(Date.now() + KST_OFFSET_MS);
 }
+// d는 실제(genuine) 타임스탬프여야 한다 — getKstNow()의 반환값을 다시 넣으면 9시간이 중복 적용된다.
 function kstDateKey(d: Date) {
-  const k = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-  return `${k.getFullYear()}-${String(k.getMonth() + 1).padStart(2, '0')}-${String(k.getDate()).padStart(2, '0')}`;
+  const k = new Date(d.getTime() + KST_OFFSET_MS);
+  return `${k.getUTCFullYear()}-${String(k.getUTCMonth() + 1).padStart(2, '0')}-${String(k.getUTCDate()).padStart(2, '0')}`;
 }
 
 // ===== 읽기: 대시보드 렌더링에서 사용 =====
@@ -43,7 +51,8 @@ export async function wasInsightsBatchFreshToday(): Promise<boolean> {
     select: { finishedAt: true },
   });
   if (!last?.finishedAt) return false;
-  return kstDateKey(last.finishedAt) === kstDateKey(getKstNow());
+  // kstDateKey는 실제 타임스탬프를 받아야 한다 — getKstNow()를 넣으면 9시간이 중복 적용된다.
+  return kstDateKey(last.finishedAt) === kstDateKey(new Date());
 }
 
 export async function getPrecomputedCrisisCauses(companies: string[]): Promise<Map<string, { cause: string; computedAt: Date }>> {
@@ -113,7 +122,7 @@ export async function computeAndStoreDashboardInsights(): Promise<void> {
 
 async function computeCrisisCauses() {
   const now = getKstNow();
-  const rc = new Date(now); rc.setDate(rc.getDate() - 3); rc.setHours(0, 0, 0, 0);
+  const rc = new Date(now); rc.setUTCDate(rc.getUTCDate() - 3); rc.setUTCHours(0, 0, 0, 0);
 
   const negOr = [{ tone: 'NEGATIVE' as string | null }, ...NEGATIVE_KEYWORDS.map(k => ({ title: { contains: k } }))];
   const crisisNeg = await prisma.article.findMany({
@@ -138,7 +147,7 @@ async function computeCrisisCauses() {
 
 async function computeCompetitorTrends() {
   const now = getKstNow();
-  const since = new Date(now); since.setMonth(since.getMonth() - 3); // 대시보드 기본 기간(최근 3개월)과 동일
+  const since = new Date(now); since.setUTCMonth(since.getUTCMonth() - 3); // 대시보드 기본 기간(최근 3개월)과 동일
 
   // ⚠️ 아래 집계 로직은 src/app/dashboard/page.tsx의 competitorAggs 구성과 반드시 같은 결과를
   // 내야 한다(카운트 산정 방식이 어긋나면 화면 숫자와 사전계산 트렌드 문구가 서로 안 맞아 보인다).
@@ -177,7 +186,7 @@ async function computeCompetitorTrends() {
   }
 
   const periodPhrase = '3개월간';
-  const cacheKey = `precompute_${kstDateKey(now)}`;
+  const cacheKey = `precompute_${kstDateKey(new Date())}`;
 
   const overall = await summarizeOverallTrend(
     top10.map(([name, s]) => ({ name, count: s.count, negCount: s.negCount })),

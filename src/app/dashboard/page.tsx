@@ -63,8 +63,10 @@ const CRISIS_WINDOW_DAYS = 3;
 // 위기 카드가 이 개수를 넘으면 개별 카드 대신 AI 종합요약 + "더보기"로 접어서 공간을 아낀다.
 const CRISIS_SUMMARY_THRESHOLD = 2;
 
+// getKstNow()가 반환하는 Date는 UTC 필드에 KST 벽시계를 담고 있으므로(아래 설명 참고),
+// fmt()는 항상 UTC getter로 읽는다 — 로컬 getter를 쓰면 실행 환경 시스템 시간대에 따라 결과가 달라진다.
 function fmt(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 }
 function isValidYmd(s?: string): s is string {
   return !!s && /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(Date.parse(s));
@@ -72,18 +74,18 @@ function isValidYmd(s?: string): s is string {
 function clamp(s: string, lo: string, hi: string) {
   return s < lo ? lo : s > hi ? hi : s;
 }
+// KST(UTC+9, DST 없음) 계산 — 실행 환경의 시스템 시간대(TZ)와 무관하게 항상 같은 결과를 내야 한다.
+// 기존엔 toLocaleString으로 KST 문자열을 만든 뒤 다시 Date로 파싱했는데, 이 재파싱이 시스템 TZ를
+// 타서 로컬(KST로 설정된 PC)에서 서버(UTC)와 다른 값이 나왔다(2026-08-05, 로컬 대시보드 기사 수가
+// 프로덕션과 안 맞던 원인). 실제 epoch에 9시간을 더한 뒤 UTC getter로만 읽는 방식으로 통일한다.
 function getKstNow() {
-  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-}
-function fmtKstTime(d: Date) {
-  const kst = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-  return `${String(kst.getHours()).padStart(2, '0')}:${String(kst.getMinutes()).padStart(2, '0')}`;
+  return new Date(Date.now() + 9 * 60 * 60 * 1000);
 }
 
 function resolveRange(searchParams: { from?: string; to?: string }) {
   const todayStr = fmt(getKstNow());
   const def = getKstNow();
-  def.setMonth(def.getMonth() - 3); // 기본 기간: 최근 3개월 (유의미한 흐름 파악)
+  def.setUTCMonth(def.getUTCMonth() - 3); // 기본 기간: 최근 3개월 (유의미한 흐름 파악)
   let from = isValidYmd(searchParams.from) ? clamp(searchParams.from, MIN_DATE, todayStr) : fmt(def);
   let to = isValidYmd(searchParams.to) ? clamp(searchParams.to, MIN_DATE, todayStr) : todayStr;
   if (from > to) [from, to] = [to, from];
@@ -115,8 +117,8 @@ async function loadDashboardData(from: string, to: string, company: string | und
 
   // 급증 배너: 기간 선택과 무관하게 "최근 3일 vs 직전 60일(백필 포함)" — KST 기준
   const now = getKstNow();
-  const rc = new Date(now); rc.setDate(rc.getDate() - 3); rc.setHours(0, 0, 0, 0);
-  const bl = new Date(now); bl.setDate(bl.getDate() - 63); bl.setHours(0, 0, 0, 0);
+  const rc = new Date(now); rc.setUTCDate(rc.getUTCDate() - 3); rc.setUTCHours(0, 0, 0, 0);
+  const bl = new Date(now); bl.setUTCDate(bl.getUTCDate() - 63); bl.setUTCHours(0, 0, 0, 0);
 
   const [
     total, sparklabsCount, portfolioCount, pitchCount, mentionCount,
@@ -522,7 +524,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     : new Set<string>();
   const articlesWithBookmark = data.articles.map(a => ({ ...a, isBookmarked: bookmarkedIds.has(a.id) }));
   const companyArticlesWithBookmark = data.companyArticles.map(a => ({ ...a, isBookmarked: bookmarkedIds.has(a.id) }));
-  const todayLabel = getKstNow().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+  // getKstNow()의 KST 값은 UTC 필드에 들어있으므로, toLocaleDateString도 timeZone: 'UTC'로
+  // 읽어야 한다 — 안 그러면 실행 환경 시스템 시간대에 따라 다시 밀린다.
+  const todayLabel = getKstNow().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long', timeZone: 'UTC' });
 
   // 탭 링크: 현재 기간·회사 필터를 유지한 채 tab만 바꾼다.
   const tabHref = (t: TabId) => {
