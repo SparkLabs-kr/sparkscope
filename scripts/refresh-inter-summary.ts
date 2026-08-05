@@ -20,13 +20,11 @@ if (fs.existsSync(envPath)) {
 }
 
 async function main() {
-  const { computeInterSummaryForDomain } = await import('../src/lib/sparkscope/inter-summary');
+  const { computeAndStoreInterSummaries } = await import('../src/lib/sparkscope/inter-summary');
   const { prisma } = await import('../src/lib/prisma');
 
-  for (const domain of ['bio', 'ai'] as const) {
-    const ok = await computeInterSummaryForDomain(domain);
-    console.log(`${domain}: ${ok ? '재계산 성공' : '실패(폴백 유지)'}`);
-  }
+  // 도메인(bio/ai) × 기간(7일/1개월/3개월/1년/3년) 전체 조합을 재계산.
+  await computeAndStoreInterSummaries();
 
   const rows = await prisma.dashboardInsight.findMany({ where: { kind: 'inter_summary' } });
   for (const r of rows) {

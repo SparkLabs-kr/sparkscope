@@ -17,6 +17,7 @@ import {
   legacySectorToTopic,
   topicSectorsFor,
 } from './sparkscope/inter-taxonomy';
+import { nearestSummaryPeriodKey } from './sparkscope/inter-summary-periods';
 
 export type InterDomain = 'bio' | 'ai';
 export type InterCountry = 'us' | 'cn' | 'jp' | 'sa' | 'other' | 'all';
@@ -57,10 +58,16 @@ const FALLBACK_SUMMARY: Record<InterDomain, Omit<DomainSummary, 'label' | 'sourc
   },
 };
 
-/** DashboardInsight(kind='inter_summary')에서 도메인별 사전계산 요약을 읽는다. 없으면 폴백. */
-export async function getDomainSummary(domain: InterDomain): Promise<DomainSummary> {
+/**
+ * DashboardInsight(kind='inter_summary')에서 도메인 × 기간별 사전계산 요약을 읽는다. 없으면 폴백.
+ * since/until은 화면에서 선택한 조회 기간 — 가장 가까운 사전계산 기간(7일/1개월/3개월/1년/3년)의
+ * 값을 찾아 반환한다. 이렇게 해야 "가장 많이 걸린 포트폴리오사" 칩(선택 기간 기준 집계)과
+ * AI 문장이 같은 기간을 보고 하는 말이 된다.
+ */
+export async function getDomainSummary(domain: InterDomain, since: Date, until: Date): Promise<DomainSummary> {
+  const periodKey = nearestSummaryPeriodKey(since, until);
   const row = await prisma.dashboardInsight.findUnique({
-    where: { kind_key: { kind: 'inter_summary', key: domain } },
+    where: { kind_key: { kind: 'inter_summary', key: `${domain}_${periodKey}` } },
   });
   if (row) {
     try {

@@ -433,6 +433,20 @@ function SectorAccordion({
 
 type SummaryChip = { label: string; cls: string };
 
+// AI 요약 문장 속 **키워드** 마크다운을 하이라이트 처리해서 렌더링.
+function renderHighlighted(text: string): ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    const m = part.match(/^\*\*([^*]+)\*\*$/);
+    if (!m) return <span key={i}>{part}</span>;
+    return (
+      <span key={i} className="rounded bg-emerald-50 px-1 font-semibold text-emerald-700">
+        {m[1]}
+      </span>
+    );
+  });
+}
+
 function ColoredSummaryItem({ n, k, v, chips, last }: { n: number; k: string; v: string; chips?: SummaryChip[]; last?: boolean }) {
   return (
     <div className={`flex gap-2.5 py-2.5 text-[14px] leading-relaxed text-spark-ink-soft ${last ? '' : 'border-b border-spark-cream'}`}>
@@ -442,7 +456,7 @@ function ColoredSummaryItem({ n, k, v, chips, last }: { n: number; k: string; v:
       <div className="min-w-0 flex-1">
         <div>
           <span className="mr-1 font-semibold text-spark-ink">{k}</span>
-          <span>{v}</span>
+          <span>{renderHighlighted(v)}</span>
         </div>
         {chips && chips.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1.5">
