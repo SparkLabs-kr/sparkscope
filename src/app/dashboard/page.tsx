@@ -15,6 +15,7 @@ import { canScrap as canScrapEmail } from '@/lib/scrap';
 import { normalizeSource } from '@/lib/sparkscope/media';
 import { matchesAsToken, isBlockedNoise, normalizeTitleKey } from '@/lib/sparkscope/relevance';
 import { NEGATIVE_KEYWORDS, INDUSTRY_TREND_KEYWORDS, PINNED_COMPETITORS, detectCrises, crisisFallbackCause, detectSpikes, type ArticleLite, type SpikeCard } from '@/lib/sparkscope/insights';
+import { hasNegativeKeyword, hasCrisisKeyword } from '@/lib/sparkscope/keywords-data';
 import { getPrecomputedCrisisCauses, getPrecomputedCompetitorInsights, wasInsightsBatchFreshToday, type InsightSource } from '@/lib/sparkscope/dashboard-insights';
 import { summarizeCrisisCause, summarizeCrisisOverview } from '@/lib/sparkscope/analyzer';
 import { summarizeCompetitorTrend, summarizeOverallTrend } from '@/lib/sparkscope/competitor-insights';
@@ -178,20 +179,24 @@ async function loadDashboardData(from: string, to: string, company: string | und
 
   type CompetitorAgg = Omit<CompetitorStatView, 'trend'> & { titles: string[] };
   const competitorStatMap = new Map<string, CompetitorAgg>();
+  // 카드의 "기사" 탭에 보여줄 최대 개수 — 예전엔 3건 고정이었는데, 스크롤로 더 볼 수 있게 늘림.
+  const ARTICLES_PER_CARD = 50;
   for (const a of competitorArticles) {
     if (!notNoise(a)) continue;
     const name = a.matchedKeyword;
     if (!name) continue;
     let s = competitorStatMap.get(name);
     if (!s) {
-      s = { name, english: competitorEnglishOf.get(name) ?? '', count: 0, negCount: 0, top3: [], negatives: [], titles: [] };
+      s = { name, english: competitorEnglishOf.get(name) ?? '', count: 0, negCount: 0, articles: [], negatives: [], titles: [] };
       competitorStatMap.set(name, s);
     }
     s.count++;
-    const neg = a.tone === 'NEGATIVE' || NEGATIVE_KEYWORDS.some(k => a.title.includes(k));
+    // 토큰 경계 매칭(hasNegativeKeyword/hasCrisisKeyword) — 부분일치(예: "우수사례"의 "수사")로
+    // 인한 오탐을 피한다. 2026-08-05, tone 필드 오탐과 같은 원인으로 여기도 같이 발견·수정.
+    const neg = a.tone === 'NEGATIVE' || hasNegativeKeyword(a.title) || !!hasCrisisKeyword(a.title);
     if (neg) s.negCount++;
     const art = { title: a.title, source: normalizeSource(a.source), pubDate: a.pubDate, link: a.link, neg }; // 입력이 최신순
-    if (s.top3.length < 3) s.top3.push(art);
+    if (s.articles.length < ARTICLES_PER_CARD) s.articles.push(art);
     if (neg) s.negatives.push(art);
     if (s.titles.length < 40) s.titles.push(a.title); // AI 트렌드 요약 입력용(최신순)
   }
@@ -202,7 +207,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
   const pinnedAggs = PINNED_COMPETITORS.map(({ keyword, displayName }) => {
     const agg = competitorStatMap.get(keyword);
     const name = displayName ?? keyword;
-    if (!agg) return { name, english: competitorEnglishOf.get(keyword) ?? '', count: 0, negCount: 0, top3: [], negatives: [], titles: [] };
+    if (!agg) return { name, english: competitorEnglishOf.get(keyword) ?? '', count: 0, negCount: 0, articles: [], negatives: [], titles: [] };
     return { ...agg, name };
   });
 

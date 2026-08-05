@@ -20,7 +20,7 @@ export interface CompetitorStatView {
   english: string;
   count: number;
   negCount: number;
-  top3: CompetitorArticleView[];
+  articles: CompetitorArticleView[];
   negatives: CompetitorArticleView[];
   /** AI 트렌드 3줄 (실패 시 null) */
   trend: string[] | null;
@@ -306,9 +306,9 @@ function CompetitorCard({ c, selected }: { c: CompetitorStatView; selected: bool
       )}
 
       {tab === '기사' && (
-        c.top3.length > 0 ? (
-          <div className="space-y-2">
-            {c.top3.map((a, i) => {
+        c.articles.length > 0 ? (
+          <div className="space-y-2 max-h-96 overflow-y-auto scroll-slim pr-1">
+            {c.articles.map((a, i) => {
               const d = new Date(a.pubDate);
               return (
                 <a key={i} href={safeArticleHref(a.link, a.title, a.source)} target="_blank" rel="noopener noreferrer" className="block group">
