@@ -180,7 +180,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
   type CompetitorAgg = Omit<CompetitorStatView, 'trend'> & { titles: string[] };
   const competitorStatMap = new Map<string, CompetitorAgg>();
   // 카드의 "기사" 탭에 보여줄 최대 개수 — 예전엔 3건 고정이었는데, 스크롤로 더 볼 수 있게 늘림.
-  const ARTICLES_PER_CARD = 50;
+  const ARTICLES_PER_CARD = 20;
   for (const a of competitorArticles) {
     if (!notNoise(a)) continue;
     const name = a.matchedKeyword;

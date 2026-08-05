@@ -146,6 +146,27 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
     return null;
   }
 
+  // 경쟁사 A를 검색하다가 걸린 기사가, 본문에만 A가 언급되고 실제 제목의 주인공은 경쟁사 B인
+  // 경우의 교차 확인용 (예: "에이티넘인베, 트리플에스 소속사 모드하우스에 100억 투자"가 본문의
+  // "IMM인베스트먼트" 언급 때문에 IMM 기사로 잘못 붙던 사고 — 2026-08-05 발견). 제목만 본다
+  // (본문 언급까지 인정하면 애초에 이 오분류를 만든 것과 같은 조건이 되므로).
+  // mainKeys(정식명)뿐 아니라 trueHelpers(대표자명·"에이티넘"처럼 언론이 흔히 쓰는 축약 별칭 등)도
+  // 포함 — 기사 제목이 정식 명칭을 그대로 안 쓰고 축약하는 경우가 많아서(예: "에이티넘인베스트먼트"
+  // 대신 "에이티넘인베"), 정식명만으로는 자기 자신조차 제목에서 못 찾는 경우가 실제로 있었다.
+  const competitorTargetsForCrosscheck = (grouped.get('competitor') ?? []).map(c => {
+    const resolved = resolveMainKeys({
+      title: '', primaryKeyword: c.primaryKeyword, name: c.name, englishName: c.englishName,
+      helperKeywords: c.helperKeywords, category: c.category,
+    });
+    return { target: c, keys: [...resolved.mainKeys, ...resolved.trueHelpers] };
+  });
+  function findCompetitorSubject(title: string): Target | null {
+    for (const { target, keys } of competitorTargetsForCrosscheck) {
+      if (keys.some(k => matchesAsToken(title, k))) return target;
+    }
+    return null;
+  }
+
   const allArticles: RawArticle[] = [];
   const CONCURRENCY = 5;
   for (let i = 0; i < limited.length; i += CONCURRENCY) {
@@ -165,6 +186,13 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
       const ownKeys = target.category === 'sparklabs_self'
         ? resolveMainKeys({ title: '', primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, category: target.category }).mainKeys
         : [];
+      // 경쟁사 자신의 강한 식별자 — 제목에 자기 이름이 있는지 확인용(교차검사 기준, 아래 참고).
+      // trueHelpers(대표자명·축약 별칭 등)까지 포함하는 이유는 competitorTargetsForCrosscheck와 동일.
+      const ownCompetitorKeys = (() => {
+        if (target.category !== 'competitor') return [] as string[];
+        const resolved = resolveMainKeys({ title: '', primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName, helperKeywords: target.helperKeywords, category: target.category });
+        return [...resolved.mainKeys, ...resolved.trueHelpers];
+      })();
 
       const mediaFiltered = items.filter(item => strongCat || isKnownMedia(item.source));
 
@@ -217,6 +245,16 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
             const body = bodyMap.get(item.link)?.text ?? '';
             const subject = findPortfolioSubject(item.title, body);
             if (subject) { matchedTarget = subject; category = 'portfolio_company'; }
+          }
+
+          // 경쟁사는 본문 언급만으로도 통과되므로(공동투자 나열문 등), 본문에 걸린 회사가 아니라
+          // 제목의 진짜 주인공인 다른 경쟁사가 따로 있으면 그쪽으로 정정한다(예: "에이티넘인베,
+          // 트리플에스 소속사 모드하우스에 100억 투자"가 본문의 "IMM인베스트먼트" 언급 때문에
+          // IMM 기사로 잘못 붙던 사고 — 2026-08-05). 제목에 자기 이름이 있으면(진짜 주인공) 그대로 유지.
+          const competitorInTitle = ownCompetitorKeys.some(k => matchesAsToken(item.title, k));
+          if (target.category === 'competitor' && !competitorInTitle) {
+            const subject = findCompetitorSubject(item.title);
+            if (subject && subject.id !== target.id) { matchedTarget = subject; }
           }
 
           return {
