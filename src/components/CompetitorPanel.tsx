@@ -317,7 +317,7 @@ function CompetitorCard({ c, selected }: { c: CompetitorStatView; selected: bool
       {tab === '기사' && (
         c.articles.length > 0 ? (
           <div className="space-y-2 max-h-96 overflow-y-auto scroll-slim pr-1">
-            {clusterArticles(c.articles).map(cl => {
+            {clusterArticles(c.articles.map(a => ({ ...a, matchedKeyword: c.name })), { maxDateDiffDays: 3 }).map(cl => {
               const a = cl.rep;
               const d = new Date(a.pubDate);
               const isOpen = expandedArticles.has(a.id);

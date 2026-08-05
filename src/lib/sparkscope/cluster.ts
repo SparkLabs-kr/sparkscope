@@ -116,7 +116,15 @@ function daysBetween(a?: Date | string, b?: Date | string): number {
 function isMatch<T extends ClusterableArticle>(a: T, b: T, maxDateDiffDays: number): boolean {
   if (daysBetween(a.pubDate, b.pubDate) > maxDateDiffDays) return false;
   const hasCompanyInfo = !!(a.matchedKeyword || b.matchedKeyword);
-  if (hasCompanyInfo) return sameCompany(a, b) && toneCompatible(a, b);
+  // 회사 정보가 있으면 "같은 회사명이 제목에 있는지"만으로 판단해왔는데, 본문 언급만으로
+  // 매칭된 기사(제목에 회사명이 아예 없는 경우 — 예: "해시드" 카드에 붙은 "KODA, ~보험 한도
+  // 확대" 기사)는 이 기준을 못 만족해서, 명백히 같은 사건인 다른 제목의 기사와 안 묶였다
+  // (2026-08-05 발견). 제목 유사도도 같이 시도해서 둘 중 하나라도 맞으면 묶는다 — 회사명
+  // 기준을 없애는 게 아니라 추가 신호로만 보강.
+  if (hasCompanyInfo) {
+    if (!toneCompatible(a, b)) return false;
+    return sameCompany(a, b) || titleMatchScore(a.title, b.title) >= 1;
+  }
   // 회사 정보가 없으면(톤 분석 등, 이미 단일 주제) 제목 유사도만으로 판단 — 기존 동작 유지.
   return titleMatchScore(a.title, b.title, a.matchedKeyword) >= 1;
 }
