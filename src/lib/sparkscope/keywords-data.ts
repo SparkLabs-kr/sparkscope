@@ -6,6 +6,8 @@
  * data 폴더 CSV 파일 변경 후엔 빌드 필요
  */
 
+import { matchesAsToken } from './relevance';
+
 export interface NegativeKeyword {
   type: string;
   keyword: string;
@@ -93,48 +95,27 @@ export const CRISIS_KEYWORDS_DATA: CrisisKeyword[] = [
   { category: "재무위험", keyword: "유동성부족" },
 ];
 
-// 검색용 함수
+// 검색용 함수 — 키워드가 "독립 토큰"으로 등장할 때만 감지한다(matchesAsToken, relevance.ts와 공유).
+// 예전엔 단순 부분 문자열(.includes())이라 "인적자원"의 "적자", "근감소증"의 "감소",
+// "중기소식"의 "기소", "우수사례"의 "수사"처럼 단어 중간에 우연히 낀 키워드가 전부 오탐이었고,
+// 매번 사례별로 예외 정규식을 추가해왔다(2026-08-05, 와이앤아처 백필 중 "우수사례집 발간" 기사가
+// 부정 기사로 잘못 뜬 것을 계기로 근본 원인을 확인). 토큰 경계 매칭으로 바꿔서 이런 예외들을
+// 한 번에 없앤다 — 새 키워드를 추가할 때마다 부분일치 사례를 또 찾아 예외를 붙일 필요가 없다.
 export function hasNegativeKeyword(title: string): boolean {
   for (const { keyword } of NEGATIVE_KEYWORDS_DATA) {
-    if (!title.includes(keyword)) continue;
-
-    // "적자" 예외: "인적자원" 등 기관명 일부인지 확인.
-    // 주의: \w는 한글을 매치하지 않으므로 한글 문자를 명시적으로 포함해야 한다
-    // (\w만 쓰면 "한국인적자원연구센터" 같은 한글 문자열에서 절대 매치되지 않아 예외가 죽은 코드가 됨).
-    if (keyword === '적자' && /인적자원/.test(title)) {
-      continue;
-    }
-    // "감소" 예외: "근감소증"처럼 질병명의 일부인 경우는 실적/수치 감소가 아님.
-    if (keyword === '감소' && /[가-힣]감소증/.test(title)) {
-      continue;
-    }
-    // "기소" 예외: 뉴시스 등 기사 말미 태그 "[중기소식]"(중소기업소식 줄임말)의 부분일치.
-    // 실제 기소·형사절차 기사가 아니라 단순 출처 태그라 위기 신호가 아님.
-    if (keyword === '기소' && /중기소식/.test(title)) {
-      continue;
-    }
-
-    return true;
+    if (matchesAsToken(title, keyword)) return true;
   }
   return false;
 }
 
 export function hasCrisisKeyword(title: string): string | null {
   for (const { category, keyword } of CRISIS_KEYWORDS_DATA) {
-    if (!title.includes(keyword)) continue;
+    if (!matchesAsToken(title, keyword)) continue;
 
-    // "규제" 예외: "규제 완화/철폐"는 오히려 호재라 위기 신호로 보지 않음.
+    // "규제" 예외: 부분일치 문제가 아니라 문맥 문제 — "규제 완화/철폐"는 "규제"가 독립
+    // 토큰으로 등장해도 오히려 호재라 위기 신호로 보지 않는다. 토큰 매칭으로 해결 안 되는
+    // 유일한 예외라 그대로 남겨둔다.
     if (keyword === '규제' && /규제\s*(완화|철폐)/.test(title)) {
-      continue;
-    }
-    // "적자" 예외: "인적자원"처럼 기관명 일부인 경우는 재무 적자가 아님.
-    if (keyword === '적자' && /인적자원/.test(title)) {
-      continue;
-    }
-    // "수사" 예외: "우수사례/우수사업"처럼 "우수" 뒤에 우연히 "사"가 이어지는 부분일치는
-    // 수사기관 조사와 무관함(2026-08-05, 와이앤아처 백필 중 발견 — 우수사례집 발간 기사가
-    // 부정 기사로 잘못 분류됨).
-    if (keyword === '수사' && /우수사/.test(title)) {
       continue;
     }
 
