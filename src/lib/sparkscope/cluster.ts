@@ -104,7 +104,12 @@ function sameCompany<T extends ClusterableArticle>(a: T, b: T): boolean {
 
 function toneCompatible<T extends ClusterableArticle>(a: T, b: T): boolean {
   if (!a.tone || !b.tone) return true; // 톤 정보 없으면 막지 않음
-  return a.tone === b.tone;
+  if (a.tone === b.tone) return true;
+  // 중립은 매체마다 톤 판정이 갈릴 뿐 같은 사건일 수 있어 긍정/부정 어느 쪽과도 묶일 수 있게 허용.
+  // 완전히 반대되는 긍정↔부정만 다른 사안일 가능성이 크다고 보고 분리한다(2026-08-06, 다이제스트에
+  // 같은 투자유치 기사가 매체별로 NEUTRAL/POSITIVE로 갈려 안 묶이고 중복 노출된 사례로 발견).
+  if (a.tone === 'NEUTRAL' || b.tone === 'NEUTRAL') return true;
+  return false;
 }
 
 function daysBetween(a?: Date | string, b?: Date | string): number {

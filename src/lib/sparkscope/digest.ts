@@ -45,11 +45,21 @@ export function buildDigestData(
   // 같은 사건인데 문구가 달라 위 필터를 통과하는 경우가 많았고, 그 결과 TOP3가 같은 사건을
   // 매체만 다르게 3개 채우는 사고가 있었음(2026-08-06). clusterArticles(대시보드 "최근 수집
   // 기사"·톤 분석에서 이미 쓰는 같은 사건 클러스터링)로 한 번 더 걸러 대표 기사만 남긴다.
-  const sorted = clusterArticles(exactDeduped.map(a => ({ ...a, id: a.link }))).map(c => c.rep);
+  const clusters = clusterArticles(exactDeduped.map(a => ({ ...a, id: a.link })));
+  // 대표 기사에 "같은 사건으로 묶인 다른 매체 보도 건수"를 붙여서, 클러스터링이 완전히 하나로
+  // 합치지 못해도 최소한 몇 건이 더 있었는지 메일에서 알 수 있게 한다(렌더 시 "외 N개 매체").
+  const sorted = clusters.map(c => ({ ...c.rep, otherOutlets: c.others.length }));
 
   const sparklabsArticles = sorted.filter(a => a.category === 'sparklabs_self').slice(0, SPARKLABS_LIMIT);
   const portfolioArticles = dedupeByCompany(sorted.filter(a => a.category === 'portfolio_company')).slice(0, PORTFOLIO_LIMIT);
-  const competitorArticles = sorted.filter(a => a.category === 'competitor').slice(0, COMPETITOR_LIMIT);
+  // 경쟁사(투자사)는 matchedKeyword가 투자사명 자체라 포트폴리오처럼 회사당 대표 1건만 —
+  // 클러스터링이 놓친 같은 사건(제목에 투자사명이 다르게 표기되는 등)이 겹쳐 보이지 않도록
+  // 하는 2차 안전망(2026-08-06, 에이티넘인베스트먼트/모드하우스 건이 매체별로 다른
+  // matchedKeyword로 수집돼 클러스터링만으론 다 못 묶인 사례로 발견).
+  // 업계동향(industry_trend)은 matchedKeyword가 "시리즈 B 투자"처럼 여러 서로 다른 회사가
+  // 공유하는 범용 주제어라 여기 적용하면 무관한 다른 회사 기사까지 지워버려 제외한다 —
+  // 클러스터링(같은 사건 판단)에만 맡긴다.
+  const competitorArticles = dedupeByCompany(sorted.filter(a => a.category === 'competitor')).slice(0, COMPETITOR_LIMIT);
   const industryArticles = sorted.filter(a => a.category === 'industry_trend').slice(0, INDUSTRY_LIMIT);
 
   // TOP3는 연관성 우선순위: 스파크랩 > 포트폴리오 > 업계동향
@@ -219,12 +229,13 @@ function renderTopCard(a: AnalyzedArticle, rank: number): string {
   const rankLabel = `#${rank} · ${categoryLabel(a.category)}${importanceLabel(a.importance)}`;
   const take = takeLine(a);
   const citation = a.category === 'sparklabs_self' ? ` · 스파크랩 ${citationType(a)}` : '';
+  const otherOutlets = a.otherOutlets ? ` · 외 ${a.otherOutlets}개 매체 추가보도` : '';
   return `
     <div class="top-card ${cls}">
       <div class="top-rank">${escape(rankLabel)}</div>
       <div class="top-headline">${escape(a.title)}</div>
       ${take ? `<div class="top-take">${escape(take)}</div>` : ''}
-      <div class="top-meta">${escape(a.source)} · ${formatDate(a.pubDate)}${citation} · <a href="${escape(safeArticleHref(a.link, a.title, a.source))}" target="_blank">기사 보기 →</a></div>
+      <div class="top-meta">${escape(a.source)} · ${formatDate(a.pubDate)}${citation}${otherOutlets} · <a href="${escape(safeArticleHref(a.link, a.title, a.source))}" target="_blank">기사 보기 →</a></div>
     </div>`;
 }
 
@@ -239,6 +250,7 @@ function renderArticle(a: AnalyzedArticle, opts: { citation?: boolean; keyword?:
   const pitchTag = a.pitchScore >= 60 ? '<span class="tag opportunity">피칭 기회</span>' : '';
   const kwTag = opts.keyword ? `<span class="tag">${escape(a.matchedKeyword)}</span>` : '';
   const take = takeLine(a);
+  const otherOutlets = a.otherOutlets ? ` · 외 ${a.otherOutlets}개 매체 추가보도` : '';
   return `
     <div class="article">
       <div>${toneTag}${citationTag}${pitchTag}${kwTag}</div>
@@ -246,7 +258,7 @@ function renderArticle(a: AnalyzedArticle, opts: { citation?: boolean; keyword?:
         <a href="${escape(safeArticleHref(a.link, a.title, a.source))}" target="_blank">${escape(a.title)}</a>
       </div>
       ${take ? `<div class="article-take">${escape(take)}</div>` : ''}
-      <div class="article-meta">${escape(a.source)} · ${formatFullDate(a.pubDate)}</div>
+      <div class="article-meta">${escape(a.source)} · ${formatFullDate(a.pubDate)}${otherOutlets}</div>
     </div>`;
 }
 

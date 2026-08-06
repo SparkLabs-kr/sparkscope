@@ -6,10 +6,12 @@ import { prisma } from '@/lib/prisma';
 import type { RawArticle, AnalyzedArticle } from './types';
 import { collectAllArticles, CATEGORY_PRIORITY } from './collector';
 import { normalizeTitleKey } from './relevance';
+import { normalizeSource } from './media';
 import { analyzeArticles, generateEditorIntro } from './analyzer';
 import { computeAndStoreDashboardInsights } from './dashboard-insights';
 import { checkConfigDrift, formatDriftReport } from './config-drift';
 import { buildDigestData, renderDigestHtml } from './digest';
+import { buildDigestKeyMap, passesDigestGuard } from './review';
 import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } from './mailer';
 import { collectInterNews } from './inter-collect';
 import { filterInterNewsWithGemini } from './inter-filter';
@@ -155,9 +157,12 @@ export async function runDailyDigest(opts: RunOptions = {}) {
         select: { link: true, title: true, source: true, category: true },
       });
       // `${source}::${titleKey}` -> 기존 link·category (분류 승격 판단용 — 아래 참고)
+      // source는 정규화해서 키를 만든다 — "mt.co.kr"과 "머니투데이"처럼 같은 매체가 다른 표기로
+      // 들어오면 원문 그대로는 다른 키가 돼서 같은 기사가 중복 행으로 쌓인다(2026-08-06, 모드하우스/
+      // 에이티넘인베스트먼트 기사가 표기 차이로 별도 저장되어 다이제스트에 중복 노출된 사례로 발견).
       const existingByKey = new Map<string, { link: string; category: string }>();
       for (const e of recentExisting) {
-        existingByKey.set(`${e.source}::${normalizeTitleKey(e.title)}`, { link: e.link, category: e.category });
+        existingByKey.set(`${normalizeSource(e.source)}::${normalizeTitleKey(e.title)}`, { link: e.link, category: e.category });
       }
 
       // 기사 하나가 잘못돼도(NaN 필드·URL 과다 길이 등 예측 못한 제약 위반) 그날 수집분
@@ -166,7 +171,7 @@ export async function runDailyDigest(opts: RunOptions = {}) {
       //  루프 중간에 예외가 나서 그날 수집분이 전부 저장 안 된 사고가 있었음)
       let saveFailures = 0;
       for (const a of analyzed) {
-        const dedupeKey = `${a.source}::${normalizeTitleKey(a.title)}`;
+        const dedupeKey = `${normalizeSource(a.source)}::${normalizeTitleKey(a.title)}`;
         const existing = existingByKey.get(dedupeKey);
         const targetLink = existing?.link ?? a.link;
         // 기존 행이 더 낮은 우선순위 분류(예: industry_trend 흔한 키워드)로 먼저 저장돼 있었는데
@@ -251,14 +256,27 @@ export async function runDailyDigest(opts: RunOptions = {}) {
       }
     }
 
+    // 4.7 다이제스트 발송 가드 재검증 — isNoise:false는 수집 당일 AI가 한 번 판단하고 끝이라
+    // 나중에 노이즈 규칙이 강화돼도 이미 저장된 기사엔 소급 적용이 안 된다. 대시보드는 렌더할 때마다
+    // isBlockedNoise를 실시간 재검사하는데 발송 경로는 이 재검사가 빠져있어 대시보드보다 메일에
+    // 오탐이 더 많이 남는 원인이었다(검수 콘솔 loadDigestCandidates에만 있던 가드를 여기서도 적용,
+    // 2026-08-06).
+    const guardTargets = await prisma.monitoringTarget.findMany({
+      where: { category: { in: ['portfolio_company', 'sparklabs_self'] }, status: 'ACTIVE' },
+      select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true },
+    });
+    const guardKeyMap = buildDigestKeyMap(guardTargets);
+    const digestReady = analyzed.filter(a => passesDigestGuard(a, guardKeyMap));
+    console.log(`[runner] digest guard: ${analyzed.length} -> ${digestReady.length} (노이즈/관련성 재검증 후)`);
+
     // 5. 편집자 인사
-    const sortedTop3 = [...analyzed].sort((a, b) => b.priorityScore - a.priorityScore).slice(0, 3);
+    const sortedTop3 = [...digestReady].sort((a, b) => b.priorityScore - a.priorityScore).slice(0, 3);
     const editorIntro = await generateEditorIntro(sortedTop3);
 
     // 6. 다이제스트 데이터 + HTML (본부 스크랩 기사 TOP3 우선 반영)
     const scrapped = await prisma.article.findMany({ where: { isScrapped: true }, select: { link: true } });
     const scrappedLinks = new Set(scrapped.map(s => s.link));
-    const data = buildDigestData(analyzed, editorIntro, undefined, scrappedLinks);
+    const data = buildDigestData(digestReady, editorIntro, undefined, scrappedLinks);
     const html = renderDigestHtml(data, opts.baseUrl);
     const subject = buildSubject(data.dateLabel, data.top3[0]?.title);
 
