@@ -252,9 +252,11 @@ export function filterReason(a: RelevanceInput): FilterReason | null {
   // 진짜 보조 식별자(trueHelpers)가 회사명과 함께 등장하면 더 확실한 근거 — 문맥어 검사 생략.
   // (NAME_MATCH_CATEGORIES 적용 대상에서 회사명이 이미 확인된 경우에만 적용 — 그 외 카테고리는
   // 기존처럼 문맥어를 항상 검사한다.)
+  // body도 토큰 경계 매칭 — includes()는 "여행"이 무관한 본문(사이드바·관련기사 등)에
+  // 우연히 포함돼도 통과시켜, 문맥어 검사 자체를 건너뛰게 하는 오탐 원인이었다(2026-08-06, 액스 사례).
   const helperConfirmed = applyNameMatch && trueHelpers.length > 0 && (
     trueHelpers.some(k => matchesAsToken(title, k)) ||
-    (body.length > 0 && trueHelpers.some(k => body.includes(k)))
+    (body.length > 0 && trueHelpers.some(k => matchesAsToken(body, k)))
   );
 
   // 문맥어: 지정된 경우, 동명이의어 등 흔한 단어의 회사명을 걸러내기 위해
