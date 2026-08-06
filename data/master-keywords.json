@@ -35,7 +35,7 @@
     "category": "sparklabs_self",
     "status": "ACTIVE",
     "primaryKeyword": "스파크랩 글로벌",
-    "helperKeywords": "스파크랩 글로벌, SparkLabs Global, SparkLabs Global Ventures",
+    "helperKeywords": "스파크랩글로벌, SparkLabs Global, SparkLabs Global Ventures",
     "excludeWords": null,
     "notes": "글로벌 벤처 투자"
   },
@@ -65,7 +65,7 @@
     "category": "sparklabs_self",
     "status": "ACTIVE",
     "primaryKeyword": "스파크랩 컬티베이트",
-    "helperKeywords": "스파크랩 컬티베이트, SparkLabs Cultiv8",
+    "helperKeywords": "스파크랩컬티베이트, SparkLabs Cultiv8",
     "excludeWords": null,
     "notes": "푸드테크/애그리테크"
   },
@@ -85,7 +85,7 @@
     "category": "sparklabs_self",
     "status": "ACTIVE",
     "primaryKeyword": "그레이스 메디컬",
-    "helperKeywords": "그레이스 메디컬, GRACE Medical, GRACE Medical Institute",
+    "helperKeywords": "그레이스메디컬, GRACE Medical, GRACE Medical Institute",
     "excludeWords": null,
     "notes": "의료 R&D"
   },
