@@ -12,6 +12,7 @@ import { analyzeArticles, pickVerifiedTop3 } from './analyzer';
 import { computeAndStoreDashboardInsights } from './dashboard-insights';
 import { checkConfigDrift, formatDriftReport } from './config-drift';
 import { buildDigestData, renderDigestHtml, buildClusteredPool, rankTop3Pool } from './digest';
+import { attachInterDigest } from './inter-digest';
 import { buildDigestKeyMap, buildDigestContextMap, passesDigestGuard } from './review';
 import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } from './mailer';
 import { collectInterNews } from './inter-collect';
@@ -324,8 +325,10 @@ export async function runDailyDigest(opts: RunOptions = {}) {
     const top3Pool = rankTop3Pool(buildClusteredPool(digestReady), scrappedLinks);
     const verifiedTop3 = await pickVerifiedTop3(top3Pool, 3);
 
-    // 6. 다이제스트 데이터 + HTML (검증된 TOP3 + 본부 스크랩 기사 반영)
-    const data = buildDigestData(digestReady, '', undefined, scrappedLinks, verifiedTop3);
+    // 6. 다이제스트 데이터 + HTML (검증된 TOP3 + 본부 스크랩 기사 + Inter 섹션 반영)
+    const data = await attachInterDigest(
+      buildDigestData(digestReady, '', undefined, scrappedLinks, verifiedTop3),
+    );
     const html = renderDigestHtml(data, opts.baseUrl);
     const subject = buildSubject(data.dateLabel, data.top3[0]?.title);
 
