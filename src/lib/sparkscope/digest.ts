@@ -10,6 +10,7 @@ import type { AnalyzedArticle, DigestData } from './types';
 import { isPolitical, normalizeTitleKey } from './relevance';
 import { safeArticleHref } from './article-link';
 import { clusterArticles } from './cluster';
+import { INTER_EMAIL_CSS, renderInterSection, renderInterStat, renderInterStrip } from './inter-digest';
 
 const TOP_3_LIMIT = 3;
 const PORTFOLIO_LIMIT = 8;
@@ -187,6 +188,7 @@ export function renderDigestHtml(data: DigestData, baseUrl?: string): string {
 <title>SparkScope · ${escape(data.dateLabel)}</title>
 <style>
 ${EMAIL_CSS}
+${INTER_EMAIL_CSS}
 </style>
 </head>
 <body>
@@ -202,8 +204,11 @@ ${EMAIL_CSS}
       ${pStat.sparklabsSelf > 0 ? `<div class="stat"><div class="stat-value">${pStat.sparklabsSelf}</div><div class="stat-label">스파크랩 직접 언급</div></div>` : ''}
       <div class="stat"><div class="stat-value">${pStat.portfolio}</div><div class="stat-label">포트폴리오사 노출</div>${pStat.portfolioTrend ? `<div class="stat-trend">${escape(pStat.portfolioTrend)}</div>` : ''}</div>
       <div class="stat"><div class="stat-value">${pStat.competitor}</div><div class="stat-label">AC·VC 동향</div></div>
+      ${data.inter ? renderInterStat(data.inter) : ''}
     </div>
   </div>
+
+  ${data.inter ? renderInterStrip(data.inter) : ''}
 
   ${data.weeklyFlow ? `
   <div class="weekly-flow">
@@ -215,6 +220,8 @@ ${EMAIL_CSS}
     <div class="section-label">⭐ 오늘의 핵심 — TOP 3</div>
     ${data.top3.map((a, i) => renderTopCard(a, i + 1)).join('\n')}
   </div>
+
+  ${data.inter ? renderInterSection(data.inter, baseUrl ?? DEFAULT_BASE_URL) : ''}
 
   ${data.insightTitle ? `
   <div class="section" style="padding-top:8px;">
