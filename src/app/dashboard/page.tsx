@@ -118,6 +118,20 @@ async function loadDashboardData(from: string, to: string, company: string | und
   const prevSince = new Date(prevUntil.getTime() - spanMs);
   const prevPortfolioWhere = { pubDate: { gte: prevSince, lte: prevUntil }, isNoise: false, category: 'portfolio_company' };
 
+  // "3년" 등 긴 기간을 고르면 직전 기간이 실제 데이터 시작일(2023.1.19) 이전까지 걸쳐서,
+  // "직전 3년"이라고 표시해도 사실은 그중 데이터 있는 마지막 몇 개월만 비교하는 셈이라 오해하기
+  // 쉬웠음(2026-08-06 확인). 직전 기간의 시작을 실제 데이터가 있는 시점으로 당겨서 라벨에 쓰고,
+  // 그 결과 직전 기간이 원래 길이의 절반도 안 남으면 증감%는 아예 표시하지 않는다.
+  const earliestPortfolio = await prisma.article.aggregate({
+    where: { category: 'portfolio_company', isNoise: false },
+    _min: { pubDate: true },
+  });
+  const earliestPortfolioDate = earliestPortfolio._min.pubDate;
+  const effectivePrevSince = earliestPortfolioDate && earliestPortfolioDate > prevSince ? earliestPortfolioDate : prevSince;
+  const prevSpanMs = prevUntil.getTime() - prevSince.getTime();
+  const effectivePrevSpanMs = prevUntil.getTime() - effectivePrevSince.getTime();
+  const portfolioTopHasEnoughPrevData = prevSpanMs <= 0 || effectivePrevSpanMs / prevSpanMs >= 0.5;
+
   // 급증 배너: 기간 선택과 무관하게 "최근 3일 vs 직전 60일(백필 포함)" — KST 기준
   const now = getKstNow();
   const rc = new Date(now); rc.setUTCDate(rc.getUTCDate() - 3); rc.setUTCHours(0, 0, 0, 0);
@@ -448,7 +462,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
   });
   // 증감% 비교 기준(직전 동일 기간) 안내용 — "2026.7.22 ~ 2026.7.28 대비" 형태로 표시
   const prettyUtc = (d: Date) => `${d.getUTCFullYear()}.${d.getUTCMonth() + 1}.${d.getUTCDate()}`;
-  const portfolioTopPrevRangeLabel = `${prettyUtc(prevSince)} ~ ${prettyUtc(prevUntil)}`;
+  const portfolioTopPrevRangeLabel = `${prettyUtc(effectivePrevSince)} ~ ${prettyUtc(prevUntil)}`;
   // 긍정/부정 하이라이트: 회사(matchedKeyword)별로 묶어 "언급 매체 수" 많은 순 → 동률이면 최신순, TOP 3만.
   // (Article에 검색노출도 필드가 없어 매체 다양성을 대리 지표로 사용)
   const top3ByMedia = (rows: { matchedKeyword: string; title: string; source: string; pubDate: Date; link: string; riskFlag?: string | null }[]) => {
@@ -514,6 +528,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
     sparkLabsFundSummary,
     portfolioTop,
     portfolioTopPrevRangeLabel,
+    portfolioTopHasEnoughPrevData,
     portfolioNegatives,
     portfolioPositives,
     toneArticles: sparklabsArticles.map(a => ({
@@ -810,7 +825,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
       {/* 포트폴리오 TOP15 → 기획기사 피칭 (위아래 배치) */}
       <div className="grid grid-cols-1 gap-4 mb-8">
-        <PortfolioTopList items={data.portfolioTop} rangeLabel={range.label} prevRangeLabel={data.portfolioTopPrevRangeLabel} />
+        <PortfolioTopList items={data.portfolioTop} rangeLabel={range.label} prevRangeLabel={data.portfolioTopPrevRangeLabel} showChange={data.portfolioTopHasEnoughPrevData} />
         <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
           <div className="font-bold mb-3">🎯 기획기사 피칭 <InfoTip text={`AI가 각 기사를 0~100점으로 평가한 '기획기사 피칭 점수'입니다.\n이 주제로 우리 포트폴리오사를 엮어 기획기사를 제안하면 성사 가능성이 높은 기사를 뜻합니다.\n· 60점 이상: 아래 목록에 표시\n· 75점 이상: 상단 '피칭 기회' 지표에 집계`} /></div>
           {data.pitches.length > 0 ? (
@@ -950,12 +965,15 @@ function PortfolioStatusBadge({ status }: { status: string | null }) {
   return <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold border ${cls}`}>{status}</span>;
 }
 
-function PortfolioTopList({ items, rangeLabel, prevRangeLabel }: { items: { name: string; count: number; portfolioStatus?: string | null; changePct: number | null; recentArticles: { title: string; link: string; source: string; pubDate: Date }[] }[]; rangeLabel: string; prevRangeLabel: string }) {
+function PortfolioTopList({ items, rangeLabel, prevRangeLabel, showChange }: { items: { name: string; count: number; portfolioStatus?: string | null; changePct: number | null; recentArticles: { title: string; link: string; source: string; pubDate: Date }[] }[]; rangeLabel: string; prevRangeLabel: string; showChange: boolean }) {
   const max = Math.max(...items.map(i => i.count), 1);
   return (
     <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
       <div className="font-bold mb-1">🔥 가장 많이 언급된 포트폴리오사 TOP 15 <InfoTip text={`${rangeLabel} 동안 언론 노출(기사 수)이 많은 포트폴리오사 순위입니다.\n최근 홍보 활동이 활발하거나 이슈가 되고 있는 회사를 보여줍니다.\n증감은 선택한 기간과 같은 길이의 직전 기간 대비입니다 (예: 최근 7일 선택 시 직전 7일과 비교).\n회사명에 마우스를 올리면(모바일은 탭) 최근 기사를 바로 볼 수 있습니다.`} /></div>
-      <div className="text-xs text-gray-500 mb-4">{rangeLabel} · 언론 노출 건수 기준 · 증감은 직전 기간({prevRangeLabel}) 대비</div>
+      <div className="text-xs text-gray-500 mb-4">
+        {rangeLabel} · 언론 노출 건수 기준
+        {showChange ? ` · 증감은 직전 기간(${prevRangeLabel}) 대비` : ' · 선택 기간이 길어 직전 기간 데이터가 부족해 증감은 표시하지 않음'}
+      </div>
       {items.length > 0 ? (
         <div className="space-y-2">
           {items.map((it, i) => (
@@ -967,11 +985,13 @@ function PortfolioTopList({ items, rangeLabel, prevRangeLabel }: { items: { name
                 <div className="h-full rounded bg-spark-purple/80" style={{ width: `${Math.round((it.count / max) * 100)}%` }} />
               </div>
               <span className="w-10 text-right font-bold tabular-nums">{it.count}</span>
-              <span className={`w-14 text-right text-xs font-semibold tabular-nums whitespace-nowrap ${
-                it.changePct === null ? 'text-blue-500' : it.changePct > 0 ? 'text-emerald-600' : it.changePct < 0 ? 'text-red-500' : 'text-gray-400'
-              }`}>
-                {it.changePct === null ? '신규' : it.changePct === 0 ? '0%' : `${it.changePct > 0 ? '+' : ''}${it.changePct}%`}
-              </span>
+              {showChange && (
+                <span className={`w-14 text-right text-xs font-semibold tabular-nums whitespace-nowrap ${
+                  it.changePct === null ? 'text-blue-500' : it.changePct > 0 ? 'text-emerald-600' : it.changePct < 0 ? 'text-red-500' : 'text-gray-400'
+                }`}>
+                  {it.changePct === null ? '신규' : it.changePct === 0 ? '0%' : `${it.changePct > 0 ? '+' : ''}${it.changePct}%`}
+                </span>
+              )}
             </div>
           ))}
         </div>
