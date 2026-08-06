@@ -118,7 +118,7 @@ function daysBetween(a?: Date | string, b?: Date | string): number {
   return Number.isNaN(diff) ? 0 : diff / 86_400_000;
 }
 
-function isMatch<T extends ClusterableArticle>(a: T, b: T, maxDateDiffDays: number): boolean {
+function isMatch<T extends ClusterableArticle>(a: T, b: T, maxDateDiffDays: number, textOnlyThreshold: number): boolean {
   if (daysBetween(a.pubDate, b.pubDate) > maxDateDiffDays) return false;
   const hasCompanyInfo = !!(a.matchedKeyword || b.matchedKeyword);
   // 회사 정보가 있으면 "같은 회사명이 제목에 있는지"만으로 판단해왔는데, 본문 언급만으로
@@ -139,18 +139,23 @@ function isMatch<T extends ClusterableArticle>(a: T, b: T, maxDateDiffDays: numb
       // 기준으로 둬서 우연한 겹침과 실제 내용 겹침을 구분한다.
       return titleMatchScore(a.title, b.title, a.matchedKeyword) >= 0.5;
     }
-    return titleMatchScore(a.title, b.title) >= 1;
+    // 회사명(matchedKeyword)이 서로 다른 경우 — 예: 같은 피투자회사 기사를 서로 다른 투자사
+    // 키워드로 각각 수집한 경우(2026-08-06, 모드하우스 투자 건이 "에이티넘인베스트먼트"·
+    // "IMM인베스트먼트" 두 투자사 키워드로 따로 잡혀 안 묶인 사례). 기본값(1.0)은 호출부가
+    // 낮춰서(textOnlyThreshold) 이런 잔여 중복까지 잡을 수 있게 한다 — 기본 동작은 그대로.
+    return titleMatchScore(a.title, b.title) >= textOnlyThreshold;
   }
   // 회사 정보가 없으면(톤 분석 등, 이미 단일 주제) 제목 유사도만으로 판단 — 기존 동작 유지.
-  return titleMatchScore(a.title, b.title, a.matchedKeyword) >= 1;
+  return titleMatchScore(a.title, b.title, a.matchedKeyword) >= textOnlyThreshold;
 }
 
 // 대표는 그룹 내 가장 간결한(짧은) 제목 — 부제가 덕지덕지 붙은 제목보다 핵심만 담겨 있어 대표로 적합.
 export function clusterArticles<T extends ClusterableArticle>(
   list: T[],
-  opts?: { maxDateDiffDays?: number },
+  opts?: { maxDateDiffDays?: number; textOnlyThreshold?: number },
 ): ArticleCluster<T>[] {
   const maxDateDiffDays = opts?.maxDateDiffDays ?? Infinity;
+  const textOnlyThreshold = opts?.textOnlyThreshold ?? 1;
   const clusters: ArticleCluster<T>[] = [];
 
   for (const article of list) {
@@ -159,7 +164,7 @@ export function clusterArticles<T extends ClusterableArticle>(
     for (const cluster of clusters) {
       // 대표뿐 아니라 이미 묶인 기사 전부와 비교 — 표현이 조금씩 이어지는 변형 체인을 놓치지 않는다.
       for (const member of [cluster.rep, ...cluster.others]) {
-        if (!isMatch(article, member, maxDateDiffDays)) continue;
+        if (!isMatch(article, member, maxDateDiffDays, textOnlyThreshold)) continue;
         const rank = -daysBetween(article.pubDate, member.pubDate); // 발행일 더 가까운 클러스터 우선
         if (rank > bestRank) { bestRank = rank; bestCluster = cluster; }
       }
