@@ -25,7 +25,22 @@ export interface RunOptions {
   skipCollect?: boolean;     // true면 수집 건너뛰고 기존 데이터로 발송만 (발송 전용 모드)
 }
 
+// 실행 중 크래시(타임아웃·강제종료 등)로 죽으면 RunLog가 RUNNING 상태로 영원히 남는다 —
+// 그 자리에서 잡을 방법이 없으므로(프로세스 자체가 죽어서 finally도 못 돈다), 다음 실행이
+// 시작될 때 너무 오래된 RUNNING을 죽은 것으로 간주해 정리한다. 지금까지 가장 오래 걸린
+// 수집이 84.8분이었던 걸 감안해 3시간을 기준으로 잡았다(2026-08-06, DB에 10건 방치돼있던 걸 발견).
+const STALE_RUN_THRESHOLD_MS = 3 * 60 * 60 * 1000;
+async function cleanupStaleRunLogs() {
+  const cutoff = new Date(Date.now() - STALE_RUN_THRESHOLD_MS);
+  const { count } = await prisma.runLog.updateMany({
+    where: { status: 'RUNNING', startedAt: { lt: cutoff } },
+    data: { status: 'FAILED', finishedAt: new Date(), errors: '타임아웃/크래시로 추정 — 다음 실행 시작 시 자동 정리됨' },
+  });
+  if (count > 0) console.warn(`[runner] 좀비 RunLog ${count}건 정리(3시간 초과 RUNNING → FAILED)`);
+}
+
 export async function runDailyDigest(opts: RunOptions = {}) {
+  await cleanupStaleRunLogs();
   const log = await prisma.runLog.create({
     data: { runType: 'daily', status: 'RUNNING' },
   });
