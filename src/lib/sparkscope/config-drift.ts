@@ -61,10 +61,20 @@ export function formatDriftReport(d: DriftResult): string {
     lines.push(`[필드 값이 다름] ${d.fieldMismatches.length}건`);
     for (const m of d.fieldMismatches.slice(0, 50)) {
       lines.push(`  - ${m.name}.${m.field}: JSON="${m.json}" / DB="${m.db}"`);
+      // DB(키워드 관리 화면에서 수정)가 보통 더 최근 값이라 JSON을 DB에 맞추는 걸 기본 제안으로 —
+      // 반대가 맞는 경우도 있을 수 있으니 문구는 "제안"으로만 표시.
+      lines.push(`    → JSON 쪽 제안: "${m.field}": "${m.db}"`);
     }
     if (d.fieldMismatches.length > 50) lines.push(`  ... 외 ${d.fieldMismatches.length - 50}건 더 (전체는 scripts/check-config-drift.ts 실행)`);
   }
-  if (d.total === 0) lines.push('일치함 — 이상 없음.');
+  if (d.total === 0) {
+    lines.push('일치함 — 이상 없음.');
+  } else {
+    lines.push('');
+    lines.push('---');
+    lines.push('data/master-keywords.json에서 위 제안대로 직접 고쳐서 커밋+푸시하거나,');
+    lines.push('Claude에게 "드리프트 동기화해줘"라고 요청하면 대신 처리합니다.');
+  }
 
   return lines.join('\n');
 }
