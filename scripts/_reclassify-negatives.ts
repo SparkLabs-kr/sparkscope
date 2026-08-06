@@ -7,7 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { Anthropic } from '@anthropic-ai/sdk';
 import { PrismaClient } from '@prisma/client';
-import { buildSonnetDeepUserMessage, SONNET_DEEP_SYSTEM } from '@/lib/sparkscope/prompts';
+import { buildSonnetDeepUserMessage, buildSonnetDeepSystem } from '@/lib/sparkscope/prompts';
 
 const envPath = path.join(process.cwd(), '.env.local');
 if (fs.existsSync(envPath)) {
@@ -66,24 +66,23 @@ async function reclassifyNegatives() {
   let reclassified = 0;
   let unchanged = 0;
 
+  // 포폴사·트렌드 목록을 포함한 고정 프리픽스 — 루프 밖에서 한 번만 만든다(prompts.ts 주석 참고).
+  const deepSystem = buildSonnetDeepSystem(portfolioUniverse, trendingTopics);
+
   for (const article of negativeArticles) {
     try {
-      const prompt = buildSonnetDeepUserMessage(
-        {
-          id: article.id,
-          title: article.title,
-          source: article.source,
-          matchedKeyword: article.matchedKeyword,
-          category: article.category,
-        },
-        portfolioUniverse,
-        trendingTopics,
-      );
+      const prompt = buildSonnetDeepUserMessage({
+        id: article.id,
+        title: article.title,
+        source: article.source,
+        matchedKeyword: article.matchedKeyword,
+        category: article.category,
+      });
 
       const response = await client.messages.create({
         model: 'claude-sonnet-5',
         max_tokens: 500,
-        system: SONNET_DEEP_SYSTEM,
+        system: deepSystem,
         messages: [{ role: 'user', content: prompt }],
       });
 

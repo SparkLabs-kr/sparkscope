@@ -128,6 +128,7 @@ export async function computeAndStoreDashboardInsights(): Promise<void> {
     await computeCrisisCauses();
     await computeCompetitorTrends();
     await computeCategoryPulses();
+    await pruneSectorUrgencyCache();
     await prisma.runLog.update({ where: { id: log.id }, data: { finishedAt: new Date(), status: 'SUCCESS' } });
   } catch (e: any) {
     console.error('[dashboard-insights] 사전계산 실패 — 대시보드는 실시간 호출로 자동 폴백됩니다:', e);
@@ -230,6 +231,20 @@ async function computeCompetitorTrends() {
       update: { value: JSON.stringify({ points }), computedAt: new Date() },
     });
   }
+}
+
+// Inter 섹터 배지 사유 캐시(/api/inter/sector-urgency) 정리.
+// 그 캐시는 키에 입력 지문이 들어가서, 기사가 쌓여 지표가 바뀔 때마다 새 키가 생기고 옛 키는
+// 다시 조회되지 않는다. 그대로 두면 행만 계속 늘어나므로 오래된 것을 주기적으로 지운다.
+// (사전계산이 아니라 "요청 시 채워지는" 캐시라 지워져도 다음 요청에 자연히 다시 만들어진다.)
+const SECTOR_URGENCY_CACHE_TTL_DAYS = 14;
+
+async function pruneSectorUrgencyCache() {
+  const cutoff = new Date(Date.now() - SECTOR_URGENCY_CACHE_TTL_DAYS * 24 * 60 * 60 * 1000);
+  const { count } = await prisma.dashboardInsight.deleteMany({
+    where: { kind: 'inter_sector_urgency', computedAt: { lt: cutoff } },
+  });
+  if (count > 0) console.log(`[dashboard-insights] 섹터 배지 사유 캐시 ${count}건 정리(${SECTOR_URGENCY_CACHE_TTL_DAYS}일 경과)`);
 }
 
 // AC·VC(competitor)/스타트업계(industry_trend) "지금 흐름" 한 줄 — 포트폴리오 급증 배너와 같은

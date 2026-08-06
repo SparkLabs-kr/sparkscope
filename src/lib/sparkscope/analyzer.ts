@@ -11,7 +11,7 @@ import OpenAI from 'openai';
 import {
   HAIKU_CLASSIFIER_SYSTEM,
   buildHaikuClassifierUserMessage,
-  SONNET_DEEP_SYSTEM,
+  buildSonnetDeepSystem,
   buildSonnetDeepUserMessage,
   EDITOR_INTRO_SYSTEM,
   buildEditorIntroUserMessage,
@@ -106,6 +106,10 @@ export async function analyzeArticles(raw: RawArticle[], portfolioUniverse: stri
     );
   }
 
+  // 심층분석의 고정 프리픽스 — 이 실행 내 모든 호출이 문자열을 그대로 재사용해야
+  // 프롬프트 캐싱이 걸린다. 루프 안에서 다시 만들지 말 것(prompts.ts 주석 참고).
+  const deepSystem = buildSonnetDeepSystem(portfolioUniverse, trendingTopics);
+
   const analyzed: AnalyzedArticle[] = [];
 
   for (const article of withId) {
@@ -127,7 +131,7 @@ export async function analyzeArticles(raw: RawArticle[], portfolioUniverse: stri
       const repId = repOf.get(article._id) ?? article._id;
       let deep = deepCache.get(repId);
       if (!deep) {
-        deep = await analyzeDeep(article, portfolioUniverse, trendingTopics);
+        deep = await analyzeDeep(article, deepSystem);
         deepCache.set(repId, deep);
       }
       oneLiner = deep.oneLiner;
@@ -224,17 +228,15 @@ async function ensureBody(article: RawArticle): Promise<string | undefined> {
 }
 
 // ===== Sonnet 심층 분석 =====
-async function analyzeDeep(article: RawArticle & { _id: string }, portfolioUniverse: string[], trendingTopics: string[]): Promise<DeepResult> {
+async function analyzeDeep(article: RawArticle & { _id: string }, deepSystem: string): Promise<DeepResult> {
   // catch 블록에서도 본문 기반 휴리스틱을 쓸 수 있게 try 밖에서 선언.
   let body: string | undefined;
   try {
     body = await ensureBody(article);
     const userContent = buildSonnetDeepUserMessage(
       { id: article._id, title: article.title, source: article.source, matchedKeyword: article.matchedKeyword, category: article.category, body },
-      portfolioUniverse,
-      trendingTopics,
     );
-    const text = await chatComplete(DEEP_MODEL, SONNET_DEEP_SYSTEM, userContent, 800);
+    const text = await chatComplete(DEEP_MODEL, deepSystem, userContent, 800);
     const parsed = JSON.parse(extractJson(text));
 
     const normalized = normalizeTone(parsed.tone);
