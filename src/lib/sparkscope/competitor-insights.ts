@@ -177,3 +177,55 @@ JSON 객체만 반환:`,
     return null;
   }
 }
+
+const CATEGORY_PULSE_SYSTEM = `당신은 벤처투자 업계 미디어 애널리스트입니다.
+최근 며칠간의 기사 제목만 보고, 지금 이 분야에서 가장 눈에 띄는 흐름을 "한 문장"으로 요약합니다.
+제목에 없는 사실은 추측하지 마세요.
+
+문체 규칙:
+- 완결된 문장("~했다") 대신 명사구로 끝나는 개조식 한 줄로 쓰세요.
+- 예시: "카카오벤처스·D2SF 등 AI 초기투자 활발, 시리즈A 조달 잇따라" (O)
+       "카카오벤처스와 D2SF를 중심으로 AI 초기투자가 활발히 이루어지고 있다" (X, 서술체·너무 김)
+- 45자 이내를 목표로 최대한 짧게. 라벨·번호 없이 한 줄만.`;
+
+/** 최근 며칠간 특정 카테고리(AC·VC/스타트업계 등) 기사 제목을 보고 "지금 흐름" 한 줄 요약. */
+export async function summarizeCategoryPulse(
+  label: string,
+  titles: string[],
+  cacheKey: string,
+  periodPhrase: string,
+): Promise<string | null> {
+  const capped = capTitles(titles);
+  if (capped.length === 0) return null;
+
+  const key = `pulse:${cacheKey}:${label}:${capped.length}`;
+  const cached = getCached(key);
+  if (cached) return cached[0] ?? null;
+
+  try {
+    const resp = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      system: CATEGORY_PULSE_SYSTEM,
+      messages: [{
+        role: 'user',
+        content: `분야: ${label}
+${periodPhrase} 기사 ${capped.length}건 중 제목:
+${capped.map((t, i) => `${i + 1}. ${t}`).join('\n')}
+
+지금 이 분야에서 가장 눈에 띄는 흐름을 한 줄로 요약해주세요.
+출력 스키마: {"line": "..."}
+JSON 객체만 반환:`,
+      }],
+    });
+    const text = resp.content[0]?.type === 'text' ? resp.content[0].text : '';
+    const parsed = JSON.parse(extractJson(text));
+    const line = typeof parsed?.line === 'string' ? parsed.line.trim() : '';
+    if (!line) return null;
+    setCached(key, [line]);
+    return line;
+  } catch (e) {
+    console.error(`[competitor-insights] ${label} 한 줄 요약 실패:`, e);
+    return null;
+  }
+}

@@ -6,8 +6,10 @@ import { useState } from 'react';
 import type { CompetitorFundSummary } from '@/lib/sparkscope/fund-db';
 import type { FundItem } from '@/lib/sparkscope/fund-db';
 import { safeArticleHref } from '@/lib/sparkscope/article-link';
+import { clusterArticles } from '@/lib/sparkscope/cluster';
 
 export interface CompetitorArticleView {
+  id: string;
   title: string;
   source: string;
   pubDate: string | Date;
@@ -224,6 +226,13 @@ type TabKey = '트렌드' | '기사' | '펀드';
 
 function CompetitorCard({ c, selected }: { c: CompetitorStatView; selected: boolean }) {
   const [tab, setTab] = useState<TabKey>('트렌드');
+  // "기사" 탭에서 같은 사건·다른 매체로 묶인 클러스터의 "+N개 매체 더보기" 펼침 상태.
+  const [expandedArticles, setExpandedArticles] = useState<Set<string>>(new Set());
+  const toggleArticleCluster = (id: string) => setExpandedArticles(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const hasNeg = c.negCount > 0;
   const hasFund = !!(c.fundSummary && c.fundSummary.fundCount > 0);
 
@@ -308,15 +317,42 @@ function CompetitorCard({ c, selected }: { c: CompetitorStatView; selected: bool
       {tab === '기사' && (
         c.articles.length > 0 ? (
           <div className="space-y-2 max-h-96 overflow-y-auto scroll-slim pr-1">
-            {c.articles.map((a, i) => {
+            {clusterArticles(c.articles.map(a => ({ ...a, matchedKeyword: c.name })), { maxDateDiffDays: 3 }).map(cl => {
+              const a = cl.rep;
               const d = new Date(a.pubDate);
+              const isOpen = expandedArticles.has(a.id);
               return (
-                <a key={i} href={safeArticleHref(a.link, a.title, a.source)} target="_blank" rel="noopener noreferrer" className="block group">
-                  <div className={`text-sm leading-snug line-clamp-2 group-hover:text-spark-purple ${a.neg ? 'text-red-700' : 'text-spark-ink-soft'}`}>
-                    {a.title}
-                  </div>
-                  <div className="text-xs text-spark-muted mt-0.5">{a.source} · {d.getMonth() + 1}.{d.getDate()}</div>
-                </a>
+                <div key={a.id}>
+                  <a href={safeArticleHref(a.link, a.title, a.source)} target="_blank" rel="noopener noreferrer" className="block group">
+                    <div className={`text-sm leading-snug line-clamp-2 group-hover:text-spark-purple ${a.neg ? 'text-red-700' : 'text-spark-ink-soft'}`}>
+                      {a.title}
+                    </div>
+                    <div className="text-xs text-spark-muted mt-0.5">{a.source} · {d.getMonth() + 1}.{d.getDate()}</div>
+                  </a>
+                  {cl.others.length > 0 && (
+                    <div className="mt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => toggleArticleCluster(a.id)}
+                        className="text-xs font-semibold text-spark-purple hover:underline"
+                      >
+                        {isOpen ? '접기 ▲' : `+${cl.others.length}개 매체 더보기 ▼`}
+                      </button>
+                      {isOpen && (
+                        <div className="mt-1 space-y-1 border-l-2 border-spark-border pl-2">
+                          {cl.others.map(o => {
+                            const od = new Date(o.pubDate);
+                            return (
+                              <a key={o.id} href={safeArticleHref(o.link, o.title, o.source)} target="_blank" rel="noopener noreferrer" className="block text-xs text-spark-muted hover:text-spark-ink">
+                                {o.source} · {od.getMonth() + 1}.{od.getDate()}
+                              </a>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>

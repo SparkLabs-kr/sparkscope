@@ -9,6 +9,7 @@
 import type { AnalyzedArticle, DigestData } from './types';
 import { isPolitical, normalizeTitleKey } from './relevance';
 import { safeArticleHref } from './article-link';
+import { clusterArticles } from './cluster';
 
 const TOP_3_LIMIT = 3;
 const PORTFOLIO_LIMIT = 8;
@@ -27,7 +28,7 @@ export function buildDigestData(
 ): DigestData {
   // 정치 기사 제외 + 중복 제거(제목 정규화/URL). 대표는 우선순위 상위 1건.
   const seenKey = new Set<string>();
-  const sorted = [...articles]
+  const exactDeduped = [...articles]
     .filter(a => !isPolitical(a.title))
     .sort((a, b) => b.priorityScore - a.priorityScore)
     .filter(a => {
@@ -38,6 +39,13 @@ export function buildDigestData(
       seenKey.add(lk);
       return true;
     });
+
+  // 위 중복 제거는 제목이 완전히 같거나 링크가 같은 경우만 잡는다. 매체마다 헤드라인을
+  // 다르게 써서(예: "엔씽, 158억 AI농업플랫폼 공급" vs "엔씽, 158억 'AI 수직농장' 구축…")
+  // 같은 사건인데 문구가 달라 위 필터를 통과하는 경우가 많았고, 그 결과 TOP3가 같은 사건을
+  // 매체만 다르게 3개 채우는 사고가 있었음(2026-08-06). clusterArticles(대시보드 "최근 수집
+  // 기사"·톤 분석에서 이미 쓰는 같은 사건 클러스터링)로 한 번 더 걸러 대표 기사만 남긴다.
+  const sorted = clusterArticles(exactDeduped.map(a => ({ ...a, id: a.link }))).map(c => c.rep);
 
   const sparklabsArticles = sorted.filter(a => a.category === 'sparklabs_self').slice(0, SPARKLABS_LIMIT);
   const portfolioArticles = dedupeByCompany(sorted.filter(a => a.category === 'portfolio_company')).slice(0, PORTFOLIO_LIMIT);

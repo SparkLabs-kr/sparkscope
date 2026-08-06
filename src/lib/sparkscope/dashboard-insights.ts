@@ -21,7 +21,7 @@ import { normalizeSource } from './media';
 import { isBlockedNoise } from './relevance';
 import { NEGATIVE_KEYWORDS, INDUSTRY_TREND_KEYWORDS, PINNED_COMPETITORS, detectCrises, type ArticleLite } from './insights';
 import { summarizeCrisisCause } from './analyzer';
-import { summarizeCompetitorTrend, summarizeOverallTrend } from './competitor-insights';
+import { summarizeCompetitorTrend, summarizeOverallTrend, summarizeCategoryPulse } from './competitor-insights';
 
 export type InsightSource = 'ai' | 'fallback';
 
@@ -98,6 +98,23 @@ export async function getPrecomputedCompetitorInsights(): Promise<{
   return { overall, byCompany };
 }
 
+/** AC·VC(competitor)/스타트업계(industry_trend) "지금 흐름" 한 줄 — 포트폴리오 급증 배너 옆에 표시. */
+export async function getPrecomputedCategoryPulses(): Promise<Map<string, { line: string; computedAt: Date }>> {
+  const result = new Map<string, { line: string; computedAt: Date }>();
+  const rows = await prisma.dashboardInsight.findMany({ where: { kind: 'category_pulse' } });
+  for (const r of rows) {
+    try {
+      const parsed = JSON.parse(r.value);
+      if (typeof parsed?.line === 'string' && parsed.line.trim()) {
+        result.set(r.key, { line: parsed.line, computedAt: r.computedAt });
+      }
+    } catch {
+      // 무시 — 호출부는 그 카테고리만 null(실시간 폴백)로 처리
+    }
+  }
+  return result;
+}
+
 // ===== 쓰기: daily-collect 크론 끝에서 호출 =====
 
 /**
@@ -110,6 +127,7 @@ export async function computeAndStoreDashboardInsights(): Promise<void> {
   try {
     await computeCrisisCauses();
     await computeCompetitorTrends();
+    await computeCategoryPulses();
     await prisma.runLog.update({ where: { id: log.id }, data: { finishedAt: new Date(), status: 'SUCCESS' } });
   } catch (e: any) {
     console.error('[dashboard-insights] 사전계산 실패 — 대시보드는 실시간 호출로 자동 폴백됩니다:', e);
@@ -210,6 +228,35 @@ async function computeCompetitorTrends() {
       where: { kind_key: { kind: 'competitor_trend', key: name } },
       create: { kind: 'competitor_trend', key: name, value: JSON.stringify({ points }) },
       update: { value: JSON.stringify({ points }), computedAt: new Date() },
+    });
+  }
+}
+
+// AC·VC(competitor)/스타트업계(industry_trend) "지금 흐름" 한 줄 — 포트폴리오 급증 배너와 같은
+// "최근 3일" 창을 써서 나란히 둬도 시점이 어긋나 보이지 않게 한다.
+async function computeCategoryPulses() {
+  const now = getKstNow();
+  const rc = new Date(now); rc.setUTCDate(rc.getUTCDate() - 3); rc.setUTCHours(0, 0, 0, 0);
+  const cacheKey = `pulse_${kstDateKey(new Date())}`;
+
+  const targets: { key: string; label: string; category: string }[] = [
+    { key: 'competitor', label: 'AC·VC(경쟁사)', category: 'competitor' },
+    { key: 'industry_trend', label: '스타트업계(업계동향)', category: 'industry_trend' },
+  ];
+
+  for (const t of targets) {
+    const articles = await prisma.article.findMany({
+      where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: t.category },
+      select: { title: true, link: true, source: true },
+      take: 300,
+    });
+    const titles = articles.filter(a => !isBlockedNoise(a)).map(a => a.title);
+    const line = await summarizeCategoryPulse(t.label, titles, cacheKey, '최근 3일간');
+    if (!line) continue;
+    await prisma.dashboardInsight.upsert({
+      where: { kind_key: { kind: 'category_pulse', key: t.key } },
+      create: { kind: 'category_pulse', key: t.key, value: JSON.stringify({ line }) },
+      update: { value: JSON.stringify({ line }), computedAt: new Date() },
     });
   }
 }

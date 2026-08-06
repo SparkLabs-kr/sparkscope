@@ -1619,7 +1619,7 @@
     "tier": "1",
     "primaryKeyword": "프라이머",
     "helperKeywords": "권도균",
-    "excludeWords": "프레이머, 도장재, 화장품, DNA, 메이크업",
+    "excludeWords": "프레이머, 도장재, 화장품, DNA, 메이크업, 프라이머 코팅, 프라이머 세트",
     "contextWords": "투자, 액셀러레이터, 스타트업, 벤처캐피탈, 벤처캐피털, 배치, 데모데이, 모집",
     "notes": null
   },
@@ -2285,7 +2285,7 @@
     "portfolioStatus": "Live",
     "tier": "C",
     "primaryKeyword": "액스",
-    "helperKeywords": "오연주, 여행",
+    "helperKeywords": "오연주",
     "contextWords": "현지 여행사, 여행상품 퍼블리싱, 예약관리",
     "notes": "전세계 현지 여행사를 위해 여행상품 퍼블리싱과 예약관리 솔루션을 개발하는 스타트업"
   },
