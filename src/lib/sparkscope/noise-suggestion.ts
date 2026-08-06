@@ -57,14 +57,19 @@ function extractJson(text: string): string {
   return s >= 0 && e > s ? text.slice(s, e + 1) : text;
 }
 
-/** 노이즈 신고 직후 호출 — 실패해도 절대 throw하지 않음(신고 자체는 이미 끝난 동작). */
-export async function suggestNoiseFilterFix(articleId: string): Promise<void> {
+/**
+ * 노이즈 신고 직후 호출 — 실패해도 절대 throw하지 않음(신고 자체는 이미 끝난 동작).
+ * 반환값은 "제안이 실제로 PENDING으로 쌓였는지" — 신고 버튼이 이걸로 "AI 제안이 생겼어요"
+ * 안내를 보여줄지 결정한다(2026-08-06: 제안이 조용히 실패해도 신고 화면엔 아무 표시가 없어서
+ * "신고했는데 아무것도 안 뜬다"는 혼란이 있었음 — 승인 대기 페이지에 따로 안 가보면 몰랐음).
+ */
+export async function suggestNoiseFilterFix(articleId: string): Promise<boolean> {
   try {
     const article = await prisma.article.findUnique({ where: { id: articleId } });
-    if (!article) return;
+    if (!article) return false;
 
     const target = await prisma.monitoringTarget.findFirst({ where: { primaryKeyword: article.matchedKeyword } });
-    if (!target) return;
+    if (!target) return false;
 
     const resp = await openai.chat.completions.create({
       model: MODEL,
@@ -75,11 +80,11 @@ export async function suggestNoiseFilterFix(articleId: string): Promise<void> {
       ],
     });
     const parsed = JSON.parse(extractJson(resp.choices[0]?.message?.content ?? '{}'));
-    if (!parsed?.relevant_fix) return;
+    if (!parsed?.relevant_fix) return false;
 
     const field = parsed.field;
     const addition = typeof parsed.addition === 'string' ? parsed.addition.trim() : '';
-    if (!['excludeWords', 'contextWords'].includes(field) || !addition) return;
+    if (!['excludeWords', 'contextWords'].includes(field) || !addition) return false;
 
     const currentValue = field === 'excludeWords' ? target.excludeWords : target.contextWords;
 
@@ -93,7 +98,9 @@ export async function suggestNoiseFilterFix(articleId: string): Promise<void> {
         reason: typeof parsed.reason === 'string' ? parsed.reason : '',
       },
     });
+    return true;
   } catch (e: any) {
     console.error('[noise-suggestion] 생성 실패:', e?.message ?? e);
+    return false;
   }
 }

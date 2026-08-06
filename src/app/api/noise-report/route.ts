@@ -27,7 +27,10 @@ export async function POST(req: Request) {
 
   // 새로 신고된 경우(취소가 아닌 경우)에만 재발방지 제안 생성 — 응답은 기다리지 않게 하지 않고
   // 바로 await한다(실패해도 throw 안 함, 신고 자체는 이미 위에서 끝난 동작이라 안전).
-  if (next) await suggestNoiseFilterFix(b.articleId);
+  // suggestionCreated를 응답에 실어 보내야, 신고 버튼이 그 자리에서 "AI 제안이 생겼어요"를
+  // 안내할 수 있다 — 안 그러면 별도 승인 페이지에 조용히 쌓이기만 해서 신고자가 모른다
+  // (2026-08-06: "신고했는데 아무것도 안 뜬다"는 문의로 발견).
+  const suggestionCreated = next ? await suggestNoiseFilterFix(b.articleId) : false;
 
-  return NextResponse.json({ isNoise: next });
+  return NextResponse.json({ isNoise: next, suggestionCreated });
 }
