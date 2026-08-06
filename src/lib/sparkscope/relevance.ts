@@ -61,6 +61,11 @@ export function isBlockedNoise(a: { title?: string | null; link?: string | null;
   if (AD_BLOCK_KEYWORDS.some(w => title.includes(w))) return true;
   // 5) 정치 키워드 (편집 가능 리스트, 제목 토큰 매칭)
   if (isPolitical(title)) return true;
+  // 6) 사진 캡션이 제목으로 잘못 긁힌 경우 — "씨엔티테크 이미지"처럼 "{짧은 어구} 이미지"로
+  // 끝나는 제목은 실제 기사 헤드라인이 아니라 사진 설명일 가능성이 높다. 길이 제한(30자)을 둔
+  // 이유는 "…AI 이미지 생성 기능…"처럼 "이미지"로 끝나되 실제 개조식 헤드라인인 경우까지
+  // 걸러내지 않기 위함(2026-08-06, 씨엔티테크 사례).
+  if (title.trim().length <= 30 && /이미지\s*$/.test(title.trim())) return true;
 
   return false;
 }
