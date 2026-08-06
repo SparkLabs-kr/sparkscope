@@ -37,6 +37,7 @@ export interface AnalyzedArticle extends RawArticle {
   noiseReason?: string;
   priorityScore: number;
   titleOnlyFallback?: boolean; // 심층분석 대상인데 본문 스크래핑 실패로 title만으로 판단됨 (UI 경고 표시용)
+  otherOutlets?: number; // 다이제스트 클러스터링에서 같은 사건으로 묶인 다른 매체 보도 건수 (있으면 "외 N개 매체" 표시)
 }
 
 export interface DigestData {

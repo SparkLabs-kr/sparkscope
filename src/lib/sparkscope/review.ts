@@ -64,6 +64,47 @@ function toReviewArticle(a: ArticleRow): ReviewArticle {
   };
 }
 
+export interface DigestGuardTarget {
+  primaryKeyword: string;
+  name?: string | null;
+  englishName?: string | null;
+  helperKeywords?: string | null;
+}
+
+/** 강한 식별자(회사명·영문명·주키워드) + 큐레이션 서비스명(helperKeywords) 맵 구성. */
+export function buildDigestKeyMap(targets: DigestGuardTarget[]): Map<string, string[]> {
+  const keyMap = new Map<string, string[]>();
+  for (const t of targets) {
+    const keys = [t.primaryKeyword, t.name, t.englishName, ...(t.helperKeywords ?? '').split(',')]
+      .map(k => (k ?? '').trim()).filter(k => k.length >= 2);
+    keyMap.set(t.primaryKeyword, Array.from(new Set(keys)));
+  }
+  return keyMap;
+}
+
+/**
+ * 다이제스트에 실릴 자격이 있는지 재검증하는 가드 — 검수 콘솔(review.ts) 전용이었으나
+ * 자동발송 경로(runner.ts)도 동일하게 통과해야 한다. isNoise:false는 수집 당일 AI가 한 번
+ * 판단하고 끝이라 노이즈 규칙이 나중에 강화돼도 소급 적용이 안 되므로, 발송 직전에 항상
+ * 다시 검사한다(대시보드가 렌더할 때마다 isBlockedNoise를 재검사하는 것과 동일한 원리, 2026-08-06).
+ */
+export function passesDigestGuard(
+  a: { title: string; link?: string | null; source?: string | null; category: string; matchedKeyword: string },
+  keyMap: Map<string, string[]>,
+): boolean {
+  // 포폴·자사·경쟁사는 매체 무관(collector.ts와 동일 기준), 업계동향만 확정 매체 26개 + 스포츠·광고 제외
+  if (!(NAME_MATCH_CATEGORIES.has(a.category) || isKnownMedia(a.source ?? ''))) return false;
+  if (isBlockedNoise({ title: a.title, link: a.link, source: a.source })) return false;
+  // 회사/조직명(강한 식별자)이 제목에 등장해야 통과 (포트폴리오+스파크랩 한정).
+  // competitor는 제외 — Article엔 본문이 없어 제목만으로 재검증하면, 수집 시점엔 본문 직접언급으로
+  // 통과했던(제목엔 투자사명이 없는) 정상 기사까지 여기서 다시 걸러지는 문제가 생긴다.
+  if (NAME_MATCH_CATEGORIES.has(a.category) && a.category !== 'competitor') {
+    const keys = keyMap.get(a.matchedKeyword) ?? [a.matchedKeyword];
+    if (!keys.some(k => matchesAsToken(a.title, k))) return false;
+  }
+  return true;
+}
+
 /** 최근 창의 비노이즈 기사 + 포트폴리오 관련성 가드 적용 후보 로드. */
 export async function loadDigestCandidates(): Promise<ReviewArticle[]> {
   const since = new Date();
@@ -82,26 +123,10 @@ export async function loadDigestCandidates(): Promise<ReviewArticle[]> {
     }),
   ]);
 
-  // 강한 식별자(회사명·영문명·주키워드) + 큐레이션 서비스명(helperKeywords). 서비스명 '약올려'로도 포폴사 인정.
-  const keyMap = new Map<string, string[]>();
-  for (const t of targets) {
-    const keys = [t.primaryKeyword, t.name, t.englishName, ...(t.helperKeywords ?? '').split(',')]
-      .map(k => (k ?? '').trim()).filter(k => k.length >= 2);
-    keyMap.set(t.primaryKeyword, Array.from(new Set(keys)));
-  }
+  const keyMap = buildDigestKeyMap(targets);
 
   return rows
-    // 포폴·자사·경쟁사는 매체 무관(collector.ts와 동일 기준), 업계동향만 확정 매체 26개 + 스포츠·광고 제외
-    .filter(a => NAME_MATCH_CATEGORIES.has(a.category) || isKnownMedia(a.source))
-    .filter(a => !isBlockedNoise({ title: a.title, link: a.link, source: a.source }))
-    // 회사/조직명(강한 식별자)이 제목에 등장해야 통과 (포트폴리오+스파크랩 한정).
-    // competitor는 제외 — Article엔 본문이 없어 제목만으로 재검증하면, 수집 시점엔 본문 직접언급으로
-    // 통과했던(제목엔 투자사명이 없는) 정상 기사까지 여기서 다시 걸러지는 문제가 생긴다.
-    .filter(a => {
-      if (!NAME_MATCH_CATEGORIES.has(a.category) || a.category === 'competitor') return true;
-      const keys = keyMap.get(a.matchedKeyword) ?? [a.matchedKeyword];
-      return keys.some(k => matchesAsToken(a.title, k));
-    })
+    .filter(a => passesDigestGuard(a, keyMap))
     .map(toReviewArticle);
 }
 

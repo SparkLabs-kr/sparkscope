@@ -104,7 +104,12 @@ function sameCompany<T extends ClusterableArticle>(a: T, b: T): boolean {
 
 function toneCompatible<T extends ClusterableArticle>(a: T, b: T): boolean {
   if (!a.tone || !b.tone) return true; // 톤 정보 없으면 막지 않음
-  return a.tone === b.tone;
+  if (a.tone === b.tone) return true;
+  // 중립은 매체마다 톤 판정이 갈릴 뿐 같은 사건일 수 있어 긍정/부정 어느 쪽과도 묶일 수 있게 허용.
+  // 완전히 반대되는 긍정↔부정만 다른 사안일 가능성이 크다고 보고 분리한다(2026-08-06, 다이제스트에
+  // 같은 투자유치 기사가 매체별로 NEUTRAL/POSITIVE로 갈려 안 묶이고 중복 노출된 사례로 발견).
+  if (a.tone === 'NEUTRAL' || b.tone === 'NEUTRAL') return true;
+  return false;
 }
 
 function daysBetween(a?: Date | string, b?: Date | string): number {
@@ -113,7 +118,7 @@ function daysBetween(a?: Date | string, b?: Date | string): number {
   return Number.isNaN(diff) ? 0 : diff / 86_400_000;
 }
 
-function isMatch<T extends ClusterableArticle>(a: T, b: T, maxDateDiffDays: number): boolean {
+function isMatch<T extends ClusterableArticle>(a: T, b: T, maxDateDiffDays: number, textOnlyThreshold: number): boolean {
   if (daysBetween(a.pubDate, b.pubDate) > maxDateDiffDays) return false;
   const hasCompanyInfo = !!(a.matchedKeyword || b.matchedKeyword);
   // 회사 정보가 있으면 "같은 회사명이 제목에 있는지"만으로 판단해왔는데, 본문 언급만으로
@@ -123,18 +128,34 @@ function isMatch<T extends ClusterableArticle>(a: T, b: T, maxDateDiffDays: numb
   // 기준을 없애는 게 아니라 추가 신호로만 보강.
   if (hasCompanyInfo) {
     if (!toneCompatible(a, b)) return false;
-    return sameCompany(a, b) || titleMatchScore(a.title, b.title) >= 1;
+    if (sameCompany(a, b)) {
+      // 회사명(matchedKeyword)이 같아도 곧 같은 사건이라는 뜻은 아니다 — "AWS"처럼 여러 무관한
+      // 기사에 흔히 언급되는 이름(클라우드 시장 뉴스든 날씨관측장비 기사든 다 "AWS"를 포함)을
+      // 추적 키워드로 쓰면, 회사명 일치만으로 판단 시 전혀 다른 기사 수십 건이 한 클러스터로
+      // 잘못 묶인다(2026-08-06, "AWS" 키워드 경쟁사 기사 60건이 폭염·주가·제휴 등 서로 무관한
+      // 기사끼리 전부 하나로 합쳐진 사고로 발견). titleMatchScore > 0만으로는 부족하다 — 완전히
+      // 무관한 한국어 문장 두 개도 조사·흔한 음절이 우연히 겹쳐 bigram 유사도가 항상 살짝은
+      // 0보다 크게 나온다(실측: 무관한 쌍 0.22~0.26, 진짜 같은 사건 1.0~1.6). 0.5를 최소
+      // 기준으로 둬서 우연한 겹침과 실제 내용 겹침을 구분한다.
+      return titleMatchScore(a.title, b.title, a.matchedKeyword) >= 0.5;
+    }
+    // 회사명(matchedKeyword)이 서로 다른 경우 — 예: 같은 피투자회사 기사를 서로 다른 투자사
+    // 키워드로 각각 수집한 경우(2026-08-06, 모드하우스 투자 건이 "에이티넘인베스트먼트"·
+    // "IMM인베스트먼트" 두 투자사 키워드로 따로 잡혀 안 묶인 사례). 기본값(1.0)은 호출부가
+    // 낮춰서(textOnlyThreshold) 이런 잔여 중복까지 잡을 수 있게 한다 — 기본 동작은 그대로.
+    return titleMatchScore(a.title, b.title) >= textOnlyThreshold;
   }
   // 회사 정보가 없으면(톤 분석 등, 이미 단일 주제) 제목 유사도만으로 판단 — 기존 동작 유지.
-  return titleMatchScore(a.title, b.title, a.matchedKeyword) >= 1;
+  return titleMatchScore(a.title, b.title, a.matchedKeyword) >= textOnlyThreshold;
 }
 
 // 대표는 그룹 내 가장 간결한(짧은) 제목 — 부제가 덕지덕지 붙은 제목보다 핵심만 담겨 있어 대표로 적합.
 export function clusterArticles<T extends ClusterableArticle>(
   list: T[],
-  opts?: { maxDateDiffDays?: number },
+  opts?: { maxDateDiffDays?: number; textOnlyThreshold?: number },
 ): ArticleCluster<T>[] {
   const maxDateDiffDays = opts?.maxDateDiffDays ?? Infinity;
+  const textOnlyThreshold = opts?.textOnlyThreshold ?? 1;
   const clusters: ArticleCluster<T>[] = [];
 
   for (const article of list) {
@@ -143,7 +164,7 @@ export function clusterArticles<T extends ClusterableArticle>(
     for (const cluster of clusters) {
       // 대표뿐 아니라 이미 묶인 기사 전부와 비교 — 표현이 조금씩 이어지는 변형 체인을 놓치지 않는다.
       for (const member of [cluster.rep, ...cluster.others]) {
-        if (!isMatch(article, member, maxDateDiffDays)) continue;
+        if (!isMatch(article, member, maxDateDiffDays, textOnlyThreshold)) continue;
         const rank = -daysBetween(article.pubDate, member.pubDate); // 발행일 더 가까운 클러스터 우선
         if (rank > bestRank) { bestRank = rank; bestCluster = cluster; }
       }
