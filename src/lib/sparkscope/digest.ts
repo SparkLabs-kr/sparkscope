@@ -200,10 +200,6 @@ ${INTER_EMAIL_CSS}
   <div class="header">
     <div class="brand">SparkScope · 미디어 다이제스트</div>
     <div class="date">${escape(data.dateLabel)}</div>
-    <div class="editor-line">
-      ${data.editorIntro ? data.editorIntro : '오늘의 미디어 다이제스트입니다.'}
-      <span class="editor-byline">— 커뮤니케이션본부</span>
-    </div>
     <div class="stats">
       ${pStat.sparklabsSelf > 0 ? `<div class="stat"><div class="stat-value">${pStat.sparklabsSelf}</div><div class="stat-label">스파크랩 직접 언급</div></div>` : ''}
       <div class="stat"><div class="stat-value">${pStat.portfolio}</div><div class="stat-label">포트폴리오사 노출</div>${pStat.portfolioTrend ? `<div class="stat-trend">${escape(pStat.portfolioTrend)}</div>` : ''}</div>
