@@ -74,7 +74,14 @@ export function ArticleListView({ articles, canScrap = false, canBookmark = fals
 
   const view = useMemo(() => {
     let list = articles;
-    if (cat) list = list.filter(a => a.category === cat);
+    if (cat) {
+      list = list.filter(a => a.category === cat);
+    } else {
+      // 전체보기(미필터)는 예전처럼 상위 120건만 — articles가 이미 카테고리별
+      // priorityScore 순으로 이어붙여져 있어(스파크랩→포트폴리오→AC·VC→스타트업계),
+      // 앞에서부터 자르면 자연히 스파크랩·포트폴리오 위주로 채워진다.
+      list = list.slice(0, 120);
+    }
     if (showSearch && q.trim()) {
       const s = q.trim().toLowerCase();
       list = list.filter(a => {
