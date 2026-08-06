@@ -25,6 +25,7 @@ import { safeArticleHref } from '@/lib/sparkscope/article-link';
 import type { SparkLabsFundSummary } from '@/lib/sparkscope/fund-db';
 import { RISK_FLAGS } from '@/lib/sparkscope/risk-flags';
 import { InterPanel } from '@/components/InterPanel';
+import { CompanyNameWithPreview } from '@/components/CompanyNameWithPreview';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -172,12 +173,21 @@ async function loadDashboardData(from: string, to: string, company: string | und
 
   // TOP15 증감%(같은 길이 직전 기간 대비) — TOP15 회사로만 범위 좁혀 추가 조회
   const top15Keywords = portfolioTop15.map(g => g.matchedKeyword);
-  const prevTop15Counts = top15Keywords.length > 0 ? await prisma.article.groupBy({ by: ['matchedKeyword'], where: { pubDate: { gte: prevSince, lte: prevUntil }, isNoise: false, category: 'portfolio_company', matchedKeyword: { in: top15Keywords } }, _count: { _all: true } }) : [];
+  const [prevTop15Counts, top15RecentByCompany] = top15Keywords.length > 0 ? await Promise.all([
+    prisma.article.groupBy({ by: ['matchedKeyword'], where: { pubDate: { gte: prevSince, lte: prevUntil }, isNoise: false, category: 'portfolio_company', matchedKeyword: { in: top15Keywords } }, _count: { _all: true } }),
+    // 회사 이름에 마우스를 올리면(모바일은 탭) 뜨는 미리보기용 — 회사별로 개별 조회해야
+    // 언급량이 큰 회사가 "최근" 슬롯을 다 차지하는 걸 막고 회사마다 최근 기사를 보장받는다.
+    Promise.all(top15Keywords.map(k =>
+      prisma.article.findMany({ where: { ...portfolioWhere, matchedKeyword: k }, orderBy: { pubDate: 'desc' }, select: { title: true, link: true, source: true, pubDate: true }, take: 5 }),
+    )),
+  ]) : [[], []];
   const prevCountOf = new Map(prevTop15Counts.map(g => [g.matchedKeyword, g._count._all]));
 
   // 스포츠·게임·연예·광고 강제 제외 (제목·URL·매체) — 표시되는 모든 기사 리스트에 공통 적용
   const notNoise = (a: { title: string; link: string; source: string }) =>
     !isBlockedNoise({ title: a.title, link: a.link, source: a.source });
+
+  const recentArticlesOf = new Map(top15Keywords.map((k, i) => [k, top15RecentByCompany[i]!.filter(notNoise).slice(0, 3)]));
 
   // 경쟁사 모니터링 통계: DB에 실제 수집된 경쟁사(matchedKeyword)별 노출량·TOP3 기사·부정 기사.
   // (주가 기사 등 competitor 카테고리 노이즈는 지금은 그대로 — 추후 프롬프트 튜닝에서 정리)
@@ -424,6 +434,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
       count,
       portfolioStatus: portfolioStatusOf.get(g.matchedKeyword) ?? null,
       changePct,
+      recentArticles: recentArticlesOf.get(g.matchedKeyword) ?? [],
     };
   });
   // 증감% 비교 기준(직전 동일 기간) 안내용 — "2026.7.22 ~ 2026.7.28 대비" 형태로 표시
@@ -928,18 +939,18 @@ function PortfolioStatusBadge({ status }: { status: string | null }) {
   return <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold border ${cls}`}>{status}</span>;
 }
 
-function PortfolioTopList({ items, rangeLabel, prevRangeLabel }: { items: { name: string; count: number; portfolioStatus?: string | null; changePct: number | null }[]; rangeLabel: string; prevRangeLabel: string }) {
+function PortfolioTopList({ items, rangeLabel, prevRangeLabel }: { items: { name: string; count: number; portfolioStatus?: string | null; changePct: number | null; recentArticles: { title: string; link: string; source: string; pubDate: Date }[] }[]; rangeLabel: string; prevRangeLabel: string }) {
   const max = Math.max(...items.map(i => i.count), 1);
   return (
     <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
-      <div className="font-bold mb-1">🔥 가장 많이 언급된 포트폴리오사 TOP 15 <InfoTip text={`${rangeLabel} 동안 언론 노출(기사 수)이 많은 포트폴리오사 순위입니다.\n최근 홍보 활동이 활발하거나 이슈가 되고 있는 회사를 보여줍니다.\n증감은 선택한 기간과 같은 길이의 직전 기간 대비입니다 (예: 최근 7일 선택 시 직전 7일과 비교).`} /></div>
+      <div className="font-bold mb-1">🔥 가장 많이 언급된 포트폴리오사 TOP 15 <InfoTip text={`${rangeLabel} 동안 언론 노출(기사 수)이 많은 포트폴리오사 순위입니다.\n최근 홍보 활동이 활발하거나 이슈가 되고 있는 회사를 보여줍니다.\n증감은 선택한 기간과 같은 길이의 직전 기간 대비입니다 (예: 최근 7일 선택 시 직전 7일과 비교).\n회사명에 마우스를 올리면(모바일은 탭) 최근 기사를 바로 볼 수 있습니다.`} /></div>
       <div className="text-xs text-gray-500 mb-4">{rangeLabel} · 언론 노출 건수 기준 · 증감은 직전 기간({prevRangeLabel}) 대비</div>
       {items.length > 0 ? (
         <div className="space-y-2">
           {items.map((it, i) => (
             <div key={it.name} className="flex items-center gap-2 text-sm">
               <span className="w-5 text-right text-xs font-bold text-gray-400 tabular-nums">{i + 1}</span>
-              <span className="w-28 truncate font-semibold text-gray-700" title={it.name}>{it.name}</span>
+              <CompanyNameWithPreview name={it.name} articles={it.recentArticles} />
               <PortfolioStatusBadge status={it.portfolioStatus ?? null} />
               <div className="flex-1 h-4 bg-gray-100 rounded overflow-hidden">
                 <div className="h-full rounded bg-spark-purple/80" style={{ width: `${Math.round((it.count / max) * 100)}%` }} />
