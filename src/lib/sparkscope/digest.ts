@@ -20,12 +20,9 @@ const INDUSTRY_LIMIT = 5;
 // 이메일 CTA 기본 도메인 (링크가 실제로 열리도록 프로덕션 URL 우선)
 const DEFAULT_BASE_URL = 'https://sparkscope.vercel.app';
 
-export function buildDigestData(
-  articles: AnalyzedArticle[],
-  editorIntro: string,
-  weeklyFlow?: string,
-  scrappedLinks?: Set<string>,
-): DigestData {
+// 정치 기사 제외 + 중복 제거(제목 정규화/URL) + 같은 사건 클러스터링 → 대표 기사만 남긴 배열.
+// TOP3 후보 산정과 카테고리별 섹션 구성 양쪽에서 공유한다.
+export function buildClusteredPool(articles: AnalyzedArticle[]): AnalyzedArticle[] {
   // 정치 기사 제외 + 중복 제거(제목 정규화/URL). 대표는 우선순위 상위 1건.
   const seenKey = new Set<string>();
   const exactDeduped = [...articles]
@@ -48,28 +45,12 @@ export function buildDigestData(
   const clusters = clusterArticles(exactDeduped.map(a => ({ ...a, id: a.link })));
   // 대표 기사에 "같은 사건으로 묶인 다른 매체 보도 건수"를 붙여서, 클러스터링이 완전히 하나로
   // 합치지 못해도 최소한 몇 건이 더 있었는지 메일에서 알 수 있게 한다(렌더 시 "외 N개 매체").
-  const sorted = clusters.map(c => ({ ...c.rep, otherOutlets: c.others.length }));
+  return clusters.map(c => ({ ...c.rep, otherOutlets: c.others.length }));
+}
 
-  const sparklabsArticles = sorted.filter(a => a.category === 'sparklabs_self').slice(0, SPARKLABS_LIMIT);
-  const portfolioArticles = dedupeByCompany(sorted.filter(a => a.category === 'portfolio_company')).slice(0, PORTFOLIO_LIMIT);
-  // 경쟁사(투자사)는 matchedKeyword가 투자사명 자체라 포트폴리오처럼 회사당 대표 1건만 —
-  // 클러스터링이 놓친 같은 사건(제목에 투자사명이 다르게 표기되는 등)이 겹쳐 보이지 않도록
-  // 하는 2차 안전망(2026-08-06, 에이티넘인베스트먼트/모드하우스 건이 매체별로 다른
-  // matchedKeyword로 수집돼 클러스터링만으론 다 못 묶인 사례로 발견).
-  // 업계동향(industry_trend)은 matchedKeyword가 "시리즈 B 투자"처럼 여러 서로 다른 회사가
-  // 공유하는 범용 주제어라 여기 적용하면 무관한 다른 회사 기사까지 지워버려 제외한다 —
-  // 클러스터링(같은 사건 판단)에만 맡긴다.
-  // 그래도 "같은 피투자회사를 서로 다른 투자사 키워드로 각각 수집"한 잔여 중복은 위 두 단계로도
-  // 못 잡는다(모드하우스가 "에이티넘인베스트먼트"·"IMM인베스트먼트" 두 키워드로 따로 잡힌 사례).
-  // 전사 발송 메일은 정확성이 최우선이라 AC·VC 섹션에 한해 mergeResidualDuplicates로 한 번 더
-  // 느슨한 기준으로 병합한다(AI 호출 없음 — 비용·시간 부담 없는 순수 문자열 비교).
-  const competitorArticles = mergeResidualDuplicates(
-    dedupeByCompany(sorted.filter(a => a.category === 'competitor')),
-  ).slice(0, COMPETITOR_LIMIT);
-  const industryArticles = sorted.filter(a => a.category === 'industry_trend').slice(0, INDUSTRY_LIMIT);
-
-  // TOP3는 연관성 우선순위: 스파크랩 > 포트폴리오 > 업계동향
-  // 본부 스크랩이 있으면 최우선, 없으면 카테고리와 priorityScore로 정렬
+// TOP3 후보를 우선순위(본부 스크랩 > 카테고리 > priorityScore)로 정렬하고 회사당 1건으로 제한한
+// 풀 — 슬라이스 전 전체 순위. runner.ts가 AI 검증 후 대체 후보를 고를 때도 이 풀을 그대로 쓴다.
+export function rankTop3Pool(sorted: AnalyzedArticle[], scrappedLinks?: Set<string>): AnalyzedArticle[] {
   const rankedForTop3 = [...sorted].sort((a, b) => {
     // [1] 본부 스크랩 우선
     const sa = scrappedLinks?.has(a.link) ? 1 : 0;
@@ -95,15 +76,48 @@ export function buildDigestData(
   // 많이 다른) 같은 회사의 서로 다른 기사 2건이 TOP3를 나눠 차지하던 문제 수정(2026-08-06,
   // 엣지크로스 기사 2건이 2·3위를 같이 차지한 사례로 발견). 업계동향(industry_trend)은
   // matchedKeyword가 여러 회사가 공유하는 범용 주제어라 이 제한에서 제외한다.
-  const top3: AnalyzedArticle[] = [];
+  const pool: AnalyzedArticle[] = [];
   const usedCompanies = new Set<string>();
   for (const a of rankedForTop3) {
-    if (top3.length >= TOP_3_LIMIT) break;
     const isCompanyScoped = a.category !== 'industry_trend';
     if (isCompanyScoped && usedCompanies.has(a.matchedKeyword)) continue;
-    top3.push(a);
+    pool.push(a);
     if (isCompanyScoped) usedCompanies.add(a.matchedKeyword);
   }
+  return pool;
+}
+
+export function buildDigestData(
+  articles: AnalyzedArticle[],
+  editorIntro: string,
+  weeklyFlow?: string,
+  scrappedLinks?: Set<string>,
+  top3Override?: AnalyzedArticle[],
+): DigestData {
+  const sorted = buildClusteredPool(articles);
+
+  const sparklabsArticles = sorted.filter(a => a.category === 'sparklabs_self').slice(0, SPARKLABS_LIMIT);
+  const portfolioArticles = dedupeByCompany(sorted.filter(a => a.category === 'portfolio_company')).slice(0, PORTFOLIO_LIMIT);
+  // 경쟁사(투자사)는 matchedKeyword가 투자사명 자체라 포트폴리오처럼 회사당 대표 1건만 —
+  // 클러스터링이 놓친 같은 사건(제목에 투자사명이 다르게 표기되는 등)이 겹쳐 보이지 않도록
+  // 하는 2차 안전망(2026-08-06, 에이티넘인베스트먼트/모드하우스 건이 매체별로 다른
+  // matchedKeyword로 수집돼 클러스터링만으론 다 못 묶인 사례로 발견).
+  // 업계동향(industry_trend)은 matchedKeyword가 "시리즈 B 투자"처럼 여러 서로 다른 회사가
+  // 공유하는 범용 주제어라 여기 적용하면 무관한 다른 회사 기사까지 지워버려 제외한다 —
+  // 클러스터링(같은 사건 판단)에만 맡긴다.
+  // 그래도 "같은 피투자회사를 서로 다른 투자사 키워드로 각각 수집"한 잔여 중복은 위 두 단계로도
+  // 못 잡는다(모드하우스가 "에이티넘인베스트먼트"·"IMM인베스트먼트" 두 키워드로 따로 잡힌 사례).
+  // 전사 발송 메일은 정확성이 최우선이라 AC·VC 섹션에 한해 mergeResidualDuplicates로 한 번 더
+  // 느슨한 기준으로 병합한다(AI 호출 없음 — 비용·시간 부담 없는 순수 문자열 비교).
+  const competitorArticles = mergeResidualDuplicates(
+    dedupeByCompany(sorted.filter(a => a.category === 'competitor')),
+  ).slice(0, COMPETITOR_LIMIT);
+  const industryArticles = sorted.filter(a => a.category === 'industry_trend').slice(0, INDUSTRY_LIMIT);
+
+  // TOP3는 연관성 우선순위: 스파크랩 > 포트폴리오 > 업계동향, 회사당 1건 제한 (rankTop3Pool 참고).
+  // top3Override가 있으면(runner.ts의 AI 검증 후 선정 결과) 그걸 그대로 쓰고, 없으면 기존처럼
+  // 규칙 기반 순위로 계산한다 — 검수 콘솔(review.ts) 등 기존 호출부는 override 없이 그대로 동작.
+  const top3 = (top3Override ?? rankTop3Pool(sorted, scrappedLinks)).slice(0, TOP_3_LIMIT);
 
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
   const dateLabel = formatDateKR(now);

@@ -288,6 +288,57 @@ export function clampEditorIntro(text: string, max = EDITOR_INTRO_MAX): string {
   return out.trim();
 }
 
+// ===== TOP3 최종 검증 (다이제스트 발송 직전, 가장 눈에 띄는 3자리만) =====
+// 규칙 기반 필터를 다 통과해도 "제목에 회사명이 있지만 실제 내용은 무관"한 경우까지는 못
+// 잡는다. TOP3는 전사 발송 메일에서 제일 눈에 띄는 자리라, 저비용 모델로 한 번 더 검증한다.
+// 후보 여러 건을 한 번에 묶어 호출 비용을 최소화하고, API 실패 시 규칙 기반 순위로 조용히
+// 폴백해 발송 자체가 막히지 않게 한다(2026-08-06).
+const TOP3_VERIFY_SYSTEM = `당신은 스파크랩 다이제스트 메일의 최종 검수자입니다.
+아래 각 기사 제목이 대괄호로 표시된 회사/주제에 대한 "진짜" 보도인지 판단하세요.
+무효(invalid) 처리 기준 — 다음 중 하나라도 확실히 해당하면 invalid:
+- 광고·홍보성 문구, 스포츠·연예 기사, 사진 캡션
+- 명시된 회사와 이름만 같고 실제로는 무관한 대상(동명이인 등)
+- 여러 기관을 나열하는 문장에서 그 회사가 주어가 아닌 단순 언급
+애매하면(진짜 관련 있어 보이면) valid로 판단하세요 — 확실한 근거가 있을 때만 invalid 처리.
+응답은 반드시 valid JSON 배열로만, 다른 설명 없이: [{"index": 0, "valid": true}, ...]`;
+
+interface Top3Candidate { title: string; category: string; matchedKeyword: string; }
+
+async function verifyTop3Candidates(candidates: Top3Candidate[]): Promise<boolean[]> {
+  const userContent = candidates
+    .map((c, i) => `${i}. [${c.category}/${c.matchedKeyword}] ${c.title}`)
+    .join('\n');
+  const text = await chatComplete(CLASSIFIER_MODEL, TOP3_VERIFY_SYSTEM, userContent, 500);
+  const cleaned = text.replace(/```json\n?|```/g, '').trim();
+  const parsed = JSON.parse(cleaned) as { index: number; valid: boolean }[];
+  return candidates.map((_, i) => parsed.find(p => p.index === i)?.valid ?? true);
+}
+
+// pool: rankTop3Pool()이 이미 우선순위·회사당 1건으로 정리해둔 후보 목록(슬라이스 전).
+// 앞에서부터 검증해 유효한 것만 count개 채우고, 검증 통과분이 모자라면 남는 자리는 원래
+// 순위 그대로 채워 발송이 비지 않게 한다.
+export async function pickVerifiedTop3<T extends Top3Candidate>(pool: T[], count = 3): Promise<T[]> {
+  if (pool.length === 0) return [];
+  const checkCount = Math.min(pool.length, count + 5); // 탈락 대비 여유 있게 검증
+  const candidates = pool.slice(0, checkCount);
+  try {
+    const validFlags = await verifyTop3Candidates(candidates);
+    const verified = candidates.filter((_, i) => validFlags[i]);
+    const rejectedTitles = candidates.filter((_, i) => !validFlags[i]).map(c => c.title);
+    if (rejectedTitles.length > 0) {
+      console.warn(`[analyzer] TOP3 검증 탈락 ${rejectedTitles.length}건:`, rejectedTitles);
+    }
+    if (verified.length >= count) return verified.slice(0, count);
+    // 검증 통과분이 모자라면 검증 안 한 나머지 풀(순위상 다음 후보)로 채운다 — 탈락한 후보를
+    // 다시 채우면 검증한 의미가 없으므로, 애초에 검사하지 않은 다음 순번만 사용한다.
+    const remainder = pool.slice(checkCount);
+    return [...verified, ...remainder].slice(0, count);
+  } catch (e) {
+    console.error('[analyzer] TOP3 검증 실패, 규칙 기반 순위로 폴백:', e);
+    return pool.slice(0, count);
+  }
+}
+
 export async function generateEditorIntro(top3: AnalyzedArticle[]): Promise<string> {
   if (top3.length === 0) return '오늘은 주목할 만한 보도가 적은 날입니다. 업계 동향만 가볍게 확인해보세요.';
   try {
