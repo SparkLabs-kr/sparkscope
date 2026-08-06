@@ -8,10 +8,10 @@ import { collectAllArticles, CATEGORY_PRIORITY } from './collector';
 import { normalizeTitleKey, matchesAsToken } from './relevance';
 import { normalizeSource } from './media';
 import { clusterArticles } from './cluster';
-import { analyzeArticles, generateEditorIntro } from './analyzer';
+import { analyzeArticles, generateEditorIntro, pickVerifiedTop3 } from './analyzer';
 import { computeAndStoreDashboardInsights } from './dashboard-insights';
 import { checkConfigDrift, formatDriftReport } from './config-drift';
-import { buildDigestData, renderDigestHtml } from './digest';
+import { buildDigestData, renderDigestHtml, buildClusteredPool, rankTop3Pool } from './digest';
 import { buildDigestKeyMap, passesDigestGuard } from './review';
 import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } from './mailer';
 import { collectInterNews } from './inter-collect';
@@ -313,14 +313,18 @@ export async function runDailyDigest(opts: RunOptions = {}) {
     const digestReady = analyzed.filter(a => passesDigestGuard(a, guardKeyMap));
     console.log(`[runner] digest guard: ${analyzed.length} -> ${digestReady.length} (노이즈/관련성 재검증 후)`);
 
-    // 5. 편집자 인사
-    const sortedTop3 = [...digestReady].sort((a, b) => b.priorityScore - a.priorityScore).slice(0, 3);
-    const editorIntro = await generateEditorIntro(sortedTop3);
-
-    // 6. 다이제스트 데이터 + HTML (본부 스크랩 기사 TOP3 우선 반영)
+    // 5. 편집자 인사 + TOP3 후보 AI 최종 검증 — TOP3는 발송 메일에서 가장 눈에 띄는 자리라,
+    // 규칙 기반 필터를 다 통과해도 놓칠 수 있는 "제목엔 회사명 있지만 실제로는 무관"한 경우까지
+    // 저비용 모델로 한 번 더 확인한다. 실패해도 규칙 기반 순위로 조용히 폴백해 발송을 막지
+    // 않는다(2026-08-06).
     const scrapped = await prisma.article.findMany({ where: { isScrapped: true }, select: { link: true } });
     const scrappedLinks = new Set(scrapped.map(s => s.link));
-    const data = buildDigestData(digestReady, editorIntro, undefined, scrappedLinks);
+    const top3Pool = rankTop3Pool(buildClusteredPool(digestReady), scrappedLinks);
+    const verifiedTop3 = await pickVerifiedTop3(top3Pool, 3);
+    const editorIntro = await generateEditorIntro(verifiedTop3);
+
+    // 6. 다이제스트 데이터 + HTML (검증된 TOP3 + 본부 스크랩 기사 반영)
+    const data = buildDigestData(digestReady, editorIntro, undefined, scrappedLinks, verifiedTop3);
     const html = renderDigestHtml(data, opts.baseUrl);
     const subject = buildSubject(data.dateLabel, data.top3[0]?.title);
 
