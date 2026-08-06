@@ -167,11 +167,16 @@ export async function matchInterNewsWithPortfolio(
     return { matched: 0, failed: [] };
   }
 
+  // Inter 트렌드-포트폴리오 매칭에서만 제외하는 회사(국내 모니터링 등 다른 기능에는 영향 없음).
+  // 2026-08-06, 비트센싱: "레이더/센싱" 같은 범용 키워드 때문에 무관한 AI 기사에도 계속 걸려서
+  // (자율주행으로 재분류한 뒤에도 억지 연결이 반복됨) 소윤 요청으로 제외.
+  const INTER_MATCH_EXCLUDED = new Set(['비트센싱']);
+
   // 2. 포트폴리오 회사 목록 조회 (프로필 포함)
-  const portfolioCompanies = await prisma.monitoringTarget.findMany({
+  const portfolioCompanies = (await prisma.monitoringTarget.findMany({
     where: { category: 'portfolio_company', status: 'ACTIVE' },
     select: { name: true, englishName: true, notes: true, tier: true },
-  });
+  })).filter(c => !INTER_MATCH_EXCLUDED.has(c.name));
 
   if (portfolioCompanies.length === 0) {
     console.log('[Inter] 포트폴리오 회사 없음');
