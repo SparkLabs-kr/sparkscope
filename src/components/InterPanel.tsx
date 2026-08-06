@@ -686,25 +686,28 @@ function HeadlineStats({ headline: h }: { headline: InterMatrix['headline'] }) {
       <div className="relative group bg-white border border-spark-border rounded-xl px-4 py-3.5">
         <div className="flex items-center gap-1 text-[12px] text-spark-muted mb-1">
           가장 급증한 트렌드 조합
-          <InfoTip text={`아래 매트릭스는 "주제"(예: 항암)와 "사건 유형"(예: 투자·딜)을 교차해서 보여줍니다.\n이 칸은 그중 직전 기간 대비 증가율이 가장 높은 조합이에요 — 최소 3건 이상 쌓인 칸 중에서만 고릅니다.`} />
+          <InfoTip text={`아래 매트릭스는 "주제"(예: 항암)와 "사건 유형"(예: 투자·딜)을 교차해서 보여줍니다.\n이 칸들은 그중 직전 기간 대비 증가율이 가장 높은 상위 3개 조합이에요 — 최소 3건 이상 쌓인 칸 중에서만 고릅니다.`} />
         </div>
-        <div className="truncate text-[15px] font-extrabold text-spark-ink" title={h.hottest?.label}>
-          {h.hottest?.label ?? '—'}
-        </div>
-        <div className="text-[11px] text-spark-muted mt-0.5">
-          {h.hottest ? (
-            <>
-              {h.hottest.count}건 · 직전 {h.hottest.prevCount}건
-              {h.hottest.deltaPct !== null ? (
-                <> → <span className="font-bold text-red-500">▲{h.hottest.deltaPct}%</span></>
-              ) : h.hottest.prevCount === 0 ? (
-                <> → <span className="font-bold text-emerald-600">신규</span></>
-              ) : null}
-            </>
-          ) : (
-            '데이터 없음'
-          )}
-        </div>
+        {h.hottest.length === 0 ? (
+          <div className="truncate text-[15px] font-extrabold text-spark-ink">데이터 없음</div>
+        ) : (
+          <div className="flex flex-col gap-1">
+            {h.hottest.map((hot, i) => (
+              <div key={hot.label} className="flex items-baseline gap-1.5">
+                <span className="shrink-0 text-[11px] font-bold text-spark-muted">{i + 1}.</span>
+                <span className="truncate text-[13px] font-extrabold text-spark-ink" title={hot.label}>{hot.label}</span>
+                <span className="ml-auto shrink-0 text-[11px] text-spark-muted">
+                  {hot.count}건 · 직전 {hot.prevCount}건
+                  {hot.deltaPct !== null ? (
+                    <> <span className="font-bold text-red-500">▲{hot.deltaPct}%</span></>
+                  ) : hot.prevCount === 0 ? (
+                    <> <span className="font-bold text-emerald-600">신규</span></>
+                  ) : null}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="relative group bg-white border border-spark-border rounded-xl px-4 py-3.5">

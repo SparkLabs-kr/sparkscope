@@ -550,7 +550,7 @@ export interface InterMatrix {
     total: number;
     prevTotal: number;
     deltaPct: number | null;
-    hottest: { label: string; count: number; prevCount: number; deltaPct: number | null } | null;
+    hottest: { label: string; count: number; prevCount: number; deltaPct: number | null }[];
     matchCount: number;
     matchedCompanyCount: number;
     /** 포트폴리오 매치가 하나라도 있는 주제 수 / 전체 주제 수 (칸 단위가 아니라 주제 단위) */
@@ -668,9 +668,9 @@ export function buildMatrix(domain: InterDomain, data: InterData): InterMatrix {
   // 비교 가능한 칸이 하나도 없으면 그냥 건수 1위로 대체한다.
   const MIN_HOT = 3;
   const comparable = filled.filter(c => c.count >= MIN_HOT && c.prevCount >= MIN_HOT && c.deltaPct !== null);
-  const hottestCell = comparable.length > 0
-    ? comparable.slice().sort((a, b) => (b.deltaPct ?? 0) - (a.deltaPct ?? 0) || b.count - a.count)[0]
-    : filled.slice().sort((a, b) => b.count - a.count)[0];
+  const hottestCells = comparable.length > 0
+    ? comparable.slice().sort((a, b) => (b.deltaPct ?? 0) - (a.deltaPct ?? 0) || b.count - a.count).slice(0, 3)
+    : filled.slice().sort((a, b) => b.count - a.count).slice(0, 1);
 
   const overlap = filled.filter(c => c.matchCount > 0);
   const overlapTopicSet = new Set(overlap.map(c => c.topicKey));
@@ -686,14 +686,12 @@ export function buildMatrix(domain: InterDomain, data: InterData): InterMatrix {
       deltaPct: prevVerdicts.length > 0
         ? Math.round(((verdicts.length - prevVerdicts.length) / prevVerdicts.length) * 100)
         : null,
-      hottest: hottestCell
-        ? {
-            label: `${hottestCell.topicKey} × ${hottestCell.eventKey}`,
-            count: hottestCell.count,
-            prevCount: hottestCell.prevCount,
-            deltaPct: hottestCell.deltaPct,
-          }
-        : null,
+      hottest: hottestCells.map(c => ({
+        label: `${c.topicKey} × ${c.eventKey}`,
+        count: c.count,
+        prevCount: c.prevCount,
+        deltaPct: c.deltaPct,
+      })),
       matchCount: matches.length,
       matchedCompanyCount: new Set(matches.map(m => m.companyName)).size,
       // "칸" 단위(주제×사건유형, 25개)는 매트릭스 구조를 몰라야 이해가 안 되는 숫자라
