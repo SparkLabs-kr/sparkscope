@@ -7,6 +7,7 @@
 // 실행:
 //   npx tsx scripts/backfill-inter-historical.ts [--years=3] [--dry-run]
 //   npx tsx scripts/backfill-inter-historical.ts --after=2026-05-01 --before=2026-07-20 --chunk-days=25
+//   npx tsx scripts/backfill-inter-historical.ts --years=1 --skip=TechCrunch   # 이미 끝난 매체 건너뛰기
 //
 // ⚠ 2026-08-04 확인된 함정: 기본 모드는 "최근 90일은 정규 RSS가 커버한다"고 보고 그 구간을 건너뛴다.
 // 그런데 RSS는 매체당 최신 20~50개만 주므로 실제로는 2~3주치만 덮인다. 수집이 2026-07-31에
@@ -23,7 +24,8 @@ import { matchInterNewsWithPortfolio } from '../src/lib/sparkscope/inter-portfol
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 const DEFAULT_ITEMS_PER_WINDOW = 12; // 매체당 구간별 최대 수집 개수 (너무 많으면 URL 해석 단계가 오래 걸림)
-const SLEEP_MS = 400; // 구글 요청 사이 지연 (레이트리밋 방지)
+// 2026-08-06: TechCrunch(53건) 끝내고 곧바로 429에 걸렸다 — 400ms는 너무 빨랐다. 3배로 늘림.
+const SLEEP_MS = 1200; // 구글 요청 사이 지연 (레이트리밋 방지)
 
 function sleep(ms: number) {
   return new Promise(r => setTimeout(r, ms));
@@ -114,6 +116,7 @@ async function main() {
   const chunkDays = Number(arg('chunk-days') ?? 90);
   const after = parseYmd(arg('after'), '--after');
   const before = parseYmd(arg('before'), '--before');
+  const skip = new Set((arg('skip') ?? '').split(',').map(s => s.trim()).filter(Boolean));
 
   if ((after && !before) || (!after && before)) {
     throw new Error('--after와 --before는 같이 지정해야 합니다.');
@@ -138,6 +141,10 @@ async function main() {
 
   outer:
   for (const [name, feedUrl] of Object.entries(FEEDS)) {
+    if (skip.has(name)) {
+      console.log(`[Backfill] ${name} 건너뜀 (--skip)`);
+      continue;
+    }
     const domain = outletDomain(feedUrl);
 
     for (const { after, before } of windows) {

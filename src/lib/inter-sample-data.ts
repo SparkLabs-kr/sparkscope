@@ -111,6 +111,7 @@ type VerdictRow = {
   eventType: string | null;
   country: string | null;
   titleKo: string | null;
+  reason: string;          // 관련성 판정(Gemini) 사유 — 포트폴리오 매칭 프롬프트의 입력으로도 쓰인다
   isScrapped: boolean;
   news: { id: string; title: string; url: string; source: string; publishedAt: Date };
 };
@@ -138,7 +139,7 @@ async function getRelevantVerdicts(
     },
     select: {
       id: true, relevant: true, domain: true, sector: true, topicSector: true, eventType: true,
-      country: true, titleKo: true, isScrapped: true,
+      country: true, titleKo: true, reason: true, isScrapped: true,
       news: { select: { id: true, title: true, url: true, source: true, publishedAt: true } },
     },
   });
@@ -153,7 +154,7 @@ async function getRelevantVerdicts(
 export interface InterData {
   verdicts: VerdictRow[];
   prevVerdicts: VerdictRow[];
-  matches: { id: string; verdictId: string; companyName: string; reason: string }[];
+  matches: { id: string; verdictId: string; companyName: string; reason: string; model: string }[];
   range: { since: Date; until: Date } | null;
 }
 
@@ -178,7 +179,7 @@ export async function loadInterData(
   ]);
   const matches = await prisma.interPortfolioMatch.findMany({
     where: { verdictId: { in: verdicts.map(v => v.id) } },
-    select: { id: true, verdictId: true, companyName: true, reason: true },
+    select: { id: true, verdictId: true, companyName: true, reason: true, model: true },
   });
   return { verdicts, prevVerdicts, matches, range: since && until ? { since, until } : null };
 }
@@ -192,9 +193,32 @@ export function getDomainStats({ verdicts, matches }: InterData): InterStat[] {
   ];
 }
 
+/**
+ * 포트폴리오 매칭 — 회사 1곳 기준으로 묶고, 그 판정이 나온 기사를 전부 들고 온다.
+ *
+ * 예전엔 (회사, 근거) 쌍을 중복제거해 `{co, desc}`로만 넘겨서, 화면에서
+ * "이 회사가 어느 기사 때문에 걸린 건지"를 알 수 없었다(그리고 5개로 잘려 있었다).
+ * DB(InterPortfolioMatch)는 verdictId로 기사와 1:1로 이어져 있으므로 그 연결을 살려 보낸다.
+ */
+export interface PortfolioMatchArticle {
+  id: string;              // verdictId — items[]의 SourceItem.id와 같은 키(스크랩·링크 재사용)
+  reason: string;          // 이 기사에 대해 AI가 쓴 매칭 근거
+  title: string;           // 한국어 번역 제목 (없으면 원문)
+  titleOriginal: string;
+  url: string;
+  media: string;
+  date: string;
+  topicKey: string | null;  // 어느 주제로 분류된 기사인지
+  eventKey: string | null;  // 어떤 사건 유형으로 분류됐는지
+  verdictReason: string;    // 관련성 판정 단계(Gemini)에서 남긴 사유 — 매칭 입력으로 쓰인 값
+  isScrapped: boolean;
+}
+
 export interface PortfolioMatch {
   co: string;
-  desc: string;
+  desc: string;             // 대표 근거(가장 최근 기사의 근거)
+  model: string;            // 매칭에 쓴 모델 — "어떻게 매칭됐는지" 표시용
+  articles: PortfolioMatchArticle[];
 }
 
 export interface SourceItem {
@@ -313,19 +337,40 @@ export function getSectorData(domain: InterDomain, data: InterData): SectorBlock
     const sectorVerdicts = verdicts.filter(v => topicOf(v) === sector.key);
     const prevCount = prevVerdicts.filter(v => topicOf(v) === sector.key).length;
 
-    const sectorMatches: PortfolioMatch[] = [];
-    const matchesSet = new Set<string>();
+    // 회사별로 묶고, 그 회사가 걸린 기사를 전부 매단다 — 최신 기사가 위로.
+    // (예전엔 (회사,근거) 쌍을 중복제거해 기사 연결을 버렸고 5개로 잘랐다)
+    const byCompany = new Map<string, PortfolioMatch>();
     let matchCount = 0;
-    sectorVerdicts.forEach(v => {
-      (matchesByVerdictId.get(v.id) ?? []).forEach(m => {
-        matchCount += 1;
-        const key = `${m.companyName}|${m.reason}`;
-        if (!matchesSet.has(key)) {
-          sectorMatches.push({ co: m.companyName, desc: m.reason });
-          matchesSet.add(key);
-        }
+    sectorVerdicts
+      .slice()
+      .sort((a, b) => b.news.publishedAt.getTime() - a.news.publishedAt.getTime())
+      .forEach(v => {
+        (matchesByVerdictId.get(v.id) ?? []).forEach(m => {
+          matchCount += 1;
+          const entry = byCompany.get(m.companyName) ?? {
+            co: m.companyName,
+            desc: m.reason, // 첫 번째(=최신 기사)의 근거를 대표로
+            model: m.model,
+            articles: [],
+          };
+          entry.articles.push({
+            id: v.id,
+            reason: m.reason,
+            title: truncate(v.titleKo || v.news.title),
+            titleOriginal: v.news.title,
+            url: v.news.url,
+            media: v.news.source,
+            date: formatDate(v.news.publishedAt),
+            topicKey: topicOf(v),
+            eventKey: v.eventType,
+            verdictReason: v.reason,
+            isScrapped: v.isScrapped,
+          });
+          byCompany.set(m.companyName, entry);
+        });
       });
-    });
+    // 많이 걸린 회사 순 — 어느 포트폴리오사가 이 주제에 가장 깊이 얽혀 있는지가 먼저 보이게.
+    const sectorMatches = [...byCompany.values()].sort((a, b) => b.articles.length - a.articles.length);
 
     const items: Record<SourceKind, SourceItem[]> = { news: [], paper: [], opinion: [] };
     sectorVerdicts
@@ -370,7 +415,7 @@ export function getSectorData(domain: InterDomain, data: InterData): SectorBlock
       sub: sector.sub,
       badge: computeBadge(metrics),
       metrics,
-      matches: sectorMatches.slice(0, 5),
+      matches: sectorMatches,
       items,
     };
   });

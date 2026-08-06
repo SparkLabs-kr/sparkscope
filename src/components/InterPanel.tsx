@@ -53,6 +53,28 @@ const SRC_BADGE_CLS: Record<SourceKind, string> = {
 const SRC_LABEL: Record<SourceKind, string> = { news: '기사', paper: '논문', opinion: '오피니언' };
 const SOURCE_KINDS: SourceKind[] = ['news', 'paper', 'opinion'];
 
+// 카드 하위 탭 — 판정 근거·포트폴리오 매치를 첫 탭으로 빼고, 나머지는 출처 종류별.
+type CardTab = 'reason' | SourceKind;
+
+// 정렬 우선순위 — "급한 것부터"(급증 → 기회 → 주요 → 조용 → 데이터 없음).
+// 기간을 바꾸면 metrics/badge가 다시 계산되므로 순서도 자동으로 따라 바뀐다.
+const BADGE_PRIORITY: Record<string, number> = {
+  surge: 0,
+  opportunity: 1,
+  major: 2,
+  quiet: 3,
+  none: 4,
+};
+
+function sortByUrgency(sectors: SectorBlock[]): SectorBlock[] {
+  return sectors.slice().sort((a, b) => {
+    const pa = BADGE_PRIORITY[a.badge.kind] ?? 9;
+    const pb = BADGE_PRIORITY[b.badge.kind] ?? 9;
+    if (pa !== pb) return pa - pb;
+    return b.metrics.count - a.metrics.count; // 같은 등급 안에서는 기사 많은 순
+  });
+}
+
 // 요약 계산 시각은 KST 기준 HH:MM으로 표시 (daily-collect 사전계산 배치가 KST 하루 1회 도는 것과 맞춤)
 function fmtKstTime(d: Date | string) {
   const kst = new Date(new Date(d).toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
@@ -84,8 +106,10 @@ export function InterPanel({
   useEffect(() => { setDraftFrom(from); setDraftTo(to); setDraftCountry(country); }, [from, to, country]);
   const dirty = draftFrom !== from || draftTo !== to || draftCountry !== country;
 
-  const [openSectors, setOpenSectors] = useState<Set<string>>(new Set());
-  const [activeSrcTab, setActiveSrcTab] = useState<Record<string, SourceKind>>({});
+  // 카드가 항상 펼쳐진 형태(경쟁사 모니터링 카드와 동일)로 바뀌어서 여닫는 상태는 없다.
+  // 매트릭스에서 주제를 누르면 해당 카드로 스크롤하며 잠깐 하이라이트만 준다.
+  const [highlighted, setHighlighted] = useState<string | null>(null);
+  const [activeSrcTab, setActiveSrcTab] = useState<Record<string, CardTab>>({});
   const [data, setData] = useState<InterApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -122,13 +146,11 @@ export function InterPanel({
     };
   }, [domain, country, from, to]);
 
-  function toggleSector(id: string) {
-    setOpenSectors(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  // 매트릭스 칸/주제를 눌렀을 때 해당 카드로 이동 + 2초간 테두리 하이라이트.
+  function focusSector(id: string) {
+    setHighlighted(id);
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => setHighlighted(prev => (prev === id ? null : prev)), 2000);
   }
 
   const [badgeReasons, setBadgeReasons] = useState<Record<string, string | null>>({});
@@ -137,7 +159,7 @@ export function InterPanel({
   // 도메인·국가·기간이 바뀌면 섹터 구성이 달라지므로 사유 캐시를 비운다.
   useEffect(() => {
     setBadgeReasons({});
-    setOpenSectors(new Set());
+    setHighlighted(null);
   }, [domain, country, from, to]);
 
   useEffect(() => {
@@ -265,35 +287,35 @@ export function InterPanel({
             <SectorMatrix
               matrix={data.matrix}
               canScrap={canScrap}
-              onSelect={topicKey => {
-                const id = `sec-${topicKey}`;
-                setOpenSectors(prev => new Set(prev).add(id));
-                document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }}
+              onSelect={topicKey => focusSector(`sec-${topicKey}`)}
             />
             <InsightPanel
               sectors={data.sectors}
               overview={data.overview}
-              onSelect={id => {
-                setOpenSectors(prev => new Set(prev).add(id));
-                document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }}
+              onSelect={focusSector}
             />
           </div>
 
           {/* AI 요약 — 위 매트릭스의 숫자를 그대로 되풀이하지 않고, 그래서 뭘 해야 하는지로 마무리 */}
           <ColoredSummaryCard summary={data.summary} overview={data.overview} isFullYear={isFullYear} />
 
-          {/* 분야별 아코디언 */}
-          <div>
-            {data.sectors.map(s => (
-              <SectorAccordion
+          {/* 분야별 카드 — 급한 순(급증→기회→주요→조용)으로 위아래 배치.
+              2열로 나눠봤더니 카드마다 탭·매치 목록이 들어가 좌우로 눈이 튀어 읽기 어려웠다(2026-08-06).
+              기간·국가를 바꾸면 배지·건수가 다시 계산되므로 순서도 함께 바뀐다. */}
+          <div className="mb-2 flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-wide text-spark-ink-soft">
+            🗂 <span>주제별 상세</span>
+            <span className="ml-auto text-[11px] font-medium normal-case text-spark-muted">
+              급한 순서(급증 → 기회 → 주요 → 조용)로 정렬 · 기간을 바꾸면 순서도 바뀝니다
+            </span>
+          </div>
+          <div className="flex flex-col gap-3">
+            {sortByUrgency(data.sectors).map(s => (
+              <SectorCard
                 key={s.id}
                 sector={s}
                 canScrap={canScrap}
-                open={openSectors.has(s.id)}
-                onToggle={() => toggleSector(s.id)}
-                activeTab={activeSrcTab[s.id] ?? 'news'}
+                highlighted={highlighted === s.id}
+                activeTab={activeSrcTab[s.id] ?? 'reason'}
                 onTabChange={t => setActiveSrcTab(prev => ({ ...prev, [s.id]: t }))}
                 isFullYear={isFullYear}
               />
@@ -333,32 +355,187 @@ function DeltaChip({ deltaPct, count, isFullYear }: { deltaPct: number | null; c
   );
 }
 
-function SectorAccordion({
+// 주제 카드 — Intra 탭 경쟁사 모니터링 카드와 같은 구조(항상 펼쳐진 카드 + 하위 탭).
+// 예전엔 여닫는 아코디언을 위아래로 길게 늘어놓아서, 어느 주제가 급한지 보려면 전부 눌러봐야 했다.
+function SectorCard({
   sector,
   canScrap,
-  open,
-  onToggle,
+  highlighted,
   activeTab,
   onTabChange,
   isFullYear,
 }: {
   sector: SectorBlock;
   canScrap: boolean;
-  open: boolean;
-  onToggle: () => void;
-  activeTab: SourceKind;
-  onTabChange: (t: SourceKind) => void;
+  highlighted: boolean;
+  activeTab: CardTab;
+  onTabChange: (t: CardTab) => void;
   isFullYear?: boolean;
 }) {
-  const items = sector.items[activeTab];
-  // 같은 사건을 여러 매체가 각자 제목을 바꿔 보도한 경우(보도자료 픽업 등) 한 줄로 묶는다.
-  // Inter 기사엔 회사명(matchedKeyword)이 없어 clusterArticles는 제목 유사도만으로 판단한다.
-  //
-  // ⚠ 일부 RSS 피드(예: BioCentury)는 개별 기사가 아니라 "Bio€quity Europe - BioCentury -
-  // biocentury.com" 같은 행사·카테고리 리스팅 페이지를 통째로 하나의 항목으로 내보낸다.
-  // 이런 제목은 "<제목> - <매체명> - <도메인>" 형태로 짧고 일반적이어서, 제목 유사도만
-  // 보는 clusterArticles가 전혀 다른 기사 여러 건과 잘못 묶어버렸다(2026-08-05 실사례).
-  // 그래서 이 패턴에 걸리는 항목은 클러스터링 후보에서 아예 빼고 항상 단독으로 둔다.
+  const frame = highlighted
+    ? 'border-emerald-500 ring-2 ring-emerald-500/30'
+    : 'border-spark-border';
+
+  return (
+    <div id={sector.id} className={`rounded-xl border-[1.5px] bg-white p-4 scroll-mt-24 transition-colors ${frame}`}>
+      {/* 헤더 — 왼쪽은 주제명, 오른쪽은 건수·증감률·배지 */}
+      <div className="mb-2.5 flex items-start gap-2.5">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-spark-cream text-[16px]">{sector.icon}</div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[15px] font-bold text-spark-ink">{sector.name}</div>
+          <div className="truncate text-[12px] text-spark-muted" title={sector.sub}>{sector.sub}</div>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <div className="flex items-center gap-1.5 whitespace-nowrap">
+            <span className="text-[15px] font-bold tabular-nums text-spark-ink">
+              {sector.metrics.count}<span className="text-[12px] font-normal text-spark-muted">건</span>
+            </span>
+            <DeltaChip deltaPct={sector.metrics.deltaPct} count={sector.metrics.count} isFullYear={isFullYear} />
+          </div>
+          <span className={`rounded px-2 py-0.5 text-[11px] font-bold ${BADGE_CLS[sector.badge.kind]}`} title={sector.badge.why}>
+            {sector.badge.label}
+          </span>
+        </div>
+      </div>
+
+      {/* 하위 탭 — 판정 근거 / 기사 / 논문 / 오피니언 */}
+      <div className="mb-3 flex border-b border-spark-border">
+        <TabButton active={activeTab === 'reason'} onClick={() => onTabChange('reason')}>
+          {sector.badge.label} 판정 근거
+          {sector.matches.length > 0 && <span className="ml-1 tabular-nums opacity-70">{sector.metrics.matchCount}</span>}
+        </TabButton>
+        {SOURCE_KINDS.map(k => (
+          <TabButton key={k} active={activeTab === k} onClick={() => onTabChange(k)}>
+            {SRC_LABEL[k]} <span className="tabular-nums opacity-70">{sector.items[k].length}</span>
+          </TabButton>
+        ))}
+      </div>
+
+      {activeTab === 'reason' ? (
+        <ReasonTab sector={sector} canScrap={canScrap} />
+      ) : (
+        <SourceList items={sector.items[activeTab]} canScrap={canScrap} />
+      )}
+    </div>
+  );
+}
+
+function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`-mb-px whitespace-nowrap border-b-2 px-2.5 py-1.5 text-[12px] font-semibold transition-colors ${
+        active ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-spark-muted hover:text-spark-ink'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+// 첫 번째 탭 — 배지가 왜 이렇게 붙었는지(집계 근거) + 포트폴리오 매치 목록.
+// 회사를 누르면 그 회사가 걸린 기사들이 펼쳐진다(어느 기사 때문에 걸렸는지 + 판정 과정).
+function ReasonTab({ sector, canScrap }: { sector: SectorBlock; canScrap: boolean }) {
+  const [openCo, setOpenCo] = useState<string | null>(null);
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <div className="rounded-lg bg-spark-subtle px-3 py-2.5 text-[13px] leading-relaxed text-spark-ink-soft">
+        <b className="text-spark-ink">{sector.badge.label}</b> · {sector.badge.why}
+      </div>
+
+      {sector.matches.length > 0 ? (
+        <div>
+          <div className="mb-1.5 flex flex-wrap items-baseline gap-x-1.5 text-[12px] text-spark-ink-soft">
+            <b className="font-bold">📎 포트폴리오 매칭 {sector.metrics.matchCount}건</b>
+            <span className="text-spark-muted">· {sector.matches.length}개사 · 회사를 누르면 연결된 기사가 열립니다</span>
+          </div>
+          <div className="flex max-h-80 flex-col gap-1.5 overflow-y-auto scroll-slim pr-1">
+            {sector.matches.map(m => {
+              const open = openCo === m.co;
+              return (
+                <div key={m.co} className={`rounded-lg border ${open ? 'border-emerald-300 bg-emerald-50/40' : 'border-spark-cream'}`}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenCo(open ? null : m.co)}
+                    aria-expanded={open}
+                    className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-spark-subtle/60"
+                  >
+                    <span className="text-[13px] font-bold text-spark-ink">{m.co}</span>
+                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-emerald-700">
+                      기사 {m.articles.length}
+                    </span>
+                    <span className={`ml-auto shrink-0 text-[11px] text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
+                  </button>
+
+                  {!open && (
+                    <p className="px-2.5 pb-2 text-[12px] leading-relaxed text-spark-ink-soft line-clamp-2">{m.desc}</p>
+                  )}
+
+                  {open && (
+                    <div className="border-t border-emerald-200/60 px-2.5 py-2">
+                      {/* 매칭 과정 — 실제 파이프라인에 들어간 입력과 모델을 그대로 적는다 */}
+                      <p className="mb-2 rounded bg-white/70 px-2 py-1.5 text-[11px] leading-relaxed text-spark-muted">
+                        <b className="text-spark-ink-soft">매칭 과정</b> · 기사 <b>제목</b>과 관련성 <b>판정 사유</b>를,
+                        포트폴리오사의 <b>사업 설명·섹터</b>와 비교해 영향이 있다고 본 것만 남깁니다
+                        (<span className="font-mono">{m.model}</span>).
+                      </p>
+
+                      <div className="flex flex-col gap-2">
+                        {m.articles.map(a => (
+                          <div key={`${a.id}-${a.reason.slice(0, 12)}`} className="rounded border border-spark-cream bg-white px-2 py-1.5">
+                            <div className="flex items-start gap-2">
+                              <a href={a.url} target="_blank" rel="noopener noreferrer" className="group min-w-0 flex-1">
+                                <div className="text-[12px] font-semibold leading-snug text-spark-ink group-hover:text-emerald-700">{a.title}</div>
+                                <div className="mt-0.5 text-[11px] text-spark-muted">
+                                  {a.media} · {a.date}
+                                  {a.eventKey && <> · {a.eventKey}</>}
+                                </div>
+                              </a>
+                              {canScrap && <InterScrapStar id={a.id} initial={a.isScrapped} />}
+                            </div>
+                            <p className="mt-1 border-t border-spark-cream pt-1 text-[11px] leading-relaxed text-spark-ink-soft">
+                              <b className="text-emerald-700">왜 {m.co}?</b> {a.reason}
+                            </p>
+                            <p className="mt-0.5 text-[11px] leading-relaxed text-spark-muted">
+                              <b>기사 분류</b> {a.verdictReason}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <p className="text-[13px] text-spark-muted/80">이 기간 이 주제와 연결된 포트폴리오사 매치가 없습니다.</p>
+      )}
+    </div>
+  );
+}
+
+// 기사·논문·오피니언 공통 목록. 같은 사건을 여러 매체가 각자 제목을 바꿔 보도한 경우
+// (보도자료 픽업 등) 한 줄로 묶는다. Inter 기사엔 회사명(matchedKeyword)이 없어
+// clusterArticles는 제목 유사도만으로 판단한다.
+//
+// ⚠ 일부 RSS 피드(예: BioCentury)는 개별 기사가 아니라 "Bio€quity Europe - BioCentury -
+// biocentury.com" 같은 행사·카테고리 리스팅 페이지를 통째로 하나의 항목으로 내보낸다.
+// 이런 제목은 "<제목> - <매체명> - <도메인>" 형태로 짧고 일반적이어서, 제목 유사도만
+// 보는 clusterArticles가 전혀 다른 기사 여러 건과 잘못 묶어버렸다(2026-08-05 실사례).
+// 그래서 이 패턴에 걸리는 항목은 클러스터링 후보에서 아예 빼고 항상 단독으로 둔다.
+function SourceList({ items, canScrap }: { items: SectorBlock['items'][SourceKind]; canScrap: boolean }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) => setExpanded(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
   const isFeedListingTitle = (title: string) => /\s-\s[a-z0-9][a-z0-9.-]*\.(com|org|net|io|co)\/?$/i.test(title.trim());
   const clusterablePool = items.filter(it => !isFeedListingTitle(it.titleOriginal));
   const singletonPool = items.filter(it => isFeedListingTitle(it.titleOriginal));
@@ -373,119 +550,58 @@ function SectorAccordion({
   const clusters = [...clusteredPart, ...singletonPart].sort(
     (a, b) => items.findIndex(x => x.id === a.rep.id) - items.findIndex(x => x.id === b.rep.id),
   );
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const toggleExpanded = (id: string) => setExpanded(prev => {
-    const next = new Set(prev);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
+
+  if (items.length === 0) {
+    return <p className="py-3 text-[13px] text-spark-muted/80">해당 탭에 항목이 없습니다.</p>;
+  }
+
   return (
-    <div id={sector.id} className="mb-2.5 scroll-mt-4">
-      <div
-        onClick={onToggle}
-        className={`flex cursor-pointer items-center gap-3 border border-spark-border bg-white px-4 py-3.5 transition-colors hover:bg-spark-subtle ${
-          open ? 'rounded-t-xl border-b-spark-cream' : 'rounded-xl'
-        }`}
-      >
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-spark-cream text-[16px]">{sector.icon}</div>
-        <div className="min-w-0">
-          <div className="text-[14px] font-bold text-spark-ink">{sector.name}</div>
-          <div className="text-[12px] text-spark-muted">{sector.sub}</div>
-        </div>
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          <span className="text-[12px] tabular-nums text-spark-muted">{sector.metrics.count}건</span>
-          <DeltaChip deltaPct={sector.metrics.deltaPct} count={sector.metrics.count} isFullYear={isFullYear} />
-          <span className={`rounded px-2 py-0.5 text-[11px] font-bold ${BADGE_CLS[sector.badge.kind]}`} title={sector.badge.why}>
-            {sector.badge.label}
-          </span>
-        </div>
-        <span className={`shrink-0 text-[12px] text-gray-300 transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
-      </div>
-
-      {open && (
-        <div className="rounded-b-xl border border-t-0 border-spark-border bg-white overflow-hidden">
-          <div className="border-b border-spark-cream bg-spark-subtle px-4 py-2 text-[12px] text-spark-ink-soft">
-            <b className="text-spark-ink">{sector.badge.label}</b> 판정 근거 · {sector.badge.why}
-          </div>
-
-          {sector.matches.length > 0 && (
-            <div className="flex flex-col gap-1.5 border-b border-spark-cream bg-spark-subtle px-4 py-2.5">
-              {sector.matches.map(m => (
-                <div key={`${m.co}-${m.desc}`} className="flex items-center gap-2.5 text-[13px]">
-                  <span className="w-28 shrink-0 font-bold text-spark-ink">📎 {m.co}</span>
-                  <span className="flex-1 text-spark-ink-soft">{m.desc}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="flex gap-0 border-b border-spark-cream px-4">
-            {SOURCE_KINDS.map(k => (
-              <button
-                key={k}
-                onClick={() => onTabChange(k)}
-                className={`border-b-2 px-3.5 py-2 text-[12px] font-semibold transition-colors ${
-                  activeTab === k ? 'border-spark-ink text-spark-ink' : 'border-transparent text-spark-muted hover:text-spark-ink-soft'
-                }`}
-              >
-                {SRC_LABEL[k]} {sector.items[k].length}
-              </button>
-            ))}
-          </div>
-
-          <div className="py-1">
-            {items.length === 0 ? (
-              <div className="py-4 text-center text-[13px] text-spark-muted">해당 탭에 항목이 없습니다</div>
-            ) : (
-              clusters.map(({ rep: it, others }) => {
-                const isOpen = expanded.has(it.id);
-                return (
-                  <div key={it.id} className="border-b border-spark-cream/60 px-4 py-2.5 last:border-0 hover:bg-spark-subtle">
-                    <div className="flex items-start gap-2.5">
-                      <a href={it.url} target="_blank" rel="noopener noreferrer" className="flex flex-1 items-start gap-2.5 min-w-0">
-                        <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[11px] font-bold ${SRC_BADGE_CLS[it.badge]}`}>{SRC_LABEL[it.badge]}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[13px] font-semibold leading-snug text-spark-ink">{it.title}</div>
-                          {it.titleOriginal !== it.title && (
-                            <div className="mt-0.5 text-[12px] leading-snug text-spark-muted">{it.titleOriginal}</div>
-                          )}
-                          <div className="mt-0.5 text-[12px] text-spark-muted">
-                            {it.media} · {it.date}{others.length > 0 && ` 외 ${others.length}개 매체`}
-                          </div>
-                        </div>
-                      </a>
-                      {canScrap && <InterScrapStar id={it.id} initial={it.isScrapped} />}
-                    </div>
-                    {others.length > 0 && (
-                      <div className="mt-1 pl-[38px]">
-                        <button
-                          type="button"
-                          onClick={() => toggleExpanded(it.id)}
-                          className="text-[11px] font-semibold text-emerald-700 hover:underline"
-                        >
-                          {isOpen ? '접기 ▲' : `같은 소식을 다룬 다른 매체 +${others.length}건 보기 ▼`}
-                        </button>
-                        {isOpen && (
-                          <div className="mt-1 space-y-1 border-l-2 border-spark-border pl-2">
-                            {others.map(o => (
-                              <div key={o.id} className="flex items-center gap-2">
-                                <a href={o.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 truncate text-[12px] text-spark-ink-soft hover:text-spark-purple">
-                                  {o.title} <span className="text-spark-muted">— {o.media} · {o.date}</span>
-                                </a>
-                                {canScrap && <InterScrapStar id={o.id} initial={o.isScrapped} />}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
+    <div className="flex max-h-96 flex-col overflow-y-auto scroll-slim pr-1">
+      {clusters.map(({ rep: it, others }) => {
+        const isOpen = expanded.has(it.id);
+        return (
+          <div key={it.id} className="border-b border-spark-cream/60 py-2 last:border-0">
+            <div className="flex items-start gap-2">
+              <a href={it.url} target="_blank" rel="noopener noreferrer" className="group flex flex-1 items-start gap-2 min-w-0">
+                <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[11px] font-bold ${SRC_BADGE_CLS[it.badge]}`}>{SRC_LABEL[it.badge]}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-semibold leading-snug text-spark-ink group-hover:text-emerald-700">{it.title}</div>
+                  {it.titleOriginal !== it.title && (
+                    <div className="mt-0.5 text-[12px] leading-snug text-spark-muted line-clamp-2">{it.titleOriginal}</div>
+                  )}
+                  <div className="mt-0.5 text-[12px] text-spark-muted">
+                    {it.media} · {it.date}{others.length > 0 && ` 외 ${others.length}개 매체`}
                   </div>
-                );
-              })
+                </div>
+              </a>
+              {canScrap && <InterScrapStar id={it.id} initial={it.isScrapped} />}
+            </div>
+            {others.length > 0 && (
+              <div className="mt-1 pl-[34px]">
+                <button
+                  type="button"
+                  onClick={() => toggleExpanded(it.id)}
+                  className="text-[11px] font-semibold text-emerald-700 hover:underline"
+                >
+                  {isOpen ? '접기 ▲' : `같은 소식을 다룬 다른 매체 +${others.length}건 보기 ▼`}
+                </button>
+                {isOpen && (
+                  <div className="mt-1 space-y-1 border-l-2 border-spark-border pl-2">
+                    {others.map(o => (
+                      <div key={o.id} className="flex items-center gap-2">
+                        <a href={o.url} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 truncate text-[12px] text-spark-ink-soft hover:text-emerald-700">
+                          {o.title} <span className="text-spark-muted">— {o.media} · {o.date}</span>
+                        </a>
+                        {canScrap && <InterScrapStar id={o.id} initial={o.isScrapped} />}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
-        </div>
-      )}
+        );
+      })}
     </div>
   );
 }
