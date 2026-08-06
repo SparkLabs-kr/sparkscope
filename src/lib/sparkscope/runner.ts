@@ -149,7 +149,9 @@ export async function runDailyDigest(opts: RunOptions = {}) {
             console.log(`[runner] Inter portfolio matched: ${matchResult.matched}건, ${matchResult.failed.length}개 오류`);
           }
         }
-        await computeAndStoreInterSummaries();
+        // 요약 사전계산은 여기서 하지 않는다 — 아래 4.55에서 한 번만 돈다.
+        // (예전엔 양쪽에서 다 호출해서 2도메인 × 5기간 = 10회 LLM 호출이 매일 통째로
+        //  중복됐다. 두 번째 호출이 첫 번째 결과를 upsert로 덮어쓰기만 하고 끝났음.)
       } catch (e: any) {
         console.error('[runner] Inter collection/filtering failed:', e?.message ?? e);
         // Inter 실패는 포트폴리오 다이제스트에 영향 안 줌
