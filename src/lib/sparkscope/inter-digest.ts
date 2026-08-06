@@ -249,10 +249,14 @@ export function renderInterStat(b: InterDigestBlock): string {
       </div>`;
 }
 
-/** TOP3 바로 아래 요약 띠. */
+/**
+ * 포트폴리오 하이라이트 바로 아래 요약 띠.
+ * 국내 다이제스트의 다른 섹션 제목(.section-label)은 전부 11px 소문자 kicker인데, 이 띠는
+ * 카드가 아니라 배경색만 있는 콜아웃이라 같은 크기로 두면 옆 섹션들 사이에서 묻힌다.
+ * "여기부터는 Inter 탭 내용"이라는 걸 색(초록 펄)뿐 아니라 크기로도 확실히 갈라준다.
+ */
 export function renderInterStrip(b: InterDigestBlock): string {
   if (b.combos.length === 0) return '';
-  const title = '🔭 해외 트렌드 주요 Topic';
 
   const rows = b.combos.map((c, i) => `
     <div class="i-rank">
@@ -269,7 +273,10 @@ export function renderInterStrip(b: InterDigestBlock): string {
 
   return `
   <div class="inter-strip">
-    <div class="i-strip-label">${title}</div>
+    <div class="i-strip-head">
+      <span class="i-strip-pill">🔭 INTER</span>
+      <span class="i-strip-title">해외 트렌드 주요 Topic</span>
+    </div>
     ${rows}
     <div class="i-strip-foot">${foot}</div>
   </div>`;
@@ -315,8 +322,10 @@ export const INTER_EMAIL_CSS = `
 .stat.inter .i-big{font-size:20px;font-weight:800;color:#064E3B;line-height:1.15;margin-top:2px}
 .stat.inter .i-big span{font-size:12px;font-weight:700}
 .stat.inter .i-detail{font-size:10px;color:#6B7280;margin-top:3px;line-height:1.45}
-.inter-strip{padding:18px 28px;background:#ECFDF5;border-bottom:1px solid #A7F3D0}
-.i-strip-label{font-size:11px;font-weight:700;letter-spacing:1.2px;color:#047857;text-transform:uppercase;margin-bottom:9px}
+.inter-strip{padding:18px 28px;background:#ECFDF5;border-top:1px solid #A7F3D0;border-bottom:1px solid #A7F3D0}
+.i-strip-head{display:flex;align-items:center;gap:9px;margin-bottom:13px}
+.i-strip-pill{display:inline-block;flex-shrink:0;background:#059669;color:#FFF;font-size:10.5px;font-weight:800;letter-spacing:.8px;padding:4px 10px;border-radius:20px}
+.i-strip-title{font-size:16px;font-weight:800;color:#064E3B;line-height:1.3}
 .i-rank{padding:4px 0;font-size:13px;color:#065F46;line-height:1.5}
 .i-no{display:inline-block;width:14px;font-weight:800;color:#A7F3D0}
 .i-combo{font-weight:800;color:#064E3B}
