@@ -14,7 +14,9 @@ const BIO_TOPIC_KEYS = BIO_TOPIC_SECTORS.map(s => s.key).join(', ');
 const AI_TOPIC_KEYS = AI_TOPIC_SECTORS.map(s => s.key).join(', ');
 const EVENT_TYPE_KEYS = INTER_EVENT_TYPES.map(e => `${e.key}(${e.sub})`).join(', ');
 
-const SYSTEM = `당신은 스파크랩 인터(해외 트렌드) 탭의 AI/바이오 도메인 뉴스 분류기입니다.
+// SYSTEM·buildUserPrompt는 검증 스크립트가 "실제로 쓰이는 프롬프트 그대로"를 돌려볼 수 있도록 export한다.
+// (복붙본으로 테스트하면 프롬프트를 고쳤을 때 테스트만 옛 문구를 검증하는 일이 생김)
+export const SYSTEM = `당신은 스파크랩 인터(해외 트렌드) 탭의 AI/바이오 도메인 뉴스 분류기입니다.
 수집된 해외 기사 제목이 "글로벌 AI 업계 트렌드" 또는 "글로벌 바이오 업계 트렌드"와 실제로 관련 있는지 판단하고,
 관련 있다면 도메인(ai/bio)·주제·사건 유형을 분류하고, 트렌드가 주로 일어나는 국가를 판별하고, 제목을 한국어로 번역합니다.
 
@@ -51,7 +53,7 @@ const SYSTEM = `당신은 스파크랩 인터(해외 트렌드) 탭의 AI/바이
 기사가 두 도메인 모두에 걸치면 더 핵심적인 쪽 하나만 고릅니다.
 응답은 반드시 valid JSON 배열만.`;
 
-function buildUserPrompt(batch: Array<{ id: string; source: string; title: string }>): string {
+export function buildUserPrompt(batch: Array<{ id: string; source: string; title: string }>): string {
   return `다음 ${batch.length}개 기사 제목을 판단하세요.
 
 ${batch.map((a, i) => `${i + 1}. [${a.source}] ${a.title}`).join('\n')}

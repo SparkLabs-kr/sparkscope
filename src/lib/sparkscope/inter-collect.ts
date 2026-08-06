@@ -47,7 +47,9 @@ export const FEEDS: Record<string, string> = {
   'SCMP Tech': 'https://www.scmp.com/rss/36/feed',                                 // 중국(홍콩) / 영어
   'Wamda': 'https://www.wamda.com/feed',                                           // 사우디·MENA / 영어
   'Japan Today': 'https://japantoday.com/feed',                                    // 일본 / 영어
-  'ITmedia': 'https://rss.itmedia.co.jp/rss/2.0/itmedia_all.xml',                  // 일본 / 일본어 — 루트 경로는 302라 이 파일 경로로 직접 접근해야 함
+  // 일본 / 일본어 — 종합 피드(itmedia_all)는 ITmedia Mobile 쿠폰·소비재 기사가 섞여서 피드당 6칸 중 4칸을
+  // noise로 날렸다(2026-08-06 드라이런에서 확인). AI 전문 채널(AI+)로 좁힘. 루트 경로는 302라 파일 경로로 직접 접근.
+  'ITmedia AI+': 'https://rss.itmedia.co.jp/rss/2.0/aiplus.xml',
   'Impress Watch': 'https://www.watch.impress.co.jp/data/rss/1.0/ipw/feed.rdf',    // 일본 / 일본어 — RSS 1.0(RDF) 포맷
   'AnswersNews': 'https://answers.and-pro.jp/pharmanews/feed/',                    // 일본 / 일본어 — 제약·바이오 전문
   // 아래 3곳은 검증했지만 팀 정책 판단으로 제외(2026-08-06):
