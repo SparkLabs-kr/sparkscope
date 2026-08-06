@@ -16,6 +16,7 @@ interface Article {
   importance: string | null;
   tone: string | null;
   pitchScore: number | null;
+  priorityScore: number;
   isScrapped?: boolean;
   isBookmarked?: boolean;
   isNoise?: boolean;
@@ -77,10 +78,12 @@ export function ArticleListView({ articles, canScrap = false, canBookmark = fals
     if (cat) {
       list = list.filter(a => a.category === cat);
     } else {
-      // 전체보기(미필터)는 예전처럼 상위 120건만 — articles가 이미 카테고리별
-      // priorityScore 순으로 이어붙여져 있어(스파크랩→포트폴리오→AC·VC→스타트업계),
-      // 앞에서부터 자르면 자연히 스파크랩·포트폴리오 위주로 채워진다.
-      list = list.slice(0, 120);
+      // 전체보기(미필터)는 원래 방식대로 — 카테고리 구분 없이 priorityScore 기준
+      // 상위 120건만. articles는 카테고리별로 나눠 가져온 배열이 이어붙은 상태라
+      // 그대로 자르면 카테고리 경계로 뚝 잘리므로, 여기서 다시 점수순으로 합쳐서 자른다.
+      list = [...articles]
+        .sort((a, b) => (b.priorityScore - a.priorityScore) || (+new Date(b.pubDate) - +new Date(a.pubDate)))
+        .slice(0, 120);
     }
     if (showSearch && q.trim()) {
       const s = q.trim().toLowerCase();
