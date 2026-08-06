@@ -129,10 +129,10 @@ export function hasCrisisKeyword(title: string): string | null {
 export function countNegativeSignals(text: string): number {
   let count = 0;
   for (const { keyword } of NEGATIVE_KEYWORDS_DATA) {
-    if (text.includes(keyword)) count++;
+    if (matchesAsToken(text, keyword)) count++;
   }
   for (const { keyword } of CRISIS_KEYWORDS_DATA) {
-    if (text.includes(keyword)) count++;
+    if (matchesAsToken(text, keyword)) count++;
   }
   return count;
 }
