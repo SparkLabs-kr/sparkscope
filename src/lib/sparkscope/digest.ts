@@ -70,29 +70,40 @@ export function buildDigestData(
 
   // TOP3는 연관성 우선순위: 스파크랩 > 포트폴리오 > 업계동향
   // 본부 스크랩이 있으면 최우선, 없으면 카테고리와 priorityScore로 정렬
-  const top3 = [...sorted]
-    .sort((a, b) => {
-      // [1] 본부 스크랩 우선
-      const sa = scrappedLinks?.has(a.link) ? 1 : 0;
-      const sb = scrappedLinks?.has(b.link) ? 1 : 0;
-      if (sa !== sb) return sb - sa;
+  const rankedForTop3 = [...sorted].sort((a, b) => {
+    // [1] 본부 스크랩 우선
+    const sa = scrappedLinks?.has(a.link) ? 1 : 0;
+    const sb = scrappedLinks?.has(b.link) ? 1 : 0;
+    if (sa !== sb) return sb - sa;
 
-      // [2] 카테고리 우선순위 (스파크랩 > 포트폴리오 > 경쟁사 > 업계동향)
-      const catPriority: Record<string, number> = {
-        'sparklabs_self': 4,
-        'portfolio_company': 3,
-        'competitor': 2,
-        'industry_trend': 1,
-        'unrelated': 0,
-      };
-      const aPri = catPriority[a.category] ?? 0;
-      const bPri = catPriority[b.category] ?? 0;
-      if (aPri !== bPri) return bPri - aPri;
+    // [2] 카테고리 우선순위 (스파크랩 > 포트폴리오 > 경쟁사 > 업계동향)
+    const catPriority: Record<string, number> = {
+      'sparklabs_self': 4,
+      'portfolio_company': 3,
+      'competitor': 2,
+      'industry_trend': 1,
+      'unrelated': 0,
+    };
+    const aPri = catPriority[a.category] ?? 0;
+    const bPri = catPriority[b.category] ?? 0;
+    if (aPri !== bPri) return bPri - aPri;
 
-      // [3] 같은 카테고리면 priorityScore
-      return b.priorityScore - a.priorityScore;
-    })
-    .slice(0, TOP_3_LIMIT);
+    // [3] 같은 카테고리면 priorityScore
+    return b.priorityScore - a.priorityScore;
+  });
+  // 회사(matchedKeyword)당 TOP3엔 최대 1건만 — 클러스터링이 "같은 사건"으로 못 묶은(문구가
+  // 많이 다른) 같은 회사의 서로 다른 기사 2건이 TOP3를 나눠 차지하던 문제 수정(2026-08-06,
+  // 엣지크로스 기사 2건이 2·3위를 같이 차지한 사례로 발견). 업계동향(industry_trend)은
+  // matchedKeyword가 여러 회사가 공유하는 범용 주제어라 이 제한에서 제외한다.
+  const top3: AnalyzedArticle[] = [];
+  const usedCompanies = new Set<string>();
+  for (const a of rankedForTop3) {
+    if (top3.length >= TOP_3_LIMIT) break;
+    const isCompanyScoped = a.category !== 'industry_trend';
+    if (isCompanyScoped && usedCompanies.has(a.matchedKeyword)) continue;
+    top3.push(a);
+    if (isCompanyScoped) usedCompanies.add(a.matchedKeyword);
+  }
 
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
   const dateLabel = formatDateKR(now);
