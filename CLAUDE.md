@@ -18,6 +18,23 @@
 - ❌ force push 절대 금지
 - ❌ main에서 직접 작업 금지 (반드시 자신의 브랜치에서 PR로)
 
+### 원격 저장소 — main은 두 곳에 동시 푸시
+
+이 저장소는 `Sparklabs-AI-Org/SparkScope`(현재 운영 저장소)로 이전했지만, 이전 저장소
+`SparkLabs-kr/sparkscope`를 아직 지우지 않아서 당분간 **둘 다 유지**한다.
+
+- ✅ **"main에 푸시"라고 하면 두 원격 모두에 푸시한다**: `old`(SparkLabs-kr/sparkscope)와
+  `origin`(Sparklabs-AI-Org/SparkScope). `git push old main && git push origin main` 순서로, 반드시
+  **둘 다 fast-forward로만** 진행한다(`--force` 금지).
+- ✅ push 전에 두 원격의 main이 서로 갈라져 있는지(diverge) 반드시 확인한다
+  (`git fetch old && git log --oneline origin/main..old/main` 등). 갈라져 있으면 그대로 밀지 말고
+  먼저 merge해서 양쪽 커밋을 모두 보존한 뒤에 두 원격에 반영한다.
+  > 2026-08-06, old 저장소 main에 origin에는 없던 커밋 8개(포트폴리오 TOP15 증감%, 경쟁사 카드
+  > 클러스터링/드롭다운, 다이제스트 TOP3 수정 등)가 별도로 쌓여 있던 걸 발견 — 이전 이후에도 old
+  > 쪽에 직접 작업이 계속됐던 것으로 보임. fast-forward merge로 양쪽 다 보존해서 합침.
+- ✅ **`old`(SparkLabs-kr)를 먼저 확실히 반영한다** — 혹시 두 곳에 동시 푸시가 어려운 상황이면
+  old를 우선한다.
+
 ### 브랜치 네이밍
 - 개인 작업: `이수브랜치` (담당자가 이수일 때)
 - 협업 기능: `feature/기능명` 또는 `fix/버그명`
