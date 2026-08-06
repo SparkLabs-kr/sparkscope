@@ -135,7 +135,15 @@ async function loadDashboardData(from: string, to: string, company: string | und
     prisma.article.count({ where: { ...portfolioWhere, title: { contains: '스파크랩' } } }),
     prisma.article.count({ where: prevPortfolioWhere }),
     prisma.article.count({ where: { ...prevPortfolioWhere, title: { contains: '스파크랩' } } }),
-    prisma.article.findMany({ where, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], take: 400 }),
+    // "최근 수집 기사" 탭용 — 카테고리 통합 후 priorityScore로 자르면 sparklabs_self(100)·
+    // portfolio_company(70)가 competitor(50)·industry_trend(40)를 밀어내 AC·VC/스타트업계
+    // 필터를 눌러도 몇 건 안 보이는 문제가 있었음(industry_trend은 전체 기사의 대다수를 차지하는데도
+    // 우선순위가 낮아 상위 400건 풀에서부터 밀려남). 카테고리별로 따로 뽑아 합쳐 각 필터가
+    // 최소한의 건수를 보장받게 한다. AC·VC·스타트업계는 노이즈성 기사가 상대적으로 많아
+    // priorityScore 상위 50건으로 더 좁게(=중요하다고 판단된 것만) 제한.
+    Promise.all(Object.entries({ sparklabs_self: 150, portfolio_company: 150, competitor: 50, industry_trend: 50 }).map(([category, take]) =>
+      prisma.article.findMany({ where: { ...where, category }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], take }),
+    )).then(arr => arr.flat()),
     // 톤 분석 — 스파크랩 기준
     prisma.article.groupBy({ by: ['tone'], where: sparklabsWhere, _count: { _all: true } }),
     prisma.article.findMany({ where: { ...where, pitchScore: { gte: 60 } }, orderBy: { pitchScore: 'desc' }, take: 20 }),
@@ -343,8 +351,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
       if (tk) dedupeSeen.add(tk);
       dedupeSeen.add(lk);
       return true;
-    })
-    .slice(0, 120);
+    });
 
   const mentionRate = portfolioCount > 0 ? Math.round((mentionCount / portfolioCount) * 100) : 0;
   const prevMentionRate = prevPortfolioCount > 0 ? Math.round((prevMentionCount / prevPortfolioCount) * 100) : 0;
