@@ -616,11 +616,13 @@ export function buildMatrix(domain: InterDomain, data: InterData): InterMatrix {
   const allCells = rows.flatMap(r => r.cells);
   const filled = allCells.filter(c => c.count > 0);
 
-  // 가장 뜨거운 칸 — 증감률로 고르되 (1) 최소 3건, (2) 직전 기간에 비교할 값이 있어야 한다.
+  // 가장 뜨거운 칸 — 증감률로 고르되 (1) 최소 3건, (2) 직전 기간도 최소 3건이어야 한다.
   // 직전 0건을 "무한대 증가"로 치면, 수집 백필이 기간마다 고르지 않을 때 아무 의미 없는
-  // 1~2건 칸이 1위를 차지한다. 비교 가능한 칸이 하나도 없으면 그냥 건수 1위로 대체한다.
+  // 1~2건 칸이 1위를 차지한다. 직전 1건 같은 너무 작은 표본도 마찬가지로 1건→5건이
+  // "▲400%"로 과장되게 보이므로 직전 기간에도 같은 하한선을 건다.
+  // 비교 가능한 칸이 하나도 없으면 그냥 건수 1위로 대체한다.
   const MIN_HOT = 3;
-  const comparable = filled.filter(c => c.count >= MIN_HOT && c.prevCount > 0 && c.deltaPct !== null);
+  const comparable = filled.filter(c => c.count >= MIN_HOT && c.prevCount >= MIN_HOT && c.deltaPct !== null);
   const hottestCell = comparable.length > 0
     ? comparable.slice().sort((a, b) => (b.deltaPct ?? 0) - (a.deltaPct ?? 0) || b.count - a.count)[0]
     : filled.slice().sort((a, b) => b.count - a.count)[0];

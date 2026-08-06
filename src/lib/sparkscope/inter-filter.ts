@@ -14,7 +14,9 @@ const BIO_TOPIC_KEYS = BIO_TOPIC_SECTORS.map(s => s.key).join(', ');
 const AI_TOPIC_KEYS = AI_TOPIC_SECTORS.map(s => s.key).join(', ');
 const EVENT_TYPE_KEYS = INTER_EVENT_TYPES.map(e => `${e.key}(${e.sub})`).join(', ');
 
-const SYSTEM = `당신은 스파크랩 인터(해외 트렌드) 탭의 AI/바이오 도메인 뉴스 분류기입니다.
+// SYSTEM·buildUserPrompt는 검증 스크립트가 "실제로 쓰이는 프롬프트 그대로"를 돌려볼 수 있도록 export한다.
+// (복붙본으로 테스트하면 프롬프트를 고쳤을 때 테스트만 옛 문구를 검증하는 일이 생김)
+export const SYSTEM = `당신은 스파크랩 인터(해외 트렌드) 탭의 AI/바이오 도메인 뉴스 분류기입니다.
 수집된 해외 기사 제목이 "글로벌 AI 업계 트렌드" 또는 "글로벌 바이오 업계 트렌드"와 실제로 관련 있는지 판단하고,
 관련 있다면 도메인(ai/bio)·주제·사건 유형을 분류하고, 트렌드가 주로 일어나는 국가를 판별하고, 제목을 한국어로 번역합니다.
 
@@ -42,11 +44,16 @@ const SYSTEM = `당신은 스파크랩 인터(해외 트렌드) 탭의 AI/바이
 (예: 미국 매체가 중국 스타트업을 다룬 기사면 "cn"). 특정 국가로 좁히기 어렵거나 여러 국가에 걸친 일반 기사는 "other".
 값은 "us"(미국) | "cn"(중국) | "jp"(일본) | "sa"(사우디) | "other" 중 하나.
 
+■ 원문 언어: 기사 제목은 영어뿐 아니라 일본어·중국어 등으로도 들어옵니다(ITmedia·Impress Watch·AnswersNews는 일본어 매체).
+원문이 어떤 언어든 판단 기준은 위와 동일하며, titleKo에는 반드시 자연스러운 한국어 번역을 넣습니다.
+원문을 그대로 복사하거나 영어로 옮기지 마세요. 일본어 기사의 경우 한자어를 한국식 표기로 옮기되(例: 創薬 → 신약발굴),
+회사명·제품명은 통용되는 표기를 씁니다.
+
 쿠폰·할인코드, 무관한 소송·노동 분쟁, AI/바이오와 무관한 일반 소비자 리뷰, 지정학/일반 정치 뉴스는 관련 없음(noise)입니다.
 기사가 두 도메인 모두에 걸치면 더 핵심적인 쪽 하나만 고릅니다.
 응답은 반드시 valid JSON 배열만.`;
 
-function buildUserPrompt(batch: Array<{ id: string; source: string; title: string }>): string {
+export function buildUserPrompt(batch: Array<{ id: string; source: string; title: string }>): string {
   return `다음 ${batch.length}개 기사 제목을 판단하세요.
 
 ${batch.map((a, i) => `${i + 1}. [${a.source}] ${a.title}`).join('\n')}
