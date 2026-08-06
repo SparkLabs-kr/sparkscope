@@ -21,6 +21,7 @@ export interface ClusterableArticle {
   matchedKeyword?: string;
   pubDate?: Date | string;
   tone?: string | null;
+  category?: string | null;
 }
 
 export interface ArticleCluster<T> {
@@ -149,7 +150,22 @@ function isMatch<T extends ClusterableArticle>(a: T, b: T, maxDateDiffDays: numb
   return titleMatchScore(a.title, b.title, a.matchedKeyword) >= textOnlyThreshold;
 }
 
-// 대표는 그룹 내 가장 간결한(짧은) 제목 — 부제가 덕지덕지 붙은 제목보다 핵심만 담겨 있어 대표로 적합.
+// 대표 선정: category가 있으면 우선순위 높은 쪽(스파크랩·포트폴리오 > 경쟁사 > 업계동향)을
+// 먼저 대표로 삼는다 — 같은 사건이 여러 카테고리로 갈려 수집됐을 때, 겹치는 것 자체는 없애되
+// "무슨 얘기인지"는 더 정확한 분류(제목에 포폴사·스파크랩이 언급됐으면 그쪽)로 대표되게 하기
+// 위함(2026-08-06, 스카이랩스 상장 기사가 포트폴리오·업계동향 두 카테고리로 수집돼 하나로
+// 합쳐졌는데 대표가 덜 정확한 업계동향 쪽으로 뽑히던 사례로 발견). category 정보가 없는
+// 호출부(대시보드 미리보기 등)는 이 우선순위가 전부 0이라 기존처럼 제목 길이로만 판단한다.
+const CATEGORY_REP_PRIORITY: Record<string, number> = {
+  sparklabs_self: 4,
+  portfolio_company: 4,
+  competitor: 2,
+  industry_trend: 1,
+};
+function repPriority(category?: string | null): number {
+  return CATEGORY_REP_PRIORITY[category ?? ''] ?? 0;
+}
+
 export function clusterArticles<T extends ClusterableArticle>(
   list: T[],
   opts?: { maxDateDiffDays?: number; textOnlyThreshold?: number },
@@ -170,7 +186,11 @@ export function clusterArticles<T extends ClusterableArticle>(
       }
     }
     if (bestCluster) {
-      if (article.title.length < bestCluster.rep.title.length) {
+      const artPri = repPriority(article.category);
+      const repPri = repPriority(bestCluster.rep.category);
+      // 카테고리 우선순위가 더 높으면 무조건 교체, 같으면 기존처럼 더 간결한(짧은) 제목을 대표로.
+      const shouldReplace = artPri > repPri || (artPri === repPri && article.title.length < bestCluster.rep.title.length);
+      if (shouldReplace) {
         bestCluster.others.push(bestCluster.rep);
         bestCluster.rep = article;
       } else {

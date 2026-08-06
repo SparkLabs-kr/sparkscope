@@ -12,7 +12,7 @@ import { analyzeArticles, generateEditorIntro, pickVerifiedTop3 } from './analyz
 import { computeAndStoreDashboardInsights } from './dashboard-insights';
 import { checkConfigDrift, formatDriftReport } from './config-drift';
 import { buildDigestData, renderDigestHtml, buildClusteredPool, rankTop3Pool } from './digest';
-import { buildDigestKeyMap, passesDigestGuard } from './review';
+import { buildDigestKeyMap, buildDigestContextMap, passesDigestGuard } from './review';
 import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } from './mailer';
 import { collectInterNews } from './inter-collect';
 import { filterInterNewsWithGemini } from './inter-filter';
@@ -305,10 +305,11 @@ export async function runDailyDigest(opts: RunOptions = {}) {
     // 2026-08-06).
     const guardTargets = await prisma.monitoringTarget.findMany({
       where: { category: { in: ['portfolio_company', 'sparklabs_self'] }, status: 'ACTIVE' },
-      select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true },
+      select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true, contextWords: true },
     });
     const guardKeyMap = buildDigestKeyMap(guardTargets);
-    const digestReady = analyzed.filter(a => passesDigestGuard(a, guardKeyMap));
+    const guardContextMap = buildDigestContextMap(guardTargets);
+    const digestReady = analyzed.filter(a => passesDigestGuard(a, guardKeyMap, guardContextMap));
     console.log(`[runner] digest guard: ${analyzed.length} -> ${digestReady.length} (노이즈/관련성 재검증 후)`);
 
     // 5. 편집자 인사 + TOP3 후보 AI 최종 검증 — TOP3는 발송 메일에서 가장 눈에 띄는 자리라,
