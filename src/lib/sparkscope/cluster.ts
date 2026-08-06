@@ -128,7 +128,18 @@ function isMatch<T extends ClusterableArticle>(a: T, b: T, maxDateDiffDays: numb
   // 기준을 없애는 게 아니라 추가 신호로만 보강.
   if (hasCompanyInfo) {
     if (!toneCompatible(a, b)) return false;
-    return sameCompany(a, b) || titleMatchScore(a.title, b.title) >= 1;
+    if (sameCompany(a, b)) {
+      // 회사명(matchedKeyword)이 같아도 곧 같은 사건이라는 뜻은 아니다 — "AWS"처럼 여러 무관한
+      // 기사에 흔히 언급되는 이름(클라우드 시장 뉴스든 날씨관측장비 기사든 다 "AWS"를 포함)을
+      // 추적 키워드로 쓰면, 회사명 일치만으로 판단 시 전혀 다른 기사 수십 건이 한 클러스터로
+      // 잘못 묶인다(2026-08-06, "AWS" 키워드 경쟁사 기사 60건이 폭염·주가·제휴 등 서로 무관한
+      // 기사끼리 전부 하나로 합쳐진 사고로 발견). titleMatchScore > 0만으로는 부족하다 — 완전히
+      // 무관한 한국어 문장 두 개도 조사·흔한 음절이 우연히 겹쳐 bigram 유사도가 항상 살짝은
+      // 0보다 크게 나온다(실측: 무관한 쌍 0.22~0.26, 진짜 같은 사건 1.0~1.6). 0.5를 최소
+      // 기준으로 둬서 우연한 겹침과 실제 내용 겹침을 구분한다.
+      return titleMatchScore(a.title, b.title, a.matchedKeyword) >= 0.5;
+    }
+    return titleMatchScore(a.title, b.title) >= 1;
   }
   // 회사 정보가 없으면(톤 분석 등, 이미 단일 주제) 제목 유사도만으로 판단 — 기존 동작 유지.
   return titleMatchScore(a.title, b.title, a.matchedKeyword) >= 1;
