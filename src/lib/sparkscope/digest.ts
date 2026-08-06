@@ -51,28 +51,32 @@ export function buildClusteredPool(articles: AnalyzedArticle[]): AnalyzedArticle
 
 // TOP3 후보를 우선순위(본부 스크랩 > 카테고리 > priorityScore)로 정렬하고 회사당 1건으로 제한한
 // 풀 — 슬라이스 전 전체 순위. runner.ts가 AI 검증 후 대체 후보를 고를 때도 이 풀을 그대로 쓴다.
+// TOP3는 "우리 얘기"(스파크랩·포트폴리오)만 다룬다 — 경쟁사·업계동향은 아래 별도 섹션에 이미
+// 있어서, TOP3까지 차지하면 가장 눈에 띄는 자리가 우리와 무관한 뉴스로 채워지는 문제가 있었다
+// (2026-08-06, 소윤 피드백).
+const TOP_3_CATEGORIES = new Set(['sparklabs_self', 'portfolio_company']);
+
 export function rankTop3Pool(sorted: AnalyzedArticle[], scrappedLinks?: Set<string>): AnalyzedArticle[] {
-  const rankedForTop3 = [...sorted].sort((a, b) => {
-    // [1] 본부 스크랩 우선
-    const sa = scrappedLinks?.has(a.link) ? 1 : 0;
-    const sb = scrappedLinks?.has(b.link) ? 1 : 0;
-    if (sa !== sb) return sb - sa;
+  const rankedForTop3 = sorted
+    .filter(a => TOP_3_CATEGORIES.has(a.category))
+    .sort((a, b) => {
+      // [1] 본부 스크랩 우선
+      const sa = scrappedLinks?.has(a.link) ? 1 : 0;
+      const sb = scrappedLinks?.has(b.link) ? 1 : 0;
+      if (sa !== sb) return sb - sa;
 
-    // [2] 카테고리 우선순위 (스파크랩 > 포트폴리오 > 경쟁사 > 업계동향)
-    const catPriority: Record<string, number> = {
-      'sparklabs_self': 4,
-      'portfolio_company': 3,
-      'competitor': 2,
-      'industry_trend': 1,
-      'unrelated': 0,
-    };
-    const aPri = catPriority[a.category] ?? 0;
-    const bPri = catPriority[b.category] ?? 0;
-    if (aPri !== bPri) return bPri - aPri;
+      // [2] 카테고리 우선순위 (스파크랩 > 포트폴리오)
+      const catPriority: Record<string, number> = {
+        'sparklabs_self': 4,
+        'portfolio_company': 3,
+      };
+      const aPri = catPriority[a.category] ?? 0;
+      const bPri = catPriority[b.category] ?? 0;
+      if (aPri !== bPri) return bPri - aPri;
 
-    // [3] 같은 카테고리면 priorityScore
-    return b.priorityScore - a.priorityScore;
-  });
+      // [3] 같은 카테고리면 priorityScore
+      return b.priorityScore - a.priorityScore;
+    });
   // 회사(matchedKeyword)당 TOP3엔 최대 1건만 — 클러스터링이 "같은 사건"으로 못 묶은(문구가
   // 많이 다른) 같은 회사의 서로 다른 기사 2건이 TOP3를 나눠 차지하던 문제 수정(2026-08-06,
   // 엣지크로스 기사 2건이 2·3위를 같이 차지한 사례로 발견). 업계동향(industry_trend)은
@@ -208,8 +212,6 @@ ${INTER_EMAIL_CSS}
     </div>
   </div>
 
-  ${data.inter ? renderInterStrip(data.inter) : ''}
-
   ${data.weeklyFlow ? `
   <div class="weekly-flow">
     <div class="weekly-label">📈 지난 주 흐름 (월요일 추가 섹션)</div>
@@ -220,6 +222,8 @@ ${INTER_EMAIL_CSS}
     <div class="section-label">⭐ 오늘의 핵심 — TOP 3</div>
     ${data.top3.map((a, i) => renderTopCard(a, i + 1)).join('\n')}
   </div>
+
+  ${data.inter ? renderInterStrip(data.inter) : ''}
 
   ${data.inter ? renderInterSection(data.inter, baseUrl ?? DEFAULT_BASE_URL) : ''}
 

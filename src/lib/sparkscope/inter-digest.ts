@@ -249,12 +249,10 @@ export function renderInterStat(b: InterDigestBlock): string {
       </div>`;
 }
 
-/** 헤더 바로 아래 요약 띠. */
+/** TOP3 바로 아래 요약 띠. */
 export function renderInterStrip(b: InterDigestBlock): string {
   if (b.combos.length === 0) return '';
-  const title = b.hasSurge
-    ? '🔭 이번 주 해외에서 급증한 조합'
-    : '🔭 이번 주 해외에서 가장 많이 다뤄진 조합';
+  const title = '🔭 해외 트렌드 주요 Topic';
 
   const rows = b.combos.map((c, i) => `
     <div class="i-rank">
