@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { canScrap } from '@/lib/scrap';
+import { suggestNoiseFilterFix } from '@/lib/sparkscope/noise-suggestion';
 
 export const runtime = 'nodejs';
 
@@ -23,5 +24,10 @@ export async function POST(req: Request) {
     where: { id: b.articleId },
     data: { isNoise: next, noiseReason: next ? 'manual_report' : null },
   });
+
+  // 새로 신고된 경우(취소가 아닌 경우)에만 재발방지 제안 생성 — 응답은 기다리지 않게 하지 않고
+  // 바로 await한다(실패해도 throw 안 함, 신고 자체는 이미 위에서 끝난 동작이라 안전).
+  if (next) await suggestNoiseFilterFix(b.articleId);
+
   return NextResponse.json({ isNoise: next });
 }

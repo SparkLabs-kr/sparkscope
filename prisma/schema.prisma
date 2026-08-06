@@ -119,6 +119,25 @@ model Bookmark {
   @@index([userId])
 }
 
+// 노이즈 신고 시 AI가 제안하는 문맥어/제외어 추가 — 바로 적용되지 않고 관리자 승인 대기.
+// 신고 1건만 보고 자동 적용하면 과적합(그 기사 하나 막으려다 진짜 관련기사까지 막는) 위험이
+// 있어서(2026-08 946건 소급판정 사고에서 배운 교훈), 사람이 한 번 보고 승인해야 반영된다.
+model NoiseSuggestion {
+  id             String   @id @default(cuid())
+  articleId      String
+  targetName     String   // MonitoringTarget.name
+  field          String   // 'excludeWords' | 'contextWords'
+  currentValue   String?  // 제안 당시 기존 값(승인 시 이 값 기준으로 이어붙임 — 그 사이 바뀌었으면 감지용)
+  addition       String   // 추가로 제안하는 문구만(전체 값 아님)
+  reason         String   // AI가 이렇게 제안한 이유
+  status         String   @default("PENDING") // PENDING / APPROVED / REJECTED
+  createdAt      DateTime @default(now())
+  resolvedAt     DateTime?
+  resolvedBy     String?
+  @@index([status])
+  @@index([articleId])
+}
+
 model Digest {
   id          String   @id @default(cuid())
   date        DateTime @unique

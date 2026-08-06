@@ -590,6 +590,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const data = await loadDashboardData(range.from, range.to, company, range.isDefaultRange);
   const session = await getServerSession(authOptions);
   const canScrap = canScrapEmail(session?.user?.email ?? null);
+  const pendingSuggestionCount = canScrap ? await prisma.noiseSuggestion.count({ where: { status: 'PENDING' } }) : 0;
   const userId = (session?.user as any)?.id as string | undefined;
   const canBookmark = !!userId;
   const bookmarkedIds = userId
@@ -653,6 +654,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           {canScrap && <Link href="/dashboard/scraps" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⭐ 스크랩함</Link>}
           {canBookmark && <Link href="/dashboard/bookmarks" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔖 내 북마크</Link>}
           {canScrap && <Link href="/dashboard/keywords" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⚙️ 키워드 관리</Link>}
+          {canScrap && <Link href="/dashboard/noise-suggestions" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔍 노이즈 제안{pendingSuggestionCount > 0 ? ` (${pendingSuggestionCount})` : ''}</Link>}
         </div>
       </div>
 
