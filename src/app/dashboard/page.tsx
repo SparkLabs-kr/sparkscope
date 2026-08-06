@@ -14,6 +14,7 @@ import { OPEN_ACCESS } from '@/lib/flags';
 import { canScrap as canScrapEmail } from '@/lib/scrap';
 import { normalizeSource } from '@/lib/sparkscope/media';
 import { matchesAsToken, isBlockedNoise, normalizeTitleKey } from '@/lib/sparkscope/relevance';
+import { clusterArticles } from '@/lib/sparkscope/cluster';
 import { NEGATIVE_KEYWORDS, INDUSTRY_TREND_KEYWORDS, PINNED_COMPETITORS, detectCrises, crisisFallbackCause, detectSpikes, type ArticleLite, type SpikeCard } from '@/lib/sparkscope/insights';
 import { hasNegativeKeyword, hasCrisisKeyword } from '@/lib/sparkscope/keywords-data';
 import { getPrecomputedCrisisCauses, getPrecomputedCompetitorInsights, getPrecomputedCategoryPulses, wasInsightsBatchFreshToday, type InsightSource } from '@/lib/sparkscope/dashboard-insights';
@@ -177,10 +178,10 @@ async function loadDashboardData(from: string, to: string, company: string | und
     prisma.article.groupBy({ by: ['matchedKeyword'], where: { pubDate: { gte: prevSince, lte: prevUntil }, isNoise: false, category: 'portfolio_company', matchedKeyword: { in: top15Keywords } }, _count: { _all: true } }),
     // 회사 이름에 마우스를 올리면(모바일은 탭) 뜨는 미리보기용 — 회사별로 개별 조회해야
     // 언급량이 큰 회사가 "최근" 슬롯을 다 차지하는 걸 막고 회사마다 최근 기사를 보장받는다.
-    // 같은 사건이 여러 매체에 실려 3칸이 전부 같은 기사로 채워지는 걸 막기 위해
-    // 넉넉히(15건) 가져온 뒤 제목 기준으로 대표 1건씩만 남긴다.
+    // 같은 사건이 여러 매체에 다른 문구로 실려 3칸이 전부 같은 내용으로 채워지는 걸 막기 위해
+    // 넉넉히(15건) 가져온 뒤 clusterArticles로 같은 사건을 묶어 대표 1건씩만 남긴다.
     Promise.all(top15Keywords.map(k =>
-      prisma.article.findMany({ where: { ...portfolioWhere, matchedKeyword: k }, orderBy: { pubDate: 'desc' }, select: { title: true, link: true, source: true, pubDate: true }, take: 15 }),
+      prisma.article.findMany({ where: { ...portfolioWhere, matchedKeyword: k }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, link: true, source: true, pubDate: true }, take: 15 }),
     )),
   ]) : [[], []];
   const prevCountOf = new Map(prevTop15Counts.map(g => [g.matchedKeyword, g._count._all]));
@@ -190,13 +191,10 @@ async function loadDashboardData(from: string, to: string, company: string | und
     !isBlockedNoise({ title: a.title, link: a.link, source: a.source });
 
   const recentArticlesOf = new Map(top15Keywords.map((k, i) => {
-    const seen = new Set<string>();
-    const deduped = top15RecentByCompany[i]!.filter(notNoise).filter(a => {
-      const tk = normalizeTitleKey(a.title);
-      if (seen.has(tk)) return false;
-      seen.add(tk);
-      return true;
-    });
+    const filtered = top15RecentByCompany[i]!.filter(notNoise);
+    // matchedKeyword를 안 넘겨서 회사명 일치가 아니라 순수 제목 유사도로만 묶는다 —
+    // 이 회사의 다른 사건(예: 투자유치와 신제품출시)까지 하나로 뭉치면 안 되기 때문.
+    const deduped = clusterArticles(filtered).map(c => c.rep);
     return [k, deduped.slice(0, 3)];
   }));
 
