@@ -179,6 +179,7 @@ export function ArticleListView({ articles, canScrap = false, canBookmark = fals
         canBookmark={canBookmark}
         canReport={canReport}
         showCategoryColumn={!cat}
+        showKeywordColumn={cat === 'competitor' || cat === 'industry_trend'}
         emptyText={showSearch && q.trim() ? `‘${q.trim()}’에 맞는 기사가 없습니다.` : emptyText}
       />
     </div>

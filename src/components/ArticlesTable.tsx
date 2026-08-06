@@ -72,7 +72,7 @@ function TitleOnlyBadge() {
   );
 }
 
-export function ArticlesTable({ articles, canScrap = false, canBookmark = false, canReport = false, emptyText, showCategoryColumn = true }: { articles: Article[]; canScrap?: boolean; canBookmark?: boolean; canReport?: boolean; emptyText?: string; showCategoryColumn?: boolean }) {
+export function ArticlesTable({ articles, canScrap = false, canBookmark = false, canReport = false, emptyText, showCategoryColumn = true, showKeywordColumn = false }: { articles: Article[]; canScrap?: boolean; canBookmark?: boolean; canReport?: boolean; emptyText?: string; showCategoryColumn?: boolean; showKeywordColumn?: boolean }) {
   if (articles.length === 0) {
     return <p className="text-sm text-gray-400 py-8 text-center">{emptyText ?? '선택 기간 내 기사가 없습니다.'}</p>;
   }
@@ -109,6 +109,7 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
               {canBookmark && <th className="text-center px-2 py-2 w-8" title="내 북마크">🔖</th>}
               <th className="text-left px-3 py-2 w-20">날짜</th>
               {showCategoryColumn && <th className="text-left px-3 py-2 w-24">분류</th>}
+              {showKeywordColumn && <th className="text-left px-3 py-2 w-28">키워드</th>}
               {hasCompanyName && <th className="text-left px-3 py-2 w-28">회사명</th>}
               {hasCompanyName && <th className="text-left px-3 py-2 w-16">상태</th>}
               <th className="text-left px-3 py-2">제목</th>
@@ -130,6 +131,7 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
                   {canBookmark && <td className="px-2 py-3 text-center"><BookmarkIcon id={a.id} initial={!!a.isBookmarked} /></td>}
                   <td className="px-3 py-3 text-xs text-gray-500">{date.getMonth() + 1}/{date.getDate()}</td>
                   {showCategoryColumn && <td className="px-3 py-3"><span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${cat.cls}`}>{cat.label}</span></td>}
+                  {showKeywordColumn && <td className="px-3 py-3 text-xs text-gray-600 whitespace-nowrap">{a.matchedKeyword}</td>}
                   {hasCompanyName && <td className="px-3 py-3 text-xs font-medium text-gray-800 whitespace-nowrap">{a.companyName ?? a.matchedKeyword}</td>}
                   {hasCompanyName && <td className="px-3 py-3">{statusCls ? <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${statusCls}`}>{a.portfolioStatus}</span> : <span className="text-gray-300 text-xs">—</span>}</td>}
                   <td className="px-3 py-3">
@@ -191,6 +193,7 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
               <div className="flex items-center justify-between gap-2 mb-2">
                 <div className="flex items-center gap-2">
                   {showCategoryColumn && <span className={`px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${cat.cls}`}>{cat.label}</span>}
+                  {showKeywordColumn && <span className="text-xs text-gray-600">{a.matchedKeyword}</span>}
                   {a.companyName && <span className="text-xs font-medium text-gray-800">{a.companyName}</span>}
                   {statusCls && <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${statusCls}`}>{a.portfolioStatus}</span>}
                   <span className="text-xs text-gray-500 whitespace-nowrap">{date.getMonth() + 1}/{date.getDate()}</span>
