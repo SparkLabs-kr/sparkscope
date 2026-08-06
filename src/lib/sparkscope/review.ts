@@ -69,6 +69,7 @@ export interface DigestGuardTarget {
   name?: string | null;
   englishName?: string | null;
   helperKeywords?: string | null;
+  contextWords?: string | null;
 }
 
 /** 강한 식별자(회사명·영문명·주키워드) + 큐레이션 서비스명(helperKeywords) 맵 구성. */
@@ -82,6 +83,17 @@ export function buildDigestKeyMap(targets: DigestGuardTarget[]): Map<string, str
   return keyMap;
 }
 
+/** 문맥어(contextWords) 맵 — "Wave"처럼 흔한 영문명 등이 무관한 기사에 우연히 걸리는 걸
+ * 막는 재검증용(2026-08-06, 웨이브코퍼레이션 Miami 기사 사례로 발견). */
+export function buildDigestContextMap(targets: DigestGuardTarget[]): Map<string, string[]> {
+  const contextMap = new Map<string, string[]>();
+  for (const t of targets) {
+    const words = (t.contextWords ?? '').split(',').map(w => w.trim()).filter(w => w.length >= 2);
+    if (words.length > 0) contextMap.set(t.primaryKeyword, words);
+  }
+  return contextMap;
+}
+
 /**
  * 다이제스트에 실릴 자격이 있는지 재검증하는 가드 — 검수 콘솔(review.ts) 전용이었으나
  * 자동발송 경로(runner.ts)도 동일하게 통과해야 한다. isNoise:false는 수집 당일 AI가 한 번
@@ -91,6 +103,7 @@ export function buildDigestKeyMap(targets: DigestGuardTarget[]): Map<string, str
 export function passesDigestGuard(
   a: { title: string; link?: string | null; source?: string | null; category: string; matchedKeyword: string },
   keyMap: Map<string, string[]>,
+  contextMap?: Map<string, string[]>,
 ): boolean {
   // 포폴·자사·경쟁사는 매체 무관(collector.ts와 동일 기준), 업계동향만 확정 매체 26개 + 스포츠·광고 제외
   if (!(NAME_MATCH_CATEGORIES.has(a.category) || isKnownMedia(a.source ?? ''))) return false;
@@ -101,6 +114,13 @@ export function passesDigestGuard(
   if (NAME_MATCH_CATEGORIES.has(a.category) && a.category !== 'competitor') {
     const keys = keyMap.get(a.matchedKeyword) ?? [a.matchedKeyword];
     if (!keys.some(k => matchesAsToken(a.title, k))) return false;
+    // 문맥어 재검사 — 회사명(특히 영문명)이 흔한 단어라 이름만으로는 무관한 기사에도 걸릴 수
+    // 있는데, 지금까지는 이 재검사가 여기 없어서 놓쳤다. 문맥어가 등록된 대상만 검사(없으면
+    // 스킵 — 수집 시점 필터와 동일 원칙).
+    const contextWords = contextMap?.get(a.matchedKeyword);
+    if (contextWords && contextWords.length > 0 && !contextWords.some(w => matchesAsToken(a.title, w))) {
+      return false;
+    }
   }
   return true;
 }
@@ -119,14 +139,15 @@ export async function loadDigestCandidates(): Promise<ReviewArticle[]> {
     }),
     prisma.monitoringTarget.findMany({
       where: { category: { in: ['portfolio_company', 'sparklabs_self'] }, status: 'ACTIVE' },
-      select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true },
+      select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true, contextWords: true },
     }),
   ]);
 
   const keyMap = buildDigestKeyMap(targets);
+  const contextMap = buildDigestContextMap(targets);
 
   return rows
-    .filter(a => passesDigestGuard(a, keyMap))
+    .filter(a => passesDigestGuard(a, keyMap, contextMap))
     .map(toReviewArticle);
 }
 
