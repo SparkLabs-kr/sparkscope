@@ -45,8 +45,8 @@ interface CompanyProfile {
   profile: string;
 }
 
-/** 캐시가 걸리는 고정 프리픽스 — 회사 목록과 분석 규칙까지 전부 여기 담는다. */
-function buildSystemPrompt(companies: CompanyProfile[]): string {
+/** 캐시가 걸리는 고정 프리픽스 — 회사 목록과 분석 규칙까지 전부 여기 담는다. (export는 특정 회사만 골라 재매칭하는 일회성 스크립트용) */
+export function buildSystemPrompt(companies: CompanyProfile[]): string {
   return `${SYSTEM_RULES}
 
 === 우리 포트폴리오 회사 ===
