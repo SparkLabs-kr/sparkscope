@@ -200,12 +200,26 @@ function strongKeys(a: RelevanceInput): string[] {
  * 진짜 보조 식별자(trueHelpers: 대표자명·별칭 등, 강한 식별자와 함께 있어야만 유효)를 분리.
  * filterReason과 소급 정리 스크립트(scripts/cleanup-helper-only-matches.ts)가 공유.
  */
+// helperKeywords 하나가 강한 식별자의 "표기 변형"인지 — 띄어쓰기 차이(완전 일치)뿐 아니라,
+// 매체가 흔히 접미사를 생략해 부르는 축약형(예: "에이티넘인베스트먼트" → "에이티넘인베스트"/
+// "에이티넘")도 같은 회사를 가리키는 게 명백하므로 포함한다. 3글자 미만 접두는 우연히 겹칠
+// 위험이 커서 최소 3글자를 요구한다(2026-08-06, "에이티넘" 계열 축약형이 helperKeywords에
+// 있었는데도 trueHelper로만 취급돼 회사명 판정에 못 쓰이던 문제로 발견 — 대표자명 같은 진짜
+// 보조 식별자(신기천 등)는 회사명과 접두 관계가 없어 이 조건에 안 걸리므로 계속 trueHelper로
+// 남는다).
+function isNameVariant(helperNormalized: string, strongNormalizedList: string[]): boolean {
+  return strongNormalizedList.some(s =>
+    s === helperNormalized ||
+    (helperNormalized.length >= 3 && (s.startsWith(helperNormalized) || helperNormalized.startsWith(s))),
+  );
+}
+
 export function resolveMainKeys(a: RelevanceInput): { mainKeys: string[]; trueHelpers: string[] } {
   const strong = strongKeys(a);
-  const strongNormalized = new Set(strong.map(k => k.replace(/\s+/g, '')));
+  const strongNormalized = strong.map(k => k.replace(/\s+/g, ''));
   const helpers = splitCsv(a.helperKeywords).filter(k => k.length >= 2);
-  const variantHelpers = helpers.filter(h => strongNormalized.has(h.replace(/\s+/g, '')));
-  const trueHelpers = helpers.filter(h => !strongNormalized.has(h.replace(/\s+/g, '')));
+  const variantHelpers = helpers.filter(h => isNameVariant(h.replace(/\s+/g, ''), strongNormalized));
+  const trueHelpers = helpers.filter(h => !isNameVariant(h.replace(/\s+/g, ''), strongNormalized));
   return { mainKeys: [...strong, ...variantHelpers], trueHelpers };
 }
 

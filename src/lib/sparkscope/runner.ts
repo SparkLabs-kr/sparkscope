@@ -5,8 +5,9 @@
 import { prisma } from '@/lib/prisma';
 import type { RawArticle, AnalyzedArticle } from './types';
 import { collectAllArticles, CATEGORY_PRIORITY } from './collector';
-import { normalizeTitleKey } from './relevance';
+import { normalizeTitleKey, matchesAsToken } from './relevance';
 import { normalizeSource } from './media';
+import { clusterArticles } from './cluster';
 import { analyzeArticles, generateEditorIntro } from './analyzer';
 import { computeAndStoreDashboardInsights } from './dashboard-insights';
 import { checkConfigDrift, formatDriftReport } from './config-drift';
@@ -39,6 +40,38 @@ async function cleanupStaleRunLogs() {
     data: { status: 'FAILED', finishedAt: new Date(), errors: '타임아웃/크래시로 추정 — 다음 실행 시작 시 자동 정리됨' },
   });
   if (count > 0) console.warn(`[runner] 좀비 RunLog ${count}건 정리(3시간 초과 RUNNING → FAILED)`);
+}
+
+// 매체별로 묶어 제목 유사도로 같은 사건을 찾고, 대표 1건만 남긴다. 대표 선정 우선순위:
+// 1) 제목에 자기 matchedKeyword가 실제 토큰으로 있는지(제목 매칭이 최우선이라는 원칙과 동일)
+// 2) 카테고리 우선순위(CATEGORY_PRIORITY)
+// 3) priorityScore
+function pickBestPerStory(list: AnalyzedArticle[]): AnalyzedArticle[] {
+  const bySource = new Map<string, AnalyzedArticle[]>();
+  for (const a of list) {
+    const key = normalizeSource(a.source);
+    if (!bySource.has(key)) bySource.set(key, []);
+    bySource.get(key)!.push(a);
+  }
+  const out: AnalyzedArticle[] = [];
+  for (const group of bySource.values()) {
+    if (group.length === 1) { out.push(group[0]); continue; }
+    const clusters = clusterArticles(group.map(a => ({ ...a, id: a.link })), { textOnlyThreshold: 0.7 });
+    for (const c of clusters) {
+      const members = [c.rep, ...c.others];
+      members.sort((x, y) => {
+        const xTitleMatch = matchesAsToken(x.title, x.matchedKeyword) ? 1 : 0;
+        const yTitleMatch = matchesAsToken(y.title, y.matchedKeyword) ? 1 : 0;
+        if (xTitleMatch !== yTitleMatch) return yTitleMatch - xTitleMatch;
+        const xPri = CATEGORY_PRIORITY[x.category] ?? 0;
+        const yPri = CATEGORY_PRIORITY[y.category] ?? 0;
+        if (xPri !== yPri) return yPri - xPri;
+        return y.priorityScore - x.priorityScore;
+      });
+      out.push(members[0]);
+    }
+  }
+  return out;
 }
 
 export async function runDailyDigest(opts: RunOptions = {}) {
@@ -138,7 +171,7 @@ export async function runDailyDigest(opts: RunOptions = {}) {
 
     // 3. 분석 (Claude) — skipCollect 모드는 이미 DB에 분석 완료된 데이터이므로 재분석하지 않고 그대로 사용
     //    (기존에는 skipCollect에서도 최대 500건을 순차 재분석해 60초 maxDuration을 초과, 발송 자체가 무산되었음)
-    const analyzed: AnalyzedArticle[] = opts.skipCollect
+    let analyzed: AnalyzedArticle[] = opts.skipCollect
       ? (raw as any[]).map(a => ({
           ...a,
           relatedCompanies: typeof a.relatedCompanies === 'string' ? JSON.parse(a.relatedCompanies) : (a.relatedCompanies ?? []),
@@ -148,6 +181,15 @@ export async function runDailyDigest(opts: RunOptions = {}) {
 
     // 4. DB 저장 (upsert by link) — skipCollect 모드는 생략 (이미 저장된 데이터)
     if (!opts.skipCollect) {
+      // 3.5 같은 매체가 같은 사건을 여러 추적 키워드로 동시에 중복 수집한 경우 정리 — 한 기사가
+      // 여러 대상(예: "에이티넘인베스트먼트"·"IMM인베스트먼트")의 검색 결과에 동시에 걸리거나,
+      // Naver/Google이 같은 기사를 다른 제목 형식(제목 끝에 "- 매체명"이 붙는 등)으로 주면,
+      // 이번 실행에서 이미 서로 다른 raw 기사로 잡혀 DB에 별도 행으로 저장된다(2026-08-06, 머니
+      // 투데이의 모드하우스 투자 기사가 두 카테고리에 중복 저장된 사례로 발견). 매체별로 묶어
+      // 제목 유사도로 같은 사건을 찾고, "제목에 자기 키워드가 실제로 있는" 쪽을 최우선으로
+      // 대표를 고른다 — relevance 판정도 제목 매칭을 최우선으로 보므로 같은 원칙을 적용.
+      analyzed = pickBestPerStory(analyzed);
+      console.log(`[runner] cross-target dedup 후: ${analyzed.length}건`);
       // 구글 뉴스는 같은 기사도 수집 때마다 link 토큰이 바뀌어서 link만으로 upsert하면
       // 실행할 때마다 같은 기사가 새 행으로 계속 쌓인다(진짜 중복). link가 달라도 최근 14일 내
       // 정규화 제목+매체가 같으면 같은 기사로 보고, 기존 행의 link로 upsert해서 갱신되게 한다.
