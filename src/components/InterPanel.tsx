@@ -195,13 +195,13 @@ export function InterPanel({
   return (
     <div>
       {/* 바이오 / AI 도메인 탭 */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+      <div data-tour="inter-domain" className="flex flex-col sm:flex-row gap-3 mb-6">
         <DomainTabBig label="바이오" active={domain === 'bio'} activeCls="bg-cyan-50 border-cyan-600 text-cyan-700" onClick={() => pushParams({ domain: 'bio' })} />
         <DomainTabBig label="AI" active={domain === 'ai'} activeCls="bg-emerald-50 border-emerald-600 text-emerald-700" onClick={() => pushParams({ domain: 'ai' })} />
       </div>
 
       {/* 조회 조건 — 기간·국가를 고른 뒤 '확인'을 눌러야 조회된다(클릭마다 화면이 새로 뜨지 않게) */}
-      <div className="bg-white border border-spark-border rounded-2xl p-5 mb-6">
+      <div data-tour="inter-filter" className="bg-white border border-spark-border rounded-2xl p-5 mb-6">
         {/* 조회 기간 */}
         <div className="flex flex-wrap items-center gap-3">
           <span className="w-full sm:w-24 shrink-0 text-[14px] font-semibold text-spark-ink-soft">조회 기간</span>
@@ -266,7 +266,9 @@ export function InterPanel({
       ) : (
         <>
           {/* 헤드라인 4지표 — 매트릭스를 읽는 데 필요한 값들(총량·증감, 가장 뜨거운 칸, 포트폴리오 접점) */}
-          <HeadlineStats headline={data.matrix.headline} />
+          <div data-tour="inter-headline">
+            <HeadlineStats headline={data.matrix.headline} />
+          </div>
 
           {/* 주제×사건유형 매트릭스 + 인사이트 패널 2분할 */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
@@ -288,7 +290,7 @@ export function InterPanel({
           {/* 분야별 카드 — 급한 순(급증→기회→주요→조용)으로 위아래 배치.
               2열로 나눠봤더니 카드마다 탭·매치 목록이 들어가 좌우로 눈이 튀어 읽기 어려웠다(2026-08-06).
               기간·국가를 바꾸면 배지·건수가 다시 계산되므로 순서도 함께 바뀐다. */}
-          <div className="mb-2 flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-wide text-spark-ink-soft">
+          <div data-tour="inter-sectors" className="mb-2 flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-wide text-spark-ink-soft">
             🗂 <span>주제별 상세</span>
             <span className="ml-auto text-[11px] font-medium normal-case text-spark-muted">
               급한 순서(급증 → 기회 → 주요 → 조용)로 정렬 · 기간을 바꾸면 순서도 바뀝니다
@@ -704,7 +706,7 @@ function ColoredSummaryItem({ n, k, v, chips, last }: { n: number; k: string; v:
 function ColoredSummaryCard({ summary, overview }: { summary: DomainSummary; overview: InterOverview }) {
   const top = overview.topSectors[0];
   return (
-    <div className="bg-white border-[1.5px] border-spark-border rounded-2xl p-5 mb-6">
+    <div data-tour="inter-summary" className="bg-white border-[1.5px] border-spark-border rounded-2xl p-5 mb-6">
       <div className="flex flex-wrap items-center gap-1.5 text-[12px] font-bold uppercase tracking-wide text-emerald-600 mb-3">
         ✦ <span>{summary.label} 종합 요약</span>
         <span className="ml-auto text-[11px] font-medium normal-case text-spark-muted">집계값 + AI 한 줄 · {overview.domainLabel} 기준</span>
@@ -851,7 +853,7 @@ function SectorMatrix({
   }
 
   return (
-    <div className="bg-white border border-spark-border rounded-2xl p-5">
+    <div data-tour="inter-matrix" className="bg-white border border-spark-border rounded-2xl p-5">
       <div className="flex flex-wrap items-center gap-1.5 text-[12px] font-bold uppercase tracking-wide text-spark-ink-soft mb-1">
         📊 <span>주제 × 사건 유형</span>
         <span className="ml-auto flex items-center gap-2.5 text-[11px] font-medium normal-case text-spark-muted">
@@ -992,7 +994,7 @@ function InsightPanel({
   const maxCompanyCount = Math.max(1, ...overview.topCompanies.map(c => c.count));
 
   return (
-    <div className="bg-white border border-spark-border rounded-2xl p-5 flex flex-col gap-4">
+    <div data-tour="inter-insight" className="bg-white border border-spark-border rounded-2xl p-5 flex flex-col gap-4">
       <div>
         <div className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-wide text-spark-ink-soft mb-3">
           ✦ <span>이 화면이 말하는 것</span>
