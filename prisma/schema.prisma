@@ -138,6 +138,23 @@ model NoiseSuggestion {
   @@index([articleId])
 }
 
+// 일반 사용자의 노이즈 신고 요청 — 관리자의 즉시 처리(NoiseReportButton/api/noise-report)와 달리
+// 승인 전까지는 Article.isNoise를 건드리지 않는다. 관리자가 승인하면 그제서야 관리자가 직접
+// 신고한 것과 동일하게 처리(Article.isNoise=true + AI 재발방지 제안 생성)되고, 거절되면 아무 것도
+// 바뀌지 않는다(신고 자체만 REJECTED로 기록).
+model NoiseReportRequest {
+  id         String    @id @default(cuid())
+  articleId  String
+  reportedBy String    // 신고자 이메일
+  reason     String    // 신고 사유 (필수 입력)
+  status     String    @default("PENDING") // PENDING / APPROVED / REJECTED
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
+  resolvedBy String?
+  @@index([status])
+  @@index([articleId])
+}
+
 model Digest {
   id          String   @id @default(cuid())
   date        DateTime @unique

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ScrapStar } from '@/components/ScrapStar';
 import { BookmarkIcon } from '@/components/BookmarkIcon';
 import { NoiseReportButton } from '@/components/NoiseReportButton';
+import { NoiseReportRequestButton } from '@/components/NoiseReportRequestButton';
 import { clusterArticles } from '@/lib/sparkscope/cluster';
 
 interface Article {
@@ -72,7 +73,7 @@ function TitleOnlyBadge() {
   );
 }
 
-export function ArticlesTable({ articles, canScrap = false, canBookmark = false, canReport = false, emptyText, showCategoryColumn = true, showKeywordColumn = false }: { articles: Article[]; canScrap?: boolean; canBookmark?: boolean; canReport?: boolean; emptyText?: string; showCategoryColumn?: boolean; showKeywordColumn?: boolean }) {
+export function ArticlesTable({ articles, canScrap = false, canBookmark = false, canReport = false, canRequestReport = false, emptyText, showCategoryColumn = true, showKeywordColumn = false }: { articles: Article[]; canScrap?: boolean; canBookmark?: boolean; canReport?: boolean; canRequestReport?: boolean; emptyText?: string; showCategoryColumn?: boolean; showKeywordColumn?: boolean }) {
   if (articles.length === 0) {
     return <p className="text-sm text-gray-400 py-8 text-center">{emptyText ?? '선택 기간 내 기사가 없습니다.'}</p>;
   }
@@ -116,7 +117,7 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
               <th className="text-left px-3 py-2 w-28">매체</th>
               <th className="text-center px-3 py-2 w-16">중요도</th>
               <th className="text-center px-3 py-2 w-16">피칭</th>
-              {canReport && <th className="text-center px-2 py-2 w-8 border-l border-spark-border" title="노이즈 신고(관리자)">🚫</th>}
+              {(canReport || canRequestReport) && <th className="text-center px-2 py-2 w-8 border-l border-spark-border" title={canReport ? '노이즈 신고(관리자)' : '노이즈 신고 요청'}>🚫</th>}
             </tr>
           </thead>
           <tbody>
@@ -172,7 +173,11 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
                   <td className="px-3 py-3 text-xs text-gray-600">{a.source}{others.length > 0 && ` 외 ${others.length}`}</td>
                   <td className={`px-3 py-3 text-center text-xs ${IMP_STYLE[a.importance ?? 'LOW']}`}>{a.importance === 'HIGH' || a.importance === 'CRITICAL' ? '높음' : a.importance === 'MEDIUM' ? '중' : '낮음'}</td>
                   <td className="px-3 py-3 text-center text-xs font-bold text-amber-700">{a.pitchScore && a.pitchScore >= 60 ? a.pitchScore : '—'}</td>
-                  {canReport && <td className="px-2 py-3 text-center border-l border-spark-border"><NoiseReportButton id={a.id} initial={!!a.isNoise} /></td>}
+                  {(canReport || canRequestReport) && (
+                    <td className="px-2 py-3 text-center border-l border-spark-border">
+                      {canReport ? <NoiseReportButton id={a.id} initial={!!a.isNoise} /> : <NoiseReportRequestButton id={a.id} />}
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -251,9 +256,9 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
                 <div className="flex items-center gap-1.5 flex-shrink-0">
                   {(a.importance === 'HIGH' || a.importance === 'CRITICAL') && <span className={IMP_STYLE[a.importance]}>높</span>}
                   {a.pitchScore && a.pitchScore >= 60 && <span className="text-amber-700 font-bold">{a.pitchScore}점</span>}
-                  {canReport && (
+                  {(canReport || canRequestReport) && (
                     <span className="pl-1.5 ml-0.5 border-l border-spark-border">
-                      <NoiseReportButton id={a.id} initial={!!a.isNoise} />
+                      {canReport ? <NoiseReportButton id={a.id} initial={!!a.isNoise} /> : <NoiseReportRequestButton id={a.id} />}
                     </span>
                   )}
                 </div>

@@ -5,7 +5,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { canScrap } from '@/lib/scrap';
 import { prisma } from '@/lib/prisma';
-import { NoiseSuggestionList } from '@/components/NoiseSuggestionList';
+import { NoiseQueueList, type QueueItem } from '@/components/NoiseQueueList';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,31 +13,44 @@ export default async function NoiseSuggestionsPage() {
   const session = await getServerSession(authOptions);
   if (!canScrap(session?.user?.email ?? null)) redirect('/dashboard');
 
-  const pending = await prisma.noiseSuggestion.findMany({
-    where: { status: 'PENDING' },
-    orderBy: { createdAt: 'desc' },
-  });
+  const [pendingSuggestions, pendingRequests] = await Promise.all([
+    prisma.noiseSuggestion.findMany({ where: { status: 'PENDING' }, orderBy: { createdAt: 'desc' } }),
+    prisma.noiseReportRequest.findMany({ where: { status: 'PENDING' }, orderBy: { createdAt: 'desc' } }),
+  ]);
+  const articleIds = [...new Set([...pendingSuggestions.map(p => p.articleId), ...pendingRequests.map(p => p.articleId)])];
   const articles = await prisma.article.findMany({
-    where: { id: { in: pending.map(p => p.articleId) } },
+    where: { id: { in: articleIds } },
     select: { id: true, title: true, link: true, source: true },
   });
   const articleById = new Map(articles.map(a => [a.id, a]));
-  const items = pending
-    .map(p => ({ suggestion: p, article: articleById.get(p.articleId) ?? null }))
-    .filter(x => x.article !== null) as { suggestion: typeof pending[number]; article: NonNullable<ReturnType<typeof articleById.get>> }[];
+
+  // AI 제안과 사용자 신고를 한 목록으로 섞어서 시간순(최신 먼저)으로 보여준다 —
+  // 관리자 입장에선 "누가 냈든 신고는 신고"라 굳이 탭을 나눌 필요가 없다.
+  const items: QueueItem[] = [
+    ...pendingSuggestions.flatMap(s => {
+      const article = articleById.get(s.articleId);
+      if (!article) return [];
+      return [{ kind: 'ai' as const, id: s.id, article, targetName: s.targetName, field: s.field, currentValue: s.currentValue, addition: s.addition, reason: s.reason, createdAt: s.createdAt }];
+    }),
+    ...pendingRequests.flatMap(r => {
+      const article = articleById.get(r.articleId);
+      if (!article) return [];
+      return [{ kind: 'user' as const, id: r.id, article, reportedBy: r.reportedBy, reason: r.reason, createdAt: r.createdAt }];
+    }),
+  ].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
 
   return (
     <>
       <div className="flex flex-wrap justify-between items-end gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold">🔍 노이즈 제안 승인</h1>
+          <h1 className="text-3xl font-bold">🔍 노이즈 제안</h1>
           <p className="text-sm text-gray-500 mt-1">
-            노이즈 신고 시 AI가 재발 방지용 문맥어/제외어를 제안합니다. 승인해야만 실제 감시대상 설정에 반영돼요({pending.length}건 대기 중).
+            AI 재발방지 제안과 사용자 신고 모두 여기서 승인해야만 실제로 반영됩니다({items.length}건 대기 중).
           </p>
         </div>
         <Link href="/dashboard" className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-600 hover:bg-gray-50">← 대시보드</Link>
       </div>
-      <NoiseSuggestionList items={items} />
+      <NoiseQueueList items={items} />
     </>
   );
 }

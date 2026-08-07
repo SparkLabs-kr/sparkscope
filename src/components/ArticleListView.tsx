@@ -52,11 +52,12 @@ function csvCell(v: string): string {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export function ArticleListView({ articles, canScrap = false, canBookmark = false, canReport = false, emptyText, showSearch = false, showCategory = false, csvName = 'sparkscope' }: {
+export function ArticleListView({ articles, canScrap = false, canBookmark = false, canReport = false, canRequestReport = false, emptyText, showSearch = false, showCategory = false, csvName = 'sparkscope' }: {
   articles: Article[];
   canScrap?: boolean;
   canBookmark?: boolean;
   canReport?: boolean;
+  canRequestReport?: boolean;
   emptyText?: string;
   showSearch?: boolean;
   showCategory?: boolean;
@@ -188,6 +189,7 @@ export function ArticleListView({ articles, canScrap = false, canBookmark = fals
         canScrap={canScrap}
         canBookmark={canBookmark}
         canReport={canReport}
+        canRequestReport={canRequestReport}
         showCategoryColumn={!cat}
         showKeywordColumn={cat === 'competitor' || cat === 'industry_trend'}
         emptyText={showSearch && q.trim() ? `‘${q.trim()}’에 맞는 기사가 없습니다.` : emptyText}

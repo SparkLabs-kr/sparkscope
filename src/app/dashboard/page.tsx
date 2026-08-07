@@ -606,8 +606,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const session = await getServerSession(authOptions);
   const canScrap = canScrapEmail(session?.user?.email ?? null);
   const pendingSuggestionCount = canScrap ? await prisma.noiseSuggestion.count({ where: { status: 'PENDING' } }) : 0;
+  // .catch(() => 0): NoiseReportRequest 테이블이 아직 DB에 반영 안 됐어도(prisma db push 전) 대시보드가
+  // 죽지 않도록 방어 — 반영 전엔 그냥 0건으로 표시된다.
+  const pendingReportCount = canScrap
+    ? await prisma.noiseReportRequest.count({ where: { status: 'PENDING' } }).catch(() => 0)
+    : 0;
   const userId = (session?.user as any)?.id as string | undefined;
   const canBookmark = !!userId;
+  // 관리자는 즉시 처리(NoiseReportButton)가 있으니, 신고 "요청" 버튼은 로그인한 비관리자에게만.
+  const canRequestReport = canBookmark && !canScrap;
   const bookmarkedIds = userId
     ? new Set((await prisma.bookmark.findMany({ where: { userId }, select: { articleId: true } })).map(b => b.articleId))
     : new Set<string>();
@@ -669,7 +676,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           {canScrap && <Link href="/dashboard/scraps" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⭐ 스크랩함</Link>}
           {canBookmark && <Link href="/dashboard/bookmarks" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔖 내 북마크</Link>}
           {canScrap && <Link href="/dashboard/keywords" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⚙️ 키워드 관리</Link>}
-          {canScrap && <Link href="/dashboard/noise-suggestions" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔍 노이즈 제안{pendingSuggestionCount > 0 ? ` (${pendingSuggestionCount})` : ''}</Link>}
+          {canScrap && <Link href="/dashboard/noise-suggestions" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔍 노이즈 제안{(pendingSuggestionCount + pendingReportCount) > 0 ? ` (${pendingSuggestionCount + pendingReportCount})` : ''}</Link>}
         </div>
       </div>
 
@@ -887,6 +894,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             canScrap={canScrap}
             canBookmark={canBookmark}
             canReport={canScrap}
+            canRequestReport={canRequestReport}
             showSearch={false}
             csvName={data.selectedCompanyName ?? '포트폴리오사'}
             emptyText={`${range.label} 내 ${data.selectedCompanyName} 기사가 없습니다.`}
@@ -897,6 +905,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             canScrap={canScrap}
             canBookmark={canBookmark}
             canReport={canScrap}
+            canRequestReport={canRequestReport}
             showSearch={true}
             showCategory={true}
             csvName="최근수집기사"
