@@ -7,7 +7,7 @@ import { parseStringPromise } from 'xml2js';
 import { prisma } from '@/lib/prisma';
 import type { RawArticle, Category } from './types';
 import { isRelevant, normalizeTitleKey, matchesAsToken, matchesAsDirectMention, resolveMainKeys } from './relevance';
-import { isKnownMedia } from './media';
+import { isKnownMedia, normalizeSource } from './media';
 import { NEGATIVE_KEYWORDS_DATA, CRISIS_KEYWORDS_DATA } from './keywords-data';
 import { scrapeArticleBody, type ScrapedBody } from './scraper';
 import { resolveGoogleNewsUrl } from './google-news-resolver';
@@ -411,7 +411,7 @@ async function fetchNaverNews(keyword: string): Promise<SourceItem[]> {
       if (isNaN(pubDate.getTime())) continue;
     } catch { continue; }
 
-    const source = domainToSource(link);
+    const source = normalizeSource(domainToSource(link));
     if (NOISE_SOURCES.has(source)) continue;
     if (EMAIL_IN_TITLE_RE.test(title)) continue;
     out.push({ title, link, source, pubDate });

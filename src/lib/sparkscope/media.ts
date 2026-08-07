@@ -71,6 +71,13 @@ const ALIASES: Record<string, string> = {
   'IT조선': '조선비즈',
 };
 
+// 26개 확정 매체 밖이지만 자주 걸리는 도메인 → 한글 매체명 (표시용, 티어 목록과는 별개).
+// 네이버 API는 언론사명을 안 줘서 도메인만으로 source를 만드는데(domainToSource), 그 결과가
+// 그대로 화면에 노출돼 "topstarnews.net" 같은 도메인이 매체명 자리에 뜨는 문제가 있었다.
+const EXTRA_DOMAIN_ALIASES: Record<string, string> = {
+  'topstarnews.net': '탑스타뉴스',
+};
+
 // 영문 표기(대소문자 무시) → 표준 매체명. Google/Naver가 영문명으로 주는 경우 대응.
 const ENGLISH_ALIASES: Record<string, string> = {
   platum: '플래텀',
@@ -92,6 +99,7 @@ export function normalizeSource(source: string): string {
   // "이름(English)" / "이름(약칭)" 형태 → 괄호 앞부분만 사용 (예: "플래텀(Platum)" → "플래텀")
   s = s.replace(/\s*\(.*\)\s*$/, '').trim();
   if (DOMAIN_TO_NAME.has(s)) return DOMAIN_TO_NAME.get(s)!;
+  if (EXTRA_DOMAIN_ALIASES[s]) return EXTRA_DOMAIN_ALIASES[s];
   if (NAME_SET.has(s)) return s;
   if (ALIASES[s]) return ALIASES[s];
   const low = s.toLowerCase();
