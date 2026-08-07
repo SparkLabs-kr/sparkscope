@@ -219,8 +219,6 @@ ${INTER_EMAIL_CSS}
     ${data.top3.map((a, i) => renderTopCard(a, i + 1)).join('\n')}
   </div>
 
-  ${data.inter ? renderInterStrip(data.inter) : ''}
-
   ${data.insightTitle ? `
   <div class="section" style="padding-top:8px;">
     <div class="insight-box">
@@ -242,6 +240,8 @@ ${INTER_EMAIL_CSS}
     ${catSummary(data.categorySummaries?.portfolio_company)}
     ${data.portfolioArticles.length > 0 ? data.portfolioArticles.map(a => renderArticle(a, { keyword: true, tone: true })).join('\n') : '<div style="color:#6B7280; font-size:13px;">최근 영업일 내 포트폴리오 보도 없음</div>'}
   </div>
+
+  ${data.inter ? renderInterStrip(data.inter) : ''}
 
   ${data.inter ? renderInterSection(data.inter, baseUrl ?? DEFAULT_BASE_URL) : ''}
 
