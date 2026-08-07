@@ -54,9 +54,6 @@ export const CATEGORY_PRIORITY: Record<string, number> = {
   industry_trend: 40,
 };
 
-// 포트폴리오사 tier(A/B/C) 가산점 — 핵심 포트폴리오사(A) 기사가 다이제스트·대시보드에서 더 상위로.
-const TIER_BONUS: Record<string, number> = { A: 15, B: 5, C: 0 };
-
 interface CollectOptions {
   maxKeywordsPerCategory?: number;
   daysBack?: number;
@@ -261,7 +258,7 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
             ...item,
             matchedKeyword: matchedTarget.primaryKeyword,
             category: category as Category,
-            basePriority: (CATEGORY_PRIORITY[category] ?? 50) + (TIER_BONUS[matchedTarget.tier ?? ''] ?? 0),
+            basePriority: CATEGORY_PRIORITY[category] ?? 50,
             companyDesc: (matchedTarget as any).notes ?? undefined,
             body: bodyMap.get(item.link)?.text,
           };
