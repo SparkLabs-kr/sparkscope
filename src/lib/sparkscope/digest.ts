@@ -215,7 +215,7 @@ ${INTER_EMAIL_CSS}
   </div>` : ''}
 
   <div class="section">
-    <div class="section-label">⭐ 오늘의 핵심 — TOP 3</div>
+    <div class="section-label">⭐ 오늘의 핵심 TOP 3</div>
     ${data.top3.map((a, i) => renderTopCard(a, i + 1)).join('\n')}
   </div>
 
@@ -278,13 +278,13 @@ function catSummary(text?: string): string {
 // ── TOP 3 컬러 카드 ──────────────────────────────────────────────
 function renderTopCard(a: AnalyzedArticle, rank: number): string {
   const cls = rank === 1 ? '' : rank === 2 ? 'dark' : 'gray';
-  const rankLabel = `#${rank} · ${categoryLabel(a.category)}${importanceLabel(a.importance)}`;
+  const rankText = `${categoryLabel(a.category)}${importanceLabel(a.importance)}`;
   const take = takeLine(a);
   const citation = a.category === 'sparklabs_self' ? ` · 스파크랩 ${citationType(a)}` : '';
   const otherOutlets = a.otherOutlets ? ` · 외 ${a.otherOutlets}개 매체 추가보도` : '';
   return `
     <div class="top-card ${cls}">
-      <div class="top-rank">${escape(rankLabel)}</div>
+      <div class="top-rank"><span class="top-num">${rank}</span> · ${escape(rankText)}</div>
       <div class="top-headline">${escape(a.title)}</div>
       ${take ? `<div class="top-take">${escape(take)}</div>` : ''}
       <div class="top-meta">${escape(a.source)} · ${formatDate(a.pubDate)}${citation}${otherOutlets} · <a href="${escape(safeArticleHref(a.link, a.title, a.source))}" target="_blank">기사 보기 →</a></div>
@@ -414,6 +414,7 @@ body{margin:0;padding:0;background:#F5F3EF;font-family:-apple-system,BlinkMacSys
 .top-card.dark{background:#1A1A1A}
 .top-card.gray{background:#475569}
 .top-card .top-rank{font-size:11px;font-weight:700;letter-spacing:1.2px;opacity:.85}
+.top-card .top-rank .top-num{font-size:16px;font-weight:800;letter-spacing:0;opacity:1}
 .top-card .top-headline{font-size:17px;font-weight:600;margin:8px 0;line-height:1.4}
 .top-card .top-take{font-size:13px;opacity:.92;margin-bottom:10px;line-height:1.55}
 .top-card .top-meta{font-size:12px;opacity:.85}

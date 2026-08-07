@@ -238,14 +238,10 @@ function delta(deltaPct: number | null): string {
 /** 헤더 stats 안에 들어갈 칸 하나. "해외 39건"이 아니라 "몇 개사가 우리와 연결됐나"를 값으로 쓴다. */
 export function renderInterStat(b: InterDigestBlock): string {
   const names = b.companyNames;
-  const shown = names.slice(0, 2).join(' · ');
-  const rest = names.length > 2 ? ` 외 ${names.length - 2}` : '';
   return `
       <div class="stat inter">
-        <div class="i-kicker">🔭 해외 트렌드</div>
-        <div class="i-big">${names.length}<span>개사 연결</span></div>
-        <div class="i-detail">${esc(shown)}${rest}</div>
-        <div class="i-detail">해외 ${b.total}건 ${delta(b.deltaPct)}</div>
+        <div class="stat-value">${names.length}</div>
+        <div class="stat-label">해외 트렌드</div>
       </div>`;
 }
 
@@ -317,11 +313,8 @@ export function renderInterSection(b: InterDigestBlock, baseUrl: string): string
 export const INTER_EMAIL_CSS = `
 .i-up{color:#DC2626;font-weight:800}
 .i-flat{color:#6B7280;font-weight:700}
-.stat.inter{background:#ECFDF5;text-align:left;flex:1.75}
-.stat.inter .i-kicker{font-size:9.5px;font-weight:800;letter-spacing:.8px;color:#047857;text-transform:uppercase}
-.stat.inter .i-big{font-size:20px;font-weight:800;color:#064E3B;line-height:1.15;margin-top:2px}
-.stat.inter .i-big span{font-size:12px;font-weight:700}
-.stat.inter .i-detail{font-size:10px;color:#6B7280;margin-top:3px;line-height:1.45}
+.stat.inter{background:#ECFDF5}
+.stat.inter .stat-value{color:#16A34A}
 .inter-strip{padding:18px 28px;background:#ECFDF5;border-top:1px solid #A7F3D0;border-bottom:1px solid #A7F3D0}
 .i-strip-head{display:flex;align-items:center;gap:9px;margin-bottom:13px}
 .i-strip-pill{display:inline-block;flex-shrink:0;background:#059669;color:#FFF;font-size:10.5px;font-weight:800;letter-spacing:.8px;padding:4px 10px;border-radius:20px}
