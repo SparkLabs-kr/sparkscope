@@ -278,16 +278,14 @@ function catSummary(text?: string): string {
 // ── TOP 3 컬러 카드 ──────────────────────────────────────────────
 function renderTopCard(a: AnalyzedArticle, rank: number): string {
   const cls = rank === 1 ? '' : rank === 2 ? 'dark' : 'gray';
-  const rankText = `${categoryLabel(a.category)}${importanceLabel(a.importance)}`;
+  const rankText = categoryLabel(a.category);
   const take = takeLine(a);
-  const citation = a.category === 'sparklabs_self' ? ` · 스파크랩 ${citationType(a)}` : '';
-  const otherOutlets = a.otherOutlets ? ` · 외 ${a.otherOutlets}개 매체 추가보도` : '';
   return `
     <div class="top-card ${cls}">
       <div class="top-rank"><span class="top-num">${rank}</span> · ${escape(rankText)}</div>
       <div class="top-headline">${escape(a.title)}</div>
       ${take ? `<div class="top-take">${escape(take)}</div>` : ''}
-      <div class="top-meta">${escape(a.source)} · ${formatDate(a.pubDate)}${citation}${otherOutlets} · <a href="${escape(safeArticleHref(a.link, a.title, a.source))}" target="_blank">기사 보기 →</a></div>
+      <div class="top-meta">${escape(a.source)} · <a href="${escape(safeArticleHref(a.link, a.title, a.source))}" target="_blank">기사 보기 →</a></div>
     </div>`;
 }
 
@@ -335,17 +333,11 @@ function citationType(a: AnalyzedArticle): string {
 
 function categoryLabel(cat: string): string {
   return ({
-    sparklabs_self: '스파크랩 미디어 노출',
-    portfolio_company: '포트폴리오 마일스톤',
+    sparklabs_self: '스파크랩 뉴스',
+    portfolio_company: '포트폴리오 뉴스',
     competitor: 'AC·VC 업계 동향',
     industry_trend: '업계 동향',
   } as Record<string, string>)[cat] ?? '주요 보도';
-}
-
-function importanceLabel(imp: string): string {
-  if (imp === 'CRITICAL') return ' · 영향력 大';
-  if (imp === 'HIGH') return ' · 영향력 높음';
-  return '';
 }
 
 // 💡 본부에 한 줄 — 실제 데이터 기반 (AI 미가동 시에도 정직한 액션)
@@ -370,10 +362,6 @@ function headquarterActionText(sorted: AnalyzedArticle[]): string {
 function formatDateKR(d: Date): string {
   const days = ['일', '월', '화', '수', '목', '금', '토'];
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
-}
-
-function formatDate(d: Date): string {
-  return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
 function formatFullDate(d: Date): string {
