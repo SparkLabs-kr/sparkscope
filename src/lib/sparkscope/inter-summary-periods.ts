@@ -13,7 +13,8 @@ export const SUMMARY_PERIODS: { key: string; days: number; label: string }[] = [
   { key: '1m', days: 30, label: '최근 1개월' },
   { key: '3m', days: 90, label: '최근 3개월' },
   { key: '1y', days: 365, label: '최근 1년' },
-  { key: '3y', days: 365 * 3, label: '최근 3년' },
+  // '3y'는 2026-08-07에 제거 — 과거 기사 백필을 1년치까지만 하기로 해서 3년 요약은
+  // 대부분 빈 구간을 요약하게 되고, 사전계산 LLM 비용만 나간다.
 ];
 
 /** 임의의 (since, until) 구간을 가장 가까운 SUMMARY_PERIODS 키로 매핑. 사전계산된 값을 재사용하기 위함. */
