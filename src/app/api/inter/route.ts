@@ -21,7 +21,9 @@ function isValidYmd(s: string | null): s is string {
 }
 
 // 프리셋(period) 하위호환 — from/to가 없을 때만 쓴다.
-const PERIOD_DAYS: Record<string, number> = { '7d': 7, '1m': 30, '3m': 90, '1y': 365, '3y': 365 * 3 };
+// '3y'는 2026-08-07에 제거(백필을 1년치까지만 하기로 결정). 옛 링크로 period=3y가 들어와도
+// 아래 `?? PERIOD_DAYS['3m']` 폴백에 걸려 기본 3개월로 조회된다.
+const PERIOD_DAYS: Record<string, number> = { '7d': 7, '1m': 30, '3m': 90, '1y': 365 };
 
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;

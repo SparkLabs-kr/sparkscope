@@ -152,7 +152,11 @@ export async function filterInterNewsWithGemini(newsIds: string[]): Promise<{ fi
           data: {
             newsId: article.id,
             relevant: verdict.relevant,
-            reason: verdict.reason,
+            // 모델이 reason을 빼먹고 응답하는 경우가 있는데(2026-08-07 실행에서 257건 중 16건),
+            // reason은 스키마상 필수라 그대로 넘기면 create가 통째로 실패하고 그 기사는
+            // 판정이 아예 안 남는다(= 화면에서 사라짐). 분류 결과는 멀쩡하므로 버리지 않고
+            // 사유만 채워서 저장한다.
+            reason: verdict.reason ?? (verdict.relevant ? '판정 사유 미기재' : '노이즈'),
             domain: verdict.relevant ? (verdict.domain ?? null) : null,
             sector: verdict.relevant ? (verdict.sector ?? null) : null,
             topicSector: verdict.relevant ? (verdict.topicSector ?? null) : null,

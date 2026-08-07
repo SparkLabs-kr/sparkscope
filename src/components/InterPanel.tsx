@@ -24,6 +24,7 @@ import {
   type SectorBlock,
 } from '@/lib/inter-sample-data';
 import { InterScrapStar } from '@/components/InterScrapStar';
+import { InterBriefingModal, type BriefingPayload } from '@/components/InterBriefingModal';
 import { DateRangePicker } from '@/components/DateRangePicker';
 import { clusterArticles } from '@/lib/sparkscope/cluster';
 
@@ -55,6 +56,14 @@ const SOURCE_KINDS: SourceKind[] = ['news', 'paper', 'opinion'];
 
 // 카드 하위 탭 — 판정 근거·포트폴리오 매치를 첫 탭으로 빼고, 나머지는 출처 종류별.
 type CardTab = 'reason' | SourceKind;
+
+// 브리핑(포폴사에 보낼 한 장) 생성에 필요한, 섹터 바깥의 맥락.
+// 카드마다 다시 계산할 값이 아니라서 위에서 한 번 만들어 내려보낸다.
+interface BriefingCtx {
+  domainLabel: string;
+  periodLabel: string;
+  overview: BriefingPayload['overview'];
+}
 
 // 정렬 우선순위 — "급한 것부터"(급증 → 기회 → 주요 → 조용 → 데이터 없음).
 // 기간을 바꾸면 metrics/badge가 다시 계산되므로 순서도 자동으로 따라 바뀐다.
@@ -291,6 +300,18 @@ export function InterPanel({
                 key={s.id}
                 sector={s}
                 canScrap={canScrap}
+                briefingCtx={{
+                  domainLabel: data.overview.domainLabel,
+                  periodLabel: `${from} ~ ${to}`,
+                  overview: {
+                    total: data.overview.total,
+                    deltaPct: data.overview.deltaPct,
+                    sourceCount: data.overview.sourceCount,
+                    matchCount: data.overview.matchCount,
+                    matchedCompanyCount: data.overview.matchedCompanyCount,
+                    topSectors: data.overview.topSectors.map(t => ({ name: t.name, count: t.count, deltaPct: t.deltaPct })),
+                  },
+                }}
                 highlighted={highlighted === s.id}
                 activeTab={activeSrcTab[s.id] ?? 'reason'}
                 onTabChange={t => setActiveSrcTab(prev => ({ ...prev, [s.id]: t }))}
@@ -335,12 +356,14 @@ function DeltaChip({ deltaPct, count }: { deltaPct: number | null; count?: numbe
 function SectorCard({
   sector,
   canScrap,
+  briefingCtx,
   highlighted,
   activeTab,
   onTabChange,
 }: {
   sector: SectorBlock;
   canScrap: boolean;
+  briefingCtx: BriefingCtx;
   highlighted: boolean;
   activeTab: CardTab;
   onTabChange: (t: CardTab) => void;
@@ -385,7 +408,7 @@ function SectorCard({
       </div>
 
       {activeTab === 'reason' ? (
-        <ReasonTab sector={sector} canScrap={canScrap} />
+        <ReasonTab sector={sector} canScrap={canScrap} briefingCtx={briefingCtx} />
       ) : (
         <SourceList items={sector.items[activeTab]} canScrap={canScrap} />
       )}
@@ -410,8 +433,12 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 
 // 첫 번째 탭 — 배지가 왜 이렇게 붙었는지(집계 근거) + 포트폴리오 매치 목록.
 // 회사를 누르면 그 회사가 걸린 기사들이 펼쳐진다(어느 기사 때문에 걸렸는지 + 판정 과정).
-function ReasonTab({ sector, canScrap }: { sector: SectorBlock; canScrap: boolean }) {
+function ReasonTab({ sector, canScrap, briefingCtx }: { sector: SectorBlock; canScrap: boolean; briefingCtx: BriefingCtx }) {
   const [openCo, setOpenCo] = useState<string | null>(null);
+  // 브리핑 모달을 띄울 회사. 회사가 바뀌면 key로 새로 마운트돼 다시 생성된다.
+  const [briefingCo, setBriefingCo] = useState<string | null>(null);
+
+  const briefingFor = sector.matches.find(m => m.co === briefingCo);
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -430,18 +457,40 @@ function ReasonTab({ sector, canScrap }: { sector: SectorBlock; canScrap: boolea
               const open = openCo === m.co;
               return (
                 <div key={m.co} className={`rounded-lg border ${open ? 'border-emerald-300 bg-emerald-50/40' : 'border-spark-cream'}`}>
-                  <button
-                    type="button"
-                    onClick={() => setOpenCo(open ? null : m.co)}
-                    aria-expanded={open}
-                    className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-spark-subtle/60"
-                  >
-                    <span className="text-[13px] font-bold text-spark-ink">{m.co}</span>
-                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-emerald-700">
-                      기사 {m.articles.length}
-                    </span>
-                    <span className={`ml-auto shrink-0 text-[11px] text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
-                  </button>
+                  {/* 회사 줄 — 펼치기 버튼과 '브리핑 생성'은 형제로 둔다(버튼 안에 버튼을 넣을 수 없다) */}
+                  <div className="flex items-center gap-2 px-2.5 py-2">
+                    <button
+                      type="button"
+                      onClick={() => setOpenCo(open ? null : m.co)}
+                      aria-expanded={open}
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                    >
+                      <span className="text-[13px] font-bold text-spark-ink">{m.co}</span>
+                      <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-emerald-700">
+                        기사 {m.articles.length}
+                      </span>
+                    </button>
+                    {/* 브리핑은 포폴사 대표에게 나갈 문서라 스크랩(별표)과 같은 권한으로 제한한다 */}
+                    {canScrap && (
+                      <button
+                        type="button"
+                        onClick={() => setBriefingCo(m.co)}
+                        title={`${m.co}에 보낼 브리핑을 만듭니다 — 매칭 이유 요약 + 업계 동향`}
+                        className="shrink-0 rounded-md border border-emerald-300 bg-white px-2 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50"
+                      >
+                        ✉ 브리핑 생성
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setOpenCo(open ? null : m.co)}
+                      aria-expanded={open}
+                      aria-label={open ? '기사 접기' : '기사 펼치기'}
+                      className={`shrink-0 text-[11px] text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
+                    >
+                      ▼
+                    </button>
+                  </div>
 
                   {!open && (
                     <p className="px-2.5 pb-2 text-[12px] leading-relaxed text-spark-ink-soft line-clamp-2">{m.desc}</p>
@@ -487,6 +536,38 @@ function ReasonTab({ sector, canScrap }: { sector: SectorBlock; canScrap: boolea
         </div>
       ) : (
         <p className="text-[13px] text-spark-muted/80">이 기간 이 주제와 연결된 포트폴리오사 매치가 없습니다.</p>
+      )}
+
+      {briefingFor && (
+        <InterBriefingModal
+          key={briefingFor.co}
+          onClose={() => setBriefingCo(null)}
+          payload={{
+            company: briefingFor.co,
+            domainLabel: briefingCtx.domainLabel,
+            periodLabel: briefingCtx.periodLabel,
+            sector: {
+              name: sector.name,
+              badgeLabel: sector.badge.label,
+              badgeWhy: sector.badge.why,
+              count: sector.metrics.count,
+              deltaPct: sector.metrics.deltaPct,
+              share: sector.metrics.share,
+              sourceCount: sector.metrics.sourceCount,
+              paperCount: sector.metrics.paperCount,
+              matchCount: sector.metrics.matchCount,
+            },
+            overview: briefingCtx.overview,
+            articles: briefingFor.articles.map(a => ({
+              title: a.title,
+              url: a.url,
+              media: a.media,
+              date: a.date,
+              reason: a.reason,
+              eventKey: a.eventKey,
+            })),
+          }}
+        />
       )}
     </div>
   );

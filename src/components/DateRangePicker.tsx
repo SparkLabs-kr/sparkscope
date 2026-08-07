@@ -13,7 +13,8 @@ const PRESETS = [
   { label: '1개월', shift: (d: Date) => d.setMonth(d.getMonth() - 1) },
   { label: '3개월', shift: (d: Date) => d.setMonth(d.getMonth() - 3) },
   { label: '1년', shift: (d: Date) => d.setFullYear(d.getFullYear() - 1) },
-  { label: '3년', shift: (d: Date) => d.setFullYear(d.getFullYear() - 3) },
+  // '3년' 프리셋은 2026-08-07에 제거. 과거 기사 백필을 1년치까지만 하기로 정해서
+  // 3년을 눌러도 앞 2년 구간은 거의 빈 화면이라 오히려 오해를 부른다.
 ];
 
 // 색 계열 — Intra는 보라, Inter는 초록으로 계속 간다(2026-08-04 결정).
