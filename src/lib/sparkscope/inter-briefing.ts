@@ -6,10 +6,18 @@
 // 포폴사에 직접 포워딩한다. 나중에 PortfolioCompany에 contactEmail이 생기면
 // 이 함수가 만든 html을 그대로 sendDigestEmail의 to만 바꿔 쓰면 되도록 분리해 둔다.
 
+import { createHash } from 'crypto';
 import OpenAI from 'openai';
+import { prisma } from '@/lib/prisma';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 const MODEL = 'gpt-4o-mini';
+
+// 요약 캐시는 DashboardInsight(kind/key/value) 테이블을 그대로 빌려 쓴다.
+// 전용 테이블을 새로 만들면 prisma db push가 필요한데, 프로덕션 DB에 스키마에 없는
+// 컬럼·테이블이 남아 있어서(country/Bookmark) push가 그걸 DROP할 위험이 있다.
+// 캐시 한 종류 때문에 그 위험을 질 이유가 없다.
+const CACHE_KIND = 'inter_briefing';
 
 export interface BriefingArticle {
   title: string;
@@ -57,6 +65,67 @@ const SYSTEM =
   '요약 부분을 쓴다. 주어진 해외 기사 제목·매칭 근거·집계 지표 안에 있는 사실만 쓰고, 없는 숫자나 ' +
   '사실을 지어내지 마라. 문장은 "~습니다/~합니다" 존댓말 종결형으로 쓴다. ' +
   '반드시 JSON 객체 하나만 반환한다.';
+
+/**
+ * 캐시 키 — 회사·주제·기간에 더해 "어떤 기사들이 걸렸는지"까지 넣는다.
+ * 같은 기간이라도 새 기사가 매칭되면 키가 달라져서 요약이 자동으로 새로 계산된다.
+ * (시간 기반 TTL이 필요 없는 이유 — 내용이 바뀌면 키가 바뀐다.)
+ */
+export function briefingCacheKey(input: BriefingInput): string {
+  const material = [
+    input.company,
+    input.sector.name,
+    input.periodLabel,
+    ...input.articles.map(a => a.url || a.title),
+  ].join('|');
+  return createHash('sha1').update(material).digest('hex').slice(0, 32);
+}
+
+/**
+ * 캐시를 거치는 요약. 같은 회사·기간·기사 조합이면 저장된 걸 그대로 돌려주고
+ * LLM을 호출하지 않는다 — 모달을 열 때와 '내 메일로 받기'를 누를 때 같은 브리핑을
+ * 두 번 만들던 낭비도 이걸로 사라진다(두 번째는 캐시 히트).
+ */
+export async function summarizeBriefingCached(
+  input: BriefingInput
+): Promise<BriefingBody & { cached: boolean }> {
+  const key = briefingCacheKey(input);
+
+  try {
+    const hit = await prisma.dashboardInsight.findUnique({
+      where: { kind_key: { kind: CACHE_KIND, key } },
+      select: { value: true },
+    });
+    if (hit) {
+      const parsed = JSON.parse(hit.value);
+      if (typeof parsed?.summary === 'string' && Array.isArray(parsed?.focus)) {
+        return { summary: parsed.summary, focus: parsed.focus, isAi: !!parsed.isAi, cached: true };
+      }
+    }
+  } catch (e) {
+    // 캐시는 있으면 좋은 것 — 읽기가 깨져도 그냥 새로 계산한다.
+    console.error('[inter-briefing] cache read failed:', e);
+  }
+
+  const body = await summarizeBriefing(input);
+
+  // AI 요약에 실패해 기본 문구로 떨어진 건 캐시하지 않는다 —
+  // 다음에 누르면 다시 AI를 시도해야 한다.
+  if (body.isAi) {
+    try {
+      const value = JSON.stringify({ summary: body.summary, focus: body.focus, isAi: true });
+      await prisma.dashboardInsight.upsert({
+        where: { kind_key: { kind: CACHE_KIND, key } },
+        create: { kind: CACHE_KIND, key, value },
+        update: { value },
+      });
+    } catch (e) {
+      console.error('[inter-briefing] cache write failed:', e);
+    }
+  }
+
+  return { ...body, cached: false };
+}
 
 /** 왜 매칭됐는지 + 어디에 집중해야 하는지 요약. 실패하면 지표 기반 기본 문구로 대체한다. */
 export async function summarizeBriefing(input: BriefingInput): Promise<BriefingBody> {

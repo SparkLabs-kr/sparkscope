@@ -38,6 +38,7 @@ export interface BriefingPayload {
 export function InterBriefingModal({ payload, onClose }: { payload: BriefingPayload; onClose: () => void }) {
   const [html, setHtml] = useState<string | null>(null);
   const [isAi, setIsAi] = useState(false);
+  const [cached, setCached] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -60,6 +61,7 @@ export function InterBriefingModal({ payload, onClose }: { payload: BriefingPayl
         }
         setHtml(json.html);
         setIsAi(!!json.isAi);
+        setCached(!!json.cached);
       })
       .catch(() => { if (!cancelled) setError('브리핑을 만들지 못했습니다.'); });
     return () => { cancelled = true; };
@@ -164,7 +166,11 @@ export function InterBriefingModal({ payload, onClose }: { payload: BriefingPayl
 
         <div className="flex flex-wrap items-center gap-2 border-t border-spark-border px-4 py-3">
           <span className="text-[11px] text-spark-muted">
-            {html ? (isAi ? '🤖 AI 요약 포함' : '⚙️ 기본 요약(AI 호출 실패 — 지표 기반 문구)') : ''}
+            {html
+              ? isAi
+                ? `🤖 AI 요약 포함${cached ? ' · 이전에 만든 요약 재사용' : ''}`
+                : '⚙️ 기본 요약(AI 호출 실패 — 지표 기반 문구)'
+              : ''}
           </span>
           {notice && <span className="text-[11px] font-semibold text-emerald-700">{notice}</span>}
           <div className="ml-auto flex gap-2">

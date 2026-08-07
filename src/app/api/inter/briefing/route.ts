@@ -14,7 +14,7 @@ import { canScrap } from '@/lib/scrap';
 import {
   briefingSubject,
   renderBriefingHtml,
-  summarizeBriefing,
+  summarizeBriefingCached,
   type BriefingInput,
 } from '@/lib/sparkscope/inter-briefing';
 import { sendDigestEmail } from '@/lib/sparkscope/mailer';
@@ -78,7 +78,9 @@ export async function POST(req: Request) {
   const input = parseInput(raw);
   if (!input) return NextResponse.json({ error: '브리핑 데이터가 올바르지 않습니다.' }, { status: 400 });
 
-  const body = await summarizeBriefing(input);
+  // 같은 회사·기간·기사 조합이면 저장된 요약을 그대로 쓴다. 그래서 모달을 연 뒤
+  // '내 메일로 받기'를 누르는 두 번째 호출은 LLM을 다시 부르지 않는다(캐시 히트).
+  const body = await summarizeBriefingCached(input);
   const html = renderBriefingHtml(input, body);
   const subject = briefingSubject(input);
 
@@ -91,7 +93,7 @@ export async function POST(req: Request) {
     }
     try {
       await sendDigestEmail({ subject, html, to: email });
-      return NextResponse.json({ html, subject, isAi: body.isAi, sentTo: email });
+      return NextResponse.json({ html, subject, isAi: body.isAi, cached: body.cached, sentTo: email });
     } catch (e) {
       console.error('[inter-briefing] send failed:', e);
       return NextResponse.json(
@@ -101,5 +103,5 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json({ html, subject, isAi: body.isAi });
+  return NextResponse.json({ html, subject, isAi: body.isAi, cached: body.cached });
 }
