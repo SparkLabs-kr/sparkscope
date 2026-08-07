@@ -127,11 +127,6 @@ export function buildDigestData(
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
   const dateLabel = formatDateKR(now);
 
-  // 💡 본부에 한 줄: 가장 점수 높은 피칭 기회를 실제 제목 기반 액션으로
-  const topPitch = sorted.find(a => a.pitchScore >= 60) ?? top3[0];
-  const insightTitle = topPitch ? headquarterActionTitle(topPitch) : undefined;
-  const insightText = topPitch ? headquarterActionText(sorted) : undefined;
-
   return {
     date: now,
     dateLabel,
@@ -150,8 +145,6 @@ export function buildDigestData(
     portfolioArticles,
     competitorArticles,
     industryArticles,
-    insightTitle,
-    insightText,
   };
 }
 
@@ -219,15 +212,6 @@ ${INTER_EMAIL_CSS}
     ${data.top3.map((a, i) => renderTopCard(a, i + 1)).join('\n')}
   </div>
 
-  ${data.insightTitle ? `
-  <div class="section" style="padding-top:8px;">
-    <div class="insight-box">
-      <div class="insight-label">💡 커뮤니케이션본부 TIP!</div>
-      <div class="insight-title">${escape(data.insightTitle)}</div>
-      <div class="insight-text">${data.insightText ?? ''}</div>
-    </div>
-  </div>` : ''}
-
   ${data.sparklabsArticles.length > 0 ? `
   <div class="section">
     <div class="section-label">🏢 스파크랩 직접 언급</div>
@@ -260,7 +244,7 @@ ${INTER_EMAIL_CSS}
   </div>` : ''}
 
   <div class="footer">
-    <div class="footer-cta-text">더 많은 기사와 업계 동향은 대시보드에서 확인하실 수 있습니다.</div>
+    <div class="footer-cta-text">INTRA(스파크랩 내부 생태계)부터 INTER(글로벌 시장)까지, 아래 대시보드에서 확인하실 수 있습니다.</div>
     <a href="https://sparkscope.vercel.app/dashboard?from=2026-04-09&amp;to=2026-07-08" class="footer-cta-button">SparkScope 대시보드 바로가기</a>
   </div>
 </div>
@@ -300,7 +284,6 @@ function renderArticle(a: AnalyzedArticle, opts: { citation?: boolean; keyword?:
   const pitchTag = a.pitchScore >= 60 ? '<span class="tag opportunity">피칭 기회</span>' : '';
   const kwTag = opts.keyword ? `<span class="tag">${escape(a.matchedKeyword)}</span>` : '';
   const take = takeLine(a);
-  const otherOutlets = a.otherOutlets ? ` · 외 ${a.otherOutlets}개 매체 추가보도` : '';
   return `
     <div class="article">
       <div>${toneTag}${citationTag}${pitchTag}${kwTag}</div>
@@ -308,7 +291,7 @@ function renderArticle(a: AnalyzedArticle, opts: { citation?: boolean; keyword?:
         <a href="${escape(safeArticleHref(a.link, a.title, a.source))}" target="_blank">${escape(a.title)}</a>
       </div>
       ${take ? `<div class="article-take">${escape(take)}</div>` : ''}
-      <div class="article-meta">${escape(a.source)} · ${formatFullDate(a.pubDate)}${otherOutlets}</div>
+      <div class="article-meta">${escape(a.source)} · ${formatFullDate(a.pubDate)}</div>
     </div>`;
 }
 
@@ -318,12 +301,12 @@ function takeLine(a: AnalyzedArticle): string {
   if (t) return t;
   // 부정 논조 안내는 스파크랩·포트폴리오에만 (AC·VC는 부정 검사 자체를 안 함)
   const toneScoped = a.category === 'sparklabs_self' || a.category === 'portfolio_company';
-  if (toneScoped && a.tone === 'NEGATIVE') return '부정 논조 보도 — 본부 모니터링·대응 검토가 필요합니다.';
-  if (a.pitchScore >= 60) return '기획기사 피칭으로 연결 가능한 주제입니다.';
-  if (a.category === 'sparklabs_self') return '스파크랩 미디어 노출 — 메시지 확산 관점에서 참고할 보도입니다.';
-  if (a.category === 'portfolio_company') return '포트폴리오사 언론 노출 — PR 활용 가능성을 살펴볼 보도입니다.';
-  if (a.category === 'competitor') return '타 하우스 동향 — 경쟁 포지셔닝 참고용입니다.';
-  return '업계 흐름 참고 보도입니다.';
+  if (toneScoped && a.tone === 'NEGATIVE') return '부정 논조 보도 — 본부 모니터링·대응 검토가 필요하다.';
+  if (a.pitchScore >= 60) return '기획기사 피칭으로 연결 가능한 주제다.';
+  if (a.category === 'sparklabs_self') return '스파크랩 미디어 노출 — 메시지 확산 관점에서 참고할 보도다.';
+  if (a.category === 'portfolio_company') return '포트폴리오사 언론 노출 — PR 활용 가능성을 살펴볼 보도다.';
+  if (a.category === 'competitor') return '타 하우스 동향 — 경쟁 포지셔닝 참고용이다.';
+  return '업계 흐름 참고 보도다.';
 }
 
 // 자체/인용 휴리스틱 (본문 미저장 상태 — 제목에 스파크랩 노출 여부로 근사)
@@ -338,25 +321,6 @@ function categoryLabel(cat: string): string {
     competitor: 'AC·VC 업계 동향',
     industry_trend: '업계 동향',
   } as Record<string, string>)[cat] ?? '주요 보도';
-}
-
-// 💡 본부에 한 줄 — 실제 데이터 기반 (AI 미가동 시에도 정직한 액션)
-function headquarterActionTitle(a: AnalyzedArticle): string {
-  if (a.pitchTopic) return `${a.pitchTopic} — 지금이 피칭 타이밍입니다`;
-  if (a.tone === 'NEGATIVE') return '부정 이슈 감지 — 선제 대응 메시지를 준비할 시점입니다';
-  return '오늘의 보도, 본부 차원에서 한 발 더 들어갈 지점입니다';
-}
-
-function headquarterActionText(sorted: AnalyzedArticle[]): string {
-  const pitches = sorted.filter(a => a.pitchScore >= 60);
-  const top = pitches[0] ?? sorted[0];
-  if (!top) return '오늘은 주목할 보도가 적습니다. 업계 동향만 가볍게 확인해 주세요.';
-  const cnt = pitches.length;
-  const lead = `<strong>${escape(top.title)}</strong>`;
-  if (cnt >= 2) {
-    return `${lead} 등 주목할 보도가 ${cnt}건 확인됐습니다. 이를 우리 포트폴리오 맥락으로 엮어 <strong>기획 피칭 또는 본부 안내 메일</strong>로 연결할 수 있습니다.`;
-  }
-  return `${lead} 보도를 우리 포트폴리오 맥락으로 엮어 <strong>기획 피칭 또는 본부 안내</strong>로 연결할 수 있습니다.`;
 }
 
 function formatDateKR(d: Date): string {
@@ -417,11 +381,6 @@ body{margin:0;padding:0;background:#F5F3EF;font-family:-apple-system,BlinkMacSys
 .tag.positive{background:#DCFCE7;color:#166534}
 .tag.alert{background:#FEE2E2;color:#991B1B}
 .tag.opportunity{background:#FEF3C7;color:#92400E}
-.insight-box{background:linear-gradient(135deg,#FFFBEB 0%,#FEF3C7 100%);border-left:5px solid #F59E0B;padding:18px 20px;border-radius:6px}
-.insight-label{font-size:11px;font-weight:700;color:#92400E;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px}
-.insight-title{font-size:15px;font-weight:700;color:#78350F;margin-bottom:8px}
-.insight-text{font-size:13px;color:#78350F;line-height:1.6}
-.insight-text strong{color:#92400E}
 .footer{padding:24px 28px 32px;background:#F5F3EF;text-align:center}
 .footer-text{font-size:12px;color:#6B7280}
 .footer-cta-text{font-size:13px;color:#374151;margin-bottom:14px}

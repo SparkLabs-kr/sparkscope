@@ -227,14 +227,6 @@ function esc(s: string): string {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-/** 증감 표기 — 오른 것만 빨강, 나머지는 회색. */
-function delta(deltaPct: number | null): string {
-  if (deltaPct === null) return '<span class="i-flat">비교 불가</span>';
-  if (deltaPct > 0) return `<span class="i-up">▲${deltaPct}%</span>`;
-  if (deltaPct < 0) return `<span class="i-flat">▼${Math.abs(deltaPct)}%</span>`;
-  return '<span class="i-flat">보합</span>';
-}
-
 /** 헤더 stats 안에 들어갈 칸 하나. "해외 39건"이 아니라 "몇 개사가 우리와 연결됐나"를 값으로 쓴다. */
 export function renderInterStat(b: InterDigestBlock): string {
   const names = b.companyNames;
@@ -256,8 +248,8 @@ export function renderInterStrip(b: InterDigestBlock): string {
 
   const rows = b.combos.map((c, i) => `
     <div class="i-rank">
-      <span class="i-no">${i + 1}</span><span class="i-combo">${esc(c.label)}</span>
-      <span class="i-nums"> · ${c.count}건 (직전 ${c.prevCount}건) </span>${delta(c.deltaPct)}${
+      <span class="i-no">${i + 1}.</span> <span class="i-combo">${esc(c.label)}</span>
+      <span class="i-nums"> · ${c.count}건</span>${
         c.isSurge ? '<span class="i-tag surge">급증</span>' : ''
       }
     </div>`).join('');
@@ -270,8 +262,7 @@ export function renderInterStrip(b: InterDigestBlock): string {
   return `
   <div class="inter-strip">
     <div class="i-strip-head">
-      <span class="i-strip-pill">🔭 INTER</span>
-      <span class="i-strip-title">해외 트렌드 주요 Topic</span>
+      <span class="i-strip-title">해외 주요 트렌드 Topic</span>
     </div>
     ${rows}
     <div class="i-strip-foot">${foot}</div>
@@ -305,25 +296,21 @@ export function renderInterSection(b: InterDigestBlock, baseUrl: string): string
       연결된 <strong>${b.cards.length}건</strong>을 골랐습니다 (연결된 회사 ${b.companyNames.length}개사).
     </div>
     ${cards}
-    <a href="${esc(baseUrl)}/dashboard?scope=inter" class="i-cta">Inter 탭에서 전체 트렌드 보기 →</a>
   </div>`;
 }
 
 /** Inter 블록 전용 CSS — 기존 EMAIL_CSS 클래스는 하나도 덮어쓰지 않는다(전부 i- / inter- 접두). */
 export const INTER_EMAIL_CSS = `
-.i-up{color:#DC2626;font-weight:800}
-.i-flat{color:#6B7280;font-weight:700}
 .stat.inter{background:#ECFDF5}
 .stat.inter .stat-value{color:#16A34A}
 .inter-strip{padding:18px 28px;background:#ECFDF5;border-top:1px solid #A7F3D0;border-bottom:1px solid #A7F3D0}
 .i-strip-head{display:flex;align-items:center;gap:9px;margin-bottom:13px}
-.i-strip-pill{display:inline-block;flex-shrink:0;background:#059669;color:#FFF;font-size:10.5px;font-weight:800;letter-spacing:.8px;padding:4px 10px;border-radius:20px}
 .i-strip-title{font-size:16px;font-weight:800;color:#064E3B;line-height:1.3}
-.i-rank{padding:4px 0;font-size:13px;color:#065F46;line-height:1.5}
-.i-no{display:inline-block;width:14px;font-weight:800;color:#A7F3D0}
+.i-rank{padding:4px 0;font-size:13px;color:#1A1A1A;line-height:1.5}
+.i-no{display:inline-block;min-width:16px;font-weight:800;color:#1A1A1A}
 .i-combo{font-weight:800;color:#064E3B}
-.i-nums{color:#6B7280;font-size:11.5px}
-.i-strip-foot{margin-top:10px;padding-top:9px;border-top:1px solid #A7F3D0;font-size:12.5px;color:#065F46;line-height:1.6}
+.i-nums{color:#1A1A1A;font-size:11.5px}
+.i-strip-foot{margin-top:10px;padding-top:9px;border-top:1px solid #A7F3D0;font-size:12.5px;color:#1A1A1A;line-height:1.6}
 .i-strip-foot strong{color:#047857}
 .section.inter-sec{border-bottom:1px solid #D1FAE5}
 .section-label.inter-lb{color:#047857}
