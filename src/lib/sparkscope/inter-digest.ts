@@ -290,10 +290,10 @@ export function renderInterSection(b: InterDigestBlock, baseUrl: string): string
 
   return `
   <div class="section inter-sec">
-    <div class="section-label inter-lb">🔭 글로벌 트렌드 × 우리 포트폴리오</div>
+    <div class="section-label inter-lb">🔭 글로벌 트렌드 × 스파크랩 포트폴리오</div>
     <div class="i-sub">
-      최근 ${WINDOW_DAYS}일 해외 매체·논문 <strong>${b.total}건</strong> 중, 우리 포트폴리오사와
-      연결된 <strong>${b.cards.length}건</strong>을 골랐습니다 (연결된 회사 ${b.companyNames.length}개사).
+      ${WINDOW_DAYS}일 기준, 해외 매체·논문 <strong>${b.total}건</strong>을 분석해 스파크랩 포트폴리오와
+      관련된 주요 트렌드 <strong>${b.cards.length}건</strong>을 선정했습니다.
     </div>
     ${cards}
   </div>`;
