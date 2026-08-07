@@ -699,7 +699,13 @@ function HeadlineStats({ headline: h }: { headline: InterMatrix['headline'] }) {
                 <span className="ml-auto shrink-0 text-[11px] text-spark-muted">
                   {hot.count}건 · 직전 {hot.prevCount}건
                   {hot.deltaPct !== null ? (
-                    <> <span className="font-bold text-red-500">▲{hot.deltaPct}%</span></>
+                    hot.deltaPct > 0 ? (
+                      <> <span className="font-bold text-red-500">▲{hot.deltaPct}%</span></>
+                    ) : hot.deltaPct < 0 ? (
+                      <> <span className="font-bold text-blue-500">▼{Math.abs(hot.deltaPct)}%</span></>
+                    ) : (
+                      <> <span className="font-bold text-spark-muted">±0%</span></>
+                    )
                   ) : hot.prevCount === 0 ? (
                     <> <span className="font-bold text-emerald-600">신규</span></>
                   ) : null}
