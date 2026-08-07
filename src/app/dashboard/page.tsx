@@ -635,7 +635,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     <>
       {/* 스코프 전환 — Intra(내부 생태계) / Inter(해외 트렌드) */}
       <div className="flex flex-wrap items-center gap-3 mb-5">
-        <div className="flex gap-0.5 rounded-lg bg-spark-cream p-0.5">
+        <div data-tour="scope-switch" className="flex gap-0.5 rounded-lg bg-spark-cream p-0.5">
           {SCOPES.map(s => {
             const active = s.id === scope;
             const activeCls = s.id === 'inter' ? 'bg-emerald-600 text-white' : 'bg-spark-purple text-white';
@@ -665,7 +665,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             {scope === 'inter' ? `${range.label} 해외 매체·논문 데이터 기준` : `${range.label} 데이터 기준`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div data-tour="header-actions" className="flex items-center gap-2">
           {canScrap && <Link href="/dashboard/scraps" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⭐ 스크랩함</Link>}
           {canBookmark && <Link href="/dashboard/bookmarks" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔖 내 북마크</Link>}
           {canScrap && <Link href="/dashboard/keywords" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⚙️ 키워드 관리</Link>}
@@ -680,7 +680,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       ) : (
       <>
       {/* 섹션 탭 — 스크롤 대신 화면 전환. 선택된 탭만 보라색으로 강조. */}
-      <nav className="flex flex-wrap gap-2 mb-3" aria-label="대시보드 섹션">
+      <nav data-tour="intra-tabs" className="flex flex-wrap gap-2 mb-3" aria-label="대시보드 섹션">
         {TABS.map(t => {
           const active = t.id === tab;
           return (
@@ -701,7 +701,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       </nav>
 
       {/* 기간 선택 — 탭 바로 아래에 두어 어느 탭에서도 같은 자리에서 기간을 바꿀 수 있게 한다. */}
-      <div className="mb-6">
+      <div data-tour="date-range" className="mb-6">
         <DateRangePicker key={`${range.from}_${range.to}`} from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())} company={data.selectedCompany} tab={tab} />
       </div>
 
@@ -710,7 +710,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       {tab !== 'competitor' && (
         <>
           {data.spikes.length > 0 && (
-            <div className="mb-6 space-y-2">
+            <div data-tour="spike-banner" className="mb-6 space-y-2">
               {data.spikes.map(s => <SpikeBanner key={s.company} s={s} />)}
             </div>
           )}
@@ -724,7 +724,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
               )}
             </div>
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div data-tour="kpi" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <KpiCard label="총 수집 기사" value={data.kpi.total} hint="선택한 기간 내 수집된 모든 기사 수 (노이즈 제외)" />
             <KpiCard label="스파크랩 직접 언급" value={data.kpi.sparklabsCount} hint="기사 제목에 '스파크랩'이 언급된 건수" />
             <KpiCard label="포트폴리오사 노출" value={data.kpi.portfolioCount} hint="스파크랩이 투자한 포트폴리오사가 언급된 기사 건수" />
@@ -737,18 +737,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       {tab === 'sparklabs' && <>
       <SectionTitle title="🏢 스파크랩" sub="우리 자사가 어디에, 어떤 논조로 보도되는가" />
       <div className="flex flex-col gap-4 mb-8">
-        <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
+        <div data-tour="media-panel" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
           <div className="font-bold mb-4">📰 매체별 노출 분포 (스파크랩) <InfoTip text="선택 기간 동안 '스파크랩' 기사를 다룬 매체 분포입니다(주요 26개 매체 기준).\n어느 매체가 우리를 가장 많이 써주는지 보여줍니다." /></div>
           <MediaPanel data={data.sources} defaultCount={12} />
         </div>
-        <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
+        <div data-tour="tone-panel" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
           <div className="font-bold mb-4">💬 톤 분석 (스파크랩) <InfoTip text="'스파크랩' 기사의 긍정·중립·부정 논조 비율입니다. 각 논조의 기사 목록이 바로 아래에 표시됩니다." /></div>
           <ToneBreakdown articles={data.toneArticles as any} />
         </div>
 
         {/* 스파크랩 펀드 현황 */}
         {data.sparkLabsFundSummary && (
-          <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
+          <div data-tour="fund-panel" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
             <div className="font-bold mb-4">🏦 스파크랩 펀드 현황</div>
             <div className="flex flex-wrap gap-4 mb-4">
               <div className="flex flex-col items-center px-4 py-3 rounded-xl bg-spark-light-purple/40 min-w-[80px]">
@@ -809,7 +809,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       <SectionTitle title="📊 포트폴리오사" sub="어느 포트폴리오사가 활발히 노출되고, 부정 이슈는 없는가" />
 
       {/* 실시간 위기 감지 — 위기 없을 땐 '정상' 상태를 명시해 기능이 살아있음을 표시 */}
-      <div className="mb-6">
+      <div data-tour="crisis-panel" className="mb-6">
         <div className="flex items-center gap-2 mb-3">
           <span className="text-sm font-bold text-red-700">🚨 실시간 위기 감지</span>
           <InfoTip text={`최근 ${CRISIS_WINDOW_DAYS}일간 포트폴리오사별 부정 논조 기사(부정 키워드·부정 톤)를 모아, 2건 이상 급증한 회사를 감지합니다.\n원인은 AI가 실제 기사 제목에서 요약합니다.`} />
@@ -818,15 +818,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       </div>
 
       {/* 긍정·부정 나란히 (대비가 한눈에) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+      <div data-tour="pos-neg" className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <PortfolioPositives items={data.portfolioPositives} rangeLabel={range.label} />
         <PortfolioNegatives items={data.portfolioNegatives} rangeLabel={range.label} />
       </div>
 
       {/* 포트폴리오 TOP15 → 기획기사 피칭 (위아래 배치) */}
       <div className="grid grid-cols-1 gap-4 mb-8">
-        <PortfolioTopList items={data.portfolioTop} rangeLabel={range.label} prevRangeLabel={data.portfolioTopPrevRangeLabel} showChange={data.portfolioTopHasEnoughPrevData} />
-        <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
+        <div data-tour="top15">
+          <PortfolioTopList items={data.portfolioTop} rangeLabel={range.label} prevRangeLabel={data.portfolioTopPrevRangeLabel} showChange={data.portfolioTopHasEnoughPrevData} />
+        </div>
+        <div data-tour="pitch" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
           <div className="font-bold mb-3">🎯 기획기사 피칭 <InfoTip text={`AI가 각 기사를 0~100점으로 평가한 '기획기사 피칭 점수'입니다.\n이 주제로 우리 포트폴리오사를 엮어 기획기사를 제안하면 성사 가능성이 높은 기사를 뜻합니다.\n· 60점 이상: 아래 목록에 표시\n· 75점 이상: 상단 '피칭 기회' 지표에 집계`} /></div>
           {data.pitches.length > 0 ? (
             <div className="space-y-3">
@@ -849,7 +851,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
       {/* 경쟁사 모니터링 — Tier1 직접 경쟁 액셀러레이터 언급량·최근 이슈 */}
       {tab === 'competitor' && (
-        <div className="mb-6">
+        <div data-tour="competitor-panel" className="mb-6">
           <CompetitorPanel
             competitors={data.competitors}
             cardCompetitors={data.pinnedCompetitors}
@@ -862,7 +864,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
       {/* 기사 테이블 — 기간/포트폴리오사 필터 + 정렬 + CSV */}
       {tab === 'articles' &&
-      <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
+      <div data-tour="article-table" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
         <div className="mb-4">
           <div className="flex flex-wrap justify-between items-start gap-3">
             <div>
