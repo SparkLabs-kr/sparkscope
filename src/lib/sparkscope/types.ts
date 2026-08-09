@@ -60,9 +60,6 @@ export interface DigestData {
   portfolioArticles: AnalyzedArticle[];
   competitorArticles: AnalyzedArticle[];
   industryArticles: AnalyzedArticle[];
-  insightTitle?: string;
-  insightText?: string;
-  insightActionUrl?: string;
   // 해외 트렌드(Inter) 블록 — 없으면 관련 섹션이 통째로 빠지고 메일은 예전과 동일하다.
   // 국내(Intra) 데이터와 출처가 완전히 분리돼 있어 buildDigestData가 아니라 호출부에서 채운다.
   inter?: import('./inter-digest').InterDigestBlock | null;
