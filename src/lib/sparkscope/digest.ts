@@ -54,7 +54,11 @@ export function buildClusteredPool(articles: AnalyzedArticle[]): AnalyzedArticle
 // TOP3는 "우리 얘기"(스파크랩·포트폴리오)만 다룬다 — 경쟁사·업계동향은 아래 별도 섹션에 이미
 // 있어서, TOP3까지 차지하면 가장 눈에 띄는 자리가 우리와 무관한 뉴스로 채워지는 문제가 있었다
 // (2026-08-06, 소윤 피드백).
-const TOP_3_CATEGORIES = new Set(['sparklabs_self', 'portfolio_company']);
+// 스파크랩·포트폴리오사가 최우선이지만, 그 둘만으로 3건이 안 채워지는 날(뉴스가 적은 날+
+// TOP3 AI 검증 탈락이 겹치는 경우)엔 AC·VC 기사로라도 채운다 — 아래 rankTop3Pool의 정렬
+// 우선순위(스파크랩 > 포트폴리오 > 그 외)가 실제로 AC·VC를 맨 뒤 보충용으로만 쓰이게 한다
+// (2026-08-10, "TOP1까지만 뜨는 날이 있다" 피드백으로 발견).
+const TOP_3_CATEGORIES = new Set(['sparklabs_self', 'portfolio_company', 'competitor']);
 
 export function rankTop3Pool(sorted: AnalyzedArticle[], scrappedLinks?: Set<string>): AnalyzedArticle[] {
   const rankedForTop3 = sorted

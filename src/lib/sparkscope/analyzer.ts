@@ -316,25 +316,32 @@ async function verifyTop3Candidates(candidates: Top3Candidate[]): Promise<boolea
   return candidates.map((_, i) => parsed.find(p => p.index === i)?.valid ?? true);
 }
 
-// pool: rankTop3Pool()이 이미 우선순위·회사당 1건으로 정리해둔 후보 목록(슬라이스 전).
-// 앞에서부터 검증해 유효한 것만 count개 채우고, 검증 통과분이 모자라면 남는 자리는 원래
-// 순위 그대로 채워 발송이 비지 않게 한다.
+// pool: rankTop3Pool()이 이미 우선순위(스파크랩 > 포트폴리오 > 그 외)·회사당 1건으로 정리해둔
+// 후보 목록(슬라이스 전). 앞에서부터 배치로 검증해 유효한 것만 채우고, 한 배치에서 count개가
+// 안 채워지면 다음 배치(순위상 다음 후보 — 스파크랩·포트폴리오가 떨어지면 자연히 AC·VC까지)로
+// 계속 내려가며 검증한다. "상위 8건만 검증하고 모자라면 그 뒤 미검증분으로만 채운다"던 예전
+// 방식은 풀 자체가 8건 이하면 채울 데가 없어 TOP1~2건으로 끝나는 날이 있었다
+// (2026-08-10, 실사용 피드백으로 발견). 최소 count개는 채우는 게 목표.
 export async function pickVerifiedTop3<T extends Top3Candidate>(pool: T[], count = 3): Promise<T[]> {
   if (pool.length === 0) return [];
-  const checkCount = Math.min(pool.length, count + 5); // 탈락 대비 여유 있게 검증
-  const candidates = pool.slice(0, checkCount);
+  const BATCH = count + 5; // 배치당 여유 있게 검증
+  const verified: T[] = [];
+  const rejected: T[] = [];
+  let offset = 0;
   try {
-    const validFlags = await verifyTop3Candidates(candidates);
-    const verified = candidates.filter((_, i) => validFlags[i]);
-    const rejectedTitles = candidates.filter((_, i) => !validFlags[i]).map(c => c.title);
-    if (rejectedTitles.length > 0) {
-      console.warn(`[analyzer] TOP3 검증 탈락 ${rejectedTitles.length}건:`, rejectedTitles);
+    while (verified.length < count && offset < pool.length) {
+      const batch = pool.slice(offset, offset + BATCH);
+      const validFlags = await verifyTop3Candidates(batch);
+      batch.forEach((c, i) => (validFlags[i] ? verified : rejected).push(c));
+      offset += batch.length;
+    }
+    if (rejected.length > 0) {
+      console.warn(`[analyzer] TOP3 검증 탈락 ${rejected.length}건:`, rejected.map(c => c.title));
     }
     if (verified.length >= count) return verified.slice(0, count);
-    // 검증 통과분이 모자라면 검증 안 한 나머지 풀(순위상 다음 후보)로 채운다 — 탈락한 후보를
-    // 다시 채우면 검증한 의미가 없으므로, 애초에 검사하지 않은 다음 순번만 사용한다.
-    const remainder = pool.slice(checkCount);
-    return [...verified, ...remainder].slice(0, count);
+    // 풀 전체를 다 검증했는데도 count개가 안 되면(=진짜 후보 자체가 그만큼 없는 날) 탈락분으로라도
+    // 채워 발송이 아예 비지 않게 한다.
+    return [...verified, ...rejected].slice(0, count);
   } catch (e) {
     console.error('[analyzer] TOP3 검증 실패, 규칙 기반 순위로 폴백:', e);
     return pool.slice(0, count);
