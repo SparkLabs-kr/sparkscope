@@ -342,7 +342,7 @@ function escape(s: string): string {
 }
 
 const EMAIL_CSS = `
-body{margin:0;padding:0;background:#F5F3EF;font-family:-apple-system,BlinkMacSystemFont,"맑은 고딕","Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#1A1A1A;line-height:1.6}
+body{margin:0;padding:0;background:#F5F3EF;font-family:-apple-system,BlinkMacSystemFont,"맑은 고딕","Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#1A1A1A;line-height:1.6;word-break:keep-all;overflow-wrap:break-word}
 .container{max-width:640px;margin:0 auto;background:#FFF}
 .header{padding:28px 28px 22px;border-bottom:3px solid #5046E5}
 .brand{font-size:11px;font-weight:700;letter-spacing:1.8px;color:#5046E5;text-transform:uppercase}
@@ -383,7 +383,7 @@ body{margin:0;padding:0;background:#F5F3EF;font-family:-apple-system,BlinkMacSys
 .tag.opportunity{background:#FEF3C7;color:#92400E}
 .footer{padding:24px 28px 32px;background:#F5F3EF;text-align:center}
 .footer-text{font-size:12px;color:#6B7280}
-.footer-cta-text{font-size:13px;color:#374151;margin-bottom:14px}
+.footer-cta-text{font-size:13px;color:#374151;margin-bottom:14px;white-space:nowrap}
 .footer-cta-button{display:block;width:100%;box-sizing:border-box;padding:15px 20px;background:#5046E5;color:#FFF !important;text-decoration:none;border-radius:8px;font-size:14px;font-weight:700;text-align:center}
 .footer-link{font-size:12px;color:#5046E5;text-decoration:none;font-weight:600}
 .footer-meta{margin-top:12px;font-size:11px;color:#9CA3AF;line-height:1.6}
