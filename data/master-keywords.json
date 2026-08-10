@@ -5478,9 +5478,9 @@
     "portfolioStatus": "Live",
     "tier": "C",
     "primaryKeyword": "타코",
-    "helperKeywords": "David Choi 숏폼비디오",
-    "excludeWords": "타코야끼, 멕시코음식, 또띠아",
-    "contextWords": "콘텐츠 크리에이터, 숏폼, 비디오, SNS, 커뮤니티",
+    "helperKeywords": "David Choi, 숏폼비디오",
+    "excludeWords": "타코야끼, 멕시코음식, 또띠아, 멕시코 타코",
+    "contextWords": "콘텐츠 크리에이터, 숏폼, 비디오",
     "notes": "콘텐츠 크리에이터들을 위한 미국의 숏폼 비디오 플랫폼"
   },
   {
