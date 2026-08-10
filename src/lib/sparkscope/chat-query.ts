@@ -76,6 +76,12 @@ export type ChatQueryInput = {
   question: string;
   period: ChatPeriod;
   scopes: ChatScope[];
+  /** 위기·이슈 질문 — 부정 톤/위험 플래그 기사만 본다 */
+  onlyNegative?: boolean;
+  /** 지표·추이 질문 — 월별 추이를 같이 뽑는다 */
+  withTrend?: boolean;
+  /** 키워드·노이즈 질문 — 오탐 많은 키워드를 같이 뽑는다 */
+  withNoise?: boolean;
   /** 의도 분석기가 뽑아준 검색어. 없으면 질문에서 규칙 기반으로 뽑는다. */
   terms?: string[];
   limit?: number;
@@ -99,6 +105,10 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
         { matchedKeyword: { contains: t, mode: 'insensitive' } },
       ]),
     });
+  }
+  // 위기·이슈: 부정 톤이거나 위험 플래그가 달린 기사만
+  if (input.onlyNegative) {
+    and.push({ OR: [{ tone: 'NEGATIVE' }, { riskFlag: { not: null } }] });
   }
   if (and.length) where.AND = and;
 
@@ -131,12 +141,58 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
 
   const clean = rows.filter((a) => !isBlockedNoise(a));
 
+  // 월별 추이 — 조건은 그대로 두고 기간만 최근 6개월로 넓혀서 센다.
+  let monthly: { month: string; count: number }[] | null = null;
+  if (input.withTrend) {
+    // 월별로 count를 따로 센다. findMany로 가져와 세면 take 상한에 걸려 숫자가 잘린다.
+    const now = new Date();
+    const buckets: { month: string; gte: Date; lt: Date }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const gte = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const lt = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+      buckets.push({ month: `${gte.getFullYear()}-${String(gte.getMonth() + 1).padStart(2, '0')}`, gte, lt });
+    }
+    const counts = await Promise.all(
+      buckets.map((b) => prisma.article.count({ where: { ...where, pubDate: { gte: b.gte, lt: b.lt } } }))
+    );
+    monthly = buckets.map((b, i) => ({ month: b.month, count: counts[i] }));
+  }
+
+  // 오탐 많은 키워드 — 같은 기간에서 isNoise=true인 기사를 키워드별로 센다.
+  let noisyKeywords: { name: string; noise: number; kept: number }[] | null = null;
+  if (input.withNoise) {
+    const noiseWhere: any = { isNoise: true };
+    if (range) noiseWhere.pubDate = { gte: range.gte, lte: range.lte };
+    const [noiseRows, keptRows] = await Promise.all([
+      prisma.article.groupBy({
+        by: ['matchedKeyword'],
+        where: noiseWhere,
+        _count: { _all: true },
+        orderBy: { _count: { matchedKeyword: 'desc' } },
+        take: 10,
+      }),
+      prisma.article.groupBy({
+        by: ['matchedKeyword'],
+        where: { ...(range ? { pubDate: { gte: range.gte, lte: range.lte } } : {}), isNoise: false },
+        _count: { _all: true },
+      }),
+    ]);
+    const keptMap = new Map(keptRows.map((r) => [r.matchedKeyword, r._count._all]));
+    noisyKeywords = noiseRows.map((r) => ({
+      name: r.matchedKeyword,
+      noise: r._count._all,
+      kept: keptMap.get(r.matchedKeyword) ?? 0,
+    }));
+  }
+
   const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
   const cat = new Map<string, number>();
   const src = new Map<string, number>();
   const comp = new Map<string, number>();
   let negativeCount = 0;
+  let riskCount = 0;
   for (const a of clean) {
+    if (a.riskFlag) riskCount++;
     bump(cat, a.category);
     bump(src, normalizeSource(a.source));
     if (a.matchedKeyword) bump(comp, a.matchedKeyword);
@@ -169,6 +225,8 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
     periodLabel: PERIOD_LABEL[input.period],
     // 1000건 상한에 걸리지 않았으면 정제 후 개수가 더 정확하다.
     total: rows.length < 1000 ? clean.length : total,
+    // 1000건 상한에 걸리면 아래 분류·키워드·매체 집계는 최신 1000건 표본 기준이다.
+    sampled: rows.length >= 1000,
     prevTotal,
     // 증감률은 양쪽 다 '정제 전 raw 건수'로 계산한다 — 이번 기간만 정제하고 비교하면
     // 줄어든 것처럼 왜곡된다. 직전이 0건이면 %가 의미 없어 null.
@@ -177,6 +235,9 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
     topSources: top(src, 5),
     topCompanies: top(comp, 5),
     negativeCount,
+    riskCount,
+    monthly,
+    noisyKeywords,
     articles,
   };
 }

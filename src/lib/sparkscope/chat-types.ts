@@ -66,5 +66,13 @@ export type ChatQueryResult = {
   topSources: { name: string; count: number }[];
   topCompanies: { name: string; count: number }[];
   negativeCount: number;
+  /** 분류·키워드·매체 집계가 최신 1000건 표본 기준인지 */
+  sampled?: boolean;
+  /** 위험 플래그가 달린 기사 수 */
+  riskCount: number;
+  /** 월별 건수 (지표·추이 질문일 때만 채워진다) */
+  monthly: { month: string; count: number }[] | null;
+  /** 오탐(노이즈)으로 걸러진 기사가 많은 키워드 (키워드·노이즈 질문일 때만) */
+  noisyKeywords: { name: string; noise: number; kept: number }[] | null;
   articles: ChatArticle[];
 };

@@ -9,6 +9,7 @@
 //   3) 카테고리(TASKS)   = 무엇을 할지     — 대시보드 기능별 업무 시나리오
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { exportAnswerToPdf } from '@/lib/chat-pdf';
 // 서버 전용 모듈(prisma)이 클라이언트 번들에 딸려오지 않도록 타입 전용 파일에서 가져온다.
 import {
   categoryLabel,
@@ -200,6 +201,54 @@ type Msg =
   | { role: 'assistant'; res: ChatResponse; period: string; scopes: string[]; modes: string[] }
   | { role: 'error'; text: string };
 
+/** 예전 버전이 저장해 둔 대화를 지금 형식으로 맞춘다.
+ *  (assistant 메시지가 {result}만 갖고 있던 시절이 있어서, 그대로 열면 화면이 깨졌다) */
+function migrateConvos(raw: any): Convo[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((c) => c && typeof c.id === 'string' && Array.isArray(c.messages))
+    .map((c) => ({
+      id: c.id,
+      title: typeof c.title === 'string' ? c.title : '대화',
+      updatedAt: typeof c.updatedAt === 'number' ? c.updatedAt : 0,
+      messages: c.messages.flatMap((m: any): Msg[] => {
+        if (!m || typeof m !== 'object') return [];
+        if (m.role === 'user') {
+          return [
+            {
+              role: 'user',
+              text: String(m.text ?? ''),
+              period: m.period ?? 'quarter',
+              scopes: Array.isArray(m.scopes) ? m.scopes : [],
+              files: Array.isArray(m.files) ? m.files : [],
+            },
+          ];
+        }
+        if (m.role === 'error') return [{ role: 'error', text: String(m.text ?? '오류') }];
+        if (m.role === 'assistant') {
+          // 구버전: { result }  →  신버전: { res: { result, ... } }
+          const res: ChatResponse = m.res ?? {
+            intent: 'search',
+            note: null,
+            unsupported: null,
+            summary: null,
+            result: m.result ?? null,
+          };
+          return [
+            {
+              role: 'assistant',
+              res,
+              period: m.period ?? 'quarter',
+              scopes: Array.isArray(m.scopes) ? m.scopes : [],
+              modes: Array.isArray(m.modes) ? m.modes : [],
+            },
+          ];
+        }
+        return [];
+      }),
+    }));
+}
+
 export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   const [input, setInput] = useState('');
   const [activeModes, setActiveModes] = useState<string[]>(['sources']);
@@ -222,7 +271,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORE_KEY);
-      if (raw) setConvos(JSON.parse(raw));
+      if (raw) setConvos(migrateConvos(JSON.parse(raw)));
     } catch {
       /* 저장본이 깨졌으면 무시하고 새로 시작 */
     }
@@ -467,7 +516,13 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                   <div key={i} className="flex gap-2.5 animate-rise">
                     <SparkScopeMark size="xs" />
                     <div className="flex-1 min-w-0">
-                      <ChatAnswer res={m.res} scopes={m.scopes} modes={m.modes} />
+                      <ChatAnswer
+                        res={m.res}
+                        scopes={m.scopes ?? []}
+                        modes={m.modes ?? []}
+                        period={m.period ?? 'quarter'}
+                        question={lastQuestionBefore(messages, i)}
+                      />
                     </div>
                   </div>
                 )
@@ -736,7 +791,20 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
 }
 
 /** 답변 한 덩어리 — 안내 문구 + (심층 분석 켰을 때) 요약 + 조회 결과 */
-function ChatAnswer({ res, scopes, modes }: { res: ChatResponse; scopes: string[]; modes: string[] }) {
+function ChatAnswer({
+  res,
+  scopes,
+  modes,
+  period,
+  question,
+}: {
+  res: ChatResponse;
+  scopes: string[];
+  modes: string[];
+  period: string;
+  question: string;
+}) {
+  if (!res) return null;
   return (
     <div className="w-full space-y-2.5">
       {/* 아직 못 하는 요청 안내 */}
@@ -761,8 +829,31 @@ function ChatAnswer({ res, scopes, modes }: { res: ChatResponse; scopes: string[
       )}
 
       {res.result && <ChatResult result={res.result} scopes={scopes} asTable={modes.includes('table')} />}
+
+      {(res.summary || res.result) && (
+        <button
+          type="button"
+          onClick={() => exportAnswerToPdf({ question, res, period, scopes })}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-spark-border bg-white text-[12px] font-semibold text-spark-ink-soft hover:text-spark-purple hover:border-spark-purple/30 transition"
+        >
+          <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5">
+            <path d="M8 2v7M8 9L5 6M8 9l3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M2.5 11v2.5h11V11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+          PDF로 저장
+        </button>
+      )}
     </div>
   );
+}
+
+/** 이 답변이 어떤 질문에 대한 것인지 — 바로 앞의 사용자 메시지 */
+function lastQuestionBefore(messages: Msg[], index: number): string {
+  for (let i = index - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role === 'user') return m.text;
+  }
+  return 'SparkScope 리포트';
 }
 
 /** 조회 결과 — DB 집계 + 기사 목록 */
@@ -798,7 +889,7 @@ function ChatResult({
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-3">
           <span className="text-2xl font-extrabold text-spark-ink">{result.total.toLocaleString()}건</span>
           <span className="text-[13px] text-spark-muted">{result.periodLabel} 기준</span>
-          {result.deltaPct !== null && (
+          {typeof result.deltaPct === 'number' && (
             <span
               className={`px-1.5 py-0.5 rounded-md text-[12px] font-bold ${
                 result.deltaPct > 0

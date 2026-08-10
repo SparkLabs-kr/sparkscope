@@ -52,7 +52,9 @@ export async function POST(req: Request) {
     const finalPeriod: ChatPeriod = period === 'quarter' && intent.period ? intent.period : period;
     const finalScopes: ChatScope[] = scopes.length ? scopes : intent.scopes;
 
-    if (!intent.needsArticles) {
+    // smalltalk이 아니면 무조건 데이터를 본다. (LLM이 manage/report를 '조회 불필요'로
+    // 판단해 빈손으로 답하던 문제가 있었다)
+    if (intent.kind === 'smalltalk') {
       return NextResponse.json({
         intent: intent.kind,
         note: intent.note,
@@ -66,10 +68,16 @@ export async function POST(req: Request) {
       period: finalPeriod,
       scopes: finalScopes,
       terms: intent.terms,
+      // 카테고리별로 필요한 데이터가 다르다.
+      onlyNegative: intent.kind === 'risk',
+      withTrend: intent.kind === 'stats',
+      withNoise: intent.kind === 'manage',
+      limit: intent.kind === 'report' ? 30 : 20,
     });
 
-    // 2) 심층 분석은 켜졌을 때만.
-    const summary = deep ? await summarizeChatResult(question, result, intent) : null;
+    // 2) 추론 — 검색은 '심층 분석' 토글이 켜졌을 때만, 나머지 의도는 분석 자체가 목적이라 항상.
+    const needsReasoning = intent.kind !== 'search' || deep;
+    const summary = needsReasoning ? await summarizeChatResult(question, result, intent) : null;
 
     return NextResponse.json({
       intent: intent.kind,
