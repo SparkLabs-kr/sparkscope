@@ -73,7 +73,7 @@ export function CompetitorPanel({
   return (
     <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
       <div className="flex flex-wrap justify-between items-center gap-2 mb-1">
-        <div className="font-bold text-xl">🏁 경쟁사 모니터링 — 언론 노출 상위</div>
+        <div className="font-bold text-xl">🏁 업계 모니터링 — 언론 노출 상위</div>
         <span className="px-2.5 py-1 bg-spark-light-purple/50 text-spark-purple rounded-full text-sm font-semibold whitespace-nowrap">
           TOP {cards.length} · {rangeLabel}
         </span>
@@ -137,7 +137,7 @@ export function CompetitorPanel({
         if (aumItems.length === 0) return null;
         return (
           <div className="mt-6 pt-5 border-t border-spark-border">
-            <div className="font-bold mb-3">📊 경쟁사 AUM 비교</div>
+            <div className="font-bold mb-3">📊 업계 AUM 비교</div>
             <div className="space-y-1.5">
               {aumItems.map(item => (
                 <div key={item.name} className="flex items-center gap-2 text-sm min-w-0">

@@ -41,7 +41,7 @@ export const INTRA_TOUR: TourStep[] = [
   {
     key: 'intra-tabs',
     title: '네 개의 섹션',
-    body: '**🏢 스파크랩** — 우리 자사가 어디에, 어떤 논조로 실렸나\n**📊 포트폴리오사** — 투자사 노출량과 부정 이슈\n**🏁 경쟁사 모니터링** — 다른 AC·VC는 뭘 하고 있나\n**📋 최근 수집 기사** — 수집된 기사 원문 목록\n\n탭을 바꾸면 아래 패널이 통째로 바뀝니다.',
+    body: '**🏢 스파크랩** — 우리 자사가 어디에, 어떤 논조로 실렸나\n**📊 포트폴리오사** — 투자사 노출량과 부정 이슈\n**🏁 업계 모니터링** — 다른 AC·VC는 뭘 하고 있나\n**📋 최근 수집 기사** — 수집된 기사 원문 목록\n\n탭을 바꾸면 아래 패널이 통째로 바뀝니다.',
   },
   {
     key: 'date-range',
@@ -95,7 +95,7 @@ export const INTRA_TOUR: TourStep[] = [
   },
   {
     key: 'competitor-panel',
-    title: '경쟁사 모니터링',
+    title: '업계 모니터링',
     body: '주요 AC·VC 하우스별 노출량을 스파크랩과 나란히 비교합니다.\n카드를 열면 그 하우스의 최근 기사와 부정 이슈를 볼 수 있고, 맨 위 AI 총평이 전체 판을 한 줄로 정리해줍니다.',
   },
   {
@@ -373,13 +373,15 @@ function TutorialButtonInner() {
   const [steps, setSteps] = useState<TourStep[] | null>(null);
   // 열 때마다 1단계부터 다시 시작하도록 오버레이를 새로 마운트시키는 키
   const [runId, setRunId] = useState(0);
+  const [waiting, setWaiting] = useState(false);
 
   // 대시보드 메인에서만 의미가 있다(하위 페이지엔 설명할 패널이 없음).
+  // ⚠️ 이 컴포넌트는 대시보드 공용 nav에 얹혀 있어 /dashboard ↔ /dashboard/* 사이 클라이언트
+  // 라우팅에도 인스턴스가 유지된다 — 훅 선언 이후에만 return해야 훅 개수가 렌더마다 같아진다
+  // (여기 있던 return이 useState(waiting)보다 앞에 있어서 React error #300이 났었음, 2026-08-10).
   if (pathname !== '/dashboard') return null;
 
   const scope = sp.get('scope') === 'inter' ? 'inter' : 'intra';
-
-  const [waiting, setWaiting] = useState(false);
 
   async function start() {
     const all = scope === 'inter' ? INTER_TOUR : INTRA_TOUR;

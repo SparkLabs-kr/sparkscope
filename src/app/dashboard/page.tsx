@@ -39,7 +39,7 @@ export const preferredRegion = 'icn1';
 const TABS = [
   { id: 'sparklabs', label: '🏢 스파크랩' },
   { id: 'portfolio', label: '📊 포트폴리오사' },
-  { id: 'competitor', label: '🏁 경쟁사 모니터링' },
+  { id: 'competitor', label: '🏁 업계 모니터링' },
   { id: 'articles', label: '📋 최근 수집 기사' },
 ] as const;
 export type TabId = (typeof TABS)[number]['id'];
