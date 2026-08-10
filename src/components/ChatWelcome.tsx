@@ -23,17 +23,6 @@ const MODES = [
     ),
   },
   {
-    id: 'compare',
-    label: '기간 비교',
-    hint: '직전 기간 대비 증감까지 계산해서 답변',
-    icon: (
-      <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
-        <path d="M2 11.5L6 7l3 2.5L14 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M10.5 4H14v3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    ),
-  },
-  {
     id: 'sources',
     label: '근거 기사 첨부',
     hint: '답변에 쓰인 원문 기사 링크를 함께 보여줌',
@@ -45,15 +34,25 @@ const MODES = [
     ),
   },
   {
-    id: 'nonoise',
-    label: '노이즈 제외',
-    hint: '광고·중복·오탐으로 걸러진 기사는 빼고 답변 (기본 켜짐)',
+    id: 'table',
+    label: '표로 정리',
+    hint: '회사·건수·매체·날짜를 표 형태로 정리해서 답변 (보고서에 붙여넣기 좋게)',
     icon: (
       <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
-        <path d="M2.5 3.5h11l-4.3 5v4.2l-2.4 1.3V8.5L2.5 3.5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        <rect x="2.2" y="3" width="11.6" height="10" rx="1.4" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M2.2 6.4h11.6M6.6 6.4V13" stroke="currentColor" strokeWidth="1.5" />
       </svg>
     ),
   },
+] as const;
+
+/** 1-b) 기간 — 토글이 아니라 하나만 고르는 선택형. 대시보드 기본값과 동일하게 최근 3개월. */
+const PERIODS = [
+  { id: 'today', label: '오늘' },
+  { id: 'week', label: '이번 주' },
+  { id: 'month', label: '최근 1개월' },
+  { id: 'quarter', label: '최근 3개월' },
+  { id: 'all', label: '전체 기간' },
 ] as const;
 
 /** 2) 검색 범위 — 스파크스코프가 다루는 데이터 축 (Intra 3 + Inter 1) */
@@ -185,7 +184,8 @@ function fileKind(name: string) {
 
 export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   const [input, setInput] = useState('');
-  const [activeModes, setActiveModes] = useState<string[]>(['sources', 'nonoise']);
+  const [activeModes, setActiveModes] = useState<string[]>(['sources']);
+  const [period, setPeriod] = useState<string>('quarter');
   const [activeScopes, setActiveScopes] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [openTask, setOpenTask] = useState<string | null>(null);
@@ -213,6 +213,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
     console.log('[SparkScope chat]', {
       question: input,
       modes: activeModes,
+      period,
       scopes: activeScopes,
       files: files.map((f) => ({ name: f.name, size: f.size, type: f.type })),
     });
@@ -297,6 +298,32 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
           <div className="px-4 pb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-[12px] font-semibold text-spark-muted mr-0.5">답변 방식</span>
+
+              {/* 기간 — 하나만 고르는 선택형 */}
+              <label
+                title="검색할 기간"
+                className="relative flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-full text-[13px] font-semibold bg-spark-light-purple text-spark-purple cursor-pointer"
+              >
+                <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
+                  <rect x="2.2" y="3.2" width="11.6" height="10" rx="1.6" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M2.2 6.4h11.6M5.6 1.8v2.6M10.4 1.8v2.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                <span>{PERIODS.find((p) => p.id === period)?.label}</span>
+                <span aria-hidden className="text-[10px] leading-none">▾</span>
+                <select
+                  value={period}
+                  onChange={(e) => setPeriod(e.target.value)}
+                  aria-label="검색 기간"
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                >
+                  {PERIODS.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               {MODES.map((m) => {
                 const on = activeModes.includes(m.id);
                 return (
