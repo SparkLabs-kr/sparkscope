@@ -185,6 +185,10 @@ function fileKind(name: string) {
   return '📄';
 }
 
+const STORE_KEY = 'sparkscope-chat-history';
+
+type Convo = { id: string; title: string; updatedAt: number; messages: Msg[] };
+
 type Msg =
   | { role: 'user'; text: string; period: string; scopes: string[]; files: string[] }
   | { role: 'assistant'; result: ChatQueryResult; period: string; scopes: string[] }
@@ -201,9 +205,41 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   const [loading, setLoading] = useState(false);
   const [composing, setComposing] = useState(false); // 한글 IME 조합 중 여부
   const [messages, setMessages] = useState<Msg[]>([]);
+  const [convos, setConvos] = useState<Convo[]>([]);
+  const [convoId, setConvoId] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // 대화 기록은 로컬(브라우저)에만 저장한다. 서버 테이블은 아직 없다.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (raw) setConvos(JSON.parse(raw));
+    } catch {
+      /* 저장본이 깨졌으면 무시하고 새로 시작 */
+    }
+  }, []);
+
+  // 메시지가 바뀔 때마다 현재 대화를 저장(첫 질문이 제목이 된다)
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const firstUser = messages.find((m) => m.role === 'user');
+    const title = firstUser && firstUser.role === 'user' ? firstUser.text : '새 대화';
+    setConvos((prev) => {
+      const id = convoId ?? String(Date.now());
+      if (!convoId) setConvoId(id);
+      const rest = prev.filter((c) => c.id !== id);
+      const next = [{ id, title, updatedAt: Date.now(), messages }, ...rest].slice(0, 50);
+      try {
+        localStorage.setItem(STORE_KEY, JSON.stringify(next));
+      } catch {
+        /* 용량 초과 등은 무시 */
+      }
+      return next;
+    });
+  }, [messages, convoId]);
 
   // 새 메시지가 붙으면 항상 마지막이 보이도록
   useEffect(() => {
@@ -250,7 +286,30 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
     }
   };
 
+  const openConvo = (c: Convo) => {
+    setConvoId(c.id);
+    setMessages(c.messages);
+    setOpenTask(null);
+  };
+
+  const deleteConvo = (id: string) => {
+    setConvos((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      try {
+        localStorage.setItem(STORE_KEY, JSON.stringify(next));
+      } catch {
+        /* 무시 */
+      }
+      return next;
+    });
+    if (convoId === id) {
+      setConvoId(null);
+      setMessages([]);
+    }
+  };
+
   const reset = () => {
+    setConvoId(null);
     setMessages([]);
     setInput('');
     setFiles([]);
@@ -262,24 +321,82 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   const canSend = input.trim().length > 0 && !loading;
 
   return (
-    <div className="h-screen bg-spark-cream flex flex-col">
+    <div className="h-screen bg-spark-cream flex">
+      {/* 대화 목록 사이드바 */}
+      <aside
+        className={`shrink-0 border-r border-spark-border bg-white/70 flex flex-col transition-all duration-200 ${
+          sidebarOpen ? 'w-60' : 'w-0 overflow-hidden'
+        }`}
+      >
+        <div className="p-3">
+          <button
+            type="button"
+            onClick={reset}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-spark-purple text-white text-[13px] font-semibold hover:opacity-90 transition"
+          >
+            + 새 대화
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-2 pb-3">
+          <div className="px-2 py-1.5 text-[11px] font-bold text-spark-muted">대화 기록</div>
+          {convos.length === 0 ? (
+            <p className="px-2 text-[12px] text-spark-muted leading-relaxed">
+              아직 없어요.
+              <br />
+              질문하면 여기에 쌓입니다.
+            </p>
+          ) : (
+            <ul className="space-y-0.5">
+              {convos.map((c) => (
+                <li key={c.id} className="group relative">
+                  <button
+                    type="button"
+                    onClick={() => openConvo(c)}
+                    className={`w-full text-left pl-2.5 pr-7 py-2 rounded-lg text-[13px] truncate transition ${
+                      c.id === convoId
+                        ? 'bg-spark-light-purple text-spark-purple font-semibold'
+                        : 'text-spark-ink-soft hover:bg-spark-subtle'
+                    }`}
+                    title={c.title}
+                  >
+                    {c.title}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteConvo(c.id)}
+                    aria-label="대화 삭제"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 grid place-items-center rounded text-spark-muted opacity-0 group-hover:opacity-100 hover:bg-spark-border/60 hover:text-spark-ink transition"
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </aside>
+
+      {/* 본문 */}
+      <div className="flex-1 min-w-0 flex flex-col">
       {/* 상단 바 */}
       <header className="shrink-0 border-b border-spark-border bg-white/80 backdrop-blur-md px-5 py-2.5 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setSidebarOpen((v) => !v)}
+          aria-label="대화 목록 접기/펼치기"
+          className="w-7 h-7 grid place-items-center rounded-lg text-spark-muted hover:text-spark-ink hover:bg-spark-subtle transition"
+        >
+          <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
+            <rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M6.2 3v10" stroke="currentColor" strokeWidth="1.5" />
+          </svg>
+        </button>
         <button type="button" onClick={reset} className="flex items-center gap-2 group" title="새 대화 시작">
           <SparkScopeMark size="sm" />
           <span className="text-spark-ink font-extrabold tracking-tight text-[15px]">SparkScope</span>
         </button>
         <span className="hidden sm:inline text-[12px] text-spark-muted">챗봇</span>
         <div className="ml-auto flex items-center gap-2">
-          {messages.length > 0 && (
-            <button
-              type="button"
-              onClick={reset}
-              className="px-2.5 py-1.5 rounded-lg border border-spark-border bg-white text-[12px] font-semibold text-spark-ink-soft hover:text-spark-purple hover:border-spark-purple/30 transition"
-            >
-              + 새 대화
-            </button>
-          )}
           <Link
             href="/dashboard"
             className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-[12px] font-semibold hover:bg-blue-700 transition"
@@ -303,55 +420,6 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                   스파크스코프가 모아둔 기사에서 찾아보고, 흐름까지 정리해드릴게요.
                 </p>
               </div>
-              {/* 카테고리 */}
-              <div className="w-full mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {TASKS.map((t) => {
-                  const on = openTask === t.id;
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => setOpenTask(on ? null : t.id)}
-                      className={`flex items-center gap-3 px-3.5 py-3 rounded-2xl border text-left transition ${
-                        on
-                          ? 'bg-spark-light-purple border-spark-purple/30 shadow-card'
-                          : 'bg-spark-surface border-spark-border hover:border-spark-border-strong'
-                      }`}
-                    >
-                      <span className={`shrink-0 ${on ? 'text-spark-purple' : 'text-spark-muted'}`}>{t.icon}</span>
-                      <span className="min-w-0">
-                        <span className={`block text-[13px] font-bold ${on ? 'text-spark-purple' : 'text-spark-ink'}`}>
-                          {t.label}
-                        </span>
-                        <span className="block text-[11px] text-spark-muted truncate">{t.desc}</span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* 예시 질문 */}
-              {task && (
-                <div className="w-full mt-3 bg-spark-surface border border-spark-border rounded-2xl shadow-card overflow-hidden animate-rise">
-                  <div className="px-4 py-2.5 border-b border-spark-border text-[13px] font-semibold text-spark-ink-soft">
-                    {task.heading}
-                  </div>
-                  <ul className="divide-y divide-spark-border">
-                    {task.suggestions.map((s) => (
-                      <li key={s}>
-                        <button
-                          type="button"
-                          onClick={() => pick(s)}
-                          className="w-full text-left px-4 py-3 hover:bg-spark-subtle transition flex items-center gap-3"
-                        >
-                          <span className="text-spark-purple shrink-0">{task.icon}</span>
-                          <span className="text-[14px] text-spark-ink-soft">{s}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
             </div>
           ) : (
             <div className="space-y-5">
@@ -407,6 +475,37 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
       {/* 입력 도크 */}
       <div className="shrink-0 border-t border-spark-border bg-spark-cream/95 backdrop-blur">
         <div className="max-w-3xl mx-auto px-6 py-4">
+          {/* 예시 질문 — 카테고리를 누르면 입력창 위로 뜬다 */}
+          {task && (
+            <div className="mb-2 bg-spark-surface border border-spark-border rounded-2xl shadow-pop overflow-hidden animate-rise">
+              <div className="px-4 py-2 border-b border-spark-border flex items-center gap-2">
+                <span className="text-spark-purple">{task.icon}</span>
+                <span className="text-[13px] font-semibold text-spark-ink-soft">{task.heading}</span>
+                <button
+                  type="button"
+                  onClick={() => setOpenTask(null)}
+                  aria-label="닫기"
+                  className="ml-auto w-5 h-5 grid place-items-center rounded text-spark-muted hover:text-spark-ink hover:bg-spark-subtle"
+                >
+                  ×
+                </button>
+              </div>
+              <ul className="divide-y divide-spark-border max-h-64 overflow-y-auto">
+                {task.suggestions.map((sug) => (
+                  <li key={sug}>
+                    <button
+                      type="button"
+                      onClick={() => pick(sug)}
+                      className="w-full text-left px-4 py-2.5 hover:bg-spark-subtle transition text-[14px] text-spark-ink-soft"
+                    >
+                      {sug}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* 입력 카드 */}
           <div
             onDragOver={(e) => {
@@ -588,10 +687,34 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
               </span>
             </div>
           </div>
+          {/* 카테고리 — 대화 중에도 계속 보인다 */}
+          <div className="mt-2 flex flex-wrap justify-center gap-1.5">
+            {TASKS.map((t) => {
+              const on = openTask === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setOpenTask(on ? null : t.id)}
+                  title={t.desc}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[12px] font-semibold transition ${
+                    on
+                      ? 'bg-spark-light-purple border-spark-purple/30 text-spark-purple'
+                      : 'bg-spark-surface border-spark-border text-spark-ink-soft hover:border-spark-border-strong'
+                  }`}
+                >
+                  <span className={on ? 'text-spark-purple' : 'text-spark-muted'}>{t.icon}</span>
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+
           <div className="mt-2 text-[11px] text-spark-muted text-center">
             답변은 수집된 기사 기반 초안입니다 · 외부 공유 금지{userEmail ? ` · ${userEmail}` : ''}
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
