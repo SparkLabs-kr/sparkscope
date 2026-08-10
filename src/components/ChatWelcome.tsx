@@ -10,7 +10,13 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 // 서버 전용 모듈(prisma)이 클라이언트 번들에 딸려오지 않도록 타입 전용 파일에서 가져온다.
-import { categoryLabel, PERIOD_LABEL, SCOPE_LABEL, type ChatQueryResult } from '@/lib/sparkscope/chat-types';
+import {
+  categoryLabel,
+  PERIOD_LABEL,
+  SCOPE_LABEL,
+  type ChatQueryResult,
+  type ChatResponse,
+} from '@/lib/sparkscope/chat-types';
 
 /** 1) 답변 방식 — 질문을 어떤 깊이·형식으로 처리할지 */
 const MODES = [
@@ -191,7 +197,7 @@ type Convo = { id: string; title: string; updatedAt: number; messages: Msg[] };
 
 type Msg =
   | { role: 'user'; text: string; period: string; scopes: string[]; files: string[] }
-  | { role: 'assistant'; result: ChatQueryResult; period: string; scopes: string[] }
+  | { role: 'assistant'; res: ChatResponse; period: string; scopes: string[] }
   | { role: 'error'; text: string };
 
 export function ChatWelcome({ userEmail }: { userEmail?: string }) {
@@ -278,7 +284,10 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? '조회에 실패했어요.');
-      setMessages((prev) => [...prev, { role: 'assistant', result: data, period, scopes: activeScopes }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', res: data, period, scopes: data.appliedScopes ?? activeScopes },
+      ]);
     } catch (e: any) {
       setMessages((prev) => [...prev, { role: 'error', text: e?.message ?? '조회에 실패했어요.' }]);
     } finally {
@@ -452,7 +461,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                   <div key={i} className="flex gap-2.5 animate-rise">
                     <SparkScopeMark size="xs" />
                     <div className="flex-1 min-w-0">
-                      <ChatResult result={m.result} scopes={m.scopes} />
+                      <ChatAnswer res={m.res} scopes={m.scopes} />
                     </div>
                   </div>
                 )
@@ -720,7 +729,37 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   );
 }
 
-/** 조회 결과 — 지금은 DB 집계 + 기사 목록만. 요약 문장은 이후 단계에서 추가. */
+/** 답변 한 덩어리 — 안내 문구 + (심층 분석 켰을 때) 요약 + 조회 결과 */
+function ChatAnswer({ res, scopes }: { res: ChatResponse; scopes: string[] }) {
+  return (
+    <div className="w-full space-y-2.5">
+      {/* 아직 못 하는 요청 안내 */}
+      {res.unsupported && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-2.5 text-[13px] text-amber-800">
+          <span className="font-semibold">아직 안 되는 기능: {res.unsupported}</span>
+          {res.note && <span className="block mt-0.5">{res.note}</span>}
+        </div>
+      )}
+      {!res.unsupported && res.note && (
+        <div className="bg-spark-surface border border-spark-border rounded-2xl px-4 py-2.5 text-[14px] text-spark-ink-soft">
+          {res.note}
+        </div>
+      )}
+
+      {/* 심층 분석 요약 */}
+      {res.summary && (
+        <div className="bg-spark-light-purple/60 border border-spark-purple/20 rounded-2xl px-4 py-3">
+          <div className="text-[11px] font-bold text-spark-purple mb-1">🤖 심층 분석</div>
+          <p className="text-[14px] text-spark-ink leading-relaxed whitespace-pre-wrap">{res.summary}</p>
+        </div>
+      )}
+
+      {res.result && <ChatResult result={res.result} scopes={scopes} />}
+    </div>
+  );
+}
+
+/** 조회 결과 — DB 집계 + 기사 목록 */
 function ChatResult({ result, scopes }: { result: ChatQueryResult; scopes: string[] }) {
   const fmtDate = (iso: string) => {
     const d = new Date(iso);
@@ -812,7 +851,7 @@ function ChatResult({ result, scopes }: { result: ChatQueryResult; scopes: strin
         </div>
       )}
 
-      <p className="text-[11px] text-spark-muted">DB 조회 결과입니다 · 요약·심층 분석은 아직 연결 전이에요</p>
+      <p className="text-[11px] text-spark-muted">수집된 기사 DB 조회 결과입니다</p>
     </div>
   );
 }

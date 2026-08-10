@@ -70,13 +70,15 @@ export type ChatQueryInput = {
   question: string;
   period: ChatPeriod;
   scopes: ChatScope[];
+  /** 의도 분석기가 뽑아준 검색어. 없으면 질문에서 규칙 기반으로 뽑는다. */
+  terms?: string[];
   limit?: number;
 };
 
 export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResult> {
   const limit = Math.min(input.limit ?? 20, 50);
   const range = resolvePeriod(input.period);
-  const terms = extractTerms(input.question);
+  const terms = input.terms ?? extractTerms(input.question);
 
   const where: any = { isNoise: false };
   if (range) where.pubDate = { gte: range.gte, lte: range.lte };

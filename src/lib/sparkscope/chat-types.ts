@@ -43,6 +43,17 @@ export type ChatArticle = {
   riskFlag: string | null;
 };
 
+/** /api/chat 응답 */
+export type ChatResponse = {
+  intent: string;
+  note: string | null;
+  unsupported: string | null;
+  summary?: string | null;
+  appliedPeriod?: ChatPeriod;
+  appliedScopes?: ChatScope[];
+  result: ChatQueryResult | null;
+};
+
 export type ChatQueryResult = {
   terms: string[];
   periodLabel: string;
