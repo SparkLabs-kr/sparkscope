@@ -249,7 +249,7 @@ ${INTER_EMAIL_CSS}
 
   <div class="footer">
     <div class="footer-cta-text">INTRA(스파크랩 내부 생태계)부터 INTER(글로벌 시장)까지, 아래 대시보드에서 확인하실 수 있습니다.</div>
-    <a href="https://sparkscope.vercel.app/dashboard?from=2026-04-09&amp;to=2026-07-08" class="footer-cta-button">SparkScope 대시보드 바로가기</a>
+    <a href="${baseUrl ?? DEFAULT_BASE_URL}/dashboard" class="footer-cta-button">SparkScope 대시보드 바로가기</a>
   </div>
 </div>
 </body>
