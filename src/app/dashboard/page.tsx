@@ -100,6 +100,37 @@ function resolveRange(searchParams: { from?: string; to?: string }) {
   return { from, to, label, isDefaultRange };
 }
 
+// "최근 수집 기사" 탭용 카테고리별 조회 — priorityScore 상위 N건만 뽑으면, 물량 많고 점수
+// 분포가 넓은 카테고리(포트폴리오사 등)는 몇 주 전 고득점 기사가 자리를 계속 차지해 정작
+// "최근" 기사가 캡 밖으로 밀려나는 문제가 있었다(2026-08-10, 실사용 확인 — 포트폴리오사 상위
+// 150건의 날짜가 7/28까지 걸쳐있고 최근 3일 이내는 7건뿐이었음). guaranteeRecentDays를 주면
+// 그 기간 내 기사는 점수 무관하게 전부 먼저 포함하고, 남는 자리만 그 밖 기간에서 점수 높은
+// 순으로 채운다 — "최근"이라는 탭 이름에 맞게 최신 기사를 우선 보장한다.
+async function fetchRecentTabArticles(
+  where: Record<string, unknown>,
+  category: string,
+  take: number,
+  now: Date,
+  guaranteeRecentDays?: number,
+) {
+  if (!guaranteeRecentDays) {
+    return prisma.article.findMany({ where: { ...where, category }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], take });
+  }
+  const recentSince = new Date(now.getTime() - guaranteeRecentDays * 24 * 60 * 60 * 1000);
+  const recent = await prisma.article.findMany({
+    where: { ...where, category, pubDate: { gte: recentSince } },
+    orderBy: [{ pubDate: 'desc' }],
+    take,
+  });
+  if (recent.length >= take) return recent;
+  const older = await prisma.article.findMany({
+    where: { ...where, category, pubDate: { lt: recentSince } },
+    orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }],
+    take: take - recent.length,
+  });
+  return [...recent, ...older];
+}
+
 async function loadDashboardData(from: string, to: string, company: string | undefined, isDefaultRange: boolean) {
   const since = new Date(`${from}T00:00:00`);
   const until = new Date(`${to}T23:59:59`);
@@ -158,7 +189,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
     // 최소한의 건수를 보장받게 한다. AC·VC·스타트업계는 노이즈성 기사가 상대적으로 많아
     // priorityScore 상위 50건으로 더 좁게(=중요하다고 판단된 것만) 제한.
     Promise.all(Object.entries({ sparklabs_self: 150, portfolio_company: 150, competitor: 50, industry_trend: 50 }).map(([category, take]) =>
-      prisma.article.findMany({ where: { ...where, category }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], take }),
+      fetchRecentTabArticles(where, category, take, now, category === 'portfolio_company' ? 3 : undefined),
     )).then(arr => arr.flat()),
     // 톤 분석 — 스파크랩 기준
     prisma.article.groupBy({ by: ['tone'], where: sparklabsWhere, _count: { _all: true } }),
