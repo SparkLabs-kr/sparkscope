@@ -2278,17 +2278,17 @@
     "notes": "고가의 VR 장비 없이 웹(SaaS) 기반으로 시공간 제약 없이 학습 가능한 AI 및 디지털 트윈 융합 항공정비 몰입형 가상 교육 솔루션(AK VIEW)"
   },
   {
-    "name": "액스",
-    "englishName": "AX",
+    "name": "메이크앤서(주)",
+    "englishName": "MakeAnswer Corp",
     "category": "portfolio_company",
     "status": "ACTIVE",
     "portfolioStatus": "Live",
     "tier": "C",
-    "primaryKeyword": "액스",
+    "primaryKeyword": "메이크앤서",
     "helperKeywords": "오연주",
     "excludeWords": null,
     "contextWords": "여행, 여행사, 여행상품, 예약관리, GDS, 액티비티",
-    "notes": "전세계 현지 여행사를 위해 여행상품 퍼블리싱과 예약관리 솔루션을 개발하는 스타트업"
+    "notes": "(구 액스/AX) 전세계 현지 여행사를 위해 여행상품 퍼블리싱과 예약관리 솔루션을 개발하는 스타트업"
   },
   {
     "name": "바벨탑",
