@@ -71,6 +71,8 @@ function buildPrompt(question: string, r: ChatQueryResult, intent: ChatIntent) {
   if (r.prevTotal !== null) {
     const d = r.deltaPct === null ? '' : ` (${r.deltaPct >= 0 ? '+' : ''}${r.deltaPct}%)`;
     lines.push(`[직전 같은 기간] ${r.prevTotal}건${d}`);
+  } else if (r.deltaUnavailableReason) {
+    lines.push(`[직전 기간 비교] 불가 — ${r.deltaUnavailableReason}. 증감을 언급하지 말고, 비교가 어렵다는 점만 짧게 알려라.`);
   }
   if (r.monthly?.length) {
     lines.push(`[월별 추이] ${r.monthly.map((m) => `${m.month} ${m.count}건`).join(', ')}`);

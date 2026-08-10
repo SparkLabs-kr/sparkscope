@@ -48,9 +48,12 @@ export function buildReportHtml(opts: {
         ${
           typeof r.deltaPct === 'number'
             ? `<span class="delta">직전 대비 ${r.deltaPct > 0 ? '+' : ''}${r.deltaPct}%</span>`
-            : ''
+            : r.deltaUnavailableReason
+              ? `<span class="muted" style="font-size:10px;margin-left:6px">직전 대비 비교 불가</span>`
+              : ''
         }
         ${r.negativeCount > 0 ? `<span class="neg">부정 톤 ${r.negativeCount}건</span>` : ''}</p>
+        ${r.deltaUnavailableReason ? `<p class="note">${esc(r.deltaUnavailableReason)}</p>` : ''}
         ${
           r.sampled
             ? '<p class="note">아래 분류·키워드·매체 집계는 최신 1000건 표본 기준입니다.</p>'

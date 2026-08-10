@@ -889,6 +889,14 @@ function ChatResult({
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-3">
           <span className="text-2xl font-extrabold text-spark-ink">{result.total.toLocaleString()}건</span>
           <span className="text-[13px] text-spark-muted">{result.periodLabel} 기준</span>
+          {typeof result.deltaPct !== 'number' && result.deltaUnavailableReason && (
+            <span
+              className="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-spark-subtle text-spark-muted"
+              title={result.deltaUnavailableReason}
+            >
+              직전 대비 비교 불가
+            </span>
+          )}
           {typeof result.deltaPct === 'number' && (
             <span
               className={`px-1.5 py-0.5 rounded-md text-[12px] font-bold ${
