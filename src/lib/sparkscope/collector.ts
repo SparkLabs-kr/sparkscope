@@ -6,7 +6,7 @@
 import { parseStringPromise } from 'xml2js';
 import { prisma } from '@/lib/prisma';
 import type { RawArticle, Category } from './types';
-import { isRelevant, normalizeTitleKey, matchesAsToken, matchesAsDirectMention, resolveMainKeys } from './relevance';
+import { isRelevant, normalizeTitleKey, matchesAsToken, resolveMainKeys } from './relevance';
 import { isKnownMedia, normalizeSource } from './media';
 import { NEGATIVE_KEYWORDS_DATA, CRISIS_KEYWORDS_DATA } from './keywords-data';
 import { scrapeArticleBody, type ScrapedBody } from './scraper';
@@ -127,16 +127,22 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
   // (예: "...스파크랩, 씨엔티테크 등으로부터 투자를 유치했다"처럼 투자자 목록에 스파크랩이
   // 한 줄 끼어있을 뿐, 기사 전체 주인공은 포트폴리오사인 케이스 — sparklabs_self 오분류 방지).
   // 포폴사가 매칭되면 포폴사로, 아니면 원래대로 스파크랩 기사로 본다.
-  const portfolioTargetsForCrosscheck = (grouped.get('portfolio_company') ?? []).map(p => ({
-    target: p,
-    keys: resolveMainKeys({
-      title: '', primaryKeyword: p.primaryKeyword, name: p.name, englishName: p.englishName,
-      helperKeywords: p.helperKeywords, category: p.category,
-    }).mainKeys,
-  }));
+  const portfolioTargetsForCrosscheck = grouped.get('portfolio_company') ?? [];
+  // 다른 대상(예: industry_trend) 검색으로 걸린 기사를 여기서 재배정하는데, 예전엔 mainKeys
+  // 단순 토큰 매칭만 써서 이 재배정이 excludeWords·contextWords를 건너뛰었다 — "AX"처럼 흔한
+  // 영문명을 쓰는 대상(액스)이, "건설부동산 AX 기업" 같은 무관한 industry_trend 기사에도
+  // 영문명만으로 재배정되는 사고가 있었다(2026-08-10). isRelevant()를 그대로 재사용해 이름
+  // 매칭뿐 아니라 문맥어·제외어까지 원래 수집 때와 동일한 기준으로 재검증한다 — 그러면
+  // "AX"를 제외어로 막지 않아도, 문맥어(여행·GDS 등)가 없는 일반 "AX" 산업 기사는 자연히
+  // 통과 못 하고, 진짜 액스 기사("여행 액티비티 GDS '액스', AX Cloud...")는 그대로 통과한다.
   function findPortfolioSubject(title: string, body: string): Target | null {
-    for (const { target, keys } of portfolioTargetsForCrosscheck) {
-      if (keys.some(k => matchesAsToken(title, k) || (body.length > 0 && matchesAsDirectMention(body, k)))) {
+    for (const target of portfolioTargetsForCrosscheck) {
+      if (isRelevant({
+        title, body,
+        primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName,
+        helperKeywords: target.helperKeywords, excludeWords: target.excludeWords, contextWords: target.contextWords,
+        category: target.category,
+      })) {
         return target;
       }
     }
@@ -150,16 +156,17 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
   // mainKeys(정식명)뿐 아니라 trueHelpers(대표자명·"에이티넘"처럼 언론이 흔히 쓰는 축약 별칭 등)도
   // 포함 — 기사 제목이 정식 명칭을 그대로 안 쓰고 축약하는 경우가 많아서(예: "에이티넘인베스트먼트"
   // 대신 "에이티넘인베"), 정식명만으로는 자기 자신조차 제목에서 못 찾는 경우가 실제로 있었다.
-  const competitorTargetsForCrosscheck = (grouped.get('competitor') ?? []).map(c => {
-    const resolved = resolveMainKeys({
-      title: '', primaryKeyword: c.primaryKeyword, name: c.name, englishName: c.englishName,
-      helperKeywords: c.helperKeywords, category: c.category,
-    });
-    return { target: c, keys: [...resolved.mainKeys, ...resolved.trueHelpers] };
-  });
+  const competitorTargetsForCrosscheck = grouped.get('competitor') ?? [];
   function findCompetitorSubject(title: string): Target | null {
-    for (const { target, keys } of competitorTargetsForCrosscheck) {
-      if (keys.some(k => matchesAsToken(title, k))) return target;
+    for (const target of competitorTargetsForCrosscheck) {
+      if (isRelevant({
+        title, body: '',
+        primaryKeyword: target.primaryKeyword, name: target.name, englishName: target.englishName,
+        helperKeywords: target.helperKeywords, excludeWords: target.excludeWords, contextWords: target.contextWords,
+        category: target.category,
+      })) {
+        return target;
+      }
     }
     return null;
   }

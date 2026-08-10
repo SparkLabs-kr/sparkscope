@@ -2286,8 +2286,8 @@
     "tier": "C",
     "primaryKeyword": "액스",
     "helperKeywords": "오연주",
-    "excludeWords": "AX",
-    "contextWords": "현지 여행사, 여행상품 퍼블리싱, 예약관리",
+    "excludeWords": null,
+    "contextWords": "여행, 여행사, 여행상품, 예약관리, GDS, 액티비티",
     "notes": "전세계 현지 여행사를 위해 여행상품 퍼블리싱과 예약관리 솔루션을 개발하는 스타트업"
   },
   {
