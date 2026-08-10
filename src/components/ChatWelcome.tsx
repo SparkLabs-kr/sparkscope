@@ -197,7 +197,7 @@ type Convo = { id: string; title: string; updatedAt: number; messages: Msg[] };
 
 type Msg =
   | { role: 'user'; text: string; period: string; scopes: string[]; files: string[] }
-  | { role: 'assistant'; res: ChatResponse; period: string; scopes: string[] }
+  | { role: 'assistant'; res: ChatResponse; period: string; scopes: string[]; modes: string[] }
   | { role: 'error'; text: string };
 
 export function ChatWelcome({ userEmail }: { userEmail?: string }) {
@@ -286,7 +286,13 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
       if (!res.ok) throw new Error(data?.error ?? '조회에 실패했어요.');
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', res: data, period, scopes: data.appliedScopes ?? activeScopes },
+        {
+          role: 'assistant',
+          res: data,
+          period,
+          scopes: data.appliedScopes ?? activeScopes,
+          modes: activeModes,
+        },
       ]);
     } catch (e: any) {
       setMessages((prev) => [...prev, { role: 'error', text: e?.message ?? '조회에 실패했어요.' }]);
@@ -461,7 +467,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                   <div key={i} className="flex gap-2.5 animate-rise">
                     <SparkScopeMark size="xs" />
                     <div className="flex-1 min-w-0">
-                      <ChatAnswer res={m.res} scopes={m.scopes} />
+                      <ChatAnswer res={m.res} scopes={m.scopes} modes={m.modes} />
                     </div>
                   </div>
                 )
@@ -730,7 +736,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
 }
 
 /** 답변 한 덩어리 — 안내 문구 + (심층 분석 켰을 때) 요약 + 조회 결과 */
-function ChatAnswer({ res, scopes }: { res: ChatResponse; scopes: string[] }) {
+function ChatAnswer({ res, scopes, modes }: { res: ChatResponse; scopes: string[]; modes: string[] }) {
   return (
     <div className="w-full space-y-2.5">
       {/* 아직 못 하는 요청 안내 */}
@@ -754,13 +760,21 @@ function ChatAnswer({ res, scopes }: { res: ChatResponse; scopes: string[] }) {
         </div>
       )}
 
-      {res.result && <ChatResult result={res.result} scopes={scopes} />}
+      {res.result && <ChatResult result={res.result} scopes={scopes} asTable={modes.includes('table')} />}
     </div>
   );
 }
 
 /** 조회 결과 — DB 집계 + 기사 목록 */
-function ChatResult({ result, scopes }: { result: ChatQueryResult; scopes: string[] }) {
+function ChatResult({
+  result,
+  scopes,
+  asTable,
+}: {
+  result: ChatQueryResult;
+  scopes: string[];
+  asTable?: boolean;
+}) {
   const fmtDate = (iso: string) => {
     const d = new Date(iso);
     return `${d.getMonth() + 1}/${d.getDate()}`;
@@ -784,6 +798,21 @@ function ChatResult({ result, scopes }: { result: ChatQueryResult; scopes: strin
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-3">
           <span className="text-2xl font-extrabold text-spark-ink">{result.total.toLocaleString()}건</span>
           <span className="text-[13px] text-spark-muted">{result.periodLabel} 기준</span>
+          {result.deltaPct !== null && (
+            <span
+              className={`px-1.5 py-0.5 rounded-md text-[12px] font-bold ${
+                result.deltaPct > 0
+                  ? 'bg-red-50 text-red-600'
+                  : result.deltaPct < 0
+                    ? 'bg-blue-50 text-blue-600'
+                    : 'bg-spark-subtle text-spark-muted'
+              }`}
+              title={`직전 같은 기간 ${result.prevTotal}건`}
+            >
+              직전 대비 {result.deltaPct > 0 ? '+' : ''}
+              {result.deltaPct}%
+            </span>
+          )}
           {result.negativeCount > 0 && (
             <span className="ml-auto text-[12px] font-semibold text-red-600">
               부정 톤 {result.negativeCount}건
@@ -813,6 +842,47 @@ function ChatResult({ result, scopes }: { result: ChatQueryResult; scopes: strin
           <div className="px-4 py-2.5 border-b border-spark-border text-[13px] font-semibold text-spark-ink-soft">
             근거 기사 {result.articles.length}건 {result.total > result.articles.length && `(전체 ${result.total}건 중)`}
           </div>
+          {asTable ? (
+            // '표로 정리' — 보고서에 그대로 붙여넣기 좋은 형태
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px] border-collapse">
+                <thead>
+                  <tr className="bg-spark-subtle text-spark-muted text-[11px]">
+                    <th className="text-left font-semibold px-3 py-2">회사·키워드</th>
+                    <th className="text-left font-semibold px-3 py-2">제목</th>
+                    <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">매체</th>
+                    <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">날짜</th>
+                    <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">톤</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-spark-border">
+                  {result.articles.map((a) => (
+                    <tr key={a.id} className="hover:bg-spark-subtle transition align-top">
+                      <td className="px-3 py-2 whitespace-nowrap font-semibold text-spark-purple">
+                        {a.matchedKeyword || '-'}
+                      </td>
+                      <td className="px-3 py-2">
+                        <a href={a.link} target="_blank" rel="noreferrer" className="text-spark-ink hover:underline">
+                          {a.title}
+                        </a>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-spark-ink-soft">{a.source}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-spark-muted">{fmtDate(a.pubDate)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {a.tone === 'NEGATIVE' ? (
+                          <span className="text-red-600 font-semibold">부정</span>
+                        ) : a.tone === 'POSITIVE' ? (
+                          <span className="text-blue-600 font-semibold">긍정</span>
+                        ) : (
+                          <span className="text-spark-muted">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
           <ul className="divide-y divide-spark-border">
             {result.articles.map((a) => (
               <li key={a.id}>
@@ -848,6 +918,7 @@ function ChatResult({ result, scopes }: { result: ChatQueryResult; scopes: strin
               </li>
             ))}
           </ul>
+          )}
         </div>
       )}
 

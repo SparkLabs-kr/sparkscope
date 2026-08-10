@@ -8,6 +8,12 @@ import { PERIOD_LABEL, type ChatPeriod, type ChatScope, type ChatArticle, type C
 
 export type { ChatPeriod, ChatScope, ChatArticle, ChatQueryResult };
 
+/** 직전 같은 길이 기간. "지난주 대비" 같은 비교에 쓴다. */
+export function previousRange(range: { gte: Date; lte: Date }): { gte: Date; lte: Date } {
+  const span = range.lte.getTime() - range.gte.getTime();
+  return { gte: new Date(range.gte.getTime() - span), lte: new Date(range.gte.getTime()) };
+}
+
 /** 기간 → pubDate 범위. 대시보드와 같은 기준(기본 최근 3개월). */
 export function resolvePeriod(period: ChatPeriod): { gte: Date; lte: Date } | null {
   if (period === 'all') return null;
@@ -98,7 +104,10 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
 
   // 집계용으로 넉넉히 가져와 서버에서 세고(매체명 정규화·노이즈 재검사가 필요해서),
   // 화면에는 limit 만큼만 보낸다.
-  const [rows, total] = await Promise.all([
+  // 직전 기간 where — 기간 조건만 바꾼 같은 조건
+  const prevWhere = range ? { ...where, pubDate: previousRange(range) } : null;
+
+  const [rows, total, prevTotal] = await Promise.all([
     prisma.article.findMany({
       where,
       orderBy: [{ pubDate: 'desc' }],
@@ -117,6 +126,7 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
       },
     }),
     prisma.article.count({ where }),
+    prevWhere ? prisma.article.count({ where: prevWhere }) : Promise.resolve(null),
   ]);
 
   const clean = rows.filter((a) => !isBlockedNoise(a));
@@ -159,6 +169,10 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
     periodLabel: PERIOD_LABEL[input.period],
     // 1000건 상한에 걸리지 않았으면 정제 후 개수가 더 정확하다.
     total: rows.length < 1000 ? clean.length : total,
+    prevTotal,
+    // 증감률은 양쪽 다 '정제 전 raw 건수'로 계산한다 — 이번 기간만 정제하고 비교하면
+    // 줄어든 것처럼 왜곡된다. 직전이 0건이면 %가 의미 없어 null.
+    deltaPct: prevTotal && prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : null,
     byCategory: [...cat.entries()].sort((a, b) => b[1] - a[1]).map(([category, count]) => ({ category, count })),
     topSources: top(src, 5),
     topCompanies: top(comp, 5),

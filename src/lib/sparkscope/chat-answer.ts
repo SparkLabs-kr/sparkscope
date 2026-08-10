@@ -15,6 +15,7 @@ const SYSTEM = `너는 스파크랩(초기투자 VC) 커뮤니케이션 본부�
 - 숫자는 주어진 값을 그대로 쓴다(임의 계산·추정 금지).
 - 기사 제목에서 읽히는 흐름(어떤 주제가 많은지, 어디서 많이 다뤘는지)을 짚어준다.
 - 부정 기사가 있으면 무엇 때문인지 제목 근거로 한 줄 덧붙인다.
+- 직전 기간 수치가 주어지면 늘었는지 줄었는지 한 문장으로 짚는다.
 - 데이터가 0건이면 검색 조건을 어떻게 바꾸면 좋을지 제안한다.`;
 
 function buildPrompt(question: string, r: ChatQueryResult, intent: ChatIntent) {
@@ -24,6 +25,10 @@ function buildPrompt(question: string, r: ChatQueryResult, intent: ChatIntent) {
   lines.push(`[기간] ${r.periodLabel}`);
   if (r.terms.length) lines.push(`[검색어] ${r.terms.join(', ')}`);
   lines.push(`[총 건수] ${r.total}건 (그중 부정 톤 ${r.negativeCount}건)`);
+  if (r.prevTotal !== null) {
+    const d = r.deltaPct === null ? '' : ` (${r.deltaPct >= 0 ? '+' : ''}${r.deltaPct}%)`;
+    lines.push(`[직전 같은 기간] ${r.prevTotal}건${d}`);
+  }
   if (r.byCategory.length)
     lines.push(`[분류별] ${r.byCategory.map((c) => `${categoryLabel(c.category)} ${c.count}`).join(', ')}`);
   if (r.topCompanies.length)

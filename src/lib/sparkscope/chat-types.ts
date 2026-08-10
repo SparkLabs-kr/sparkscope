@@ -58,6 +58,10 @@ export type ChatQueryResult = {
   terms: string[];
   periodLabel: string;
   total: number;
+  /** 같은 길이의 직전 기간 건수. 기간이 '전체'면 null */
+  prevTotal: number | null;
+  /** 직전 기간 대비 증감률(%). 직전이 0건이면 null */
+  deltaPct: number | null;
   byCategory: { category: string; count: number }[];
   topSources: { name: string; count: number }[];
   topCompanies: { name: string; count: number }[];
