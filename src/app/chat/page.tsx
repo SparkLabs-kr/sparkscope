@@ -16,7 +16,7 @@ export default async function ChatPage() {
       <div className="absolute top-4 right-5 z-10">
         <Link
           href="/dashboard"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-spark-border text-[13px] font-semibold text-spark-ink-soft hover:text-spark-purple hover:border-spark-purple/30 transition"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-700 transition shadow-card"
         >
           대시보드로 이동
           <span aria-hidden>→</span>

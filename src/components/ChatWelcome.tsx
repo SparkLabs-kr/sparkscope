@@ -1,37 +1,20 @@
 'use client';
 
-// SparkScope 챗봇 첫 화면(초안). 아직 실제 응답 백엔드는 붙어 있지 않고,
-// 입력 → 모드/필터 선택 → 전송까지의 UI 흐름만 구현되어 있다.
+// SparkScope 챗봇 첫 화면(초안). 아직 실제 응답 백엔드/DB는 붙어 있지 않고,
+// 입력 → 답변 방식 → 검색 범위 → 파일 첨부 → 전송까지의 UI 흐름만 구현되어 있다.
+//
+// 화면의 세 줄은 서로 다른 축을 담당한다. (겹치지 않게 의도적으로 분리)
+//   1) 답변 방식(MODES)  = 어떻게 답할지   — 깊이·형식 옵션
+//   2) 검색 범위(SCOPES) = 어디서 찾을지   — 데이터 소스
+//   3) 카테고리(TASKS)   = 무엇을 할지     — 대시보드 기능별 업무 시나리오
 import { useRef, useState } from 'react';
 
-/** 입력창 아래 토글 — 질문을 "어떤 방식으로" 처리할지 */
+/** 1) 답변 방식 — 질문을 어떤 깊이·형식으로 처리할지 */
 const MODES = [
   {
-    id: 'search',
-    label: '기사 검색',
-    hint: '수집된 기사 DB에서 바로 찾기',
-    icon: (
-      <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
-        <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.6" />
-        <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
-    id: 'trend',
-    label: '트렌드 분석',
-    hint: '기간 비교·급증 감지·언론사 분포',
-    icon: (
-      <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
-        <path d="M2 11.5L6 7l3 2.5L14 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M10.5 4H14v3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    ),
-  },
-  {
-    id: 'briefing',
-    label: '심층 브리핑',
-    hint: '여러 기사를 읽고 원인·맥락까지 정리',
+    id: 'deep',
+    label: '심층 분석',
+    hint: '여러 기사를 교차로 읽고 원인·맥락까지 정리 (느리지만 자세함)',
     icon: (
       <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
         <circle cx="8" cy="8" r="6.2" stroke="currentColor" strokeWidth="1.6" />
@@ -40,92 +23,111 @@ const MODES = [
     ),
   },
   {
-    id: 'risk',
-    label: '위기 감지',
-    hint: '부정 기사·리스크 시그널 우선 확인',
+    id: 'compare',
+    label: '기간 비교',
+    hint: '직전 기간 대비 증감까지 계산해서 답변',
     icon: (
       <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
-        <path d="M8 2.2l6 10.6H2L8 2.2z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-        <path d="M8 6.5v3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        <circle cx="8" cy="11.4" r="0.85" fill="currentColor" />
+        <path d="M2 11.5L6 7l3 2.5L14 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M10.5 4H14v3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  {
+    id: 'sources',
+    label: '근거 기사 첨부',
+    hint: '답변에 쓰인 원문 기사 링크를 함께 보여줌',
+    icon: (
+      <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
+        <path d="M6.8 9.2a2.6 2.6 0 003.7 0l2-2a2.6 2.6 0 10-3.7-3.7l-.9.9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <path d="M9.2 6.8a2.6 2.6 0 00-3.7 0l-2 2a2.6 2.6 0 103.7 3.7l.9-.9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    id: 'nonoise',
+    label: '노이즈 제외',
+    hint: '광고·중복·오탐으로 걸러진 기사는 빼고 답변 (기본 켜짐)',
+    icon: (
+      <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
+        <path d="M2.5 3.5h11l-4.3 5v4.2l-2.4 1.3V8.5L2.5 3.5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
       </svg>
     ),
   },
 ] as const;
 
-/** 검색 범위 — 스파크스코프가 다루는 3개 축 */
+/** 2) 검색 범위 — 스파크스코프가 다루는 데이터 축 (Intra 3 + Inter 1) */
 const SCOPES = [
   { id: 'portfolio', label: '포트폴리오사' },
   { id: 'competitor', label: '경쟁사(VC)' },
   { id: 'sparklabs', label: '스파크랩' },
+  { id: 'inter', label: '해외 트렌드' },
 ] as const;
 
-/** 하단 카테고리 버튼 + 각 카테고리의 예시 질문 */
-const CATEGORIES = [
+/** 3) 카테고리 — 대시보드/인터/인트라 기능별 업무 시나리오 */
+const TASKS = [
   {
     id: 'find',
     label: '기사 찾기',
-    heading: '기사 검색 예시',
-    icon: (
-      <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5">
-        <circle cx="9" cy="9" r="5.6" stroke="currentColor" strokeWidth="1.7" />
-        <path d="M13.2 13.2L17.5 17.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      </svg>
-    ),
+    desc: '검색 · 필터 · 최근 수집',
+    heading: '기사 검색 · 조회',
+    icon: <IconSearch />,
     suggestions: [
       '이번 주 포트폴리오사 투자유치 기사 모아줘',
-      '오늘 스파크랩 언급된 기사 있어?',
-      '지난달 시리즈A 관련 기사 중 조회수 높은 순으로',
-      '노이즈로 걸러진 기사 중 다시 봐야 할 게 있을까?',
-      '특정 포폴사 이름으로 최근 3개월 기사 찾아줘',
+      '오늘 새로 수집된 기사 중 스파크랩 언급된 것',
+      '지난달 시리즈A 관련 기사만 최신순으로',
+      '이 회사 이름으로 최근 3개월 기사 전부 찾아줘',
+      '내가 스크랩·북마크해둔 기사 다시 보여줘',
     ],
   },
   {
-    id: 'trend',
-    label: '동향 파악',
-    heading: '트렌드 분석 예시',
-    icon: (
-      <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5">
-        <path d="M3 14.5L7.5 9l3.5 3 6-6.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M13 5.5h4v4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    ),
+    id: 'metric',
+    label: '지표·추이',
+    desc: '건수 · 증감 · 매체 분포',
+    heading: '수치와 추이',
+    icon: <IconChart />,
     suggestions: [
-      '이번 주 기사량이 급증한 회사는 어디야?',
-      '경쟁 VC들이 최근 어떤 섹터에 많이 노출됐어?',
-      '지난 분기 대비 포폴사 보도량 변화 정리해줘',
-      '우리 기사를 가장 많이 써준 매체 TOP 10',
-      '요즘 인터 관련 기사에서 자주 나오는 키워드는?',
+      '이번 주 보도량 TOP 10 포폴사 알려줘',
+      '지난 분기 대비 포폴사 기사량 얼마나 늘었어?',
+      '우리 기사를 가장 많이 써준 매체 순위',
+      '경쟁 VC별 노출량 비교해줘',
+      '최근 6개월 월별 기사 추이 정리해줘',
     ],
   },
   {
     id: 'risk',
-    label: '리스크 점검',
-    heading: '위기·이슈 점검 예시',
-    icon: (
-      <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5">
-        <path d="M10 2.8l7.4 13.4H2.6L10 2.8z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-        <path d="M10 8v3.6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-        <circle cx="10" cy="14" r="1" fill="currentColor" />
-      </svg>
-    ),
+    label: '위기·이슈',
+    desc: '부정 톤 · 급증 · 리스크',
+    heading: '위기 감지와 원인 분석',
+    icon: <IconAlert />,
     suggestions: [
-      '최근 7일 부정 톤 기사만 보여줘',
-      '이 이슈가 왜 갑자기 늘었는지 설명해줘',
-      '포폴사 중 지금 리스크 시그널이 있는 곳은?',
+      '지금 리스크 시그널이 잡힌 포폴사 있어?',
+      '최근 7일 부정 톤 기사만 모아줘',
+      '이 회사 기사가 갑자기 늘어난 이유가 뭐야?',
       '같은 사안을 다룬 매체별 논조 차이 비교해줘',
-      '어제 대비 오늘 새로 뜬 부정 기사 있어?',
+      '어제 대비 오늘 새로 뜬 부정 기사',
     ],
   },
   {
-    id: 'write',
-    label: '리포트 작성',
-    heading: '리포트·정리 예시',
-    icon: (
-      <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5">
-        <path d="M13.2 3.4l3.4 3.4L7.2 16.2 3 17l.8-4.2 9.4-9.4z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-      </svg>
-    ),
+    id: 'inter',
+    label: '해외 트렌드',
+    desc: 'Inter · 섹터 · 국가',
+    heading: '해외 시장(Inter) 분석',
+    icon: <IconGlobe />,
+    suggestions: [
+      '최근 뜨는 해외 AI 섹터가 뭐야?',
+      '바이오 섹터 중 급증한 주제 알려줘',
+      '미국·유럽 기사에서 자주 나오는 키워드는?',
+      '이 해외 트렌드와 겹치는 우리 포폴사가 있어?',
+      '이번 주 인터 브리핑 요약해줘',
+    ],
+  },
+  {
+    id: 'report',
+    label: '리포트·메일',
+    desc: '다이제스트 · 보고용 요약',
+    heading: '리포트 작성',
+    icon: <IconPen />,
     suggestions: [
       '이번 주 다이제스트 초안 만들어줘',
       '이 기사 3줄 요약하고 시사점 뽑아줘',
@@ -134,37 +136,96 @@ const CATEGORIES = [
       '이 이슈 타임라인 순서대로 정리해줘',
     ],
   },
+  {
+    id: 'manage',
+    label: '키워드·노이즈',
+    desc: '수집 설정 · 오탐 정리',
+    heading: '모니터링 설정 관리',
+    icon: <IconSliders />,
+    suggestions: [
+      '이 회사 키워드에 문맥어 뭘 넣으면 좋을까?',
+      '요즘 오탐이 많은 키워드 찾아줘',
+      '이 기사 노이즈로 신고하고 싶어',
+      '수집은 되는데 한 건도 안 걸리는 키워드 있어?',
+      '동명이인 때문에 잘못 잡히는 기사 정리해줘',
+    ],
+  },
 ] as const;
+
+/** 첨부 가능한 파일 — 사내에서 쓰는 문서·미디어 전반 */
+const ACCEPT = [
+  // 문서
+  '.pdf', '.doc', '.docx', '.hwp', '.hwpx', '.txt', '.rtf', '.md',
+  // 스프레드시트 / 프레젠테이션
+  '.xls', '.xlsx', '.csv', '.tsv', '.ppt', '.pptx', '.key', '.numbers', '.pages',
+  // 이미지
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.heic', '.svg',
+  // 오디오 / 비디오
+  '.mp3', '.wav', '.m4a', '.aac', '.flac', '.mp4', '.mov', '.avi', '.mkv', '.webm',
+  // 기타
+  '.zip', '.json', '.xml', '.eml', '.msg',
+].join(',');
+
+function fmtSize(bytes: number) {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+}
+
+function fileKind(name: string) {
+  const ext = name.split('.').pop()?.toLowerCase() ?? '';
+  if (['mp3', 'wav', 'm4a', 'aac', 'flac'].includes(ext)) return '🎧';
+  if (['mp4', 'mov', 'avi', 'mkv', 'webm'].includes(ext)) return '🎬';
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'svg'].includes(ext)) return '🖼️';
+  if (['xls', 'xlsx', 'csv', 'tsv', 'numbers'].includes(ext)) return '📊';
+  if (['ppt', 'pptx', 'key'].includes(ext)) return '📽️';
+  if (ext === 'pdf') return '📕';
+  return '📄';
+}
 
 export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   const [input, setInput] = useState('');
-  const [activeModes, setActiveModes] = useState<string[]>(['search']);
+  const [activeModes, setActiveModes] = useState<string[]>(['sources', 'nonoise']);
   const [activeScopes, setActiveScopes] = useState<string[]>([]);
-  const [openCategory, setOpenCategory] = useState<string | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [openTask, setOpenTask] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const toggle = (list: string[], id: string) =>
     list.includes(id) ? list.filter((v) => v !== id) : [...list, id];
 
+  const addFiles = (incoming: FileList | null) => {
+    if (!incoming?.length) return;
+    setFiles((prev) => [...prev, ...Array.from(incoming)]);
+  };
+
   const pick = (text: string) => {
     setInput(text);
-    setOpenCategory(null);
+    setOpenTask(null);
     inputRef.current?.focus();
   };
 
   const send = () => {
-    if (!input.trim()) return;
+    if (!input.trim() && files.length === 0) return;
     // TODO: /api/chat 연결 전까지는 콘솔 확인용
-    console.log('[SparkScope chat]', { question: input, modes: activeModes, scopes: activeScopes });
+    console.log('[SparkScope chat]', {
+      question: input,
+      modes: activeModes,
+      scopes: activeScopes,
+      files: files.map((f) => ({ name: f.name, size: f.size, type: f.type })),
+    });
     setInput('');
+    setFiles([]);
   };
 
-  const category = CATEGORIES.find((c) => c.id === openCategory);
+  const task = TASKS.find((t) => t.id === openTask);
+  const canSend = input.trim().length > 0 || files.length > 0;
 
   return (
     <div className="min-h-screen bg-spark-cream flex flex-col items-center justify-center px-6 py-14">
       <div className="w-full max-w-3xl flex flex-col items-center animate-rise">
-        {/* 로고 */}
         <SparkScopeMark />
         <div className="mt-4 mb-8 text-center">
           <h1 className="text-3xl sm:text-[34px] font-extrabold tracking-tight text-spark-ink mb-2">
@@ -176,7 +237,21 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
         </div>
 
         {/* 입력 카드 */}
-        <div className="w-full bg-spark-surface border border-spark-border rounded-2xl shadow-card overflow-hidden">
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            addFiles(e.dataTransfer.files);
+          }}
+          className={`w-full bg-spark-surface border rounded-2xl shadow-card overflow-hidden transition ${
+            dragging ? 'border-spark-purple ring-2 ring-spark-purple/20' : 'border-spark-border'
+          }`}
+        >
           <div className="px-5 pt-4 pb-2">
             <textarea
               ref={inputRef}
@@ -194,9 +269,34 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
             />
           </div>
 
-          {/* 모드 토글 */}
+          {/* 첨부된 파일 */}
+          {files.length > 0 && (
+            <div className="px-4 pb-2 flex flex-wrap gap-2">
+              {files.map((f, i) => (
+                <span
+                  key={`${f.name}-${i}`}
+                  className="flex items-center gap-1.5 pl-2 pr-1.5 py-1 rounded-lg bg-spark-subtle border border-spark-border text-[12px] text-spark-ink-soft"
+                >
+                  <span aria-hidden>{fileKind(f.name)}</span>
+                  <span className="max-w-[180px] truncate font-medium">{f.name}</span>
+                  <span className="text-spark-muted">{fmtSize(f.size)}</span>
+                  <button
+                    type="button"
+                    aria-label={`${f.name} 첨부 취소`}
+                    onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                    className="w-4 h-4 grid place-items-center rounded text-spark-muted hover:text-spark-ink hover:bg-spark-border/60"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* 답변 방식 + 전송 */}
           <div className="px-4 pb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[12px] font-semibold text-spark-muted mr-0.5">답변 방식</span>
               {MODES.map((m) => {
                 const on = activeModes.includes(m.id);
                 return (
@@ -220,10 +320,10 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
             <button
               type="button"
               onClick={send}
-              disabled={!input.trim()}
+              disabled={!canSend}
               aria-label="보내기"
               className={`w-9 h-9 shrink-0 grid place-items-center rounded-full transition ${
-                input.trim()
+                canSend
                   ? 'bg-spark-purple text-white hover:opacity-90'
                   : 'bg-spark-subtle text-spark-muted border border-spark-border cursor-not-allowed'
               }`}
@@ -236,7 +336,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
 
           {/* 검색 범위 */}
           <div className="px-4 py-2.5 border-t border-spark-border flex flex-wrap items-center gap-2">
-            <span className="text-[12px] font-semibold text-spark-muted mr-0.5">범위</span>
+            <span className="text-[12px] font-semibold text-spark-muted mr-0.5">검색 범위</span>
             {SCOPES.map((s) => {
               const on = activeScopes.includes(s.id);
               return (
@@ -255,29 +355,60 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
               );
             })}
             <span className="ml-auto text-[11px] text-spark-muted">
-              {activeScopes.length === 0 ? '선택 안 하면 전체에서 찾아요' : `${activeScopes.length}개 범위 선택됨`}
+              {activeScopes.length === 0 ? '선택하지 않을시 전체에서 찾아요' : `${activeScopes.length}개 범위 선택됨`}
+            </span>
+          </div>
+
+          {/* 파일 첨부 */}
+          <div className="px-4 py-2.5 border-t border-spark-border flex items-center gap-3">
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              accept={ACCEPT}
+              className="hidden"
+              onChange={(e) => {
+                addFiles(e.target.files);
+                e.target.value = '';
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="flex items-center gap-1.5 text-[13px] font-semibold text-spark-ink-soft hover:text-spark-purple transition"
+            >
+              <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
+                <path d="M8 3.5v9M3.5 8h9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+              파일 첨부
+            </button>
+            <span className="text-[11px] text-spark-muted">
+              PDF · 워드 · 한글 · 엑셀 · PPT · 이미지 · 음성(mp3) · 영상(mp4) — 끌어다 놓아도 돼요
             </span>
           </div>
         </div>
 
         {/* 카테고리 */}
-        <div className="w-full mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {CATEGORIES.map((c) => {
-            const on = openCategory === c.id;
+        <div className="w-full mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {TASKS.map((t) => {
+            const on = openTask === t.id;
             return (
               <button
-                key={c.id}
+                key={t.id}
                 type="button"
-                onClick={() => setOpenCategory(on ? null : c.id)}
-                className={`flex flex-col items-center justify-center gap-2 px-3 py-4 rounded-2xl border transition ${
+                onClick={() => setOpenTask(on ? null : t.id)}
+                className={`flex items-center gap-3 px-3.5 py-3 rounded-2xl border text-left transition ${
                   on
                     ? 'bg-spark-light-purple border-spark-purple/30 shadow-card'
                     : 'bg-spark-surface border-spark-border hover:border-spark-border-strong'
                 }`}
               >
-                <span className={on ? 'text-spark-purple' : 'text-spark-muted'}>{c.icon}</span>
-                <span className={`text-[13px] font-semibold ${on ? 'text-spark-purple' : 'text-spark-ink'}`}>
-                  {c.label}
+                <span className={`shrink-0 ${on ? 'text-spark-purple' : 'text-spark-muted'}`}>{t.icon}</span>
+                <span className="min-w-0">
+                  <span className={`block text-[13px] font-bold ${on ? 'text-spark-purple' : 'text-spark-ink'}`}>
+                    {t.label}
+                  </span>
+                  <span className="block text-[11px] text-spark-muted truncate">{t.desc}</span>
                 </span>
               </button>
             );
@@ -285,20 +416,20 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
         </div>
 
         {/* 예시 질문 */}
-        {category && (
+        {task && (
           <div className="w-full mt-3 bg-spark-surface border border-spark-border rounded-2xl shadow-card overflow-hidden animate-rise">
             <div className="px-4 py-2.5 border-b border-spark-border text-[13px] font-semibold text-spark-ink-soft">
-              {category.heading}
+              {task.heading}
             </div>
             <ul className="divide-y divide-spark-border">
-              {category.suggestions.map((s) => (
+              {task.suggestions.map((s) => (
                 <li key={s}>
                   <button
                     type="button"
                     onClick={() => pick(s)}
                     className="w-full text-left px-4 py-3 hover:bg-spark-subtle transition flex items-center gap-3"
                   >
-                    <span className="text-spark-purple shrink-0">{category.icon}</span>
+                    <span className="text-spark-purple shrink-0">{task.icon}</span>
                     <span className="text-[14px] text-spark-ink-soft">{s}</span>
                   </button>
                 </li>
@@ -328,12 +459,61 @@ function SparkScopeMark() {
           </linearGradient>
         </defs>
         <rect x="4" y="4" width="88" height="88" rx="26" fill="url(#ss-grad)" />
-        {/* 스코프(렌즈) + 스파크 */}
         <circle cx="44" cy="44" r="20" fill="none" stroke="#fff" strokeWidth="5" strokeOpacity="0.95" />
         <path d="M59 59L74 74" stroke="#fff" strokeWidth="7" strokeLinecap="round" />
         <path d="M46 33l-9 14h8l-3 10 10-14h-8l2-10z" fill="#fff" />
       </svg>
       <span className="text-[13px] font-extrabold tracking-[0.14em] text-spark-purple">SPARKSCOPE</span>
     </div>
+  );
+}
+
+function IconSearch() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5">
+      <circle cx="9" cy="9" r="5.6" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M13.2 13.2L17.5 17.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+function IconChart() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5">
+      <path d="M3 14.5L7.5 9l3.5 3 6-6.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M13 5.5h4v4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconAlert() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5">
+      <path d="M10 2.8l7.4 13.4H2.6L10 2.8z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+      <path d="M10 8v3.6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <circle cx="10" cy="14" r="1" fill="currentColor" />
+    </svg>
+  );
+}
+function IconGlobe() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5">
+      <circle cx="10" cy="10" r="7.3" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M2.7 10h14.6M10 2.7c1.9 2 2.9 4.6 2.9 7.3s-1 5.3-2.9 7.3c-1.9-2-2.9-4.6-2.9-7.3S8.1 4.7 10 2.7z" stroke="currentColor" strokeWidth="1.7" />
+    </svg>
+  );
+}
+function IconPen() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5">
+      <path d="M13.2 3.4l3.4 3.4L7.2 16.2 3 17l.8-4.2 9.4-9.4z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IconSliders() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="w-5 h-5">
+      <path d="M3 6h14M3 14h14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <circle cx="8" cy="6" r="2.1" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="13" cy="14" r="2.1" fill="none" stroke="currentColor" strokeWidth="1.7" />
+    </svg>
   );
 }
