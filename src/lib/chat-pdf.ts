@@ -46,11 +46,9 @@ export function buildReportHtml(opts: {
         <h2>집계</h2>
         <p class="big">${r.total.toLocaleString()}건 <span class="muted">${esc(r.periodLabel)} 기준</span>
         ${
-          typeof r.deltaPct === 'number'
-            ? `<span class="delta">직전 대비 ${r.deltaPct > 0 ? '+' : ''}${r.deltaPct}%</span>`
-            : r.deltaUnavailableReason
-              ? `<span class="muted" style="font-size:10px;margin-left:6px">직전 대비 비교 불가</span>`
-              : ''
+          typeof r.prevTotal === 'number'
+            ? `<span class="muted" style="font-size:11px;margin-left:6px">직전 기간 ${r.prevTotal.toLocaleString()}건</span>`
+            : ''
         }
         ${r.negativeCount > 0 ? `<span class="neg">부정 톤 ${r.negativeCount}건</span>` : ''}</p>
         ${r.deltaUnavailableReason || r.deltaCaution ? `<p class="note">${esc(r.deltaUnavailableReason ?? r.deltaCaution ?? '')}</p>` : ''}

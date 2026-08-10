@@ -889,27 +889,12 @@ function ChatResult({
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-3">
           <span className="text-2xl font-extrabold text-spark-ink">{result.total.toLocaleString()}건</span>
           <span className="text-[13px] text-spark-muted">{result.periodLabel} 기준</span>
-          {typeof result.deltaPct !== 'number' && result.deltaUnavailableReason && (
+          {typeof result.prevTotal === 'number' && (
             <span
-              className="px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-spark-subtle text-spark-muted"
-              title={result.deltaUnavailableReason}
+              className="px-1.5 py-0.5 rounded-md text-[12px] font-semibold bg-spark-subtle text-spark-ink-soft"
+              title={result.deltaCaution ?? '같은 길이의 직전 기간 건수'}
             >
-              직전 대비 비교 불가
-            </span>
-          )}
-          {typeof result.deltaPct === 'number' && (
-            <span
-              className={`px-1.5 py-0.5 rounded-md text-[12px] font-bold ${
-                result.deltaPct > 0
-                  ? 'bg-red-50 text-red-600'
-                  : result.deltaPct < 0
-                    ? 'bg-blue-50 text-blue-600'
-                    : 'bg-spark-subtle text-spark-muted'
-              }`}
-              title={result.deltaCaution ?? `직전 같은 기간 ${result.prevTotal}건`}
-            >
-              직전 대비 {result.deltaPct > 0 ? '+' : ''}
-              {result.deltaPct}%{result.deltaCaution ? ' ⚠' : ''}
+              직전 기간 {result.prevTotal.toLocaleString()}건{result.deltaCaution ? ' ⚠' : ''}
             </span>
           )}
           {result.negativeCount > 0 && (
