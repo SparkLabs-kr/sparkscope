@@ -71,6 +71,7 @@ function buildPrompt(question: string, r: ChatQueryResult, intent: ChatIntent) {
   if (r.prevTotal !== null) {
     const d = r.deltaPct === null ? '' : ` (${r.deltaPct >= 0 ? '+' : ''}${r.deltaPct}%)`;
     lines.push(`[직전 같은 기간] ${r.prevTotal}건${d}`);
+    if (r.deltaCaution) lines.push(`[증감 해석 주의] ${r.deltaCaution}. 증감률을 단정하지 말고 이 단서를 함께 언급해라.`);
   } else if (r.deltaUnavailableReason) {
     lines.push(`[직전 기간 비교] 불가 — ${r.deltaUnavailableReason}. 증감을 언급하지 말고, 비교가 어렵다는 점만 짧게 알려라.`);
   }

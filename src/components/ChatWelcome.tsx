@@ -906,10 +906,10 @@ function ChatResult({
                     ? 'bg-blue-50 text-blue-600'
                     : 'bg-spark-subtle text-spark-muted'
               }`}
-              title={`직전 같은 기간 ${result.prevTotal}건`}
+              title={result.deltaCaution ?? `직전 같은 기간 ${result.prevTotal}건`}
             >
               직전 대비 {result.deltaPct > 0 ? '+' : ''}
-              {result.deltaPct}%
+              {result.deltaPct}%{result.deltaCaution ? ' ⚠' : ''}
             </span>
           )}
           {result.negativeCount > 0 && (
@@ -918,6 +918,12 @@ function ChatResult({
             </span>
           )}
         </div>
+
+        {(result.deltaCaution || result.deltaUnavailableReason) && (
+          <p className="-mt-1 mb-2 text-[11px] text-spark-muted">
+            ⚠ {result.deltaCaution ?? result.deltaUnavailableReason}
+          </p>
+        )}
 
         {result.total === 0 ? (
           <p className="text-[14px] text-spark-ink-soft">

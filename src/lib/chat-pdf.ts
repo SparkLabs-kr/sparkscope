@@ -53,7 +53,7 @@ export function buildReportHtml(opts: {
               : ''
         }
         ${r.negativeCount > 0 ? `<span class="neg">부정 톤 ${r.negativeCount}건</span>` : ''}</p>
-        ${r.deltaUnavailableReason ? `<p class="note">${esc(r.deltaUnavailableReason)}</p>` : ''}
+        ${r.deltaUnavailableReason || r.deltaCaution ? `<p class="note">${esc(r.deltaUnavailableReason ?? r.deltaCaution ?? '')}</p>` : ''}
         ${
           r.sampled
             ? '<p class="note">아래 분류·키워드·매체 집계는 최신 1000건 표본 기준입니다.</p>'

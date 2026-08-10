@@ -62,8 +62,10 @@ export type ChatQueryResult = {
   prevTotal: number | null;
   /** 직전 기간 대비 증감률(%). 직전이 0건이거나 비교 불가면 null */
   deltaPct: number | null;
-  /** 증감률을 못 내는 이유 (수집 시작 이전 구간 등). 없으면 null */
+  /** 증감률을 못 내는 이유 (직전 기간에 해당 카테고리 미수집). 없으면 null */
   deltaUnavailableReason?: string | null;
+  /** 증감률은 냈지만 신뢰도가 낮을 때의 경고 (직전 기간이 백필 구간). 없으면 null */
+  deltaCaution?: string | null;
   byCategory: { category: string; count: number }[];
   topSources: { name: string; count: number }[];
   topCompanies: { name: string; count: number }[];

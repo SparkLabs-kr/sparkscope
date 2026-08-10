@@ -4,21 +4,29 @@
 import { prisma } from '@/lib/prisma';
 import { normalizeSource } from './media';
 import { isBlockedNoise } from './relevance';
-import { PERIOD_LABEL, type ChatPeriod, type ChatScope, type ChatArticle, type ChatQueryResult } from './chat-types';
+import { PERIOD_LABEL, categoryLabel, type ChatPeriod, type ChatScope, type ChatArticle, type ChatQueryResult } from './chat-types';
 
 export type { ChatPeriod, ChatScope, ChatArticle, ChatQueryResult };
 
-// 수집 시작일(가장 오래된 collectedAt) 캐시.
-// 이 날짜 이전 구간은 "기사가 적었던 기간"이 아니라 "수집을 안 하던 기간"이라
-// 증감률을 내면 +4403% 같은 무의미한 숫자가 나온다. 그래서 비교 자체를 막는다.
-let dataStartCache: { at: number; value: Date | null } | null = null;
+// 카테고리별 데이터 시작일(가장 오래된 pubDate) 캐시.
+//
+// 백필 범위가 카테고리마다 다르다. 스파크랩·포트폴리오사는 2023년치까지 백필돼 있지만,
+// 경쟁사·업계동향은 정기 수집을 시작한 2026-05부터만 있다. 그래서 "직전 3개월 대비"를
+// 그냥 계산하면 업계동향이 0건이던 구간과 비교돼 +4403% 같은 숫자가 나온다.
+// 비교 가능 여부는 이 커버리지를 카테고리별로 확인해서 판단한다.
+let coverageCache: { at: number; value: Map<string, Date> } | null = null;
 
-async function getDataStart(): Promise<Date | null> {
+async function getCategoryCoverage(): Promise<Map<string, Date>> {
   const now = Date.now();
-  if (dataStartCache && now - dataStartCache.at < 60 * 60 * 1000) return dataStartCache.value;
-  const row = await prisma.article.aggregate({ _min: { collectedAt: true } });
-  const value = row._min.collectedAt ?? null;
-  dataStartCache = { at: now, value };
+  if (coverageCache && now - coverageCache.at < 60 * 60 * 1000) return coverageCache.value;
+  const rows = await prisma.article.groupBy({
+    by: ['category'],
+    where: { isNoise: false },
+    _min: { pubDate: true },
+  });
+  const value = new Map<string, Date>();
+  for (const r of rows) if (r._min.pubDate) value.set(r.category, r._min.pubDate);
+  coverageCache = { at: now, value };
   return value;
 }
 
@@ -132,12 +140,9 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
 
   // 집계용으로 넉넉히 가져와 서버에서 세고(매체명 정규화·노이즈 재검사가 필요해서),
   // 화면에는 limit 만큼만 보낸다.
-  // 직전 기간 where — 기간 조건만 바꾼 같은 조건.
-  // 단, 직전 구간이 수집 시작일보다 앞서면 비교가 성립하지 않으므로 아예 조회하지 않는다.
-  const dataStart = await getDataStart();
   const prevRange = range ? previousRange(range) : null;
-  const prevComparable = !!prevRange && (!dataStart || prevRange.gte >= dataStart);
-  const prevWhere = prevRange && prevComparable ? { ...where, pubDate: prevRange } : null;
+  // 직전 기간 where — 기간 조건만 바꾼 같은 조건
+  const prevWhere = prevRange ? { ...where, pubDate: prevRange } : null;
 
   const [rows, total, prevTotal] = await Promise.all([
     prisma.article.findMany({
@@ -162,6 +167,30 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
   ]);
 
   const clean = rows.filter((a) => !isBlockedNoise(a));
+
+  // 직전 기간과 비교해도 되는지 — 이번 결과에 10% 이상 기여한 카테고리 중
+  // 직전 구간에 데이터가 아예 없던 것(백필 미포함)이 있으면 비교를 막는다.
+  let deltaUnavailableReason: string | null = null;
+  let deltaCaution: string | null = null;
+  if (prevRange && clean.length > 0) {
+    const coverage = await getCategoryCoverage();
+    // 정기 수집 시작일 = 가장 늦게 커버리지가 생긴 카테고리 기준.
+    // 그 이전 구간은 백필로 채운 데이터라 지금보다 성기다(회사·매체 커버리지가 좁다).
+    const regularStart = [...coverage.values()].sort((a, b) => +b - +a)[0];
+    const share = new Map<string, number>();
+    for (const a of clean) share.set(a.category, (share.get(a.category) ?? 0) + 1);
+    const uncovered: string[] = [];
+    for (const [cat, n] of share) {
+      if (n / clean.length < 0.1) continue; // 비중 낮은 카테고리는 무시
+      const from = coverage.get(cat);
+      if (from && from > prevRange.gte) uncovered.push(`${categoryLabel(cat)}(${fmtYmd(from)}부터 수집)`);
+    }
+    if (uncovered.length) {
+      deltaUnavailableReason = `${uncovered.join(', ')} 기사는 직전 기간(${fmtYmd(prevRange.gte)}~${fmtYmd(prevRange.lte)})에 수집 전이라 증감 비교가 정확하지 않아요`;
+    } else if (regularStart && prevRange.gte < regularStart) {
+      deltaCaution = `직전 기간은 정기 수집(${fmtYmd(regularStart)}) 이전이라 백필 데이터로만 채워져 있어요. 증감률이 실제보다 크게 나올 수 있습니다`;
+    }
+  }
 
   // 월별 추이 — 조건은 그대로 두고 기간만 최근 6개월로 넓혀서 센다.
   let monthly: { month: string; count: number }[] | null = null;
@@ -250,14 +279,14 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
     // 1000건 상한에 걸리면 아래 분류·키워드·매체 집계는 최신 1000건 표본 기준이다.
     sampled: rows.length >= 1000,
     prevTotal,
-    // 비교가 불가능한 이유 (화면·요약에서 그대로 쓴다)
-    deltaUnavailableReason:
-      prevRange && !prevComparable && dataStart
-        ? `직전 기간(${fmtYmd(prevRange.gte)}~${fmtYmd(prevRange.lte)})은 수집 시작(${fmtYmd(dataStart)}) 이전이라 비교할 수 없어요`
-        : null,
+    deltaUnavailableReason,
+    deltaCaution,
     // 증감률은 양쪽 다 '정제 전 raw 건수'로 계산한다 — 이번 기간만 정제하고 비교하면
     // 줄어든 것처럼 왜곡된다. 직전이 0건이면 %가 의미 없어 null.
-    deltaPct: prevTotal && prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : null,
+    deltaPct:
+      prevTotal && prevTotal > 0 && !deltaUnavailableReason
+        ? Math.round(((total - prevTotal) / prevTotal) * 100)
+        : null,
     byCategory: [...cat.entries()].sort((a, b) => b[1] - a[1]).map(([category, count]) => ({ category, count })),
     topSources: top(src, 5),
     topCompanies: top(comp, 5),
