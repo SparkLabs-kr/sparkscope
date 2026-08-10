@@ -7,7 +7,8 @@
 //   1) 답변 방식(MODES)  = 어떻게 답할지   — 깊이·형식 옵션
 //   2) 검색 범위(SCOPES) = 어디서 찾을지   — 데이터 소스
 //   3) 카테고리(TASKS)   = 무엇을 할지     — 대시보드 기능별 업무 시나리오
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 // 서버 전용 모듈(prisma)이 클라이언트 번들에 딸려오지 않도록 타입 전용 파일에서 가져온다.
 import { categoryLabel, PERIOD_LABEL, SCOPE_LABEL, type ChatQueryResult } from '@/lib/sparkscope/chat-types';
 
@@ -184,6 +185,11 @@ function fileKind(name: string) {
   return '📄';
 }
 
+type Msg =
+  | { role: 'user'; text: string; period: string; scopes: string[]; files: string[] }
+  | { role: 'assistant'; result: ChatQueryResult; period: string; scopes: string[] }
+  | { role: 'error'; text: string };
+
 export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   const [input, setInput] = useState('');
   const [activeModes, setActiveModes] = useState<string[]>(['sources']);
@@ -193,11 +199,16 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   const [openTask, setOpenTask] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<ChatQueryResult | null>(null);
-  const [asked, setAsked] = useState<{ question: string; period: string; scopes: string[] } | null>(null);
+  const [composing, setComposing] = useState(false); // 한글 IME 조합 중 여부
+  const [messages, setMessages] = useState<Msg[]>([]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // 새 메시지가 붙으면 항상 마지막이 보이도록
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages, loading]);
 
   const toggle = (list: string[], id: string) =>
     list.includes(id) ? list.filter((v) => v !== id) : [...list, id];
@@ -217,11 +228,12 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
     const question = input.trim();
     if (!question || loading) return;
     // 파일 첨부는 아직 서버로 보내지 않는다(스토리지 연결 전).
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    setAsked({ question, period, scopes: activeScopes });
+    const attached = files.map((f) => f.name);
+    setMessages((prev) => [...prev, { role: 'user', text: question, period, scopes: activeScopes, files: attached }]);
+    setInput('');
+    setFiles([]);
     setOpenTask(null);
+    setLoading(true);
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -230,279 +242,355 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? '조회에 실패했어요.');
-      setResult(data);
-      setInput('');
+      setMessages((prev) => [...prev, { role: 'assistant', result: data, period, scopes: activeScopes }]);
     } catch (e: any) {
-      setError(e?.message ?? '조회에 실패했어요.');
+      setMessages((prev) => [...prev, { role: 'error', text: e?.message ?? '조회에 실패했어요.' }]);
     } finally {
       setLoading(false);
     }
   };
 
+  const reset = () => {
+    setMessages([]);
+    setInput('');
+    setFiles([]);
+    setOpenTask(null);
+    inputRef.current?.focus();
+  };
+
   const task = TASKS.find((t) => t.id === openTask);
   const canSend = input.trim().length > 0 && !loading;
-  const hasAnswer = loading || !!error || !!result;
 
   return (
-    <div className={`min-h-screen bg-spark-cream flex flex-col items-center px-6 py-14 ${hasAnswer ? '' : 'justify-center'}`}>
-      <div className="w-full max-w-3xl flex flex-col items-center animate-rise">
-        <SparkScopeMark />
-        <div className="mt-4 mb-8 text-center">
-          <h1 className="text-3xl sm:text-[34px] font-extrabold tracking-tight text-spark-ink mb-2">
-            어떤 기사를 찾고 계세요?
-          </h1>
-          <p className="text-spark-ink-soft text-[15px]">
-            스파크스코프가 모아둔 기사에서 찾아보고, 흐름까지 정리해드릴게요.
-          </p>
+    <div className="h-screen bg-spark-cream flex flex-col">
+      {/* 상단 바 */}
+      <header className="shrink-0 border-b border-spark-border bg-white/80 backdrop-blur-md px-5 py-2.5 flex items-center gap-3">
+        <button type="button" onClick={reset} className="flex items-center gap-2 group" title="새 대화 시작">
+          <SparkScopeMark size="sm" />
+          <span className="text-spark-ink font-extrabold tracking-tight text-[15px]">SparkScope</span>
+        </button>
+        <span className="hidden sm:inline text-[12px] text-spark-muted">챗봇</span>
+        <div className="ml-auto flex items-center gap-2">
+          {messages.length > 0 && (
+            <button
+              type="button"
+              onClick={reset}
+              className="px-2.5 py-1.5 rounded-lg border border-spark-border bg-white text-[12px] font-semibold text-spark-ink-soft hover:text-spark-purple hover:border-spark-purple/30 transition"
+            >
+              + 새 대화
+            </button>
+          )}
+          <Link
+            href="/dashboard"
+            className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-[12px] font-semibold hover:bg-blue-700 transition"
+          >
+            대시보드로 이동
+          </Link>
         </div>
+      </header>
 
-        {/* 입력 카드 */}
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragging(false);
-            addFiles(e.dataTransfer.files);
-          }}
-          className={`w-full bg-spark-surface border rounded-2xl shadow-card overflow-hidden transition ${
-            dragging ? 'border-spark-purple ring-2 ring-spark-purple/20' : 'border-spark-border'
-          }`}
-        >
-          <div className="px-5 pt-4 pb-2">
-            <textarea
-              ref={inputRef}
-              rows={1}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  send();
-                }
-              }}
-              placeholder="무엇이든 물어보세요. 예) 이번 주 포폴사 투자유치 기사 정리해줘"
-              className="w-full resize-none bg-transparent text-[15px] leading-6 text-spark-ink outline-none placeholder:text-spark-muted"
-            />
-          </div>
+      {/* 대화 기록 */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto px-6 py-8">
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center animate-rise">
+              <SparkScopeMark />
+              <div className="mt-4 mb-7 text-center">
+                <h1 className="text-3xl sm:text-[34px] font-extrabold tracking-tight text-spark-ink mb-2">
+                  어떤 기사를 찾고 계세요?
+                </h1>
+                <p className="text-spark-ink-soft text-[15px]">
+                  스파크스코프가 모아둔 기사에서 찾아보고, 흐름까지 정리해드릴게요.
+                </p>
+              </div>
+              {/* 카테고리 */}
+              <div className="w-full mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {TASKS.map((t) => {
+                  const on = openTask === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setOpenTask(on ? null : t.id)}
+                      className={`flex items-center gap-3 px-3.5 py-3 rounded-2xl border text-left transition ${
+                        on
+                          ? 'bg-spark-light-purple border-spark-purple/30 shadow-card'
+                          : 'bg-spark-surface border-spark-border hover:border-spark-border-strong'
+                      }`}
+                    >
+                      <span className={`shrink-0 ${on ? 'text-spark-purple' : 'text-spark-muted'}`}>{t.icon}</span>
+                      <span className="min-w-0">
+                        <span className={`block text-[13px] font-bold ${on ? 'text-spark-purple' : 'text-spark-ink'}`}>
+                          {t.label}
+                        </span>
+                        <span className="block text-[11px] text-spark-muted truncate">{t.desc}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
 
-          {/* 첨부된 파일 */}
-          {files.length > 0 && (
-            <div className="px-4 pb-2 flex flex-wrap gap-2">
-              {files.map((f, i) => (
-                <span
-                  key={`${f.name}-${i}`}
-                  className="flex items-center gap-1.5 pl-2 pr-1.5 py-1 rounded-lg bg-spark-subtle border border-spark-border text-[12px] text-spark-ink-soft"
-                >
-                  <span aria-hidden>{fileKind(f.name)}</span>
-                  <span className="max-w-[180px] truncate font-medium">{f.name}</span>
-                  <span className="text-spark-muted">{fmtSize(f.size)}</span>
-                  <button
-                    type="button"
-                    aria-label={`${f.name} 첨부 취소`}
-                    onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                    className="w-4 h-4 grid place-items-center rounded text-spark-muted hover:text-spark-ink hover:bg-spark-border/60"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
+              {/* 예시 질문 */}
+              {task && (
+                <div className="w-full mt-3 bg-spark-surface border border-spark-border rounded-2xl shadow-card overflow-hidden animate-rise">
+                  <div className="px-4 py-2.5 border-b border-spark-border text-[13px] font-semibold text-spark-ink-soft">
+                    {task.heading}
+                  </div>
+                  <ul className="divide-y divide-spark-border">
+                    {task.suggestions.map((s) => (
+                      <li key={s}>
+                        <button
+                          type="button"
+                          onClick={() => pick(s)}
+                          className="w-full text-left px-4 py-3 hover:bg-spark-subtle transition flex items-center gap-3"
+                        >
+                          <span className="text-spark-purple shrink-0">{task.icon}</span>
+                          <span className="text-[14px] text-spark-ink-soft">{s}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {messages.map((m, i) =>
+                m.role === 'user' ? (
+                  <div key={i} className="flex justify-end animate-rise">
+                    <div className="max-w-[85%]">
+                      <div className="bg-spark-purple text-white rounded-2xl rounded-br-md px-4 py-2.5 text-[14px] leading-relaxed whitespace-pre-wrap">
+                        {m.text}
+                      </div>
+                      <div className="mt-1 flex flex-wrap justify-end items-center gap-1 text-[11px] text-spark-muted">
+                        <span>{PERIOD_LABEL[m.period as keyof typeof PERIOD_LABEL] ?? m.period}</span>
+                        {m.scopes.map((sc) => (
+                          <span key={sc}>· {SCOPE_LABEL[sc as keyof typeof SCOPE_LABEL] ?? sc}</span>
+                        ))}
+                        {m.files.map((f) => (
+                          <span key={f}>· 📎 {f}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : m.role === 'error' ? (
+                  <div key={i} className="flex gap-2.5 animate-rise">
+                    <SparkScopeMark size="xs" />
+                    <div className="flex-1 bg-red-50 border border-red-200 rounded-2xl rounded-tl-md px-4 py-3 text-[14px] text-red-700">
+                      {m.text}
+                    </div>
+                  </div>
+                ) : (
+                  <div key={i} className="flex gap-2.5 animate-rise">
+                    <SparkScopeMark size="xs" />
+                    <div className="flex-1 min-w-0">
+                      <ChatResult result={m.result} scopes={m.scopes} />
+                    </div>
+                  </div>
+                )
+              )}
+
+              {loading && (
+                <div className="flex gap-2.5 items-center animate-rise">
+                  <SparkScopeMark size="xs" />
+                  <div className="bg-spark-surface border border-spark-border rounded-2xl rounded-tl-md px-4 py-2.5 text-[14px] text-spark-ink-soft">
+                    <span className="inline-block w-2.5 h-2.5 mr-2 rounded-full bg-spark-purple animate-pulse align-middle" />
+                    기사를 찾는 중이에요…
+                  </div>
+                </div>
+              )}
             </div>
           )}
+        </div>
+      </div>
 
-          {/* 답변 방식 + 전송 */}
-          <div className="px-4 pb-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[12px] font-semibold text-spark-muted mr-0.5">답변 방식</span>
+      {/* 입력 도크 */}
+      <div className="shrink-0 border-t border-spark-border bg-spark-cream/95 backdrop-blur">
+        <div className="max-w-3xl mx-auto px-6 py-4">
+          {/* 입력 카드 */}
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              addFiles(e.dataTransfer.files);
+            }}
+            className={`w-full bg-spark-surface border rounded-2xl shadow-card overflow-hidden transition ${
+              dragging ? 'border-spark-purple ring-2 ring-spark-purple/20' : 'border-spark-border'
+            }`}
+          >
+            <div className="px-5 pt-4 pb-2">
+              <textarea
+                ref={inputRef}
+                rows={1}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onCompositionStart={() => setComposing(true)}
+                onCompositionEnd={() => setComposing(false)}
+                onKeyDown={(e) => {
+                  // 한글 조합 중의 Enter는 글자를 확정하는 키다. 여기서 보내면 입력이 잘린다.
+                  if (composing) return;
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    send();
+                  }
+                }}
+                placeholder="무엇이든 물어보세요. 예) 이번 주 포폴사 투자유치 기사 정리해줘"
+                className="w-full resize-none bg-transparent text-[15px] leading-6 text-spark-ink outline-none placeholder:text-spark-muted"
+              />
+            </div>
 
-              {/* 기간 — 하나만 고르는 선택형 */}
-              <label
-                title="검색할 기간"
-                className="relative flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-full text-[13px] font-semibold bg-spark-light-purple text-spark-purple cursor-pointer"
+            {/* 첨부된 파일 */}
+            {files.length > 0 && (
+              <div className="px-4 pb-2 flex flex-wrap gap-2">
+                {files.map((f, i) => (
+                  <span
+                    key={`${f.name}-${i}`}
+                    className="flex items-center gap-1.5 pl-2 pr-1.5 py-1 rounded-lg bg-spark-subtle border border-spark-border text-[12px] text-spark-ink-soft"
+                  >
+                    <span aria-hidden>{fileKind(f.name)}</span>
+                    <span className="max-w-[180px] truncate font-medium">{f.name}</span>
+                    <span className="text-spark-muted">{fmtSize(f.size)}</span>
+                    <button
+                      type="button"
+                      aria-label={`${f.name} 첨부 취소`}
+                      onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                      className="w-4 h-4 grid place-items-center rounded text-spark-muted hover:text-spark-ink hover:bg-spark-border/60"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* 답변 방식 + 전송 */}
+            <div className="px-4 pb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[12px] font-semibold text-spark-muted mr-0.5">답변 방식</span>
+
+                {/* 기간 — 하나만 고르는 선택형 */}
+                <label
+                  title="검색할 기간"
+                  className="relative flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-full text-[13px] font-semibold bg-spark-light-purple text-spark-purple cursor-pointer"
+                >
+                  <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
+                    <rect x="2.2" y="3.2" width="11.6" height="10" rx="1.6" stroke="currentColor" strokeWidth="1.5" />
+                    <path d="M2.2 6.4h11.6M5.6 1.8v2.6M10.4 1.8v2.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                  <span>{PERIODS.find((p) => p.id === period)?.label}</span>
+                  <span aria-hidden className="text-[10px] leading-none">▾</span>
+                  <select
+                    value={period}
+                    onChange={(e) => setPeriod(e.target.value)}
+                    aria-label="검색 기간"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  >
+                    {PERIODS.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {MODES.map((m) => {
+                  const on = activeModes.includes(m.id);
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      title={m.hint}
+                      onClick={() => setActiveModes((prev) => toggle(prev, m.id))}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-semibold transition ${
+                        on
+                          ? 'bg-spark-light-purple text-spark-purple'
+                          : 'bg-spark-subtle text-spark-muted hover:text-spark-ink-soft border border-spark-border'
+                      }`}
+                    >
+                      {m.icon}
+                      <span>{m.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                onClick={send}
+                disabled={!canSend}
+                aria-label="보내기"
+                className={`w-9 h-9 shrink-0 grid place-items-center rounded-full transition ${
+                  canSend
+                    ? 'bg-spark-purple text-white hover:opacity-90'
+                    : 'bg-spark-subtle text-spark-muted border border-spark-border cursor-not-allowed'
+                }`}
               >
                 <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
-                  <rect x="2.2" y="3.2" width="11.6" height="10" rx="1.6" stroke="currentColor" strokeWidth="1.5" />
-                  <path d="M2.2 6.4h11.6M5.6 1.8v2.6M10.4 1.8v2.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  <path d="M8 13V3.5M8 3.5L4 7.5M8 3.5l4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                <span>{PERIODS.find((p) => p.id === period)?.label}</span>
-                <span aria-hidden className="text-[10px] leading-none">▾</span>
-                <select
-                  value={period}
-                  onChange={(e) => setPeriod(e.target.value)}
-                  aria-label="검색 기간"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                >
-                  {PERIODS.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              </button>
+            </div>
 
-              {MODES.map((m) => {
-                const on = activeModes.includes(m.id);
+            {/* 검색 범위 */}
+            <div className="px-4 py-2.5 border-t border-spark-border flex flex-wrap items-center gap-2">
+              <span className="text-[12px] font-semibold text-spark-muted mr-0.5">검색 범위</span>
+              {SCOPES.map((s) => {
+                const on = activeScopes.includes(s.id);
                 return (
                   <button
-                    key={m.id}
+                    key={s.id}
                     type="button"
-                    title={m.hint}
-                    onClick={() => setActiveModes((prev) => toggle(prev, m.id))}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-semibold transition ${
+                    onClick={() => setActiveScopes((prev) => toggle(prev, s.id))}
+                    className={`px-2.5 py-1 rounded-lg text-[12px] font-semibold transition border ${
                       on
-                        ? 'bg-spark-light-purple text-spark-purple'
-                        : 'bg-spark-subtle text-spark-muted hover:text-spark-ink-soft border border-spark-border'
+                        ? 'bg-spark-light-purple text-spark-purple border-spark-purple/30'
+                        : 'bg-white text-spark-muted border-spark-border hover:text-spark-ink-soft'
                     }`}
                   >
-                    {m.icon}
-                    <span>{m.label}</span>
+                    {s.label}
                   </button>
                 );
               })}
+              <span className="ml-auto text-[11px] text-spark-muted">
+                {activeScopes.length === 0 ? '선택하지 않을시 전체에서 찾아요' : `${activeScopes.length}개 범위 선택됨`}
+              </span>
             </div>
-            <button
-              type="button"
-              onClick={send}
-              disabled={!canSend}
-              aria-label="보내기"
-              className={`w-9 h-9 shrink-0 grid place-items-center rounded-full transition ${
-                canSend
-                  ? 'bg-spark-purple text-white hover:opacity-90'
-                  : 'bg-spark-subtle text-spark-muted border border-spark-border cursor-not-allowed'
-              }`}
-            >
-              <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
-                <path d="M8 13V3.5M8 3.5L4 7.5M8 3.5l4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          </div>
 
-          {/* 검색 범위 */}
-          <div className="px-4 py-2.5 border-t border-spark-border flex flex-wrap items-center gap-2">
-            <span className="text-[12px] font-semibold text-spark-muted mr-0.5">검색 범위</span>
-            {SCOPES.map((s) => {
-              const on = activeScopes.includes(s.id);
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => setActiveScopes((prev) => toggle(prev, s.id))}
-                  className={`px-2.5 py-1 rounded-lg text-[12px] font-semibold transition border ${
-                    on
-                      ? 'bg-spark-light-purple text-spark-purple border-spark-purple/30'
-                      : 'bg-white text-spark-muted border-spark-border hover:text-spark-ink-soft'
-                  }`}
-                >
-                  {s.label}
-                </button>
-              );
-            })}
-            <span className="ml-auto text-[11px] text-spark-muted">
-              {activeScopes.length === 0 ? '선택하지 않을시 전체에서 찾아요' : `${activeScopes.length}개 범위 선택됨`}
-            </span>
-          </div>
-
-          {/* 파일 첨부 */}
-          <div className="px-4 py-2.5 border-t border-spark-border flex items-center gap-3">
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
-              accept={ACCEPT}
-              className="hidden"
-              onChange={(e) => {
-                addFiles(e.target.files);
-                e.target.value = '';
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="flex items-center gap-1.5 text-[13px] font-semibold text-spark-ink-soft hover:text-spark-purple transition"
-            >
-              <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
-                <path d="M8 3.5v9M3.5 8h9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              </svg>
-              파일 첨부
-            </button>
-            <span className="text-[11px] text-spark-muted">
-              PDF · 워드 · 한글 · 엑셀 · PPT · 이미지 · 음성(mp3) · 영상(mp4) — 끌어다 놓아도 돼요
-            </span>
-          </div>
-        </div>
-
-        {/* 카테고리 */}
-        <div className="w-full mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {TASKS.map((t) => {
-            const on = openTask === t.id;
-            return (
+            {/* 파일 첨부 */}
+            <div className="px-4 py-2.5 border-t border-spark-border flex items-center gap-3">
+              <input
+                ref={fileRef}
+                type="file"
+                multiple
+                accept={ACCEPT}
+                className="hidden"
+                onChange={(e) => {
+                  addFiles(e.target.files);
+                  e.target.value = '';
+                }}
+              />
               <button
-                key={t.id}
                 type="button"
-                onClick={() => setOpenTask(on ? null : t.id)}
-                className={`flex items-center gap-3 px-3.5 py-3 rounded-2xl border text-left transition ${
-                  on
-                    ? 'bg-spark-light-purple border-spark-purple/30 shadow-card'
-                    : 'bg-spark-surface border-spark-border hover:border-spark-border-strong'
-                }`}
+                onClick={() => fileRef.current?.click()}
+                className="flex items-center gap-1.5 text-[13px] font-semibold text-spark-ink-soft hover:text-spark-purple transition"
               >
-                <span className={`shrink-0 ${on ? 'text-spark-purple' : 'text-spark-muted'}`}>{t.icon}</span>
-                <span className="min-w-0">
-                  <span className={`block text-[13px] font-bold ${on ? 'text-spark-purple' : 'text-spark-ink'}`}>
-                    {t.label}
-                  </span>
-                  <span className="block text-[11px] text-spark-muted truncate">{t.desc}</span>
-                </span>
+                <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
+                  <path d="M8 3.5v9M3.5 8h9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+                파일 첨부
               </button>
-            );
-          })}
-        </div>
-
-        {/* 예시 질문 */}
-        {task && (
-          <div className="w-full mt-3 bg-spark-surface border border-spark-border rounded-2xl shadow-card overflow-hidden animate-rise">
-            <div className="px-4 py-2.5 border-b border-spark-border text-[13px] font-semibold text-spark-ink-soft">
-              {task.heading}
+              <span className="text-[11px] text-spark-muted">
+                PDF · 워드 · 한글 · 엑셀 · PPT · 이미지 · 음성(mp3) · 영상(mp4) — 끌어다 놓아도 돼요
+              </span>
             </div>
-            <ul className="divide-y divide-spark-border">
-              {task.suggestions.map((s) => (
-                <li key={s}>
-                  <button
-                    type="button"
-                    onClick={() => pick(s)}
-                    className="w-full text-left px-4 py-3 hover:bg-spark-subtle transition flex items-center gap-3"
-                  >
-                    <span className="text-spark-purple shrink-0">{task.icon}</span>
-                    <span className="text-[14px] text-spark-ink-soft">{s}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
           </div>
-        )}
-
-        {/* 결과 */}
-        {loading && (
-          <div className="w-full mt-4 bg-spark-surface border border-spark-border rounded-2xl shadow-card px-4 py-5 text-[14px] text-spark-ink-soft">
-            <span className="inline-block w-3 h-3 mr-2 rounded-full bg-spark-purple animate-pulse align-middle" />
-            기사를 찾는 중이에요…
+          <div className="mt-2 text-[11px] text-spark-muted text-center">
+            답변은 수집된 기사 기반 초안입니다 · 외부 공유 금지{userEmail ? ` · ${userEmail}` : ''}
           </div>
-        )}
-
-        {error && !loading && (
-          <div className="w-full mt-4 bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-[14px] text-red-700">
-            {error}
-          </div>
-        )}
-
-        {result && !loading && <ChatResult result={result} asked={asked} />}
-
-        <div className="mt-8 text-[11px] text-spark-muted text-center">
-          답변은 수집된 기사 기반 초안입니다 · 외부 공유 금지
-          {userEmail ? ` · ${userEmail}` : ''}
         </div>
       </div>
     </div>
@@ -510,29 +598,19 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
 }
 
 /** 조회 결과 — 지금은 DB 집계 + 기사 목록만. 요약 문장은 이후 단계에서 추가. */
-function ChatResult({
-  result,
-  asked,
-}: {
-  result: ChatQueryResult;
-  asked: { question: string; period: string; scopes: string[] } | null;
-}) {
+function ChatResult({ result, scopes }: { result: ChatQueryResult; scopes: string[] }) {
   const fmtDate = (iso: string) => {
     const d = new Date(iso);
     return `${d.getMonth() + 1}/${d.getDate()}`;
   };
 
   return (
-    <div className="w-full mt-4 space-y-3 animate-rise">
-      {/* 질문 요약 */}
-      {asked && (
-        <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-spark-muted">
-          <span className="px-2 py-0.5 rounded-md bg-white border border-spark-border font-semibold text-spark-ink-soft">
-            {PERIOD_LABEL[asked.period as keyof typeof PERIOD_LABEL] ?? asked.period}
-          </span>
-          {asked.scopes.map((s) => (
-            <span key={s} className="px-2 py-0.5 rounded-md bg-spark-light-purple text-spark-purple font-semibold">
-              {SCOPE_LABEL[s as keyof typeof SCOPE_LABEL] ?? s}
+    <div className="w-full space-y-2.5">
+      {(result.terms.length > 0 || scopes.length > 0) && (
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-spark-muted">
+          {scopes.map((sc) => (
+            <span key={sc} className="px-2 py-0.5 rounded-md bg-spark-light-purple text-spark-purple font-semibold">
+              {SCOPE_LABEL[sc as keyof typeof SCOPE_LABEL] ?? sc}
             </span>
           ))}
           {result.terms.length > 0 && <span>검색어: {result.terms.join(' · ')}</span>}
@@ -611,9 +689,7 @@ function ChatResult({
         </div>
       )}
 
-      <p className="text-[11px] text-spark-muted">
-        DB 조회 결과입니다 · 요약·심층 분석은 아직 연결 전이에요
-      </p>
+      <p className="text-[11px] text-spark-muted">DB 조회 결과입니다 · 요약·심층 분석은 아직 연결 전이에요</p>
     </div>
   );
 }
@@ -636,10 +712,11 @@ function StatList({ title, items }: { title: string; items: { name: string; coun
 }
 
 /** SparkScope 로고 마크 — 대시보드 상단 로고(보라 사각형 + S)의 큰 버전 */
-function SparkScopeMark() {
+function SparkScopeMark({ size = 'lg' }: { size?: 'lg' | 'sm' | 'xs' }) {
+  const box = size === 'lg' ? 'w-20 h-20' : size === 'sm' ? 'w-7 h-7' : 'w-8 h-8 shrink-0';
   return (
     <div className="flex flex-col items-center gap-3">
-      <svg viewBox="0 0 96 96" className="w-20 h-20" aria-label="SparkScope">
+      <svg viewBox="0 0 96 96" className={box} aria-label="SparkScope">
         <defs>
           <linearGradient id="ss-grad" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stopColor="#6E66EA" />
@@ -651,7 +728,9 @@ function SparkScopeMark() {
         <path d="M59 59L74 74" stroke="#fff" strokeWidth="7" strokeLinecap="round" />
         <path d="M46 33l-9 14h8l-3 10 10-14h-8l2-10z" fill="#fff" />
       </svg>
-      <span className="text-[13px] font-extrabold tracking-[0.14em] text-spark-purple">SPARKSCOPE</span>
+      {size === 'lg' && (
+        <span className="text-[13px] font-extrabold tracking-[0.14em] text-spark-purple">SPARKSCOPE</span>
+      )}
     </div>
   );
 }
