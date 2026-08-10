@@ -8,6 +8,8 @@
 //   2) 검색 범위(SCOPES) = 어디서 찾을지   — 데이터 소스
 //   3) 카테고리(TASKS)   = 무엇을 할지     — 대시보드 기능별 업무 시나리오
 import { useRef, useState } from 'react';
+// 서버 전용 모듈(prisma)이 클라이언트 번들에 딸려오지 않도록 타입 전용 파일에서 가져온다.
+import { categoryLabel, PERIOD_LABEL, SCOPE_LABEL, type ChatQueryResult } from '@/lib/sparkscope/chat-types';
 
 /** 1) 답변 방식 — 질문을 어떤 깊이·형식으로 처리할지 */
 const MODES = [
@@ -190,6 +192,10 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   const [files, setFiles] = useState<File[]>([]);
   const [openTask, setOpenTask] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<ChatQueryResult | null>(null);
+  const [asked, setAsked] = useState<{ question: string; period: string; scopes: string[] } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -207,25 +213,38 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
     inputRef.current?.focus();
   };
 
-  const send = () => {
-    if (!input.trim() && files.length === 0) return;
-    // TODO: /api/chat 연결 전까지는 콘솔 확인용
-    console.log('[SparkScope chat]', {
-      question: input,
-      modes: activeModes,
-      period,
-      scopes: activeScopes,
-      files: files.map((f) => ({ name: f.name, size: f.size, type: f.type })),
-    });
-    setInput('');
-    setFiles([]);
+  const send = async () => {
+    const question = input.trim();
+    if (!question || loading) return;
+    // 파일 첨부는 아직 서버로 보내지 않는다(스토리지 연결 전).
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    setAsked({ question, period, scopes: activeScopes });
+    setOpenTask(null);
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, period, scopes: activeScopes, modes: activeModes }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? '조회에 실패했어요.');
+      setResult(data);
+      setInput('');
+    } catch (e: any) {
+      setError(e?.message ?? '조회에 실패했어요.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const task = TASKS.find((t) => t.id === openTask);
-  const canSend = input.trim().length > 0 || files.length > 0;
+  const canSend = input.trim().length > 0 && !loading;
+  const hasAnswer = loading || !!error || !!result;
 
   return (
-    <div className="min-h-screen bg-spark-cream flex flex-col items-center justify-center px-6 py-14">
+    <div className={`min-h-screen bg-spark-cream flex flex-col items-center px-6 py-14 ${hasAnswer ? '' : 'justify-center'}`}>
       <div className="w-full max-w-3xl flex flex-col items-center animate-rise">
         <SparkScopeMark />
         <div className="mt-4 mb-8 text-center">
@@ -465,11 +484,153 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
           </div>
         )}
 
+        {/* 결과 */}
+        {loading && (
+          <div className="w-full mt-4 bg-spark-surface border border-spark-border rounded-2xl shadow-card px-4 py-5 text-[14px] text-spark-ink-soft">
+            <span className="inline-block w-3 h-3 mr-2 rounded-full bg-spark-purple animate-pulse align-middle" />
+            기사를 찾는 중이에요…
+          </div>
+        )}
+
+        {error && !loading && (
+          <div className="w-full mt-4 bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-[14px] text-red-700">
+            {error}
+          </div>
+        )}
+
+        {result && !loading && <ChatResult result={result} asked={asked} />}
+
         <div className="mt-8 text-[11px] text-spark-muted text-center">
           답변은 수집된 기사 기반 초안입니다 · 외부 공유 금지
           {userEmail ? ` · ${userEmail}` : ''}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** 조회 결과 — 지금은 DB 집계 + 기사 목록만. 요약 문장은 이후 단계에서 추가. */
+function ChatResult({
+  result,
+  asked,
+}: {
+  result: ChatQueryResult;
+  asked: { question: string; period: string; scopes: string[] } | null;
+}) {
+  const fmtDate = (iso: string) => {
+    const d = new Date(iso);
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  };
+
+  return (
+    <div className="w-full mt-4 space-y-3 animate-rise">
+      {/* 질문 요약 */}
+      {asked && (
+        <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-spark-muted">
+          <span className="px-2 py-0.5 rounded-md bg-white border border-spark-border font-semibold text-spark-ink-soft">
+            {PERIOD_LABEL[asked.period as keyof typeof PERIOD_LABEL] ?? asked.period}
+          </span>
+          {asked.scopes.map((s) => (
+            <span key={s} className="px-2 py-0.5 rounded-md bg-spark-light-purple text-spark-purple font-semibold">
+              {SCOPE_LABEL[s as keyof typeof SCOPE_LABEL] ?? s}
+            </span>
+          ))}
+          {result.terms.length > 0 && <span>검색어: {result.terms.join(' · ')}</span>}
+        </div>
+      )}
+
+      {/* 집계 */}
+      <div className="bg-spark-surface border border-spark-border rounded-2xl shadow-card p-4">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-3">
+          <span className="text-2xl font-extrabold text-spark-ink">{result.total.toLocaleString()}건</span>
+          <span className="text-[13px] text-spark-muted">{result.periodLabel} 기준</span>
+          {result.negativeCount > 0 && (
+            <span className="ml-auto text-[12px] font-semibold text-red-600">
+              부정 톤 {result.negativeCount}건
+            </span>
+          )}
+        </div>
+
+        {result.total === 0 ? (
+          <p className="text-[14px] text-spark-ink-soft">
+            조건에 맞는 기사가 없어요. 기간을 넓히거나 검색어를 줄여보세요.
+          </p>
+        ) : (
+          <div className="grid sm:grid-cols-3 gap-3 text-[13px]">
+            <StatList
+              title="분류"
+              items={result.byCategory.map((c) => ({ name: categoryLabel(c.category), count: c.count }))}
+            />
+            <StatList title="많이 나온 회사·키워드" items={result.topCompanies} />
+            <StatList title="매체" items={result.topSources} />
+          </div>
+        )}
+      </div>
+
+      {/* 기사 목록 */}
+      {result.articles.length > 0 && (
+        <div className="bg-spark-surface border border-spark-border rounded-2xl shadow-card overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-spark-border text-[13px] font-semibold text-spark-ink-soft">
+            근거 기사 {result.articles.length}건 {result.total > result.articles.length && `(전체 ${result.total}건 중)`}
+          </div>
+          <ul className="divide-y divide-spark-border">
+            {result.articles.map((a) => (
+              <li key={a.id}>
+                <a
+                  href={a.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block px-4 py-3 hover:bg-spark-subtle transition"
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="text-[14px] text-spark-ink leading-snug">{a.title}</span>
+                    {a.tone === 'NEGATIVE' && (
+                      <span className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-bold">부정</span>
+                    )}
+                    {a.riskFlag && (
+                      <span className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-bold">⚠</span>
+                    )}
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-spark-muted">
+                    <span>{a.source}</span>
+                    <span>·</span>
+                    <span>{fmtDate(a.pubDate)}</span>
+                    <span>·</span>
+                    <span>{categoryLabel(a.category)}</span>
+                    {a.matchedKeyword && (
+                      <>
+                        <span>·</span>
+                        <span className="text-spark-purple font-semibold">{a.matchedKeyword}</span>
+                      </>
+                    )}
+                  </div>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <p className="text-[11px] text-spark-muted">
+        DB 조회 결과입니다 · 요약·심층 분석은 아직 연결 전이에요
+      </p>
+    </div>
+  );
+}
+
+function StatList({ title, items }: { title: string; items: { name: string; count: number }[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="bg-spark-subtle border border-spark-border rounded-xl px-3 py-2.5">
+      <div className="text-[11px] font-semibold text-spark-muted mb-1.5">{title}</div>
+      <ul className="space-y-1">
+        {items.map((i) => (
+          <li key={i.name} className="flex items-center justify-between gap-2">
+            <span className="truncate text-spark-ink-soft">{i.name}</span>
+            <span className="shrink-0 font-bold text-spark-ink">{i.count}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
