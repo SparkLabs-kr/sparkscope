@@ -108,6 +108,21 @@ model Article {
   @@index([isScrapped])
 }
 
+// 기사 임베딩 — 챗봇의 의미 검색용.
+//
+// Article과 분리한 이유: pgvector 타입을 Prisma가 다루지 못해(Unsupported) 조회는
+// 전부 raw SQL이다. 본문 테이블에 섞으면 일반 조회까지 지저분해진다.
+// 실제 컬럼 생성은 scripts/enable-vector.ts가 raw SQL로 한다(db push를 쓰지 않는다).
+// 여기 적어두는 건 나중에 db push가 이 테이블을 모르는 채로 지워버리지 않게 하려는 것.
+model ArticleEmbedding {
+  articleId String   @id
+  // text-embedding-3-small을 512차원으로 줄여서 쓴다.
+  // 1536차원이면 30만 건 기준 저장·인덱스가 3배로 커지는데 이 용도에선 체감 차이가 없다.
+  embedding Unsupported("vector(512)")
+  model     String
+  updatedAt DateTime @default(now())
+}
+
 // 개인 북마크 — 로그인한 사용자 각자의 북마크 목록. ★ 스크랩(본부 큐레이션·다이제스트용)과 별개로,
 // 누구나 자기 것만 보인다. Article과는 FK 없이 articleId로만 연결(다른 테이블들과 동일한 패턴).
 model Bookmark {

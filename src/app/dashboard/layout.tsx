@@ -26,6 +26,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </Link>
           <span className="hidden sm:inline h-3.5 w-px bg-spark-border" />
           <span className="hidden sm:inline text-xs font-medium text-spark-muted">본부 인사이트 대시보드</span>
+          <Link href="/chat" className="hidden sm:inline text-xs font-semibold text-spark-muted hover:text-spark-purple transition">💬 챗봇</Link>
           <DashboardTutorial />
         </div>
         <div className="flex items-center gap-3 text-sm text-spark-muted">

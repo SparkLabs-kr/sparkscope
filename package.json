@@ -12,7 +12,9 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "digest:run": "tsx scripts/run-digest.ts",
-    "keywords:check": "tsx scripts/check-context-words.ts"
+    "keywords:check": "tsx scripts/check-context-words.ts",
+    "embed:backfill": "tsx --env-file=.env.local scripts/backfill-embeddings.ts",
+    "test:chat": "tsx --env-file=.env.local scripts/test-chat.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

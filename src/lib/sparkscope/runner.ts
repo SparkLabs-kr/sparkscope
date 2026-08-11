@@ -10,6 +10,7 @@ import { normalizeSource } from './media';
 import { clusterArticles } from './cluster';
 import { analyzeArticles, pickVerifiedTop3 } from './analyzer';
 import { computeAndStoreDashboardInsights } from './dashboard-insights';
+import { backfillEmbeddings } from './embedding';
 import { checkConfigDrift, formatDriftReport } from './config-drift';
 import { buildDigestData, renderDigestHtml, buildClusteredPool, rankTop3Pool } from './digest';
 import { attachInterDigest } from './inter-digest';
@@ -278,6 +279,16 @@ export async function runDailyDigest(opts: RunOptions = {}) {
 
       // 4.55 Inter(해외 트렌드) 탭 AI 요약 사전계산 — 위와 같은 이유로 하루 1회, 여기서만.
       await computeAndStoreInterSummaries();
+
+      // 4.57 챗봇 의미 검색용 임베딩 — 오늘 새로 들어온 기사만 채운다(이미 있는 건 건너뜀).
+      // 실패해도 수집·발송에는 영향이 없어야 하므로 여기서 삼킨다. 임베딩이 없는 기사는
+      // 키워드 검색에는 그대로 잡히고, 의미 검색에서만 빠진다.
+      try {
+        const embedded = await backfillEmbeddings({ limit: 5000 });
+        if (embedded > 0) console.log(`[runner] 기사 임베딩 ${embedded}건 생성`);
+      } catch (e) {
+        console.error('[runner] 임베딩 생성 실패 (수집은 정상):', e);
+      }
 
       // 4.6 master-keywords.json ↔ DB 불일치 확인 — 하루 1회, 다를 때만 관리자에게 메일.
       // (7/31~8/3에 파일은 고쳤는데 DB엔 반영 안 된 채로 몇 주 방치된 사고 재발 방지)
