@@ -71,6 +71,30 @@ export function resolvePeriod(period: ChatPeriod): { gte: Date; lte: Date } | nu
   return { gte, lte: now };
 }
 
+/**
+ * 같은 사안을 여러 매체가 받아쓴 기사를 하나로 접는다.
+ *
+ * 통신사 기사를 그대로 받는 매체가 많아 "엔씽, 국가기관·대기업·교육까지 전방위 수주"와
+ * "엔씽, 국가기관·대기업·교육 현장 잇단 수주…"처럼 제목만 조금 다른 기사가 6~7건씩 쌓인다.
+ * 그대로 두면 목록 상위가 같은 기사로 도배되고 회사·매체 집계도 부풀어 보인다.
+ *
+ * 판정: 구두점·공백을 뗀 제목의 앞 10글자가 같으면 같은 사안으로 본다.
+ * 한국어 기사 제목은 앞부분에 "회사명 + 핵심 동사"가 오므로 이 정도면 거의 맞는다.
+ */
+export function dedupeArticles<T extends { title: string; priorityScore?: number }>(rows: T[]): T[] {
+  const seen = new Map<string, T>();
+  for (const r of rows) {
+    const key = r.title.replace(/[^\p{L}\p{N}]/gu, '').slice(0, 10);
+    if (!key) continue;
+    const prev = seen.get(key);
+    // 같은 사안이면 우선순위가 높은 쪽을 남긴다(먼저 온 순서를 유지).
+    if (!prev || (r.priorityScore ?? 0) > (prev.priorityScore ?? 0)) seen.set(key, r);
+  }
+  // 원래 정렬 순서를 지키기 위해 입력 순서대로 다시 뽑는다.
+  const kept = new Set(seen.values());
+  return rows.filter((r) => kept.has(r));
+}
+
 /** 검색 범위 칩 → category 조건. 아무것도 안 고르면 전체. */
 function scopeWhere(scopes: ChatScope[]) {
   if (scopes.length === 0) return undefined;
@@ -288,9 +312,11 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
       .slice(0, n)
       .map(([name, count]) => ({ name, count }));
 
-  const articles = clean
-    .slice()
-    .sort((a, b) => b.priorityScore - a.priorityScore || +b.pubDate - +a.pubDate)
+  // 화면에 뿌릴 목록에서만 중복을 접는다. total은 실제 건수 그대로 둔다
+  // (같은 사안이 여러 매체에 실린 것도 보도량이므로 집계에서 빼면 다른 수치와 어긋난다).
+  const articles = dedupeArticles(
+    clean.slice().sort((a, b) => b.priorityScore - a.priorityScore || +b.pubDate - +a.pubDate)
+  )
     .slice(0, limit)
     .map((a) => ({
       id: a.id,

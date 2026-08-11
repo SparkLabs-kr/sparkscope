@@ -10,6 +10,7 @@
 import OpenAI from 'openai';
 import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
 import { runChatQuery, getCoverageSummary } from './chat-query';
+import { runSemanticQuery } from './chat-semantic';
 import { PERIOD_LABEL, SCOPE_LABEL, categoryLabel } from './chat-types';
 import type { ChatPeriod, ChatScope, ChatQueryResult } from './chat-types';
 
@@ -61,6 +62,36 @@ const TOOLS: ChatCompletionTool[] = [
           },
         },
         required: ['terms', 'period', 'scopes'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'semantic_search',
+      description:
+        '뜻으로 기사를 찾는다(임베딩 유사도). 키워드가 제목에 없어도 내용이 비슷하면 잡힌다. ' +
+        '이럴 때 써라: (1) 주제를 상황·개념으로 물어서 딱 떨어지는 검색어가 없을 때 ' +
+        '("해외로 나가는 회사", "새로 뭐 시작한 데"), ' +
+        '(2) search_articles를 검색어까지 바꿔가며 시도했는데도 결과가 신통찮을 때. ' +
+        '회사 이름처럼 정확한 단어로 찾아야 하는 건 search_articles가 낫다. ' +
+        '★ 중요: 임베딩은 "무슨 이야기인지"만 알지 "좋은 소식인지 나쁜 소식인지"는 구분하지 못한다. ' +
+        '"투자유치"와 "투자주의종목 지정"이 비슷하다고 나올 정도다. ' +
+        '그러니 좋다/나쁘다를 meaning에 쓰지 마라 — 톤은 only_negative로만 거른다.',
+      parameters: {
+        type: 'object',
+        properties: {
+          meaning: {
+            type: 'string',
+            description:
+              '찾고 싶은 내용을 기사 문장처럼 한국어로 서술해라. 키워드 나열이 아니다. ' +
+              '예) "스타트업이 투자를 유치하거나 매출이 늘어 사업이 잘 풀리고 있다는 소식"',
+          },
+          period: { type: 'string', enum: PERIODS },
+          scopes: { type: 'array', items: { type: 'string', enum: SCOPES } },
+          only_negative: { type: 'boolean', description: '부정 톤·위험 기사만 볼 때 true' },
+        },
+        required: ['meaning', 'period', 'scopes'],
       },
     },
   },
@@ -132,7 +163,11 @@ function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean
 - 첫 검색이 0건이거나 눈에 띄게 적으면 그대로 "없다"고 하지 마라.
   이때 가장 먼저 할 일은 검색어를 다른 단어로 바꾸는 게 아니라 아예 비우는 것이다.
   terms를 빼고 기간·범위·톤만으로 조회하면 무엇이 있는지 실제로 보인다. 그 다음에 좁혀라.
-  그래도 없으면 기간을 넓히거나 범위를 풀어라.
+  그래도 없으면 semantic_search로 뜻을 서술해서 찾아보고, 기간을 넓히거나 범위를 풀어라.
+- 질문이 "해외 나가는 데", "새로 뭐 시작한 곳"처럼 주제를 상황으로 물어서 딱 떨어지는
+  검색어를 못 고르겠으면, 처음부터 semantic_search를 써라. 그게 이 도구의 용도다.
+- 좋다/나쁘다를 묻는 질문("시끄러운 데", "잘나가는 데")은 톤 필터가 답이다.
+  only_negative=true로 조회해라. 검색어나 meaning에 "논란", "안 좋은" 같은 말을 넣는 게 아니다.
 - 반대로 결과가 수천 건이면 너무 넓은 것이다. 검색어를 좁혀서 다시 불러라.
 - 도구는 최대 ${MAX_STEPS}번까지 부를 수 있다. 2~3번 안에 끝내는 게 보통이다.
 - "늘었나/줄었나", "추세", "흐름", "언제부터" 같은 질문에는 반드시 monthly_trend를 불러라.
@@ -178,6 +213,25 @@ function compactResult(r: ChatQueryResult) {
       risk: a.riskFlag ? true : undefined,
     })),
   };
+}
+
+/**
+ * 질문에 "명시적인" 기간 표현이 있는지. "요즘"·"최근"처럼 모호한 말은 포함하지 않는다.
+ * 화면 드롭다운이 기간의 기준이고, 질문이 대놓고 다른 기간을 말할 때만 양보한다.
+ */
+const EXPLICIT_PERIOD =
+  /지난\s*주|저번\s*주|이번\s*주|금주|주간|어제|오늘|당일|이번\s*달|이달|지난\s*달|저번\s*달|올해|금년|작년|재작년|분기|전체\s*기간|\d+\s*(년|개월|달|주|일)/;
+
+/**
+ * 모델이 준 기간을 그대로 믿지 않는다.
+ *
+ * 프롬프트로 "'요즘'은 기간 표현이 아니다"라고 아무리 적어도 모델이 계속 1개월로 좁혔다.
+ * 사용자가 화면에서 3개월을 골라놨는데 답은 1개월 데이터로 나오면 그냥 틀린 답이다.
+ * 질문에 명시적 기간 표현이 없으면 화면 값을 강제한다.
+ */
+function resolvePeriodArg(v: any, fb: ChatPeriod, question: string): ChatPeriod {
+  if (!PERIODS.includes(v) || v === fb) return fb;
+  return EXPLICIT_PERIOD.test(question) ? v : fb;
 }
 
 const asPeriod = (v: any, fb: ChatPeriod): ChatPeriod => (PERIODS.includes(v) ? v : fb);
@@ -255,7 +309,7 @@ export async function runChatAgent(opts: {
             const terms = asTerms(args.terms);
             const r = await runChatQuery({
               question: opts.question,
-              period: asPeriod(args.period, opts.period),
+              period: resolvePeriodArg(args.period, opts.period, opts.question),
               scopes: asScopes(args.scopes),
               terms,
               onlyNegative: args.only_negative === true,
@@ -266,12 +320,30 @@ export async function runChatAgent(opts: {
             payload = compactResult(r);
             break;
           }
+          case 'semantic_search': {
+            const meaning = String(args.meaning ?? opts.question).slice(0, 500);
+            const r = await runSemanticQuery({
+              meaning,
+              period: resolvePeriodArg(args.period, opts.period, opts.question),
+              scopes: asScopes(args.scopes),
+              onlyNegative: args.only_negative === true,
+              limit: 30,
+            });
+            steps.push(`semantic("${meaning.slice(0, 24)}…") → ${r.total}건`);
+            if (!uiResult || r.total > 0) uiResult = r;
+            payload = {
+              ...compactResult(r),
+              searchKind: '의미 검색 결과다. 건수는 "관련도가 충분한 기사 수"이지 ' +
+                '해당 주제 전체 건수가 아니다. 총량을 말할 때 이 숫자를 전체인 것처럼 쓰지 마라.',
+            };
+            break;
+          }
           case 'monthly_trend': {
             // 월별 추이는 기간과 무관하게 최근 6개월을 세지만, 같은 호출로 기간 내
             // 건수·기사 목록도 함께 나온다. 화면 카드가 비지 않도록 그 결과도 받아둔다.
             const r = await runChatQuery({
               question: opts.question,
-              period: asPeriod(args.period, opts.period),
+              period: resolvePeriodArg(args.period, opts.period, opts.question),
               scopes: asScopes(args.scopes),
               terms: asTerms(args.terms),
               withTrend: true,
@@ -286,7 +358,7 @@ export async function runChatAgent(opts: {
           case 'noise_report': {
             const r = await runChatQuery({
               question: opts.question,
-              period: asPeriod(args.period, opts.period),
+              period: resolvePeriodArg(args.period, opts.period, opts.question),
               scopes: [],
               terms: [],
               withNoise: true,
