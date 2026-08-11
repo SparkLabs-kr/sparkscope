@@ -82,9 +82,19 @@ export function ArticleListView({ articles, canScrap = false, canBookmark = fals
       // 전체보기(미필터)는 원래 방식대로 — 카테고리 구분 없이 priorityScore 기준
       // 상위 120건만. articles는 카테고리별로 나눠 가져온 배열이 이어붙은 상태라
       // 그대로 자르면 카테고리 경계로 뚝 잘리므로, 여기서 다시 점수순으로 합쳐서 자른다.
-      list = [...articles]
-        .sort((a, b) => (b.priorityScore - a.priorityScore) || (+new Date(b.pubDate) - +new Date(a.pubDate)))
-        .slice(0, 120);
+      // 단, priorityScore만으로 자르면 서버에서 애써 보장한 "최근 기사"도 여기서 다시
+      // 밀려날 수 있어(2026-08-11) — 최근 3일 내 기사는 최대 20건까지 점수 무관하게
+      // 먼저 포함하고, 나머지 자리만 기존처럼 점수순으로 채운다.
+      const recentCutoff = Date.now() - 3 * 24 * 60 * 60 * 1000;
+      const recent = articles
+        .filter(a => +new Date(a.pubDate) >= recentCutoff)
+        .sort((a, b) => +new Date(b.pubDate) - +new Date(a.pubDate))
+        .slice(0, 20);
+      const recentIds = new Set(recent.map(a => a.id));
+      const older = articles
+        .filter(a => !recentIds.has(a.id))
+        .sort((a, b) => (b.priorityScore - a.priorityScore) || (+new Date(b.pubDate) - +new Date(a.pubDate)));
+      list = [...recent, ...older].slice(0, 120);
     }
     if (showSearch && q.trim()) {
       const s = q.trim().toLowerCase();
