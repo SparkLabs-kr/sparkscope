@@ -355,6 +355,19 @@ export type AgentOutcome = {
   usage: { calls: number; inputTokens: number; cachedTokens: number; outputTokens: number };
 };
 
+/** 도구 이름 → 사용자에게 보여줄 말. 내부 이름을 그대로 노출하지 않는다. */
+const TOOL_LABEL: Record<string, string> = {
+  search_articles: '기사 검색',
+  semantic_search: '의미로 검색',
+  inter_trends: '해외 트렌드 조회',
+  pitch_opportunities: '피칭 소재 찾기',
+  coverage_gap: '노출 사각지대 확인',
+  digest_archive: '다이제스트 기록 확인',
+  monthly_trend: '월별 추이 집계',
+  noise_report: '오탐 키워드 점검',
+  data_coverage: '데이터 현황 확인',
+};
+
 export async function runChatAgent(opts: {
   question: string;
   history: AgentTurn[];
@@ -362,6 +375,11 @@ export async function runChatAgent(opts: {
   scopes: ChatScope[];
   deep: boolean;
   asTable: boolean;
+  /**
+   * 진행 상황 알림. 도구를 부르기 직전과 결과가 나온 직후에 호출된다.
+   * 화면에서 "지금 뭐 하는 중"을 보여주는 데 쓴다(조회가 5~20초 걸려서 빈 화면이 길다).
+   */
+  onProgress?: (e: { phase: 'tool_start' | 'tool_done' | 'thinking'; label: string; detail?: string }) => void;
 }): Promise<AgentOutcome> {
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const steps: string[] = [];
@@ -397,6 +415,7 @@ export async function runChatAgent(opts: {
   ];
 
   for (let step = 0; step < MAX_STEPS; step++) {
+    opts.onProgress?.({ phase: 'thinking', label: step === 0 ? '질문 이해하는 중' : '결과 살펴보는 중' });
     const resp = await openai.chat.completions.create({
       model: MODEL,
       max_completion_tokens: 2000,
@@ -414,6 +433,10 @@ export async function runChatAgent(opts: {
 
     for (const call of calls) {
       if (call.type !== 'function') continue;
+      opts.onProgress?.({
+        phase: 'tool_start',
+        label: TOOL_LABEL[call.function.name] ?? call.function.name,
+      });
       let args: any = {};
       try {
         args = JSON.parse(call.function.arguments || '{}');
@@ -554,6 +577,13 @@ export async function runChatAgent(opts: {
         payload = { error: '조회에 실패했습니다. 다른 조건으로 시도해 보세요.' };
       }
 
+      // 방금 push된 step 문자열이 "무엇을 얼마나 찾았는지"를 담고 있다 — 그대로 보여준다.
+      opts.onProgress?.({
+        phase: 'tool_done',
+        label: TOOL_LABEL[call.function.name] ?? call.function.name,
+        detail: steps[steps.length - 1],
+      });
+
       messages.push({
         role: 'tool',
         tool_call_id: call.id,
@@ -561,6 +591,7 @@ export async function runChatAgent(opts: {
       });
     }
   }
+  opts.onProgress?.({ phase: 'thinking', label: '답변 정리하는 중' });
 
   // 상한까지 도구만 부르고 안 끝났다 — 모은 데이터로 마무리하게 한 번 더 부른다(도구 없이).
   const final = await openai.chat.completions.create({

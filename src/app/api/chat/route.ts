@@ -54,48 +54,89 @@ export async function POST(req: Request) {
         .slice(-6)
     : [];
 
-  try {
-    // 키가 없으면 에이전트를 못 돌린다 — 규칙 기반 단일 조회로 집계만 보여준다.
-    if (!process.env.OPENAI_API_KEY) {
-      const result = await runChatQuery({ question, period, scopes, limit: 20 });
-      return NextResponse.json({
-        intent: 'search',
-        note: 'AI 분석이 꺼져 있어 검색 결과만 보여드려요.',
-        unsupported: null,
-        summary: null,
-        appliedPeriod: period,
-        appliedScopes: scopes,
-        result,
-      });
-    }
+  // NDJSON 스트림 — 한 줄에 이벤트 하나.
+  //   {"type":"progress", ...}  조회가 진행되는 동안 여러 번
+  //   {"type":"done", ...}      최종 답변 (기존 응답 본문과 같은 모양)
+  //   {"type":"error", ...}
+  // 조회에 5~20초가 걸리는데 그동안 화면이 비어 있어서, 무엇을 하고 있는지 흘려보낸다.
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      let closed = false;
+      const send = (obj: unknown) => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`${JSON.stringify(obj)}\n`));
+        } catch {
+          closed = true; // 사용자가 창을 닫았거나 연결이 끊긴 경우
+        }
+      };
 
-    const { summary, result, steps, usage } = await runChatAgent({
-      question,
-      history,
-      period,
-      scopes,
-      deep,
-      asTable,
-    });
-    // gpt-5.4-mini 단가($/1M): 입력 0.75 / 캐시된 입력 0.075 / 출력 4.50
-    const cost =
-      ((usage.inputTokens - usage.cachedTokens) * 0.75 + usage.cachedTokens * 0.075 + usage.outputTokens * 4.5) / 1e6;
-    console.log(
-      `[api/chat] "${question.slice(0, 30)}" | ${steps.join(' → ')} | ` +
-        `LLM ${usage.calls}회 in ${usage.inputTokens}(캐시 ${usage.cachedTokens}) out ${usage.outputTokens} ≈ $${cost.toFixed(4)}`
-    );
+      try {
+        // 키가 없으면 에이전트를 못 돌린다 — 규칙 기반 단일 조회로 집계만 보여준다.
+        if (!process.env.OPENAI_API_KEY) {
+          const result = await runChatQuery({ question, period, scopes, limit: 20 });
+          send({
+            type: 'done',
+            intent: 'search',
+            note: 'AI 분석이 꺼져 있어 검색 결과만 보여드려요.',
+            unsupported: null,
+            summary: null,
+            appliedPeriod: period,
+            appliedScopes: scopes,
+            result,
+          });
+          return;
+        }
 
-    return NextResponse.json({
-      intent: 'search',
-      note: null,
-      unsupported: null,
-      summary,
-      appliedPeriod: period,
-      appliedScopes: scopes,
-      result,
-    });
-  } catch (e) {
-    console.error('[api/chat] query failed', e);
-    return NextResponse.json({ error: '조회 중 오류가 발생했습니다.' }, { status: 500 });
-  }
+        const { summary, result, steps, usage } = await runChatAgent({
+          question,
+          history,
+          period,
+          scopes,
+          deep,
+          asTable,
+          onProgress: (e) => send({ type: 'progress', ...e }),
+        });
+
+        // gpt-5.4-mini 단가($/1M): 입력 0.75 / 캐시된 입력 0.075 / 출력 4.50
+        const cost =
+          ((usage.inputTokens - usage.cachedTokens) * 0.75 + usage.cachedTokens * 0.075 + usage.outputTokens * 4.5) / 1e6;
+        console.log(
+          `[api/chat] "${question.slice(0, 30)}" | ${steps.join(' → ')} | ` +
+            `LLM ${usage.calls}회 in ${usage.inputTokens}(캐시 ${usage.cachedTokens}) out ${usage.outputTokens} ≈ $${cost.toFixed(4)}`
+        );
+
+        send({
+          type: 'done',
+          intent: 'search',
+          note: null,
+          unsupported: null,
+          summary,
+          appliedPeriod: period,
+          appliedScopes: scopes,
+          result,
+        });
+      } catch (e) {
+        console.error('[api/chat] query failed', e);
+        send({ type: 'error', error: '조회 중 오류가 발생했습니다.' });
+      } finally {
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          /* 이미 닫혔으면 무시 */
+        }
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'application/x-ndjson; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      // 프록시가 버퍼링하면 스트리밍이 의미가 없다.
+      'X-Accel-Buffering': 'no',
+    },
+  });
 }

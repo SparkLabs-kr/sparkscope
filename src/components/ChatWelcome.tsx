@@ -258,6 +258,8 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   const [openTask, setOpenTask] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
+  /** 조회 진행 상황 — 서버가 도구를 부를 때마다 흘려보내는 것을 쌓아 보여준다 */
+  const [progress, setProgress] = useState<{ label: string; detail?: string; done: boolean }[]>([]);
   const [composing, setComposing] = useState(false); // 한글 IME 조합 중 여부
   const [messages, setMessages] = useState<Msg[]>([]);
   const [convos, setConvos] = useState<Convo[]>([]);
@@ -337,21 +339,66 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
       )
       .filter(Boolean)
       .slice(-6);
+    setProgress([]);
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question, period, scopes: activeScopes, modes: activeModes, history }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? '조회에 실패했어요.');
+      if (!res.ok || !res.body) {
+        const msg = await res.json().catch(() => null);
+        throw new Error(msg?.error ?? '조회에 실패했어요.');
+      }
+
+      // NDJSON 스트림을 한 줄씩 읽는다. 마지막 done 이벤트가 실제 답변이고,
+      // 그 전에 오는 progress 이벤트로 "지금 뭐 하는 중"을 보여준다.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      let done: any = null;
+
+      for (;;) {
+        const { value, done: finished } = await reader.read();
+        if (finished) break;
+        buf += decoder.decode(value, { stream: true });
+        // 마지막 조각은 아직 줄이 안 끝났을 수 있으니 buf에 남겨둔다.
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let ev: any;
+          try {
+            ev = JSON.parse(line);
+          } catch {
+            continue; // 깨진 줄은 건너뛴다
+          }
+          if (ev.type === 'progress') {
+            setProgress((prev) => {
+              // 같은 작업의 시작/완료는 한 줄로 합쳐서 보여준다.
+              const next = prev.slice();
+              if (ev.phase === 'tool_done' && next.length && next[next.length - 1].label === ev.label) {
+                next[next.length - 1] = { label: ev.label, detail: ev.detail, done: true };
+                return next;
+              }
+              return [...next, { label: ev.label, detail: ev.detail, done: ev.phase !== 'tool_start' }];
+            });
+          } else if (ev.type === 'done') {
+            done = ev;
+          } else if (ev.type === 'error') {
+            throw new Error(ev.error ?? '조회에 실패했어요.');
+          }
+        }
+      }
+      if (!done) throw new Error('응답이 중간에 끊겼어요. 다시 시도해 주세요.');
+
       setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          res: data,
+          res: done,
           period,
-          scopes: data.appliedScopes ?? activeScopes,
+          scopes: done.appliedScopes ?? activeScopes,
           modes: activeModes,
         },
       ]);
@@ -359,6 +406,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
       setMessages((prev) => [...prev, { role: 'error', text: e?.message ?? '조회에 실패했어요.' }]);
     } finally {
       setLoading(false);
+      setProgress([]);
     }
   };
 
@@ -541,11 +589,39 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
               )}
 
               {loading && (
-                <div className="flex gap-2.5 items-center animate-rise">
+                <div className="flex gap-2.5 items-start animate-rise">
                   <SparkScopeMark size="xs" />
-                  <div className="bg-spark-surface border border-spark-border rounded-2xl rounded-tl-md px-4 py-2.5 text-[14px] text-spark-ink-soft">
-                    <span className="inline-block w-2.5 h-2.5 mr-2 rounded-full bg-spark-purple animate-pulse align-middle" />
-                    기사를 찾는 중이에요…
+                  <div className="bg-spark-surface border border-spark-border rounded-2xl rounded-tl-md px-4 py-3 text-[13px] min-w-[240px]">
+                    {progress.length === 0 ? (
+                      <div className="flex items-center gap-2 text-spark-ink-soft">
+                        <span className="w-2.5 h-2.5 rounded-full bg-spark-purple animate-pulse" />
+                        질문 이해하는 중…
+                      </div>
+                    ) : (
+                      <ul className="space-y-1.5">
+                        {progress.map((p, i) => {
+                          const last = i === progress.length - 1;
+                          return (
+                            <li key={i} className="flex items-start gap-2">
+                              {p.done ? (
+                                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 mt-0.5 shrink-0 text-spark-purple">
+                                  <path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              ) : (
+                                <span className="w-2.5 h-2.5 mt-1 shrink-0 rounded-full bg-spark-purple animate-pulse" />
+                              )}
+                              <span className={last && !p.done ? 'text-spark-ink' : 'text-spark-muted'}>
+                                {p.label}
+                                {/* detail은 "search(투자유치|시리즈A) → 169건" 같은 실제 조회 결과 */}
+                                {p.detail && (
+                                  <span className="block text-[11px] text-spark-muted/80 mt-0.5 break-all">{p.detail}</span>
+                                )}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
                   </div>
                 </div>
               )}
