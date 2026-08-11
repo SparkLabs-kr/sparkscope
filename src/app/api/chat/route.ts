@@ -96,6 +96,7 @@ export async function POST(req: Request) {
           scopes,
           deep,
           asTable,
+          userEmail: session.user.email,
           onProgress: (e) => send({ type: 'progress', ...e }),
         });
 

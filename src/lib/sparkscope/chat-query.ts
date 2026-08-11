@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { normalizeSource } from './media';
 import { isBlockedNoise } from './relevance';
 import { expandTerms } from './term-expand';
-import { PERIOD_LABEL, categoryLabel, type ChatPeriod, type ChatScope, type ChatArticle, type ChatQueryResult } from './chat-types';
+import { PERIOD_LABEL, categoryLabel, type ChatPeriod, type ChatScope, type ChatArticle, type ChatQueryResult, type NoisyKeyword } from './chat-types';
 
 export type { ChatPeriod, ChatScope, ChatArticle, ChatQueryResult };
 
@@ -267,7 +267,7 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
   }
 
   // 오탐 많은 키워드 — 같은 기간에서 isNoise=true인 기사를 키워드별로 센다.
-  let noisyKeywords: { name: string; noise: number; kept: number }[] | null = null;
+  let noisyKeywords: NoisyKeyword[] | null = null;
   if (input.withNoise) {
     const noiseWhere: any = { isNoise: true };
     if (range) noiseWhere.pubDate = { gte: range.gte, lte: range.lte };
@@ -286,10 +286,51 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
       }),
     ]);
     const keptMap = new Map(keptRows.map((r) => [r.matchedKeyword, r._count._all]));
+
+    // 감시대상의 수집 상태를 함께 싣는다.
+    // 멈춰 있는(PAUSED) 대상은 설정을 고쳐도 효과가 없는데, 오탐 건수만 보면 제일 심해 보여서
+    // 거기부터 손대려다 헛걸음을 한다(캐스팅: 오탐 120건인데 PAUSED라 손댈 수 없음).
+    const names = noiseRows.map((r) => r.matchedKeyword);
+    const targets = await prisma.monitoringTarget.findMany({
+      where: { OR: [{ primaryKeyword: { in: names } }, { name: { in: names } }] },
+      select: { name: true, primaryKeyword: true, status: true, contextWords: true, excludeWords: true },
+    });
+    const statusOf = new Map<string, string>();
+    // 현재 설정도 같이 준다 — 이미 들어 있는 단어를 또 제안하지 않도록.
+    const settingsOf = new Map<string, { contextWords: string | null; excludeWords: string | null }>();
+    for (const t of targets) {
+      for (const key of [t.primaryKeyword, t.name]) {
+        statusOf.set(key, t.status);
+        settingsOf.set(key, { contextWords: t.contextWords, excludeWords: t.excludeWords });
+      }
+    }
+
+    // 오탐 "예시 제목"을 함께 준다.
+    //
+    // 건수만 주면 모델이 무엇 때문에 오탐이 나는지 상상해서 엉뚱한 제외어를 제안한다.
+    // (실제 사고: 리코의 오탐은 '푸에르토리코'·'하야시다 리코'·야구 기사인데,
+    //  모델이 건수만 보고 "음식, 커피, 쿠키, 리테일"을 제외하자고 했다)
+    const samplesByKeyword = new Map<string, string[]>();
+    await Promise.all(
+      names.map(async (kw) => {
+        const rows = await prisma.article.findMany({
+          where: { ...noiseWhere, matchedKeyword: kw },
+          orderBy: { pubDate: 'desc' },
+          take: 6,
+          select: { title: true },
+        });
+        samplesByKeyword.set(kw, rows.map((r) => r.title));
+      })
+    );
+
     noisyKeywords = noiseRows.map((r) => ({
       name: r.matchedKeyword,
       noise: r._count._all,
       kept: keptMap.get(r.matchedKeyword) ?? 0,
+      // 명단에 없는 키워드도 있다(수집 규칙이 바뀌기 전에 쌓인 것).
+      status: statusOf.get(r.matchedKeyword) ?? 'UNKNOWN',
+      samples: samplesByKeyword.get(r.matchedKeyword) ?? [],
+      current: settingsOf.get(r.matchedKeyword) ?? null,
     }));
   }
 

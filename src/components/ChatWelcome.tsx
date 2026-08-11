@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { exportAnswerToHtml } from '@/lib/chat-export';
+import { AnswerText } from './AnswerText';
 // 서버 전용 모듈(prisma)이 클라이언트 번들에 딸려오지 않도록 타입 전용 파일에서 가져온다.
 import {
   categoryLabel,
@@ -912,7 +913,7 @@ function ChatAnswer({
       {res.summary && (
         <div className="bg-spark-light-purple/60 border border-spark-purple/20 rounded-2xl px-4 py-3">
           <div className="text-[11px] font-bold text-spark-purple mb-1">🤖 심층 분석</div>
-          <p className="text-[14px] text-spark-ink leading-relaxed whitespace-pre-wrap">{res.summary}</p>
+          <AnswerText text={res.summary} />
         </div>
       )}
 

@@ -13,6 +13,7 @@ import { runChatQuery, getCoverageSummary } from './chat-query';
 import { runSemanticQuery } from './chat-semantic';
 import { runInterQuery, compactInter } from './chat-inter';
 import { runPitchQuery, pitchDetailsForModel, runCoverageGap, runDigestArchive } from './chat-ops';
+import { proposeKeywordFix, listPendingSuggestions } from './chat-actions';
 import { PERIOD_LABEL, SCOPE_LABEL, categoryLabel } from './chat-types';
 import type { ChatPeriod, ChatScope, ChatQueryResult } from './chat-types';
 
@@ -214,12 +215,58 @@ const TOOLS: ChatCompletionTool[] = [
       name: 'noise_report',
       description:
         '오탐(노이즈)으로 걸러진 기사가 많은 수집 키워드를 돌려준다. ' +
-        '키워드 설정·오탐 정리 질문에 쓴다.',
+        '키워드 설정·오탐 정리 질문에 쓴다. ' +
+        '각 키워드에 수집 상태(status)가 함께 온다 — ACTIVE만 설정을 고쳐서 효과를 볼 수 있다. ' +
+        'PAUSED는 이미 수집이 멈춰 있어 오탐 건수가 커 보여도 손댈 게 없으니, ' +
+        '고칠 대상을 고를 땐 ACTIVE 중에서 골라라.',
       parameters: {
         type: 'object',
         properties: { period: { type: 'string', enum: PERIODS } },
         required: ['period'],
       },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'propose_keyword_fix',
+      description:
+        '감시 키워드 설정 보완을 "제안"한다. 실제로 반영되지는 않는다 — 승인 대기 목록에 쌓이고 ' +
+        '관리자가 대시보드(설정 > 노이즈 제안)에서 승인해야 적용된다. ' +
+        '오탐이 많은 키워드를 발견했고 사용자가 고쳐달라고 하면 이걸 써라. ' +
+        '★ 반드시 noise_report로 실제 오탐 건수를 확인한 뒤에 제안해라. 추측으로 제안하지 마라.\n' +
+        '★★ 두 필드는 방향이 정반대다. 헷갈리면 설정을 망가뜨린다:\n' +
+        '  · excludeWords = 제목에 이 단어가 있으면 무조건 버린다. 추가하면 더 엄격해진다 → 오탐이 준다.\n' +
+        '  · contextWords = 제목에 이 중 하나라도 있어야 통과한다(OR). 추가하면 더 느슨해진다 → 오탐이 는다.\n' +
+        '  따라서 "오탐을 줄이고 싶다"면 답은 거의 항상 excludeWords다. ' +
+        '오탐을 일으키는 무관한 주제어(예: 노리가 놀이·게임 기사에 걸리면 "게임, 놀이, 완구")를 excludeWords에 넣어라. ' +
+        '그 단어들을 contextWords에 넣으면 정반대로 그 오탐 기사들을 통과시키게 된다.\n' +
+        '  contextWords는 그 대상이 문맥어를 아예 안 갖고 있어서 아무 기사나 걸릴 때만 새로 채운다. ' +
+        '이미 문맥어가 있는 대상에 단어를 더 보태는 건 필터를 푸는 일이니 하지 마라.',
+      parameters: {
+        type: 'object',
+        properties: {
+          target_name: { type: 'string', description: '감시대상 이름 또는 수집 키워드 (예: 노리, 캐스팅)' },
+          field: {
+            type: 'string',
+            enum: ['contextWords', 'excludeWords'],
+            description:
+              'contextWords=이 단어 중 하나가 제목에 있어야 통과(동명이인·흔한 이름에 씀). ' +
+              'excludeWords=이 단어가 있으면 무조건 제외(무관한 주제 차단).',
+          },
+          addition: { type: 'string', description: '추가할 단어들. 쉼표 구분, 짧게. 예: "에듀테크, 수학, 학습"' },
+          reason: { type: 'string', description: '왜 이 제안이 필요한지 한 줄. 오탐 건수 근거를 포함해라.' },
+        },
+        required: ['target_name', 'field', 'addition', 'reason'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'pending_suggestions',
+      description: '승인 대기 중인 키워드 설정 제안 목록을 본다(읽기 전용).',
+      parameters: { type: 'object', properties: { limit: { type: 'number' } } },
     },
   },
   {
@@ -283,6 +330,11 @@ function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean
 
 [답변 규칙]
 - 한국어 존댓말. 인사말·서론 없이 바로 본론.
+- ★ 도구 이름(search_articles, coverage_gap, inter_trends 등)을 답변에 절대 쓰지 마라.
+  사용자는 그런 게 있는지 모른다. "감시 대상 218곳 기준으로", "해외 트렌드 데이터에서"처럼
+  사람이 쓰는 말로 바꿔라.
+- 표는 필요할 때만 쓴다. 쓸 때는 마크다운 표 문법(| 열 | 열 | 다음 줄에 |---|---|)을
+  정확히 지켜라 — 형식이 어긋나면 화면에 기호가 그대로 보인다.
 - 도구가 돌려준 숫자만 쓴다. 직접 계산하거나 추정하지 마라. 데이터에 없는 사실은 절대 지어내지 마라.
 - 퍼센트(%) 증감률은 쓰지 마라. "이번 기간 N건, 직전 기간 M건"처럼 건수로 말한다.
 - 굵게(**) 같은 마크다운 강조는 쓰지 마라. 평문으로 쓴다.
@@ -366,6 +418,8 @@ const TOOL_LABEL: Record<string, string> = {
   monthly_trend: '월별 추이 집계',
   noise_report: '오탐 키워드 점검',
   data_coverage: '데이터 현황 확인',
+  propose_keyword_fix: '설정 보완 제안 등록',
+  pending_suggestions: '대기 중인 제안 확인',
 };
 
 export async function runChatAgent(opts: {
@@ -373,6 +427,8 @@ export async function runChatAgent(opts: {
   history: AgentTurn[];
   period: ChatPeriod;
   scopes: ChatScope[];
+  /** 제안을 남길 때 "누가 요청했는지" 기록용 */
+  userEmail: string;
   deep: boolean;
   asTable: boolean;
   /**
@@ -562,6 +618,31 @@ export async function runChatAgent(opts: {
             noisyKeywords = r.noisyKeywords;
             steps.push(`noise → ${r.noisyKeywords?.length ?? 0}개 키워드`);
             payload = { noisyKeywords: r.noisyKeywords };
+            break;
+          }
+          case 'propose_keyword_fix': {
+            const r = await proposeKeywordFix({
+              targetName: String(args.target_name ?? ''),
+              field: args.field === 'excludeWords' ? 'excludeWords' : 'contextWords',
+              addition: String(args.addition ?? ''),
+              reason: String(args.reason ?? ''),
+              requestedBy: opts.userEmail,
+            });
+            steps.push(r.ok ? `제안 등록: ${r.targetName} ${r.field} +${r.addition}` : `제안 실패: ${r.error}`);
+            payload = r.ok
+              ? {
+                  ...r,
+                  note:
+                    '승인 대기 목록에 올렸다. 아직 반영되지 않았다는 점과, 대시보드 > 노이즈 제안에서 ' +
+                    '승인해야 적용된다는 점을 사용자에게 반드시 알려라.',
+                }
+              : r;
+            break;
+          }
+          case 'pending_suggestions': {
+            const rows = await listPendingSuggestions(args.limit);
+            steps.push(`대기 제안 ${rows.length}건`);
+            payload = { pending: rows };
             break;
           }
           case 'data_coverage': {

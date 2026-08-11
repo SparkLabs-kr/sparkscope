@@ -31,6 +31,19 @@ export function categoryLabel(c: string) {
   return CATEGORY_LABEL[c] ?? c;
 }
 
+/** 오탐이 많은 수집 키워드 — 건수만이 아니라 왜 오탐인지 판단할 재료까지 담는다 */
+export type NoisyKeyword = {
+  name: string;
+  noise: number;
+  kept: number;
+  /** 감시대상 수집 상태. ACTIVE만 설정을 고쳐서 효과를 볼 수 있다 */
+  status?: string;
+  /** 실제 오탐 기사 제목 예시 — 이게 없으면 무엇 때문에 오탐인지 추측하게 된다 */
+  samples?: string[];
+  /** 현재 문맥어·제외어 설정 */
+  current?: { contextWords: string | null; excludeWords: string | null } | null;
+};
+
 export type ChatArticle = {
   id: string;
   title: string;
@@ -80,6 +93,6 @@ export type ChatQueryResult = {
   /** 월별 건수 (지표·추이 질문일 때만 채워진다) */
   monthly: { month: string; count: number }[] | null;
   /** 오탐(노이즈)으로 걸러진 기사가 많은 키워드 (키워드·노이즈 질문일 때만) */
-  noisyKeywords: { name: string; noise: number; kept: number }[] | null;
+  noisyKeywords: NoisyKeyword[] | null;
   articles: ChatArticle[];
 };
