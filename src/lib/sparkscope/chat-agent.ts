@@ -244,6 +244,8 @@ export type AgentOutcome = {
   result: ChatQueryResult | null;
   /** 어떤 조회를 몇 번 했는지 — 로그·디버깅용 */
   steps: string[];
+  /** 이번 질문에 쓴 토큰. 도구를 여러 번 부르면 왕복마다 쌓이므로 눈에 보이게 남긴다. */
+  usage: { calls: number; inputTokens: number; cachedTokens: number; outputTokens: number };
 };
 
 export async function runChatAgent(opts: {
@@ -262,6 +264,14 @@ export async function runChatAgent(opts: {
   let monthly: ChatQueryResult['monthly'] = null;
   let noisyKeywords: ChatQueryResult['noisyKeywords'] = null;
 
+  const usage = { calls: 0, inputTokens: 0, cachedTokens: 0, outputTokens: 0 };
+  const track = (u: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } } | undefined) => {
+    usage.calls++;
+    usage.inputTokens += u?.prompt_tokens ?? 0;
+    usage.outputTokens += u?.completion_tokens ?? 0;
+    usage.cachedTokens += u?.prompt_tokens_details?.cached_tokens ?? 0;
+  };
+
   /** 화면 카드용 결과에 월별 추이·오탐 키워드를 얹어 마무리한다. */
   const finish = (summary: string | null): AgentOutcome => ({
     summary,
@@ -269,6 +279,7 @@ export async function runChatAgent(opts: {
       ? { ...uiResult, monthly: monthly ?? uiResult.monthly, noisyKeywords: noisyKeywords ?? uiResult.noisyKeywords }
       : null,
     steps,
+    usage,
   });
 
   const messages: ChatCompletionMessageParam[] = [
@@ -286,6 +297,7 @@ export async function runChatAgent(opts: {
       messages,
     });
 
+    track(resp.usage);
     const msg = resp.choices[0]?.message;
     if (!msg) break;
     messages.push(msg as ChatCompletionMessageParam);
@@ -400,5 +412,6 @@ export async function runChatAgent(opts: {
     ],
   });
 
+  track(final.usage);
   return finish(final.choices[0]?.message?.content?.trim() || null);
 }

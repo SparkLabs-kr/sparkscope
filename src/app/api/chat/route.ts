@@ -69,7 +69,7 @@ export async function POST(req: Request) {
       });
     }
 
-    const { summary, result, steps } = await runChatAgent({
+    const { summary, result, steps, usage } = await runChatAgent({
       question,
       history,
       period,
@@ -77,7 +77,13 @@ export async function POST(req: Request) {
       deep,
       asTable,
     });
-    console.log('[api/chat]', question.slice(0, 40), '|', steps.join(' → '));
+    // gpt-5.4-mini 단가($/1M): 입력 0.75 / 캐시된 입력 0.075 / 출력 4.50
+    const cost =
+      ((usage.inputTokens - usage.cachedTokens) * 0.75 + usage.cachedTokens * 0.075 + usage.outputTokens * 4.5) / 1e6;
+    console.log(
+      `[api/chat] "${question.slice(0, 30)}" | ${steps.join(' → ')} | ` +
+        `LLM ${usage.calls}회 in ${usage.inputTokens}(캐시 ${usage.cachedTokens}) out ${usage.outputTokens} ≈ $${cost.toFixed(4)}`
+    );
 
     return NextResponse.json({
       intent: 'search',
