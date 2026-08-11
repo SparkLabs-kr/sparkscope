@@ -106,18 +106,12 @@ function resolveRange(searchParams: { from?: string; to?: string }) {
 // 150건의 날짜가 7/28까지 걸쳐있고 최근 3일 이내는 7건뿐이었음). guaranteeRecentDays를 주면
 // 그 기간 내 기사는 점수 무관하게 전부 먼저 포함하고, 남는 자리만 그 밖 기간에서 점수 높은
 // 순으로 채운다 — "최근"이라는 탭 이름에 맞게 최신 기사를 우선 보장한다.
-// recentCap: 보장 슬롯 자체의 상한(기본값 take = 무제한). 스타트업계처럼 하루 물량이
-// 캡(take)을 훌쩍 넘는 카테고리에 guaranteeRecentDays를 그대로 적용하면 "최근" 슬롯만으로
-// take가 꽉 차버려 정작 이 캡의 존재 이유였던 "중요도 높은 기사 위주 노출"이 무력화된다
-// (2026-08-11 지적됨). recentCap으로 보장 슬롯을 작게 떼어주면, 최근 기사도 몇 건 보이면서
-// 나머지는 여전히 점수 순으로 채워져 두 목적을 같이 만족한다.
 async function fetchRecentTabArticles(
   where: Record<string, unknown>,
   category: string,
   take: number,
   now: Date,
   guaranteeRecentDays?: number,
-  recentCap: number = take,
 ) {
   if (!guaranteeRecentDays) {
     return prisma.article.findMany({ where: { ...where, category }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], take });
@@ -126,14 +120,11 @@ async function fetchRecentTabArticles(
   const recent = await prisma.article.findMany({
     where: { ...where, category, pubDate: { gte: recentSince } },
     orderBy: [{ pubDate: 'desc' }],
-    take: Math.min(take, recentCap),
+    take,
   });
   if (recent.length >= take) return recent;
-  // recentCap이 take보다 작아 "최근" 창 안에 아직 못 뽑은 기사가 남아있을 수 있으므로,
-  // 날짜가 아니라 id 제외로 나머지를 채운다 — 그래야 그 안의 고득점 기사도 여기서 잡힌다.
-  const recentIds = recent.map(a => a.id);
   const older = await prisma.article.findMany({
-    where: { ...where, category, id: { notIn: recentIds } },
+    where: { ...where, category, pubDate: { lt: recentSince } },
     orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }],
     take: take - recent.length,
   });
@@ -197,14 +188,8 @@ async function loadDashboardData(from: string, to: string, company: string | und
     // 우선순위가 낮아 상위 400건 풀에서부터 밀려남). 카테고리별로 따로 뽑아 합쳐 각 필터가
     // 최소한의 건수를 보장받게 한다. AC·VC·스타트업계는 노이즈성 기사가 상대적으로 많아
     // priorityScore 상위 50건으로 더 좁게(=중요하다고 판단된 것만) 제한.
-    // 4개 카테고리 모두 최근 3일은 점수 무관하게 보장(guaranteeRecentDays=3, 2026-08-11).
-    // 단, 스타트업계·업계 모니터링은 하루 물량이 캡(50)을 훌쩍 넘어서(스타트업계 하루 40건+)
-    // 보장을 무제한으로 주면 "최근 3일"만으로 캡이 꽉 차 애초에 이 캡을 둔 이유(중요도 높은
-    // 기사 위주 노출)가 무력화된다. recentCap으로 보장 슬롯을 15건으로 제한해, 최근 기사도
-    // 몇 건 보이면서 나머지 35건은 여전히 점수 순으로 채워지게 한다. 포트폴리오사·스파크랩은
-    // 원래 하루 물량이 적어(3일치가 take를 넘지 않음) recentCap 제한이 없어도 문제되지 않는다.
     Promise.all(Object.entries({ sparklabs_self: 150, portfolio_company: 150, competitor: 50, industry_trend: 50 }).map(([category, take]) =>
-      fetchRecentTabArticles(where, category, take, now, 3, category === 'competitor' || category === 'industry_trend' ? 15 : take),
+      fetchRecentTabArticles(where, category, take, now, category === 'portfolio_company' ? 3 : undefined),
     )).then(arr => arr.flat()),
     // 톤 분석 — 스파크랩 기준
     prisma.article.groupBy({ by: ['tone'], where: sparklabsWhere, _count: { _all: true } }),
