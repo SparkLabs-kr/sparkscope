@@ -17,7 +17,7 @@ export const preferredRegion = 'icn1';
 export const maxDuration = 120;
 
 const PERIODS: ChatPeriod[] = ['today', 'week', 'month', 'quarter', 'all'];
-const SCOPES: ChatScope[] = ['portfolio', 'competitor', 'sparklabs', 'inter'];
+const SCOPES: ChatScope[] = ['portfolio', 'competitor', 'sparklabs', 'industry'];
 
 export async function POST(req: Request) {
   const session = OPEN_ACCESS

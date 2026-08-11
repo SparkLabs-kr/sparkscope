@@ -105,7 +105,7 @@ function scopeWhere(scopes: ChatScope[]) {
     else if (s === 'sparklabs') {
       or.push({ category: 'sparklabs_self' });
       or.push({ title: { contains: '스파크랩' } });
-    } else if (s === 'inter') or.push({ category: 'industry_trend' });
+    } else if (s === 'industry') or.push({ category: 'industry_trend' });
   }
   return or.length ? or : undefined;
 }

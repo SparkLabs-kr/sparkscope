@@ -70,7 +70,7 @@ const SCOPES = [
   { id: 'portfolio', label: '포트폴리오사' },
   { id: 'competitor', label: '경쟁사(VC)' },
   { id: 'sparklabs', label: '스파크랩' },
-  { id: 'inter', label: '해외 트렌드' },
+  { id: 'industry', label: '업계동향' },
 ] as const;
 
 /** 3) 카테고리 — 대시보드/인터/인트라 기능별 업무 시나리오 */

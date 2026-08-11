@@ -11,6 +11,8 @@ import OpenAI from 'openai';
 import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
 import { runChatQuery, getCoverageSummary } from './chat-query';
 import { runSemanticQuery } from './chat-semantic';
+import { runInterQuery, compactInter } from './chat-inter';
+import { runPitchQuery, pitchDetailsForModel, runCoverageGap, runDigestArchive } from './chat-ops';
 import { PERIOD_LABEL, SCOPE_LABEL, categoryLabel } from './chat-types';
 import type { ChatPeriod, ChatScope, ChatQueryResult } from './chat-types';
 
@@ -23,7 +25,7 @@ const ARTICLES_PER_TOOL_RESULT = 18;
 export type AgentTurn = { role: 'user' | 'assistant'; text: string };
 
 const PERIODS: ChatPeriod[] = ['today', 'week', 'month', 'quarter', 'all'];
-const SCOPES: ChatScope[] = ['portfolio', 'competitor', 'sparklabs', 'inter'];
+const SCOPES: ChatScope[] = ['portfolio', 'competitor', 'sparklabs', 'industry'];
 
 const TOOLS: ChatCompletionTool[] = [
   {
@@ -116,6 +118,99 @@ const TOOLS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'inter_trends',
+      description:
+        '해외 트렌드 기사를 조회한다(TechCrunch·Wired·MIT Tech Review 등 해외 매체를 수집해 ' +
+        'AI가 관련성을 판정하고 한국어 제목·주제·국가를 붙여둔 별도 데이터). ' +
+        '"해외", "글로벌 트렌드", "외국에서 뭐가 뜨나" 같은 질문은 반드시 이걸 써라. ' +
+        'search_articles로는 국내 기사만 나온다. ' +
+        '포트폴리오사와 엮인 해외 기사도 표시된다(어떤 회사가 어떤 해외 흐름과 연결되는지).',
+      parameters: {
+        type: 'object',
+        properties: {
+          period: { type: 'string', enum: PERIODS },
+          domain: { type: 'string', enum: ['bio', 'ai'], description: '바이오 또는 AI. 안 주면 둘 다' },
+          country: {
+            type: 'string',
+            enum: ['us', 'cn', 'jp', 'sa', 'in', 'other'],
+            description: '기사가 다루는 트렌드의 주요 국가',
+          },
+          event_type: {
+            type: 'string',
+            enum: ['투자·딜', '규제·승인', '연구성과', '제품·상용화', '시장·인물'],
+            description: '무슨 일이 일어났는지',
+          },
+          topic_sector: {
+            type: 'string',
+            description:
+              '주제 섹터. 바이오: 신약발굴, 항암, 약물전달, 의료기기·진단, 디지털헬스 등. ' +
+              'AI: 생성형AI·콘텐츠, AI인프라·데이터, 에이전틱AI, AI버티컬 등',
+          },
+          portfolio_only: { type: 'boolean', description: '포트폴리오사와 엮인 기사만 볼 때 true' },
+          company: { type: 'string', description: '특정 포트폴리오사와 엮인 해외 기사만' },
+        },
+        required: ['period'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'pitch_opportunities',
+      description:
+        '기획기사 피칭 소재를 찾는다. 수집할 때 기사마다 매겨둔 피칭 가능성 점수(0~100)와 ' +
+        '피칭 주제, 본부 관점 코멘트를 함께 돌려준다. ' +
+        '"피칭할 거리", "기획기사 소재", "기자한테 뭘 제안하지", "밀어볼 만한 아이템" 같은 질문에 써라.',
+      parameters: {
+        type: 'object',
+        properties: {
+          period: { type: 'string', enum: PERIODS },
+          scopes: { type: 'array', items: { type: 'string', enum: SCOPES } },
+          min_score: { type: 'number', description: '점수 하한(기본 70). 결과가 없으면 낮춰서 다시 불러라' },
+        },
+        required: ['period', 'scopes'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'coverage_gap',
+      description:
+        '감시 대상 중 해당 기간에 기사가 하나도 안 난 곳을 찾는다(운영 중인 포트폴리오사 218곳 기준). ' +
+        'PAUSED·EXIT 상태인 곳은 애초에 수집 대상이 아니라 제외된다. ' +
+        '"기사 안 난 데", "조용한 포폴사", "노출 없는 회사", "어디를 챙겨야 하나" 같은 질문에 써라. ' +
+        '기사 검색으로는 못 구한다 — 없는 것을 찾으려면 명단과 대조해야 하기 때문이다.',
+      parameters: {
+        type: 'object',
+        properties: {
+          period: { type: 'string', enum: PERIODS },
+          scopes: { type: 'array', items: { type: 'string', enum: SCOPES }, description: '기본은 포트폴리오사' },
+          tier: { type: 'string', enum: ['A', 'B', 'C'], description: '포트폴리오 티어로 좁힐 때' },
+        },
+        required: ['period'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'digest_archive',
+      description:
+        '실제로 발송된 다이제스트 메일 기록(날짜·제목·수신자 수). ' +
+        '"지난주 메일에 뭐 나갔지", "다이제스트 언제 나갔어" 같은 질문에 써라.',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: { type: 'number', description: '가져올 개수(기본 10)' },
+          on: { type: 'string', description: '특정 날짜만 볼 때 YYYY-MM-DD' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'noise_report',
       description:
         '오탐(노이즈)으로 걸러진 기사가 많은 수집 키워드를 돌려준다. ' +
@@ -144,10 +239,16 @@ function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean
 수집된 국내 뉴스 기사 DB를 도구로 조회해서 질문에 답한다.
 
 [데이터]
-분류는 넷이다 — 스파크랩(자사), 포트폴리오사(투자한 회사), 경쟁사(VC), 업계동향.
-기사마다 제목·매체·발행일·톤(긍정/중립/부정)·위험 플래그·AI 한 줄 요약이 있다.
-2026.05부터 매일 정기 수집 중이고, 그 이전은 나중에 소급 수집한 백필 구간이라
-스파크랩·포트폴리오사만 있고 훨씬 성기다. 기간 비교가 이상하면 data_coverage로 확인해라.
+1) 국내 기사 — 분류 넷: 스파크랩(자사), 포트폴리오사(투자한 회사), 경쟁사(VC), 업계동향.
+   기사마다 제목·매체·발행일·톤(긍정/중립/부정)·위험 플래그·AI 한 줄 요약·피칭 점수가 있다.
+   2026.05부터 매일 정기 수집 중이고, 그 이전은 나중에 소급 수집한 백필 구간이라
+   스파크랩·포트폴리오사만 있고 훨씬 성기다. 기간 비교가 이상하면 data_coverage로 확인해라.
+2) 해외 기사 — 완전히 별개 데이터다(inter_trends). 해외 매체를 수집해 한국어 제목·주제·국가를
+   붙여뒀고, 어떤 포트폴리오사와 연결되는지도 매겨져 있다.
+   ★ "업계동향"은 국내 업계 기사지 해외가 아니다. 해외를 물으면 반드시 inter_trends를 써라.
+3) 감시 대상 명단(운영 중: 포트폴리오사 218, 경쟁사 114, 업계 57, 스파크랩 17)
+   — coverage_gap으로 "기사가 안 난 곳"을 찾는다. 기사 검색으로는 못 구하는 값이다.
+4) 발송된 다이제스트 기록 — digest_archive.
 
 [화면에서 고른 값]
 기간 ${PERIOD_LABEL[uiPeriod]} / 범위 ${uiScopes.length ? uiScopes.map((s) => SCOPE_LABEL[s]).join(', ') : '전체'}
@@ -173,6 +274,12 @@ function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean
 - "늘었나/줄었나", "추세", "흐름", "언제부터" 같은 질문에는 반드시 monthly_trend를 불러라.
   직전 기간 한 개와의 비교만으로 추세를 말하지 마라 — 백필 구간에 걸려 왜곡되기 쉽다.
 - 키워드·오탐·수집 설정을 물으면 noise_report를 써라.
+- ★ 화면 카드(건수·집계·근거 기사 목록)에는 "마지막으로 성공한 조회" 결과가 뜬다.
+  그러니 사용자에게 근거로 보여줄 조회를 맨 마지막에 해라. 예를 들어 해외 트렌드를
+  물었으면 inter_trends를 마지막에 부른 상태로 답을 마쳐야 화면과 답변이 맞는다.
+  탐색용으로 넓게 조회했다면, 답할 내용에 해당하는 조회를 한 번 더 부르고 끝내라.
+- 답변에 쓰는 숫자는 화면 카드에 뜰 숫자와 같아야 한다. 여러 번 조회했다면
+  어느 조회의 숫자인지 밝혀라("해외 AI 기사 173건", "국내 포폴사 기사 288건"처럼).
 
 [답변 규칙]
 - 한국어 존댓말. 인사말·서론 없이 바로 본론.
@@ -365,6 +472,59 @@ export async function runChatAgent(opts: {
             steps.push(`trend(${r.monthly?.length ?? 0}개월) → ${r.total}건`);
             if (!uiResult || r.total > 0) uiResult = r;
             payload = { monthly: r.monthly, ...compactResult(r) };
+            break;
+          }
+          case 'inter_trends': {
+            const outcome = await runInterQuery({
+              period: resolvePeriodArg(args.period, opts.period, opts.question),
+              domain: args.domain ?? null,
+              country: args.country ?? null,
+              eventType: args.event_type ?? null,
+              topicSector: args.topic_sector ?? null,
+              portfolioOnly: args.portfolio_only === true,
+              company: args.company ?? null,
+              limit: 30,
+            });
+            steps.push(`inter(${outcome.result.terms.join('|') || '전체'}) → ${outcome.result.total}건`);
+            if (!uiResult || outcome.result.total > 0) uiResult = outcome.result;
+            payload = compactInter(outcome);
+            break;
+          }
+          case 'pitch_opportunities': {
+            const period = resolvePeriodArg(args.period, opts.period, opts.question);
+            const scopes = asScopes(args.scopes);
+            const minScore = typeof args.min_score === 'number' ? args.min_score : 70;
+            const [r, details] = await Promise.all([
+              runPitchQuery({ period, scopes, minScore, limit: 30 }),
+              pitchDetailsForModel({ period, scopes, minScore }),
+            ]);
+            // periodLabel은 조회 함수가 비워두므로 여기서 채운다.
+            r.periodLabel = PERIOD_LABEL[period];
+            steps.push(`pitch(${minScore}점↑) → ${r.total}건`);
+            if (!uiResult || r.total > 0) uiResult = r;
+            payload = {
+              total: r.total,
+              byTopic: r.topCompanies,
+              bySource: r.topSources,
+              candidates: details,
+              hint: '점수는 수집 때 매긴 피칭 가능성이다. ourTake는 본부 관점 코멘트라 피칭 각도로 그대로 쓸 수 있다.',
+            };
+            break;
+          }
+          case 'coverage_gap': {
+            const gap = await runCoverageGap({
+              period: resolvePeriodArg(args.period, opts.period, opts.question),
+              scopes: asScopes(args.scopes),
+              tier: args.tier ?? null,
+            });
+            steps.push(`gap → 무노출 ${gap.silentCount}/${gap.totalTargets}곳`);
+            payload = gap;
+            break;
+          }
+          case 'digest_archive': {
+            const rows = await runDigestArchive({ limit: args.limit, on: args.on ?? null });
+            steps.push(`digest → ${rows.length}건`);
+            payload = { digests: rows };
             break;
           }
           case 'noise_report': {

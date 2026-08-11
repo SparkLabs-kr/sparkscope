@@ -2,7 +2,7 @@
 // 이 파일은 prisma 등 서버 전용 모듈을 절대 import 하지 않는다.
 
 export type ChatPeriod = 'today' | 'week' | 'month' | 'quarter' | 'all';
-export type ChatScope = 'portfolio' | 'competitor' | 'sparklabs' | 'inter';
+export type ChatScope = 'portfolio' | 'competitor' | 'sparklabs' | 'industry';
 
 export const PERIOD_LABEL: Record<ChatPeriod, string> = {
   today: '오늘',
@@ -16,7 +16,7 @@ export const SCOPE_LABEL: Record<ChatScope, string> = {
   portfolio: '포트폴리오사',
   competitor: '경쟁사(VC)',
   sparklabs: '스파크랩',
-  inter: '해외 트렌드',
+  industry: '업계동향',
 };
 
 const CATEGORY_LABEL: Record<string, string> = {

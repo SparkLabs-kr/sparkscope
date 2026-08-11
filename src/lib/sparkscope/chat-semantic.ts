@@ -22,7 +22,7 @@ function scopeCategories(scopes: ChatScope[]): string[] | null {
     if (s === 'portfolio') out.push('portfolio_company');
     else if (s === 'competitor') out.push('competitor');
     else if (s === 'sparklabs') out.push('sparklabs_self');
-    else if (s === 'inter') out.push('industry_trend');
+    else if (s === 'industry') out.push('industry_trend');
   }
   return out.length ? out : null;
 }
