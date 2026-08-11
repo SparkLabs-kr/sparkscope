@@ -31,6 +31,28 @@ async function getCategoryCoverage(): Promise<Map<string, Date>> {
   return value;
 }
 
+/**
+ * 카테고리별 수집 시작일 + 연도별 건수.
+ * 에이전트가 "이 숫자를 믿어도 되나"를 스스로 판단할 수 있게 노출한다.
+ * (2026-05 이전은 백필 구간이라 스파크랩·포폴사만 있고 밀도도 훨씬 낮다)
+ */
+export async function getCoverageSummary() {
+  const [coverage, yearly] = await Promise.all([
+    getCategoryCoverage(),
+    prisma.$queryRawUnsafe<{ y: number; c: number }[]>(
+      `SELECT date_part('year',"pubDate")::int y, count(*)::int c
+       FROM "Article" WHERE "isNoise"=false GROUP BY 1 ORDER BY 1`
+    ),
+  ]);
+  return {
+    categories: [...coverage.entries()]
+      .map(([category, from]) => ({ category: categoryLabel(category), collectedFrom: fmtYmd(from) }))
+      .sort((a, b) => a.collectedFrom.localeCompare(b.collectedFrom)),
+    byYear: yearly.map((r) => ({ year: r.y, count: Number(r.c) })),
+    note: '2026.05 이전은 나중에 소급 수집한 백필 구간이라 스파크랩·포트폴리오사만 있고 밀도가 훨씬 낮다. 그 구간과의 증감 비교는 신뢰할 수 없다.',
+  };
+}
+
 /** 직전 같은 길이 기간. "지난주 대비" 같은 비교에 쓴다. */
 export function previousRange(range: { gte: Date; lte: Date }): { gte: Date; lte: Date } {
   const span = range.lte.getTime() - range.gte.getTime();
@@ -199,7 +221,7 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
     if (uncovered.length) {
       deltaUnavailableReason = `${uncovered.join(', ')} 기사는 직전 기간(${fmtYmd(prevRange.gte)}~${fmtYmd(prevRange.lte)})에 수집 전이라 증감 비교가 정확하지 않아요`;
     } else if (regularStart && prevRange.gte < regularStart) {
-      deltaCaution = `직전 기간은 정기 수집(${fmtYmd(regularStart)}) 이전이라 백필 데이터로만 채워져 있어요. 증감률이 실제보다 크게 나올 수 있습니다`;
+      deltaCaution = `직전 기간은 정기 수집(${fmtYmd(regularStart)}) 이전이라 백필 데이터로만 채워져 있어요. 직전 건수가 실제보다 적게 잡혀 있습니다`;
     }
   }
 

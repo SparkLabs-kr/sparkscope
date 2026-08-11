@@ -1,13 +1,13 @@
-// 챗봇 API — 질문 이해(LLM) → DB 조회 → (선택) 심층 분석(LLM).
-// 심층 분석이 꺼져 있으면 LLM은 의도 분석 1회만 탄다. OPENAI_API_KEY가 없으면
-// 의도 분석도 건너뛰고 규칙 기반으로 동작한다.
+// 챗봇 API — 에이전트가 도구(기사검색·월별추이·오탐점검·데이터현황)를 직접 여러 번 불러
+// 답을 만든다. 0건이 나오면 스스로 검색어를 바꿔 다시 찾는다.
+//
+// OPENAI_API_KEY가 없으면 규칙 기반 단일 조회로 조용히 내려간다(집계만 나오고 요약은 없다).
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { OPEN_ACCESS } from '@/lib/flags';
 import { runChatQuery, type ChatPeriod, type ChatScope } from '@/lib/sparkscope/chat-query';
-import { parseIntent } from '@/lib/sparkscope/chat-intent';
-import { summarizeChatResult } from '@/lib/sparkscope/chat-answer';
+import { runChatAgent, type AgentTurn } from '@/lib/sparkscope/chat-agent';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -42,50 +42,50 @@ export async function POST(req: Request) {
     ? body.scopes.filter((s: any): s is ChatScope => SCOPES.includes(s))
     : [];
 
-  const deep = Array.isArray(body?.modes) && body.modes.includes('deep');
+  const modes: string[] = Array.isArray(body?.modes) ? body.modes : [];
+  const deep = modes.includes('deep');
+  const asTable = modes.includes('table');
+
+  // 이전 대화 — 후속 질문("그중 부정적인 것만")을 이해하는 데 쓴다.
+  const history: AgentTurn[] = Array.isArray(body?.history)
+    ? body.history
+        .filter((t: any) => (t?.role === 'user' || t?.role === 'assistant') && typeof t?.text === 'string' && t.text.trim())
+        .map((t: any) => ({ role: t.role, text: String(t.text).slice(0, 2000) }))
+        .slice(-6)
+    : [];
 
   try {
-    // 1) 질문 이해 — 검색어·기간·범위를 뽑고, 못 하는 요청인지 판별한다.
-    const intent = await parseIntent(question);
-
-    // 화면에서 고른 값이 우선. 질문에 기간·범위가 명시됐고 화면은 기본값이면 질문을 따른다.
-    const finalPeriod: ChatPeriod = period === 'quarter' && intent.period ? intent.period : period;
-    const finalScopes: ChatScope[] = scopes.length ? scopes : intent.scopes;
-
-    // smalltalk이 아니면 무조건 데이터를 본다. (LLM이 manage/report를 '조회 불필요'로
-    // 판단해 빈손으로 답하던 문제가 있었다)
-    if (intent.kind === 'smalltalk') {
+    // 키가 없으면 에이전트를 못 돌린다 — 규칙 기반 단일 조회로 집계만 보여준다.
+    if (!process.env.OPENAI_API_KEY) {
+      const result = await runChatQuery({ question, period, scopes, limit: 20 });
       return NextResponse.json({
-        intent: intent.kind,
-        note: intent.note,
-        unsupported: intent.unsupported,
-        result: null,
+        intent: 'search',
+        note: 'AI 분석이 꺼져 있어 검색 결과만 보여드려요.',
+        unsupported: null,
+        summary: null,
+        appliedPeriod: period,
+        appliedScopes: scopes,
+        result,
       });
     }
 
-    const result = await runChatQuery({
+    const { summary, result, steps } = await runChatAgent({
       question,
-      period: finalPeriod,
-      scopes: finalScopes,
-      terms: intent.terms,
-      // 카테고리별로 필요한 데이터가 다르다.
-      onlyNegative: intent.kind === 'risk',
-      withTrend: intent.kind === 'stats',
-      withNoise: intent.kind === 'manage',
-      limit: intent.kind === 'report' ? 30 : 20,
+      history,
+      period,
+      scopes,
+      deep,
+      asTable,
     });
-
-    // 2) 추론 — 검색은 '심층 분석' 토글이 켜졌을 때만, 나머지 의도는 분석 자체가 목적이라 항상.
-    const needsReasoning = intent.kind !== 'search' || deep;
-    const summary = needsReasoning ? await summarizeChatResult(question, result, intent) : null;
+    console.log('[api/chat]', question.slice(0, 40), '|', steps.join(' → '));
 
     return NextResponse.json({
-      intent: intent.kind,
-      note: intent.note,
-      unsupported: intent.unsupported,
+      intent: 'search',
+      note: null,
+      unsupported: null,
       summary,
-      appliedPeriod: finalPeriod,
-      appliedScopes: finalScopes,
+      appliedPeriod: period,
+      appliedScopes: scopes,
       result,
     });
   } catch (e) {

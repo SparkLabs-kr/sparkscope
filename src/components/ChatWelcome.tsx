@@ -9,7 +9,7 @@
 //   3) 카테고리(TASKS)   = 무엇을 할지     — 대시보드 기능별 업무 시나리오
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { exportAnswerToPdf } from '@/lib/chat-pdf';
+import { exportAnswerToHtml } from '@/lib/chat-export';
 // 서버 전용 모듈(prisma)이 클라이언트 번들에 딸려오지 않도록 타입 전용 파일에서 가져온다.
 import {
   categoryLabel,
@@ -325,11 +325,23 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
     setFiles([]);
     setOpenTask(null);
     setLoading(true);
+    // 이전 대화를 함께 보낸다 — "그중 부정적인 것만" 같은 후속 질문을 이해하려면 필요하다.
+    // 답변은 요약 문장만 넘긴다(기사 목록까지 보내면 토큰만 커진다).
+    const history = messages
+      .map((m) =>
+        m.role === 'user'
+          ? { role: 'user' as const, text: m.text }
+          : m.role === 'assistant' && m.res.summary
+            ? { role: 'assistant' as const, text: m.res.summary }
+            : null
+      )
+      .filter(Boolean)
+      .slice(-6);
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, period, scopes: activeScopes, modes: activeModes }),
+        body: JSON.stringify({ question, period, scopes: activeScopes, modes: activeModes, history }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? '조회에 실패했어요.');
@@ -833,14 +845,14 @@ function ChatAnswer({
       {(res.summary || res.result) && (
         <button
           type="button"
-          onClick={() => exportAnswerToPdf({ question, res, period, scopes })}
+          onClick={() => exportAnswerToHtml({ question, res, period, scopes })}
           className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-spark-border bg-white text-[12px] font-semibold text-spark-ink-soft hover:text-spark-purple hover:border-spark-purple/30 transition"
         >
           <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5">
             <path d="M8 2v7M8 9L5 6M8 9l3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
             <path d="M2.5 11v2.5h11V11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
           </svg>
-          PDF로 저장
+          HTML로 저장
         </button>
       )}
     </div>
