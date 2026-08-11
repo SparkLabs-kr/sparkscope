@@ -16,7 +16,7 @@ import { runPitchQuery, pitchDetailsForModel, runCoverageGap, runDigestArchive }
 import { proposeKeywordFix, listPendingSuggestions } from './chat-actions';
 import { runLiveSearch } from './chat-live';
 import { PERIOD_LABEL, SCOPE_LABEL, categoryLabel } from './chat-types';
-import type { ChatPeriod, ChatScope, ChatQueryResult } from './chat-types';
+import type { ChatPeriod, ChatScope, ChatQueryResult, ResultKind } from './chat-types';
 
 const MODEL = 'gpt-5.4-mini';
 /** 도구 호출 왕복 상한. 넘으면 그때까지 모은 데이터로 답하게 한다. */
@@ -421,11 +421,33 @@ const asTerms = (v: any): string[] =>
 export type AgentOutcome = {
   summary: string | null;
   result: ChatQueryResult | null;
+  resultKind: ResultKind;
   /** 어떤 조회를 몇 번 했는지 — 로그·디버깅용 */
   steps: string[];
   /** 이번 질문에 쓴 토큰. 도구를 여러 번 부르면 왕복마다 쌓이므로 눈에 보이게 남긴다. */
   usage: { calls: number; inputTokens: number; cachedTokens: number; outputTokens: number };
 };
+
+/** noise_report만 단독으로 불렸을 때(uiResult가 없을 때) 오탐 데이터를 담을 빈 껍데기. */
+function emptyResult(): ChatQueryResult {
+  return {
+    terms: [],
+    periodLabel: '',
+    total: 0,
+    prevTotal: null,
+    deltaPct: null,
+    deltaUnavailableReason: null,
+    deltaCaution: null,
+    byCategory: [],
+    topSources: [],
+    topCompanies: [],
+    negativeCount: 0,
+    riskCount: 0,
+    monthly: null,
+    noisyKeywords: null,
+    articles: [],
+  };
+}
 
 /** 도구 이름 → 사용자에게 보여줄 말. 내부 이름을 그대로 노출하지 않는다. */
 const TOOL_LABEL: Record<string, string> = {
@@ -465,6 +487,7 @@ export async function runChatAgent(opts: {
   let uiResult: ChatQueryResult | null = null;
   let monthly: ChatQueryResult['monthly'] = null;
   let noisyKeywords: ChatQueryResult['noisyKeywords'] = null;
+  let resultKind: ResultKind = null;
 
   const usage = { calls: 0, inputTokens: 0, cachedTokens: 0, outputTokens: 0 };
   const track = (u: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } } | undefined) => {
@@ -474,15 +497,22 @@ export async function runChatAgent(opts: {
     usage.cachedTokens += u?.prompt_tokens_details?.cached_tokens ?? 0;
   };
 
-  /** 화면 카드용 결과에 월별 추이·오탐 키워드를 얹어 마무리한다. */
-  const finish = (summary: string | null): AgentOutcome => ({
-    summary,
-    result: uiResult
-      ? { ...uiResult, monthly: monthly ?? uiResult.monthly, noisyKeywords: noisyKeywords ?? uiResult.noisyKeywords }
-      : null,
-    steps,
-    usage,
-  });
+  /**
+   * 화면 카드용 결과에 월별 추이·오탐 키워드를 얹어 마무리한다.
+   * noise_report만 단독으로 불려서 uiResult가 비어있어도, 모아둔 noisyKeywords는
+   * 빈 껍데기에라도 실어 보낸다 — 안 그러면 오탐 점검만 물었을 때 결과가 통째로 null이 돼서
+   * 화면·HTML 저장 둘 다 아무것도 못 보여준다(2026-08-11 발견).
+   */
+  const finish = (summary: string | null): AgentOutcome => {
+    const base = uiResult ?? (monthly || noisyKeywords ? emptyResult() : null);
+    return {
+      summary,
+      result: base ? { ...base, monthly: monthly ?? base.monthly, noisyKeywords: noisyKeywords ?? base.noisyKeywords } : null,
+      resultKind,
+      steps,
+      usage,
+    };
+  };
 
   const messages: ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt(opts.period, opts.scopes, opts.deep, opts.asTable) },
@@ -535,7 +565,7 @@ export async function runChatAgent(opts: {
               limit: 30,
             });
             steps.push(`search(${terms.join('|') || '전체'}) → ${r.total}건`);
-            if (!uiResult || r.total > 0) uiResult = r;
+            if (!uiResult || r.total > 0) { uiResult = r; resultKind = 'search'; }
             payload = compactResult(r);
             break;
           }
@@ -549,7 +579,7 @@ export async function runChatAgent(opts: {
               limit: 30,
             });
             steps.push(`semantic("${meaning.slice(0, 24)}…") → ${r.total}건`);
-            if (!uiResult || r.total > 0) uiResult = r;
+            if (!uiResult || r.total > 0) { uiResult = r; resultKind = 'search'; }
             payload = {
               ...compactResult(r),
               searchKind: '의미 검색 결과다. 건수는 "관련도가 충분한 기사 수"이지 ' +
@@ -569,6 +599,7 @@ export async function runChatAgent(opts: {
               limit: 30,
             });
             monthly = r.monthly;
+            resultKind = 'trend';
             steps.push(`trend(${r.monthly?.length ?? 0}개월) → ${r.total}건`);
             if (!uiResult || r.total > 0) uiResult = r;
             payload = { monthly: r.monthly, ...compactResult(r) };
@@ -586,7 +617,7 @@ export async function runChatAgent(opts: {
               limit: 30,
             });
             steps.push(`inter(${outcome.result.terms.join('|') || '전체'}) → ${outcome.result.total}건`);
-            if (!uiResult || outcome.result.total > 0) uiResult = outcome.result;
+            if (!uiResult || outcome.result.total > 0) { uiResult = outcome.result; resultKind = 'inter'; }
             payload = compactInter(outcome);
             break;
           }
@@ -601,7 +632,7 @@ export async function runChatAgent(opts: {
             // periodLabel은 조회 함수가 비워두므로 여기서 채운다.
             r.periodLabel = PERIOD_LABEL[period];
             steps.push(`pitch(${minScore}점↑) → ${r.total}건`);
-            if (!uiResult || r.total > 0) uiResult = r;
+            if (!uiResult || r.total > 0) { uiResult = r; resultKind = 'pitch'; }
             payload = {
               total: r.total,
               byTopic: r.topCompanies,
@@ -637,6 +668,7 @@ export async function runChatAgent(opts: {
               limit: 1,
             });
             noisyKeywords = r.noisyKeywords;
+            resultKind = 'noise';
             steps.push(`noise → ${r.noisyKeywords?.length ?? 0}개 키워드`);
             payload = { noisyKeywords: r.noisyKeywords };
             break;
@@ -675,7 +707,7 @@ export async function runChatAgent(opts: {
             const keyword = String(args.keyword ?? opts.question).trim().slice(0, 60);
             const r = await runLiveSearch(keyword);
             steps.push(`live(${keyword}) → ${r.total}건`);
-            if (!uiResult || r.total > 0) uiResult = r;
+            if (!uiResult || r.total > 0) { uiResult = r; resultKind = 'live'; }
             payload = compactResult(r);
             break;
           }

@@ -84,12 +84,13 @@ export async function POST(req: Request) {
             summary: null,
             appliedPeriod: period,
             appliedScopes: scopes,
+            resultKind: 'search',
             result,
           });
           return;
         }
 
-        const { summary, result, steps, usage } = await runChatAgent({
+        const { summary, result, resultKind, steps, usage } = await runChatAgent({
           question,
           history,
           period,
@@ -116,6 +117,7 @@ export async function POST(req: Request) {
           summary,
           appliedPeriod: period,
           appliedScopes: scopes,
+          resultKind,
           result,
         });
       } catch (e) {

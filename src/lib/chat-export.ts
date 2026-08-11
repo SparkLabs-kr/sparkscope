@@ -10,7 +10,7 @@
 // 파일을 열고 Cmd+P → "PDF로 저장"을 하면 깔끔한 PDF도 그대로 나온다.
 //
 // LLM은 관여하지 않는다. 이미 받아온 응답 데이터로 브라우저에서만 만든다.
-import type { ChatResponse } from './sparkscope/chat-types';
+import type { ChatResponse, ChatQueryResult } from './sparkscope/chat-types';
 import { categoryLabel, PERIOD_LABEL, SCOPE_LABEL } from './sparkscope/chat-types';
 
 const esc = (s: string) =>
@@ -65,6 +65,85 @@ function statCard(title: string, items: { name: string; count: number }[]) {
   </div>`;
 }
 
+/**
+ * 월별 추이용 시계열 막대그래프 — 순수 인라인 SVG(외부 차트 라이브러리 없음, 파일 하나로
+ * 열리는 원칙 유지). 예전엔 statCard(가로 막대 목록)로 뭉뚱그려 보여줘서 "시간 흐름"이라는
+ * 감이 안 왔는데, 실제로 달마다 막대가 나란히 놓여야 늘고 주는 흐름이 한눈에 들어온다(2026-08-11).
+ */
+function monthlyChart(items: { month: string; count: number }[]) {
+  if (!items.length) return '';
+  const max = Math.max(...items.map((i) => i.count), 1);
+  const W = 720;
+  const H = 220;
+  const padL = 8;
+  const padB = 34;
+  const padT = 24;
+  const chartW = W - padL * 2;
+  const chartH = H - padT - padB;
+  const n = items.length;
+  const gap = chartW / n;
+  const barW = Math.min(48, gap * 0.55);
+
+  const bars = items
+    .map((it, i) => {
+      const h = Math.round((it.count / max) * chartH);
+      const x = padL + gap * i + (gap - barW) / 2;
+      const y = padT + (chartH - h);
+      const [, m] = it.month.split('-');
+      const label = m ? `${parseInt(m, 10)}월` : it.month;
+      return `<g>
+        <rect x="${x}" y="${y}" width="${barW}" height="${Math.max(h, 1)}" rx="3" fill="#5046E5" opacity="${it.count > 0 ? 0.82 : 0.18}" />
+        <text x="${x + barW / 2}" y="${y - 6}" text-anchor="middle" font-size="11" font-weight="700" fill="#514E5C">${it.count.toLocaleString()}</text>
+        <text x="${x + barW / 2}" y="${H - 12}" text-anchor="middle" font-size="11" fill="#8B8894">${esc(label)}</text>
+      </g>`;
+    })
+    .join('');
+
+  return `<div class="card chart-card">
+    <h4>월별 추이</h4>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="월별 기사 건수 추이">
+      <line x1="${padL}" y1="${padT + chartH}" x2="${W - padL}" y2="${padT + chartH}" stroke="#E7E3DB" stroke-width="1" />
+      ${bars}
+    </svg>
+  </div>`;
+}
+
+/**
+ * 오탐 많은 키워드 점검 결과 표 — 예전엔 이 데이터(noisyKeywords) 자체가 HTML 저장에
+ * 아예 안 실렸다(2026-08-11 발견, chat-agent.ts의 noise_report가 uiResult를 안 채워서
+ * 화면 결과가 통째로 비어버리는 문제와 함께 고침). 오탐 건수·정상 건수·현재 설정·실제
+ * 오탐 기사 예시까지 같이 보여줘야 "왜 오탐인지" 판단하고 바로 조치할 수 있다.
+ */
+function noiseTable(rows: NonNullable<ChatQueryResult['noisyKeywords']>) {
+  if (!rows.length) return '';
+  return `<section>
+    <h2>오탐 많은 키워드 <span class="count">${rows.length}개</span></h2>
+    <table>
+      <thead><tr><th>키워드</th><th>상태</th><th>오탐</th><th>정상</th><th>현재 설정</th><th>오탐 예시</th></tr></thead>
+      <tbody>
+        ${rows
+          .map((r) => {
+            const settings = r.current
+              ? [
+                  r.current.contextWords ? `문맥어: ${esc(r.current.contextWords)}` : '',
+                  r.current.excludeWords ? `제외어: ${esc(r.current.excludeWords)}` : '',
+                ].filter(Boolean).join('<br/>') || '<span class="dimtext">없음</span>'
+              : '<span class="dimtext">없음</span>';
+            return `<tr>
+              <td class="kw">${esc(r.name)}</td>
+              <td>${r.status === 'ACTIVE' ? '<span class="badge dim">ACTIVE</span>' : `<span class="badge neg">${esc(r.status ?? 'UNKNOWN')}</span>`}</td>
+              <td class="nowrap"><b>${r.noise.toLocaleString()}</b>건</td>
+              <td class="nowrap dimtext">${r.kept.toLocaleString()}건</td>
+              <td class="dimtext" style="font-size:11px">${settings}</td>
+              <td class="dimtext" style="font-size:11px">${(r.samples ?? []).slice(0, 3).map((s) => esc(s)).join('<br/>')}</td>
+            </tr>`;
+          })
+          .join('')}
+      </tbody>
+    </table>
+  </section>`;
+}
+
 export function buildReportHtml(opts: {
   question: string;
   res: ChatResponse;
@@ -107,11 +186,7 @@ export function buildReportHtml(opts: {
           ${statCard('회사·키워드', r.topCompanies)}
           ${statCard('매체', r.topSources)}
         </div>
-        ${
-          r.monthly?.length
-            ? `<h3>월별 추이</h3>${statCard('', r.monthly.map((m) => ({ name: m.month, count: m.count })))}`
-            : ''
-        }
+        ${r.monthly?.length ? monthlyChart(r.monthly) : ''}
       </section>`
     : '';
 
@@ -139,6 +214,8 @@ export function buildReportHtml(opts: {
         </table>
       </section>`
     : '';
+
+  const noiseBlock = r?.noisyKeywords?.length ? noiseTable(r.noisyKeywords) : '';
 
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -232,6 +309,7 @@ export function buildReportHtml(opts: {
     ${res.unsupported ? `<p class="note">참고: ${esc(res.note ?? '')}</p>` : ''}
     ${summaryBlock}
     ${statBlock}
+    ${noiseBlock}
     ${articleBlock}
     <footer>SparkScope 수집 기사 DB 기반 자동 생성 · 스파크랩 내부 자료 · 외부 공유 금지</footer>
   </div>

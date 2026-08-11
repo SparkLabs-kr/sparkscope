@@ -60,6 +60,9 @@ export type ChatArticle = {
   importance?: string | null;
 };
 
+/** 결과가 어떤 조회에서 나왔는지 — HTML 저장이 이걸 보고 표시 방식을 고른다(2026-08-11). */
+export type ResultKind = 'search' | 'trend' | 'noise' | 'inter' | 'pitch' | 'live' | null;
+
 /** /api/chat 응답 */
 export type ChatResponse = {
   intent: string;
@@ -68,6 +71,7 @@ export type ChatResponse = {
   summary?: string | null;
   appliedPeriod?: ChatPeriod;
   appliedScopes?: ChatScope[];
+  resultKind?: ResultKind;
   result: ChatQueryResult | null;
 };
 
