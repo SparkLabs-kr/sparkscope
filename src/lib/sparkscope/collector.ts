@@ -26,10 +26,10 @@ const C_TIER_FALLBACK_KEYWORDS: string[] = [
   '횡령', '갑질', '불매', '파업', '구조조정', '사기', '폐업', '위기', '부실',
 ];
 
-type SourceItem = Omit<RawArticle, 'matchedKeyword' | 'category' | 'basePriority'>;
+export type SourceItem = Omit<RawArticle, 'matchedKeyword' | 'category' | 'basePriority'>;
 type Target = Awaited<ReturnType<typeof prisma.monitoringTarget.findMany>>[number];
 
-function naverEnabled(): boolean {
+export function naverEnabled(): boolean {
   return !!(process.env.NAVER_CLIENT_ID && process.env.NAVER_CLIENT_SECRET);
 }
 
@@ -361,7 +361,7 @@ async function safeSource(fn: () => Promise<SourceItem[]>, keyword: string, labe
 // "스파크랩"처럼 예전 기사가 많이 쌓인 키워드는 최근 기사가 그 100건 안에도 못 들어가 통째로
 // 누락됨(직접 확인: when:7d 없이는 100건이 전부 작년 11월~올해 5월 기사, 최근 1주일치는 0건).
 // 7d로 넉넉히 받아오고, 실제 보존 기간은 뒤의 filterAndDedupe(daysBack)가 다시 컷한다.
-async function fetchGoogleNews(keyword: string): Promise<SourceItem[]> {
+export async function fetchGoogleNews(keyword: string): Promise<SourceItem[]> {
   const url = `https://news.google.com/rss/search?q=${encodeURIComponent(`${keyword} when:7d`)}&hl=ko&gl=KR&ceid=KR:ko`;
   const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 SparkScope/0.1' }, cache: 'no-store' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -392,7 +392,7 @@ async function fetchGoogleNews(keyword: string): Promise<SourceItem[]> {
   return out;
 }
 
-async function fetchNaverNews(keyword: string): Promise<SourceItem[]> {
+export async function fetchNaverNews(keyword: string): Promise<SourceItem[]> {
   const url = `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(keyword)}&display=30&sort=date`;
   const res = await fetch(url, {
     headers: {

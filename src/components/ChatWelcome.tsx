@@ -20,6 +20,30 @@ import {
   type ChatResponse,
 } from '@/lib/sparkscope/chat-types';
 
+// 음성 입력(마이크) — 브라우저 Web Speech API. leeryeong 브랜치에서 먼저 만든 걸 이식(2026-08-11).
+// 표준 TS DOM 타입에 없어서 최소한만 직접 선언한다.
+interface SpeechRecognitionAlternative { transcript: string }
+interface SpeechRecognitionResult { [index: number]: SpeechRecognitionAlternative; length: number }
+interface SpeechRecognitionResultList { [index: number]: SpeechRecognitionResult; length: number }
+interface SpeechRecognitionEvent extends Event { results: SpeechRecognitionResultList }
+interface SpeechRecognitionInstance extends EventTarget {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult: ((ev: SpeechRecognitionEvent) => void) | null;
+  onerror: ((ev: Event) => void) | null;
+  onend: ((ev: Event) => void) | null;
+  start(): void;
+  stop(): void;
+}
+type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  }
+}
+
 /** 1) 답변 방식 — 질문을 어떤 깊이·형식으로 처리할지 */
 const MODES = [
   {
@@ -266,9 +290,11 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   const [convos, setConvos] = useState<Convo[]>([]);
   const [convoId, setConvoId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [listening, setListening] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
   // 대화 기록은 로컬(브라우저)에만 저장한다. 서버 테이블은 아직 없다.
   useEffect(() => {
@@ -316,6 +342,32 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
     setInput(text);
     setOpenTask(null);
     inputRef.current?.focus();
+  };
+
+  const toggleMic = () => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const Ctor = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    if (!Ctor) {
+      alert('이 브라우저는 음성 입력을 지원하지 않아요.');
+      return;
+    }
+    const recognition = new Ctor();
+    recognition.lang = 'ko-KR';
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.onresult = (ev: SpeechRecognitionEvent) => {
+      let text = '';
+      for (let i = 0; i < ev.results.length; i++) text += ev.results[i][0]?.transcript ?? '';
+      setInput(text);
+    };
+    recognition.onerror = () => setListening(false);
+    recognition.onend = () => setListening(false);
+    recognitionRef.current = recognition;
+    setListening(true);
+    recognition.start();
   };
 
   const send = async () => {
@@ -776,21 +828,39 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                   );
                 })}
               </div>
-              <button
-                type="button"
-                onClick={send}
-                disabled={!canSend}
-                aria-label="보내기"
-                className={`w-9 h-9 shrink-0 grid place-items-center rounded-full transition ${
-                  canSend
-                    ? 'bg-spark-purple text-white hover:opacity-90'
-                    : 'bg-spark-subtle text-spark-muted border border-spark-border cursor-not-allowed'
-                }`}
-              >
-                <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
-                  <path d="M8 13V3.5M8 3.5L4 7.5M8 3.5l4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={toggleMic}
+                  aria-label={listening ? '음성 입력 중지' : '음성으로 질문 입력'}
+                  title="음성으로 질문 입력"
+                  className={`w-9 h-9 shrink-0 grid place-items-center rounded-full border transition ${
+                    listening
+                      ? 'bg-red-50 text-red-600 border-red-200 animate-pulse'
+                      : 'bg-spark-subtle text-spark-muted border-spark-border hover:text-spark-ink-soft'
+                  }`}
+                >
+                  <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
+                    <rect x="6" y="1.5" width="4" height="7.5" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                    <path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2.5M5.8 14.5h4.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={send}
+                  disabled={!canSend}
+                  aria-label="보내기"
+                  className={`w-9 h-9 shrink-0 grid place-items-center rounded-full transition ${
+                    canSend
+                      ? 'bg-spark-purple text-white hover:opacity-90'
+                      : 'bg-spark-subtle text-spark-muted border border-spark-border cursor-not-allowed'
+                  }`}
+                >
+                  <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
+                    <path d="M8 13V3.5M8 3.5L4 7.5M8 3.5l4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             {/* 검색 범위 */}

@@ -14,6 +14,7 @@ import { runSemanticQuery } from './chat-semantic';
 import { runInterQuery, compactInter } from './chat-inter';
 import { runPitchQuery, pitchDetailsForModel, runCoverageGap, runDigestArchive } from './chat-ops';
 import { proposeKeywordFix, listPendingSuggestions } from './chat-actions';
+import { runLiveSearch } from './chat-live';
 import { PERIOD_LABEL, SCOPE_LABEL, categoryLabel } from './chat-types';
 import type { ChatPeriod, ChatScope, ChatQueryResult } from './chat-types';
 
@@ -279,6 +280,22 @@ const TOOLS: ChatCompletionTool[] = [
       parameters: { type: 'object', properties: {} },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'live_search',
+      description:
+        'search_articles/semantic_search를 검색어까지 바꿔가며 시도했는데도 0건이거나 거의 없을 때만 쓰는 ' +
+        '실시간 뉴스 검색(구글뉴스·네이버뉴스를 그 자리에서 직접 검색). 우리 DB에 아직 수집되지 않은 회사·주제를 ' +
+        '보완하는 용도다. 반드시 DB 도구를 먼저 시도한 다음에만 써라. 결과는 노이즈 필터를 거치지 않은 원본이니 ' +
+        '답변에서 "우리 DB엔 없어서 실시간 검색 결과"라고 출처를 밝혀라.',
+      parameters: {
+        type: 'object',
+        properties: { keyword: { type: 'string', description: '실시간으로 검색할 회사명 또는 키워드' } },
+        required: ['keyword'],
+      },
+    },
+  },
 ];
 
 function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean, asTable: boolean) {
@@ -318,6 +335,9 @@ function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean
   only_negative=true로 조회해라. 검색어나 meaning에 "논란", "안 좋은" 같은 말을 넣는 게 아니다.
 - 반대로 결과가 수천 건이면 너무 넓은 것이다. 검색어를 좁혀서 다시 불러라.
 - 도구는 최대 ${MAX_STEPS}번까지 부를 수 있다. 2~3번 안에 끝내는 게 보통이다.
+- search_articles(검색어 비우기까지)·semantic_search를 다 시도했는데도 0건이면, 포기하고
+  "없다"고 하지 말고 live_search로 실시간 검색을 한 번 더 시도해라. 그 결과를 쓸 때는
+  "우리 DB엔 없어서 실시간 검색 결과예요"라고 출처를 밝혀라.
 - "늘었나/줄었나", "추세", "흐름", "언제부터" 같은 질문에는 반드시 monthly_trend를 불러라.
   직전 기간 한 개와의 비교만으로 추세를 말하지 마라 — 백필 구간에 걸려 왜곡되기 쉽다.
 - 키워드·오탐·수집 설정을 물으면 noise_report를 써라.
@@ -420,6 +440,7 @@ const TOOL_LABEL: Record<string, string> = {
   data_coverage: '데이터 현황 확인',
   propose_keyword_fix: '설정 보완 제안 등록',
   pending_suggestions: '대기 중인 제안 확인',
+  live_search: '실시간 뉴스 검색',
 };
 
 export async function runChatAgent(opts: {
@@ -648,6 +669,14 @@ export async function runChatAgent(opts: {
           case 'data_coverage': {
             payload = await getCoverageSummary();
             steps.push('coverage');
+            break;
+          }
+          case 'live_search': {
+            const keyword = String(args.keyword ?? opts.question).trim().slice(0, 60);
+            const r = await runLiveSearch(keyword);
+            steps.push(`live(${keyword}) → ${r.total}건`);
+            if (!uiResult || r.total > 0) uiResult = r;
+            payload = compactResult(r);
             break;
           }
           default:
