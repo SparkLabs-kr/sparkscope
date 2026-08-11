@@ -40,9 +40,16 @@ const SYSTEM = `너는 스파크랩(초기투자 VC)의 뉴스 모니터링 시�
   search=특정 기사 찾기, stats=건수·순위·추이 같은 수치, risk=부정/위기/리스크,
   inter=해외·글로벌 트렌드, report=요약·정리·보고서 작성, manage=키워드/노이즈 설정 관련,
   smalltalk=인사·사용법 질문
-- terms: DB 제목 검색에 쓸 핵심어 배열(최대 5개). 회사명·기술·이벤트 같은 명사만.
+- terms: DB 검색에 쓸 핵심어 배열(최대 8개). 회사명·기술·이벤트 같은 명사만.
+  ★ 질문에 쓰인 단어를 그대로 옮기지 마라. "기사 제목에 실제로 어떻게 쓰였을까"를 생각해서
+  같은 뜻의 표현을 함께 넣어라. 사용자는 일상어로 묻고 기사는 업계 용어로 쓴다.
+    "투자 받은 데 있어?"        → ["투자유치","시리즈A","프리A","시드 투자","라운드"]
+    "요즘 잘나가는 포폴사"       → ["투자유치","매출","계약","수주","선정","출시"]
+    "문제 생긴 회사 있나"        → ["논란","의혹","소송","적자","철수","구조조정"]
+    "AI 쪽 뭐 있어?"            → ["AI","인공지능","LLM","생성형"]
+  띄어쓰기 변형("투자 유치")은 시스템이 알아서 처리하니 넣지 마라.
   "PDF", "리포트", "정리해줘", "알려줘" 같은 요청·형식 단어는 절대 넣지 마라.
-  검색어가 필요 없으면 빈 배열.
+  질문이 특정 주제를 안 가리키면(예: "이번 주 기사 정리해줘") 빈 배열.
 - period: today | week | month | quarter | all | null  (질문에 기간 표현이 있을 때만, 없으면 null)
 - scopes: portfolio | competitor | sparklabs | inter 중 질문이 명시한 것만. 없으면 빈 배열.
 - needsArticles: 기사 조회가 필요하면 true (인사·사용법 질문이면 false)
@@ -55,7 +62,9 @@ const SYSTEM = `너는 스파크랩(초기투자 VC)의 뉴스 모니터링 시�
 "PDF로 리포트 만들어줘" →
 {"kind":"report","terms":[],"period":null,"scopes":[],"needsArticles":true,"unsupported":null,"note":"리포트로 정리했습니다. 답변 아래 'PDF로 저장' 버튼을 누르면 PDF로 내려받을 수 있어요."}
 "지난주 포폴사 투자유치 기사" →
-{"kind":"search","terms":["투자유치"],"period":"week","scopes":["portfolio"],"needsArticles":true,"unsupported":null,"note":null}`;
+{"kind":"search","terms":["투자유치","시리즈A","라운드"],"period":"week","scopes":["portfolio"],"needsArticles":true,"unsupported":null,"note":null}
+"우리 포폴 중에 요즘 돈 잘 굴러가는 데 있어?" →
+{"kind":"search","terms":["투자유치","시리즈A","매출","계약","수주"],"period":null,"scopes":["portfolio"],"needsArticles":true,"unsupported":null,"note":null}`;
 
 // LLM이 가끔 흘리는 일반명사 — 제목 검색에 넣으면 결과만 좁아진다.
 const GENERIC = new Set([
@@ -102,7 +111,7 @@ export async function parseIntent(question: string): Promise<ChatIntent> {
         ? p.terms
             .filter((t: any) => typeof t === 'string' && t.trim().length >= 2 && !GENERIC.has(t.trim()))
             .map((t: string) => t.trim())
-            .slice(0, 5)
+            .slice(0, 8)
         : [],
       period: PERIODS.includes(p.period) ? p.period : null,
       scopes: Array.isArray(p.scopes) ? p.scopes.filter((s: any) => SCOPES.includes(s)) : [],

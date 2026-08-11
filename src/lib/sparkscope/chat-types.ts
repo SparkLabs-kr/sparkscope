@@ -41,6 +41,9 @@ export type ChatArticle = {
   matchedKeyword: string;
   tone: string | null;
   riskFlag: string | null;
+  /** 수집 때 뽑아둔 AI 한 줄 요약 (약 90%의 기사에 있다) */
+  oneLiner?: string | null;
+  importance?: string | null;
 };
 
 /** /api/chat 응답 */

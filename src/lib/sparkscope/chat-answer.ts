@@ -93,9 +93,18 @@ function buildPrompt(question: string, r: ChatQueryResult, intent: ChatIntent) {
     lines.push(`[많이 나온 키워드] ${r.topCompanies.map((c) => `${c.name} ${c.count}`).join(', ')}`);
   if (r.topSources.length) lines.push(`[매체] ${r.topSources.map((s) => `${s.name} ${s.count}`).join(', ')}`);
   if (r.articles.length) {
-    lines.push('[기사 제목 (최대 25건)]');
+    // 제목만 주면 "무슨 내용인지"를 모델이 추측하게 된다. 수집 때 뽑아둔 한 줄 요약을
+    // 함께 주면 지어내지 않고 실제 내용에 근거해 묶을 수 있다.
+    lines.push('[기사 (최대 25건)]');
     for (const a of r.articles.slice(0, 25)) {
-      lines.push(`- ${a.title} (${a.source}${a.tone === 'NEGATIVE' ? ', 부정' : ''}${a.riskFlag ? ', 위험' : ''})`);
+      const tags = [
+        a.source,
+        a.importance === 'CRITICAL' || a.importance === 'HIGH' ? `중요도 ${a.importance}` : null,
+        a.tone === 'NEGATIVE' ? '부정' : null,
+        a.riskFlag ? '위험' : null,
+      ].filter(Boolean);
+      lines.push(`- ${a.title} (${tags.join(', ')})`);
+      if (a.oneLiner && a.oneLiner !== a.title) lines.push(`  요약: ${a.oneLiner}`);
     }
   }
   return lines.join('\n');

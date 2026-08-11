@@ -4,6 +4,7 @@
 import { prisma } from '@/lib/prisma';
 import { normalizeSource } from './media';
 import { isBlockedNoise } from './relevance';
+import { expandTerms } from './term-expand';
 import { PERIOD_LABEL, categoryLabel, type ChatPeriod, type ChatScope, type ChatArticle, type ChatQueryResult } from './chat-types';
 
 export type { ChatPeriod, ChatScope, ChatArticle, ChatQueryResult };
@@ -125,10 +126,16 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
   const scopeOr = scopeWhere(input.scopes);
   if (scopeOr) and.push({ OR: scopeOr });
   if (terms.length) {
+    // 표기 변형까지 펼쳐서 찾는다("투자유치"만 찾으면 "투자 유치" 1,200여 건을 통째로 놓친다).
+    // 제목뿐 아니라 수집 때 뽑아둔 한 줄 요약(oneLiner, 90% 채워져 있음)과 등장 회사
+    // 목록(relatedCompanies)까지 본다 — 제목에 안 드러난 내용이 여기 담겨 있다.
+    const variants = expandTerms(terms);
     and.push({
-      OR: terms.flatMap((t) => [
+      OR: variants.flatMap((t) => [
         { title: { contains: t, mode: 'insensitive' } },
+        { oneLiner: { contains: t, mode: 'insensitive' } },
         { matchedKeyword: { contains: t, mode: 'insensitive' } },
+        { relatedCompanies: { contains: t, mode: 'insensitive' } },
       ]),
     });
   }
@@ -160,6 +167,10 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
         tone: true,
         riskFlag: true,
         priorityScore: true,
+        // 수집 때 기사별로 뽑아둔 AI 한 줄 요약 — 제목만으로는 안 보이는 내용이 담겨 있어
+        // 검색 대상이자 답변 근거로 쓴다.
+        oneLiner: true,
+        importance: true,
       },
     }),
     prisma.article.count({ where }),
@@ -269,6 +280,8 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
       matchedKeyword: a.matchedKeyword,
       tone: a.tone,
       riskFlag: a.riskFlag,
+      oneLiner: a.oneLiner,
+      importance: a.importance,
     }));
 
   return {
