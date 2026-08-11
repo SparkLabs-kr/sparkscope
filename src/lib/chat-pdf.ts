@@ -1,10 +1,12 @@
 'use client';
 
-// 답변을 PDF로 저장 — 인쇄용 문서를 만들어 브라우저 인쇄 대화상자를 띄운다.
-// 여기서 "PDF로 저장"을 고르면 파일이 만들어진다.
+// 답변을 PDF로 저장 — 인쇄 대화상자(window.print) 대신 실제 PDF 파일을 만들어 바로 내려받는다.
 //
-// jsPDF 같은 라이브러리를 쓰지 않은 이유: 한글 폰트를 직접 임베드해야 해서 번들이 수 MB 커지고
-// 줄바꿈·표 레이아웃을 전부 손으로 계산해야 한다. 브라우저 인쇄 경로는 한글·표·링크가 그대로 나온다.
+// 한글 폰트를 jsPDF에 직접 임베드하면 번들이 수 MB 커지므로, 대신 보이지 않는 iframe에
+// HTML을 렌더링한 뒤 html2canvas로 화면째 캡처해 이미지로 PDF에 넣는다(폰트 임베딩 불필요,
+// 표·줄바꿈은 브라우저 레이아웃 엔진이 그대로 처리).
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import type { ChatResponse } from './sparkscope/chat-types';
 import { categoryLabel, PERIOD_LABEL, SCOPE_LABEL } from './sparkscope/chat-types';
 
@@ -148,38 +150,76 @@ function statList(title: string, items: { name: string; count: number }[]) {
     .join('')}</ul></div>`;
 }
 
-/** 인쇄 대화상자를 띄운다. 사용자가 "PDF로 저장"을 고르면 파일이 만들어진다. */
-export function exportAnswerToPdf(opts: {
+const A4_WIDTH_MM = 210;
+const A4_HEIGHT_MM = 297;
+const PX_PER_MM = 96 / 25.4; // 화면 렌더용 CSS px 기준(브라우저 96dpi)
+
+/** 인쇄 대화상자 없이 실제 PDF 파일을 만들어 바로 내려받는다("다른 이름으로 저장" 창이 뜬다). */
+export async function exportAnswerToPdf(opts: {
   question: string;
   res: ChatResponse;
   period: string;
   scopes: string[];
 }) {
   const html = buildReportHtml(opts);
+  const widthPx = Math.round(A4_WIDTH_MM * PX_PER_MM);
+
   const iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
-  iframe.style.right = '0';
-  iframe.style.bottom = '0';
-  iframe.style.width = '0';
+  iframe.style.left = '-99999px';
+  iframe.style.top = '0';
+  iframe.style.width = `${widthPx}px`;
   iframe.style.height = '0';
   iframe.style.border = '0';
   document.body.appendChild(iframe);
 
-  const doc = iframe.contentDocument;
-  if (!doc) {
-    document.body.removeChild(iframe);
-    return;
-  }
-  doc.open();
-  doc.write(html);
-  doc.close();
+  try {
+    const doc = iframe.contentDocument;
+    if (!doc) return;
+    doc.open();
+    doc.write(html);
+    doc.close();
 
-  const run = () => {
-    iframe.contentWindow?.focus();
-    iframe.contentWindow?.print();
-    // 인쇄 대화상자가 닫힌 뒤 정리 (취소해도 지워진다)
-    setTimeout(() => iframe.parentNode && document.body.removeChild(iframe), 60_000);
-  };
-  if (doc.readyState === 'complete') run();
-  else iframe.onload = run;
+    await new Promise<void>((resolve) => {
+      if (doc.readyState === 'complete') resolve();
+      else iframe.onload = () => resolve();
+    });
+
+    const body = doc.body;
+    // @page 여백을 캡처 대상에는 그대로 두고, 실제 컨텐츠 높이만큼 iframe을 늘려서 잘리지 않게 한다.
+    iframe.style.height = `${body.scrollHeight}px`;
+    await new Promise((r) => setTimeout(r, 50)); // 리플로우 대기
+
+    const canvas = await html2canvas(body, {
+      width: widthPx,
+      windowWidth: widthPx,
+      scale: 2,
+      backgroundColor: '#FFFFFF',
+      useCORS: true,
+    });
+
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+    const pageHeightPx = Math.round((A4_HEIGHT_MM / A4_WIDTH_MM) * canvas.width);
+    const totalPages = Math.max(1, Math.ceil(canvas.height / pageHeightPx));
+
+    const pageCanvas = document.createElement('canvas');
+    pageCanvas.width = canvas.width;
+    const ctx = pageCanvas.getContext('2d')!;
+
+    for (let i = 0; i < totalPages; i++) {
+      const sliceHeight = Math.min(pageHeightPx, canvas.height - i * pageHeightPx);
+      pageCanvas.height = sliceHeight;
+      ctx.clearRect(0, 0, pageCanvas.width, sliceHeight);
+      ctx.drawImage(canvas, 0, i * pageHeightPx, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+      const imgData = pageCanvas.toDataURL('image/png');
+      if (i > 0) pdf.addPage();
+      const imgHeightMm = (sliceHeight / canvas.width) * A4_WIDTH_MM;
+      pdf.addImage(imgData, 'PNG', 0, 0, A4_WIDTH_MM, imgHeightMm);
+    }
+
+    const filename = `스파크스코프_${opts.question.slice(0, 20).replace(/[\\/:*?"<>|]/g, '')}.pdf`;
+    pdf.save(filename);
+  } finally {
+    document.body.removeChild(iframe);
+  }
 }
