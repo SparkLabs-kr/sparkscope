@@ -376,7 +376,10 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
     if (!question && !opts?.live) return;
     // 파일 첨부는 아직 서버로 보내지 않는다(스토리지 연결 전).
     const attached = files.map((f) => f.name);
-    setMessages((prev) => [...prev, { role: 'user', text: question, period, scopes: activeScopes, files: attached }]);
+    // live 검색일 때는 사용자 메시지를 추가하지 않는다 (이미 이전 결과가 있는 상태)
+    if (!opts?.live) {
+      setMessages((prev) => [...prev, { role: 'user', text: question, period, scopes: activeScopes, files: attached }]);
+    }
     setInput('');
     setFiles([]);
     setOpenTask(null);

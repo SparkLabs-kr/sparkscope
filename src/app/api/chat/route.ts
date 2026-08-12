@@ -35,8 +35,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Bad request' }, { status: 400 });
   }
 
+  const live = body?.live === true;
+  const keyword = typeof body?.keyword === 'string' ? body.keyword.trim() : '';
+
   const question = typeof body?.question === 'string' ? body.question.trim() : '';
-  if (!question) return NextResponse.json({ error: '질문이 비어 있습니다.' }, { status: 400 });
+  if (!question && !live) return NextResponse.json({ error: '질문이 비어 있습니다.' }, { status: 400 });
 
   const period: ChatPeriod = PERIODS.includes(body?.period) ? body.period : 'quarter';
   const scopes: ChatScope[] = Array.isArray(body?.scopes)
@@ -46,8 +49,6 @@ export async function POST(req: Request) {
   const modes: string[] = Array.isArray(body?.modes) ? body.modes : [];
   const deep = modes.includes('deep');
   const asTable = modes.includes('table');
-  const live = body?.live === true;
-  const keyword = typeof body?.keyword === 'string' ? body.keyword.trim() : '';
 
   // 이전 대화 — 후속 질문("그중 부정적인 것만")을 이해하는 데 쓴다.
   const history: AgentTurn[] = Array.isArray(body?.history)
