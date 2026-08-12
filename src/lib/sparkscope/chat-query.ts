@@ -285,21 +285,39 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
     }
   }
 
-  // 월별 추이 — 조건은 그대로 두고 기간만 최근 6개월로 넓혀서 센다.
+  // 추이 — "이번 주"·"오늘"처럼 짧은 기간을 고른 질문은 월 단위로 묶으면 점이 1~2개뿐이라
+  // 의미가 없다. 이때는 최근 14일을 일 단위로 쪼개고(날짜별 막대), 그 외(월/분기/전체)는
+  // 기존처럼 최근 6개월을 월 단위로 묶는다(선그래프) — 화면 쪽에서 trendGranularity로 구분해
+  // 그린다(2026-08-12).
   let monthly: { month: string; count: number }[] | null = null;
+  let trendGranularity: 'day' | 'month' = 'month';
   if (input.withTrend) {
-    // 월별로 count를 따로 센다. findMany로 가져와 세면 take 상한에 걸려 숫자가 잘린다.
     const now = new Date();
-    const buckets: { month: string; gte: Date; lt: Date }[] = [];
-    for (let i = 5; i >= 0; i--) {
-      const gte = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const lt = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
-      buckets.push({ month: `${gte.getFullYear()}-${String(gte.getMonth() + 1).padStart(2, '0')}`, gte, lt });
+    if (input.period === 'today' || input.period === 'week') {
+      trendGranularity = 'day';
+      const buckets: { month: string; gte: Date; lt: Date }[] = [];
+      for (let i = 13; i >= 0; i--) {
+        const gte = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+        const lt = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i + 1);
+        buckets.push({ month: `${String(gte.getMonth() + 1).padStart(2, '0')}-${String(gte.getDate()).padStart(2, '0')}`, gte, lt });
+      }
+      const counts = await Promise.all(
+        buckets.map((b) => prisma.article.count({ where: { ...where, pubDate: { gte: b.gte, lt: b.lt } } }))
+      );
+      monthly = buckets.map((b, i) => ({ month: b.month, count: counts[i] }));
+    } else {
+      // 월별로 count를 따로 센다. findMany로 가져와 세면 take 상한에 걸려 숫자가 잘린다.
+      const buckets: { month: string; gte: Date; lt: Date }[] = [];
+      for (let i = 5; i >= 0; i--) {
+        const gte = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const lt = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+        buckets.push({ month: `${gte.getFullYear()}-${String(gte.getMonth() + 1).padStart(2, '0')}`, gte, lt });
+      }
+      const counts = await Promise.all(
+        buckets.map((b) => prisma.article.count({ where: { ...where, pubDate: { gte: b.gte, lt: b.lt } } }))
+      );
+      monthly = buckets.map((b, i) => ({ month: b.month, count: counts[i] }));
     }
-    const counts = await Promise.all(
-      buckets.map((b) => prisma.article.count({ where: { ...where, pubDate: { gte: b.gte, lt: b.lt } } }))
-    );
-    monthly = buckets.map((b, i) => ({ month: b.month, count: counts[i] }));
   }
 
   // 오탐 많은 키워드 — 같은 기간에서 isNoise=true인 기사를 키워드별로 센다.
@@ -440,6 +458,7 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
     neutralCount,
     riskCount,
     monthly,
+    trendGranularity: input.withTrend ? trendGranularity : undefined,
     noisyKeywords,
     articles,
   };

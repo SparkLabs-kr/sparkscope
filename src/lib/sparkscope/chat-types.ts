@@ -66,6 +66,10 @@ export type ChatArticle = {
    * 키워드 매칭이라 'company'로 취급한다.
    */
   tagKind?: 'company' | 'topic';
+  /** 기획기사 피칭 가능성 점수(0~100) — 피칭 소재 산점도용. pitch 조회에서만 채워진다. */
+  pitchScore?: number | null;
+  /** 노출 우선순위 점수 — 피칭 산점도의 다른 축. pitch 조회에서만 채워진다. */
+  priorityScore?: number | null;
 };
 
 /** 결과가 어떤 조회에서 나왔는지 — HTML 저장이 이걸 보고 표시 방식을 고른다(2026-08-11). */
@@ -112,6 +116,9 @@ export type ChatQueryResult = {
   riskCount: number;
   /** 월별 건수 (지표·추이 질문일 때만 채워진다) */
   monthly: { month: string; count: number }[] | null;
+  /** monthly가 월 단위인지 일 단위인지 — 기간을 짧게(오늘·이번 주) 골랐으면 일 단위 막대그래프,
+   *  그 외엔 6개월치 월 단위 선그래프로 그린다. */
+  trendGranularity?: 'day' | 'month';
   /** 오탐(노이즈)으로 걸러진 기사가 많은 키워드 (키워드·노이즈 질문일 때만) */
   noisyKeywords: NoisyKeyword[] | null;
   articles: ChatArticle[];

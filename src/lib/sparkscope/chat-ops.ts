@@ -100,6 +100,9 @@ export async function runPitchQuery(input: {
       // 피칭 화면에선 "왜 이게 소재가 되는지"가 한 줄 요약보다 중요하다.
       oneLiner: a.pitchTopic ? `[${a.pitchScore}점] ${a.pitchTopic}` : a.oneLiner,
       importance: a.importance,
+      // 피칭 점수 vs 노출 우선순위 산점도용 — 둘 다 높은 기사(우상단)가 진짜 좋은 소재다.
+      pitchScore: a.pitchScore,
+      priorityScore: a.priorityScore,
     })),
   };
 }

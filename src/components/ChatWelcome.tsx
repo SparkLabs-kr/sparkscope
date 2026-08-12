@@ -16,6 +16,7 @@ import {
   categoryLabel,
   PERIOD_LABEL,
   SCOPE_LABEL,
+  type ChatArticle,
   type ChatQueryResult,
   type ChatResponse,
   type ResultKind,
@@ -1304,7 +1305,7 @@ function ChatResult({
           들어온다 — 예전엔 이 데이터(monthly)가 HTML로 저장할 때만 그래프로 보였고 채팅
           화면에는 아예 안 나왔다(2026-08-12). */}
       {resultKind === 'trend' && result.monthly && result.monthly.length > 0 && (
-        <MonthlyTrendChart items={result.monthly} />
+        <TrendChart items={result.monthly} granularity={result.trendGranularity ?? 'month'} />
       )}
 
       {/* 키워드·노이즈 질문은 "왜 오탐인지" 판단할 근거(오탐 예시·현재 설정)까지 표로 한눈에
@@ -1324,6 +1325,26 @@ function ChatResult({
             negative={result.negativeCount}
           />
         )}
+
+      {/* "요즘 어떤 기사가 많아?"처럼 분류 구성을 묻는 질문은 숫자 나열보다 비율이 한눈에
+          보이는 도넛차트가 더 직관적이다(2026-08-12). 분류가 2개 이상 섞여 있을 때만 의미가
+          있다 — 검색 범위를 하나로 좁혔으면(예: 포트폴리오사만) 어차피 100%라 그릴 필요 없다. */}
+      {resultKind === 'search' && result.byCategory.filter((c) => c.count > 0).length > 1 && (
+        <CategoryDonutChart items={result.byCategory} />
+      )}
+
+      {/* "어디서 많이 나왔어?" 같은 회사·매체 비교는 목록보다 막대 길이로 바로 비교되는 게
+          낫다(2026-08-12). 3곳 미만이면 굳이 그래프까지 필요 없어 텍스트 목록으로 충분하다. */}
+      {resultKind === 'search' && result.topCompanies.length >= 3 && (
+        <CompanyBarChart title="많이 나온 회사·키워드" items={result.topCompanies} />
+      )}
+
+      {/* 피칭 소재는 "점수가 높은 것"과 "이미 노출 우선순위가 높은 것"이 다를 수 있어, 목록
+          순위만 봐선 어느 기사가 진짜 소재인지 감이 안 온다. 두 점수를 산점도로 놓으면
+          우상단(둘 다 높음)이 바로 눈에 띈다(2026-08-12). */}
+      {resultKind === 'pitch' && result.articles.some((a) => a.pitchScore != null) && (
+        <PitchScatterChart articles={result.articles} />
+      )}
 
       {/* 기사 목록 */}
       {result.articles.length > 0 && (
@@ -1448,8 +1469,14 @@ function ChatResult({
   );
 }
 
-/** 월별 추이 막대그래프 — HTML 저장(chat-export.ts)의 monthlyChart()와 같은 모양을 채팅 화면에도 그린다. */
-function MonthlyTrendChart({ items }: { items: { month: string; count: number }[] }) {
+/**
+ * 추이 차트 — granularity에 따라 그리는 방식을 바꾼다(2026-08-12).
+ * - 'month'(기간을 월/분기/전체로 골랐을 때, 최근 6개월치): 몇 안 되는 점이 어느 방향으로
+ *   움직이는지가 중요하므로 선그래프.
+ * - 'day'(기간을 오늘·이번 주로 골랐을 때, 최근 14일치): 날짜라는 범주별 비교라 막대그래프가
+ *   하루하루 건수를 비교하기 쉽다. (연속값 구간을 나눈 히스토그램과는 다름 — 여기선 안 씀.)
+ */
+function TrendChart({ items, granularity }: { items: { month: string; count: number }[]; granularity: 'day' | 'month' }) {
   const max = Math.max(...items.map((i) => i.count), 1);
   const W = 640;
   const H = 180;
@@ -1460,37 +1487,79 @@ function MonthlyTrendChart({ items }: { items: { month: string; count: number }[
   const chartH = H - padT - padB;
   const n = items.length;
   const gap = chartW / n;
-  const barW = Math.min(44, gap * 0.55);
+  const title = granularity === 'day' ? '일별 추이 (최근 14일)' : '월별 추이 (최근 6개월)';
+  const label = (raw: string) => {
+    if (granularity === 'day') {
+      const [m, d] = raw.split('-');
+      return m && d ? `${parseInt(m, 10)}/${parseInt(d, 10)}` : raw;
+    }
+    const [, m] = raw.split('-');
+    return m ? `${parseInt(m, 10)}월` : raw;
+  };
+
+  if (granularity === 'day') {
+    const barW = Math.min(28, gap * 0.6);
+    return (
+      <div className="bg-spark-surface border border-spark-border rounded-2xl shadow-card p-4">
+        <div className="text-[13px] font-semibold text-spark-ink-soft mb-2">{title}</div>
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label={title}>
+          <line x1={padL} y1={padT + chartH} x2={W - padL} y2={padT + chartH} stroke="#E7E3DB" strokeWidth={1} />
+          {items.map((it, i) => {
+            const h = Math.round((it.count / max) * chartH);
+            const x = padL + gap * i + (gap - barW) / 2;
+            const y = padT + (chartH - h);
+            return (
+              <g key={it.month}>
+                <rect x={x} y={y} width={barW} height={Math.max(h, 1)} rx={2} fill="#5046E5" opacity={it.count > 0 ? 0.82 : 0.18} />
+                {it.count > 0 && (
+                  <text x={x + barW / 2} y={y - 5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#514E5C">
+                    {it.count.toLocaleString()}
+                  </text>
+                )}
+                <text x={x + barW / 2} y={H - 8} textAnchor="middle" fontSize={9} fill="#8B8894">
+                  {label(it.month)}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    );
+  }
+
+  // 선그래프
+  const points = items.map((it, i) => {
+    const x = padL + gap * i + gap / 2;
+    const y = padT + (chartH - Math.round((it.count / max) * chartH));
+    return { x, y, it };
+  });
+  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const areaPath = `${linePath} L ${points[points.length - 1].x} ${padT + chartH} L ${points[0].x} ${padT + chartH} Z`;
 
   return (
     <div className="bg-spark-surface border border-spark-border rounded-2xl shadow-card p-4">
-      <div className="text-[13px] font-semibold text-spark-ink-soft mb-2">월별 추이</div>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label="월별 기사 건수 추이">
+      <div className="text-[13px] font-semibold text-spark-ink-soft mb-2">{title}</div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label={title}>
         <line x1={padL} y1={padT + chartH} x2={W - padL} y2={padT + chartH} stroke="#E7E3DB" strokeWidth={1} />
-        {items.map((it, i) => {
-          const h = Math.round((it.count / max) * chartH);
-          const x = padL + gap * i + (gap - barW) / 2;
-          const y = padT + (chartH - h);
-          const [, m] = it.month.split('-');
-          const label = m ? `${parseInt(m, 10)}월` : it.month;
-          return (
-            <g key={it.month}>
-              <rect x={x} y={y} width={barW} height={Math.max(h, 1)} rx={3} fill="#5046E5" opacity={it.count > 0 ? 0.82 : 0.18} />
-              <text x={x + barW / 2} y={y - 6} textAnchor="middle" fontSize={11} fontWeight={700} fill="#514E5C">
-                {it.count.toLocaleString()}
-              </text>
-              <text x={x + barW / 2} y={H - 8} textAnchor="middle" fontSize={11} fill="#8B8894">
-                {label}
-              </text>
-            </g>
-          );
-        })}
+        <path d={areaPath} fill="#5046E5" opacity={0.08} stroke="none" />
+        <path d={linePath} fill="none" stroke="#5046E5" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+        {points.map((p) => (
+          <g key={p.it.month}>
+            <circle cx={p.x} cy={p.y} r={4} fill="#5046E5" />
+            <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize={11} fontWeight={700} fill="#514E5C">
+              {p.it.count.toLocaleString()}
+            </text>
+            <text x={p.x} y={H - 8} textAnchor="middle" fontSize={11} fill="#8B8894">
+              {label(p.it.month)}
+            </text>
+          </g>
+        ))}
       </svg>
     </div>
   );
 }
 
-/** 긍정/중립/부정 톤 비율 도넛차트 — MonthlyTrendChart와 같은 SVG 인라인 패턴. */
+/** 긍정/중립/부정 톤 비율 도넛차트 — TrendChart와 같은 SVG 인라인 패턴. */
 function ToneDonutChart({ positive, neutral, negative }: { positive: number; neutral: number; negative: number }) {
   const total = positive + neutral + negative;
   if (total === 0) return null;
@@ -1553,6 +1622,76 @@ function ToneDonutChart({ positive, neutral, negative }: { positive: number; neu
   );
 }
 
+/** 회사·매체 등 상위 N개 비교용 가로 막대그래프 — StatList의 미니바보다 축·수치가 또렷한
+ *  전용 그래프 카드가 필요할 때(항목이 3개 이상) 쓴다. */
+function CompanyBarChart({ title, items }: { title: string; items: { name: string; count: number }[] }) {
+  const max = Math.max(...items.map((i) => i.count), 1);
+  return (
+    <div className="bg-spark-surface border border-spark-border rounded-2xl shadow-card p-4">
+      <div className="text-[13px] font-semibold text-spark-ink-soft mb-3">{title}</div>
+      <div className="space-y-2.5">
+        {items.map((i) => (
+          <div key={i.name} className="flex items-center gap-2.5 text-[12px]">
+            <span className="w-24 shrink-0 truncate text-spark-ink-soft" title={i.name}>
+              {i.name}
+            </span>
+            <div className="flex-1 h-4 rounded-md bg-spark-subtle overflow-hidden">
+              <div
+                className="h-full rounded-md bg-spark-purple flex items-center justify-end px-1.5"
+                style={{ width: `${Math.max((i.count / max) * 100, 8)}%` }}
+              >
+                <span className="text-[10px] font-bold text-white">{i.count}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 피칭 점수 vs 노출 우선순위 산점도 — 둘 다 높은(우상단) 기사가 가장 좋은 피칭 소재다
+ *  (2026-08-12). 점 위치가 겹칠 수 있어 제목은 hover 시 title 툴팁으로만 보여준다. */
+function PitchScatterChart({ articles }: { articles: ChatQueryResult['articles'] }) {
+  const points = articles.filter(
+    (a): a is ChatArticle & { pitchScore: number } => typeof a.pitchScore === 'number'
+  );
+  if (points.length === 0) return null;
+  const W = 640;
+  const H = 260;
+  const padL = 36;
+  const padB = 30;
+  const padT = 14;
+  const padR = 14;
+  const chartW = W - padL - padR;
+  const chartH = H - padT - padB;
+  const maxPriority = Math.max(...points.map((p) => p.priorityScore ?? 0), 100);
+
+  return (
+    <div className="bg-spark-surface border border-spark-border rounded-2xl shadow-card p-4">
+      <div className="text-[13px] font-semibold text-spark-ink-soft mb-1">피칭 점수 vs 노출 우선순위</div>
+      <div className="text-[11px] text-spark-muted mb-2">우상단에 가까울수록 좋은 피칭 소재예요</div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label="피칭 점수 대 노출 우선순위 산점도">
+        <line x1={padL} y1={padT} x2={padL} y2={padT + chartH} stroke="#E7E3DB" strokeWidth={1} />
+        <line x1={padL} y1={padT + chartH} x2={W - padR} y2={padT + chartH} stroke="#E7E3DB" strokeWidth={1} />
+        <text x={padL - 8} y={padT + 4} textAnchor="end" fontSize={10} fill="#8B8894">100점</text>
+        <text x={padL - 8} y={padT + chartH} textAnchor="end" fontSize={10} fill="#8B8894">0점</text>
+        <text x={W - padR} y={H - 6} textAnchor="end" fontSize={10} fill="#8B8894">우선순위 →</text>
+        <text x={padL} y={H - 6} textAnchor="start" fontSize={10} fill="#8B8894">피칭 점수 ↑</text>
+        {points.map((p) => {
+          const x = padL + Math.min((p.priorityScore ?? 0) / maxPriority, 1) * chartW;
+          const y = padT + chartH - Math.min(p.pitchScore / 100, 1) * chartH;
+          return (
+            <circle key={p.id} cx={x} cy={y} r={5} fill="#5046E5" opacity={0.72}>
+              <title>{`${p.title} — 피칭 ${p.pitchScore}점 / 우선순위 ${p.priorityScore ?? 0}`}</title>
+            </circle>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 /** 오탐 많은 키워드 표 — HTML 저장(chat-export.ts)의 noiseTable()과 같은 정보를 채팅 화면에도 보여준다. */
 function NoiseKeywordTable({ rows }: { rows: NonNullable<ChatQueryResult['noisyKeywords']> }) {
   return (
@@ -1610,17 +1749,98 @@ function NoiseKeywordTable({ rows }: { rows: NonNullable<ChatQueryResult['noisyK
 
 function StatList({ title, items }: { title: string; items: { name: string; count: number }[] }) {
   if (!items.length) return null;
+  const max = Math.max(...items.map((i) => i.count), 1);
   return (
     <div className="bg-spark-subtle border border-spark-border rounded-xl px-3 py-2.5">
       <div className="text-[11px] font-semibold text-spark-muted mb-1.5">{title}</div>
-      <ul className="space-y-1">
+      <ul className="space-y-1.5">
         {items.map((i) => (
-          <li key={i.name} className="flex items-center justify-between gap-2">
-            <span className="truncate text-spark-ink-soft">{i.name}</span>
-            <span className="shrink-0 font-bold text-spark-ink">{i.count}</span>
+          <li key={i.name}>
+            <div className="flex items-center justify-between gap-2 mb-0.5">
+              <span className="truncate text-spark-ink-soft">{i.name}</span>
+              <span className="shrink-0 font-bold text-spark-ink">{i.count}</span>
+            </div>
+            <div className="h-1 rounded-full bg-spark-border/60 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-spark-purple/50"
+                style={{ width: `${Math.max((i.count / max) * 100, 4)}%` }}
+              />
+            </div>
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/** 카테고리(스파크랩·포폴사·경쟁사·업계동향) 비율 도넛차트 — ToneDonutChart와 같은 SVG 패턴.
+ * "요즘 어떤 기사가 많아?" 같은 질문은 숫자 목록보다 비율이 한눈에 보이는 게 낫다(2026-08-12). */
+const CATEGORY_COLOR: Record<string, string> = {
+  sparklabs_self: '#5046E5',
+  portfolio_company: '#16A34A',
+  competitor: '#F59E0B',
+  industry_trend: '#3B82F6',
+  executive: '#EC4899',
+  live: '#8B8894',
+};
+const CATEGORY_COLOR_FALLBACK = '#8B8894';
+
+function CategoryDonutChart({ items }: { items: { category: string; count: number }[] }) {
+  const total = items.reduce((sum, i) => sum + i.count, 0);
+  if (total === 0) return null;
+  const R = 54;
+  const C = 2 * Math.PI * R;
+  const segments = items
+    .filter((i) => i.count > 0)
+    .map((i) => ({ label: categoryLabel(i.category), value: i.count, color: CATEGORY_COLOR[i.category] ?? CATEGORY_COLOR_FALLBACK }));
+  let cursor = 0;
+  const arcs = segments.map((s) => {
+    const dash = (s.value / total) * C;
+    const arc = { ...s, dash, offset: -cursor };
+    cursor += dash;
+    return arc;
+  });
+
+  return (
+    <div className="bg-spark-surface border border-spark-border rounded-2xl shadow-card p-4">
+      <div className="text-[13px] font-semibold text-spark-ink-soft mb-2">분류 비율</div>
+      <div className="flex items-center gap-6">
+        <svg viewBox="0 0 140 140" width={140} height={140} role="img" aria-label="분류별 기사 비율">
+          <g transform="translate(70,70) rotate(-90)">
+            <circle r={R} cx={0} cy={0} fill="none" stroke="#EDEAE2" strokeWidth={20} />
+            {arcs.map((a) => (
+              <circle
+                key={a.label}
+                r={R}
+                cx={0}
+                cy={0}
+                fill="none"
+                stroke={a.color}
+                strokeWidth={20}
+                strokeDasharray={`${a.dash} ${C - a.dash}`}
+                strokeDashoffset={a.offset}
+              />
+            ))}
+          </g>
+          <text x={70} y={66} textAnchor="middle" fontSize={20} fontWeight={800} fill="#2A2830">
+            {total.toLocaleString()}
+          </text>
+          <text x={70} y={84} textAnchor="middle" fontSize={11} fill="#8B8894">
+            건
+          </text>
+        </svg>
+        <div className="flex flex-col gap-1.5 text-[12px]">
+          {segments.map((s) => (
+            <div key={s.label} className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: s.color }} />
+              <span className="text-spark-ink-soft font-medium">{s.label}</span>
+              <span className="text-spark-muted">
+                {s.value.toLocaleString()}건 ({Math.round((s.value / total) * 100)}%)
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
