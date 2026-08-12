@@ -18,6 +18,7 @@ import {
   SCOPE_LABEL,
   type ChatQueryResult,
   type ChatResponse,
+  type ResultKind,
 } from '@/lib/sparkscope/chat-types';
 
 // 음성 입력(마이크) — 브라우저 Web Speech API. leeryeong 브랜치에서 먼저 만든 걸 이식(2026-08-11).
@@ -987,7 +988,14 @@ function ChatAnswer({
         </div>
       )}
 
-      {res.result && <ChatResult result={res.result} scopes={scopes} asTable={modes.includes('table')} />}
+      {res.result && (
+        <ChatResult
+          result={res.result}
+          scopes={scopes}
+          asTable={modes.includes('table')}
+          resultKind={res.resultKind}
+        />
+      )}
 
       {(res.summary || res.result) && (
         <button
@@ -1095,10 +1103,12 @@ function ChatResult({
   result,
   scopes,
   asTable,
+  resultKind,
 }: {
   result: ChatQueryResult;
   scopes: string[];
   asTable?: boolean;
+  resultKind?: ResultKind;
 }) {
   const fmtDate = (iso: string) => {
     const d = new Date(iso);
@@ -1160,6 +1170,19 @@ function ChatResult({
           </div>
         )}
       </div>
+
+      {/* 지표·추이 질문은 숫자 목록보다 달마다 막대가 나란히 놓인 그래프가 흐름이 한눈에
+          들어온다 — 예전엔 이 데이터(monthly)가 HTML로 저장할 때만 그래프로 보였고 채팅
+          화면에는 아예 안 나왔다(2026-08-12). */}
+      {resultKind === 'trend' && result.monthly && result.monthly.length > 0 && (
+        <MonthlyTrendChart items={result.monthly} />
+      )}
+
+      {/* 키워드·노이즈 질문은 "왜 오탐인지" 판단할 근거(오탐 예시·현재 설정)까지 표로 한눈에
+          봐야 바로 조치할 수 있다 — 이것도 예전엔 HTML 저장 때만 표로 보였다(2026-08-12). */}
+      {resultKind === 'noise' && result.noisyKeywords && result.noisyKeywords.length > 0 && (
+        <NoiseKeywordTable rows={result.noisyKeywords} />
+      )}
 
       {/* 기사 목록 */}
       {result.articles.length > 0 && (
@@ -1257,6 +1280,103 @@ function ChatResult({
       )}
 
       <p className="text-[11px] text-spark-muted">수집된 기사 DB 조회 결과입니다</p>
+    </div>
+  );
+}
+
+/** 월별 추이 막대그래프 — HTML 저장(chat-export.ts)의 monthlyChart()와 같은 모양을 채팅 화면에도 그린다. */
+function MonthlyTrendChart({ items }: { items: { month: string; count: number }[] }) {
+  const max = Math.max(...items.map((i) => i.count), 1);
+  const W = 640;
+  const H = 180;
+  const padL = 8;
+  const padB = 26;
+  const padT = 22;
+  const chartW = W - padL * 2;
+  const chartH = H - padT - padB;
+  const n = items.length;
+  const gap = chartW / n;
+  const barW = Math.min(44, gap * 0.55);
+
+  return (
+    <div className="bg-spark-surface border border-spark-border rounded-2xl shadow-card p-4">
+      <div className="text-[13px] font-semibold text-spark-ink-soft mb-2">월별 추이</div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label="월별 기사 건수 추이">
+        <line x1={padL} y1={padT + chartH} x2={W - padL} y2={padT + chartH} stroke="#E7E3DB" strokeWidth={1} />
+        {items.map((it, i) => {
+          const h = Math.round((it.count / max) * chartH);
+          const x = padL + gap * i + (gap - barW) / 2;
+          const y = padT + (chartH - h);
+          const [, m] = it.month.split('-');
+          const label = m ? `${parseInt(m, 10)}월` : it.month;
+          return (
+            <g key={it.month}>
+              <rect x={x} y={y} width={barW} height={Math.max(h, 1)} rx={3} fill="#5046E5" opacity={it.count > 0 ? 0.82 : 0.18} />
+              <text x={x + barW / 2} y={y - 6} textAnchor="middle" fontSize={11} fontWeight={700} fill="#514E5C">
+                {it.count.toLocaleString()}
+              </text>
+              <text x={x + barW / 2} y={H - 8} textAnchor="middle" fontSize={11} fill="#8B8894">
+                {label}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/** 오탐 많은 키워드 표 — HTML 저장(chat-export.ts)의 noiseTable()과 같은 정보를 채팅 화면에도 보여준다. */
+function NoiseKeywordTable({ rows }: { rows: NonNullable<ChatQueryResult['noisyKeywords']> }) {
+  return (
+    <div className="bg-spark-surface border border-spark-border rounded-2xl shadow-card overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-spark-border text-[13px] font-semibold text-spark-ink-soft">
+        오탐 많은 키워드 {rows.length}개
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[13px] border-collapse">
+          <thead>
+            <tr className="bg-spark-subtle text-spark-muted text-[11px]">
+              <th className="text-left font-semibold px-3 py-2">키워드</th>
+              <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">상태</th>
+              <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">오탐</th>
+              <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">정상</th>
+              <th className="text-left font-semibold px-3 py-2">현재 설정</th>
+              <th className="text-left font-semibold px-3 py-2">오탐 예시</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-spark-border">
+            {rows.map((r) => (
+              <tr key={r.name} className="align-top hover:bg-spark-subtle transition">
+                <td className="px-3 py-2 font-semibold text-spark-purple whitespace-nowrap">{r.name}</td>
+                <td className="px-3 py-2 whitespace-nowrap">
+                  {r.status === 'ACTIVE' ? (
+                    <span className="px-1.5 py-0.5 rounded-md bg-spark-subtle text-spark-muted text-[11px] font-semibold">
+                      ACTIVE
+                    </span>
+                  ) : (
+                    <span className="px-1.5 py-0.5 rounded-md bg-red-50 text-red-600 text-[11px] font-semibold">
+                      {r.status ?? 'UNKNOWN'}
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-2 font-bold text-spark-ink whitespace-nowrap">{r.noise.toLocaleString()}건</td>
+                <td className="px-3 py-2 text-spark-muted whitespace-nowrap">{r.kept.toLocaleString()}건</td>
+                <td className="px-3 py-2 text-spark-muted text-[12px]">
+                  {r.current?.contextWords && <div>문맥어: {r.current.contextWords}</div>}
+                  {r.current?.excludeWords && <div>제외어: {r.current.excludeWords}</div>}
+                  {!r.current?.contextWords && !r.current?.excludeWords && '없음'}
+                </td>
+                <td className="px-3 py-2 text-spark-muted text-[12px]">
+                  {(r.samples ?? []).slice(0, 3).map((s, i) => (
+                    <div key={i}>{s}</div>
+                  ))}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
