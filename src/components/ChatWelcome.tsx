@@ -1042,24 +1042,53 @@ function lastQuestionBefore(messages: Msg[], index: number): string {
  *   피드백). 그룹으로 묶지 않고 그냥 목록으로 보여주되, 기사마다 관련 회사를 칩(배지)으로
  *   붙여서 "이 기사가 어느 회사와 관련 있는지"만 바로 보이게 한다.
  */
-function organizeArticles(articles: ChatQueryResult['articles']): { topics: { tag: string; items: ChatQueryResult['articles'] }[]; companyArticles: ChatQueryResult['articles'] } {
+function organizeArticles(articles: ChatQueryResult['articles']): {
+  topics: { tag: string; items: ChatQueryResult['articles'] }[];
+  companies: { tag: string; items: ChatQueryResult['articles'] }[];
+  companyArticles: ChatQueryResult['articles'];
+} {
   const topicGroups = new Map<string, ChatQueryResult['articles']>();
-  const companyArticles: ChatQueryResult['articles'] = [];
+  const companyGroups = new Map<string, ChatQueryResult['articles']>();
+  const companyTagged: ChatQueryResult['articles'] = [];
   for (const a of articles) {
     if (a.tagKind === 'topic') {
       const tag = a.matchedKeyword || '기타';
       if (!topicGroups.has(tag)) topicGroups.set(tag, []);
       topicGroups.get(tag)!.push(a);
     } else {
-      companyArticles.push(a);
+      companyTagged.push(a);
+      // matchedKeyword는 "루센트블록" 하나일 수도, "차차, 원티드랩"처럼 여러 개일 수도 있다.
+      // 예전엔 이 문자열 전체(조합)를 그룹 키로 써서 회사 조합이 겹치는 경우가 드물어
+      // 대부분 1건짜리 그룹으로 쪼개졌다(2026-08-12 실사용 피드백으로 한 번 되돌림). 회사
+      // 이름 하나하나를 키로 쓰면 조합이 아니라 실제 회사 단위로 묶여서, 기사가 회사를
+      // 여러 개 언급해도 각 회사 그룹에 다 들어간다(중복 노출은 허용 — 주제 태그 그룹과 같은 방식).
+      const names = (a.matchedKeyword || '').split(',').map((s) => s.trim()).filter(Boolean);
+      for (const name of names) {
+        if (!companyGroups.has(name)) companyGroups.set(name, []);
+        companyGroups.get(name)!.push(a);
+      }
     }
   }
   const topics = [...topicGroups.entries()]
     .map(([tag, items]) => ({ tag, items }))
     .filter((g) => g.items.length > 1) // 1건짜리 주제 그룹도 묶는 의미가 없으니 목록으로 내림
     .sort((a, b) => b.items.length - a.items.length);
-  const grouped = new Set(topics.flatMap((g) => g.items.map((a) => a.id)));
-  return { topics, companyArticles: [...companyArticles, ...articles.filter((a) => a.tagKind === 'topic' && !grouped.has(a.id))] };
+  const companies = [...companyGroups.entries()]
+    .map(([tag, items]) => ({ tag, items }))
+    .filter((g) => g.items.length > 1) // 그 회사 기사가 1건뿐이면 묶을 의미가 없으니 목록으로 내림
+    .sort((a, b) => b.items.length - a.items.length);
+
+  const groupedTopicIds = new Set(topics.flatMap((g) => g.items.map((a) => a.id)));
+  const groupedCompanyIds = new Set(companies.flatMap((g) => g.items.map((a) => a.id)));
+
+  return {
+    topics,
+    companies,
+    companyArticles: [
+      ...companyTagged.filter((a) => !groupedCompanyIds.has(a.id)),
+      ...articles.filter((a) => a.tagKind === 'topic' && !groupedTopicIds.has(a.id)),
+    ],
+  };
 }
 
 /** 근거 기사 목록의 행 하나. showCompanyTags=true면 관련 회사를 칩(배지)으로 따로 붙인다. */
@@ -1232,13 +1261,36 @@ function ChatResult({
             </div>
           ) : organized ? (
             <div className="divide-y divide-spark-border">
-              {/* 포트폴리오사와 엮인 기사 — 회사 조합별로 나누면 1건짜리 그룹이 잔뜩 생겨서
-                  (2026-08-12 실사용 피드백), 묶지 않고 목록으로 보여주되 기사마다 관련
-                  회사를 칩으로 붙인다. */}
+              {/* 같은 포트폴리오사 기사끼리 묶는다 — 예전엔 회사 "조합"(예: "차차, 원티드랩")을
+                  통째로 그룹 키로 써서 조합이 겹치는 경우가 드물어 1건짜리 그룹만 잔뜩 생겼다
+                  (2026-08-12 이전 피드백으로 한 번 되돌림). 지금은 회사 이름 하나하나를 키로
+                  묶어서 실제 회사 단위 클러스터링이 되고, 기사가 회사를 여러 개 언급하면 각
+                  회사 그룹에 중복으로 들어간다(주제 태그 그룹과 같은 방식, 2026-08-12). */}
+              {organized.companies.map((g) => (
+                <details key={g.tag} open={organized.companies.length <= 4} className="group">
+                  <summary className="list-none flex items-center justify-between gap-2 px-4 py-2.5 cursor-pointer hover:bg-spark-subtle transition select-none">
+                    <span className="flex items-center gap-1.5 text-[13px] font-semibold text-spark-purple">
+                      <span>🏢</span>
+                      {g.tag}
+                    </span>
+                    <span className="flex items-center gap-2 text-[11px] text-spark-muted">
+                      {g.items.length}건
+                      <span className="transition-transform group-open:rotate-180">▾</span>
+                    </span>
+                  </summary>
+                  <ul className="divide-y divide-spark-border border-t border-spark-border">
+                    {g.items.map((a) => (
+                      <ArticleRow key={a.id} a={a} fmtDate={fmtDate} showCompanyTags />
+                    ))}
+                  </ul>
+                </details>
+              ))}
+              {/* 위 회사 그룹에 안 묶인 기사(그 회사 기사가 1건뿐이거나 회사 태그가 아예 없는 경우) —
+                  묶어도 의미 없는 1건짜리 그룹을 강제로 만들지 않고 그냥 목록으로 보여준다. */}
               {organized.companyArticles.length > 0 && (
                 <div>
                   <div className="px-4 py-2 text-[11px] font-semibold text-spark-muted bg-spark-subtle/60">
-                    🏢 포트폴리오사와 매칭된 기사 {organized.companyArticles.length}건
+                    🏢 그 외 매칭된 기사 {organized.companyArticles.length}건
                   </div>
                   <ul className="divide-y divide-spark-border">
                     {organized.companyArticles.map((a) => (
