@@ -74,8 +74,49 @@ const ALIASES: Record<string, string> = {
 // 26개 확정 매체 밖이지만 자주 걸리는 도메인 → 한글 매체명 (표시용, 티어 목록과는 별개).
 // 네이버 API는 언론사명을 안 줘서 도메인만으로 source를 만드는데(domainToSource), 그 결과가
 // 그대로 화면에 노출돼 "topstarnews.net" 같은 도메인이 매체명 자리에 뜨는 문제가 있었다.
+// 2026-08-12: 구글 뉴스 경로도 정규화를 안 거치던 버그를 고치면서, 실제 DB에 자주 쌓인
+// 도메인(90일 기준 상위)을 훑어 아는 매체를 추가함. v.daum.net은 다음이 여러 언론사 기사를
+// 묶어 보여주는 뷰어 주소라 원 매체를 알 수 없어 "다음뉴스"로 대체 표시한다.
 const EXTRA_DOMAIN_ALIASES: Record<string, string> = {
   'topstarnews.net': '탑스타뉴스',
+  'v.daum.net': '다음뉴스',
+  'khan.co.kr': '경향신문',
+  'newsis.com': '뉴시스',
+  'newspim.com': '뉴스핌',
+  'segye.com': '세계일보',
+  'kmib.co.kr': '국민일보',
+  'seoul.co.kr': '서울신문',
+  'hankookilbo.com': '한국일보',
+  'munhwa.com': '문화일보',
+  'pressian.com': '프레시안',
+  'ohmynews.com': '오마이뉴스',
+  'koreatimes.co.kr': '코리아타임스',
+  'koreaherald.com': '코리아헤럴드',
+  'kukinews.com': '쿠키뉴스',
+  'ytn.co.kr': 'YTN',
+  'mbn.co.kr': 'MBN',
+  'inews24.com': '아이뉴스24',
+  'zdnet.co.kr': 'ZDNet Korea',
+  'dt.co.kr': '디지털타임스',
+  'ddaily.co.kr': '디지털데일리',
+  'newstomato.com': '뉴스토마토',
+  'ajunews.com': '아주경제',
+  'tokenpost.kr': '토큰포스트',
+  'coinness.com': '코인니스',
+  'businesspost.co.kr': '비즈니스포스트',
+  'dailian.co.kr': '데일리안',
+  'newsis.co.kr': '뉴시스',
+  'gukjenews.com': '국제뉴스',
+  'ebn.co.kr': 'EBN',
+  'pinpointnews.co.kr': '핀포인트뉴스',
+  'newsworks.co.kr': '뉴스웍스',
+  'g-enews.com': '글로벌이코노믹',
+  'thepublic.kr': '더퍼블릭',
+  'boannews.com': '보안뉴스',
+  'dealsite.co.kr': '딜사이트',
+  'numbers.co.kr': '넘버스',
+  'outstanding.kr': '아웃스탠딩',
+  'wikitree.co.kr': '위키트리',
 };
 
 // 영문 표기(대소문자 무시) → 표준 매체명. Google/Naver가 영문명으로 주는 경우 대응.
@@ -107,6 +148,16 @@ export function normalizeSource(source: string): string {
   // "XXX신문"이 등록 매체명이면 접미사 제거
   const noPaper = s.replace(/신문$/, '');
   if (NAME_SET.has(noPaper)) return noPaper;
+  // 서브도메인(biz.chosun.com, sports.donga.com 등) → 등록된 상위 도메인과 같은 매체로 취급.
+  // 도메인 자체가 아니라 "확실히 딸린 하위 페이지"일 때만 맞도록 앞에 뭔가 붙은 경우로 제한한다.
+  if (s.includes('.')) {
+    const parts = s.split('.');
+    for (let i = 1; i < parts.length - 1; i++) {
+      const parent = parts.slice(i).join('.');
+      if (DOMAIN_TO_NAME.has(parent)) return DOMAIN_TO_NAME.get(parent)!;
+      if (EXTRA_DOMAIN_ALIASES[parent]) return EXTRA_DOMAIN_ALIASES[parent];
+    }
+  }
   return s;
 }
 

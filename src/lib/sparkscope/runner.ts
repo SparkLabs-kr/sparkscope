@@ -232,7 +232,10 @@ export async function runDailyDigest(opts: RunOptions = {}) {
             create: {
               title: a.title,
               link: a.link,
-              source: a.source,
+              // a.source는 수집 단계에서 놓친 매체가 있을 수 있어(2026-08-12) DB에 넣는 시점에
+              // 다시 한번 정규화한다 — normalizeSource는 모르는 값이면 원본을 그대로 돌려주므로
+              // 안전하다.
+              source: normalizeSource(a.source),
               pubDate: a.pubDate,
               matchedKeyword: a.matchedKeyword,
               category: a.category,

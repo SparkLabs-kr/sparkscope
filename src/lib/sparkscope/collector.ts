@@ -387,7 +387,10 @@ async function fetchGoogleNews(keyword: string): Promise<SourceItem[]> {
       if (isNaN(pubDate.getTime())) continue;
     } catch { continue; }
 
-    out.push({ title, link, source, pubDate });
+    // 네이버 경로(아래)는 도메인→매체명 정규화를 거치는데 구글 경로는 안 거쳐서, "이데일리"
+    // 대신 "edaily.co.kr"처럼 이미 등록된 매체조차 도메인 그대로 저장되던 문제(2026-08-12
+    // 발견). 구글이 주는 source 값도 여기서 같이 정규화한다.
+    out.push({ title, link, source: normalizeSource(source), pubDate });
   }
   return out;
 }
