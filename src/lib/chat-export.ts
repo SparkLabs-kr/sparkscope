@@ -66,11 +66,12 @@ function statCard(title: string, items: { name: string; count: number }[]) {
 }
 
 /**
- * 월별 추이용 시계열 막대그래프 — 순수 인라인 SVG(외부 차트 라이브러리 없음, 파일 하나로
- * 열리는 원칙 유지). 예전엔 statCard(가로 막대 목록)로 뭉뚱그려 보여줘서 "시간 흐름"이라는
- * 감이 안 왔는데, 실제로 달마다 막대가 나란히 놓여야 늘고 주는 흐름이 한눈에 들어온다(2026-08-11).
+ * 추이 그래프 — 순수 인라인 SVG(외부 차트 라이브러리 없음, 파일 하나로 열리는 원칙 유지).
+ * 채팅 화면의 TrendChart(ChatWelcome.tsx)와 같은 기준으로 그린다(2026-08-12) — 기간을
+ * 짧게(오늘·이번 주) 골라 일 단위로 쪼갠 데이터는 막대, 그 외 월 단위 6개월치는 선그래프.
+ * 예전엔 이 함수가 막대 하나뿐이라 화면(채팅)과 저장한 HTML의 그래프 모양이 달랐다.
  */
-function monthlyChart(items: { month: string; count: number }[]) {
+function trendChart(items: { month: string; count: number }[], granularity: 'day' | 'month') {
   if (!items.length) return '';
   const max = Math.max(...items.map((i) => i.count), 1);
   const W = 720;
@@ -82,30 +83,130 @@ function monthlyChart(items: { month: string; count: number }[]) {
   const chartH = H - padT - padB;
   const n = items.length;
   const gap = chartW / n;
-  const barW = Math.min(48, gap * 0.55);
+  const title = granularity === 'day' ? '일별 추이 (최근 14일)' : '월별 추이 (최근 6개월)';
+  const label = (raw: string) => {
+    if (granularity === 'day') {
+      const [m, d] = raw.split('-');
+      return m && d ? `${parseInt(m, 10)}/${parseInt(d, 10)}` : raw;
+    }
+    const [, m] = raw.split('-');
+    return m ? `${parseInt(m, 10)}월` : raw;
+  };
+  const axis = `<line x1="${padL}" y1="${padT + chartH}" x2="${W - padL}" y2="${padT + chartH}" stroke="#E7E3DB" stroke-width="1" />`;
 
-  const bars = items
-    .map((it, i) => {
-      const h = Math.round((it.count / max) * chartH);
-      const x = padL + gap * i + (gap - barW) / 2;
-      const y = padT + (chartH - h);
-      const [, m] = it.month.split('-');
-      const label = m ? `${parseInt(m, 10)}월` : it.month;
-      return `<g>
-        <rect x="${x}" y="${y}" width="${barW}" height="${Math.max(h, 1)}" rx="3" fill="#5046E5" opacity="${it.count > 0 ? 0.82 : 0.18}" />
-        <text x="${x + barW / 2}" y="${y - 6}" text-anchor="middle" font-size="11" font-weight="700" fill="#514E5C">${it.count.toLocaleString()}</text>
-        <text x="${x + barW / 2}" y="${H - 12}" text-anchor="middle" font-size="11" fill="#8B8894">${esc(label)}</text>
-      </g>`;
-    })
+  if (granularity === 'day') {
+    const barW = Math.min(34, gap * 0.6);
+    const bars = items
+      .map((it, i) => {
+        const h = Math.round((it.count / max) * chartH);
+        const x = padL + gap * i + (gap - barW) / 2;
+        const y = padT + (chartH - h);
+        return `<g>
+          <rect x="${x}" y="${y}" width="${barW}" height="${Math.max(h, 1)}" rx="3" fill="#5046E5" opacity="${it.count > 0 ? 0.82 : 0.18}" />
+          ${it.count > 0 ? `<text x="${x + barW / 2}" y="${y - 6}" text-anchor="middle" font-size="10" font-weight="700" fill="#514E5C">${it.count.toLocaleString()}</text>` : ''}
+          <text x="${x + barW / 2}" y="${H - 12}" text-anchor="middle" font-size="10" fill="#8B8894">${esc(label(it.month))}</text>
+        </g>`;
+      })
+      .join('');
+    return `<div class="card chart-card">
+      <h4>${title}</h4>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="${title}">${axis}${bars}</svg>
+    </div>`;
+  }
+
+  const points = items.map((it, i) => {
+    const x = padL + gap * i + gap / 2;
+    const y = padT + (chartH - Math.round((it.count / max) * chartH));
+    return { x, y, it };
+  });
+  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const areaPath = `${linePath} L ${points[points.length - 1].x} ${padT + chartH} L ${points[0].x} ${padT + chartH} Z`;
+  const dots = points
+    .map(
+      (p) => `<g>
+        <circle cx="${p.x}" cy="${p.y}" r="4" fill="#5046E5" />
+        <text x="${p.x}" y="${p.y - 10}" text-anchor="middle" font-size="11" font-weight="700" fill="#514E5C">${p.it.count.toLocaleString()}</text>
+        <text x="${p.x}" y="${H - 12}" text-anchor="middle" font-size="11" fill="#8B8894">${esc(label(p.it.month))}</text>
+      </g>`
+    )
     .join('');
 
   return `<div class="card chart-card">
-    <h4>월별 추이</h4>
-    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="월별 기사 건수 추이">
-      <line x1="${padL}" y1="${padT + chartH}" x2="${W - padL}" y2="${padT + chartH}" stroke="#E7E3DB" stroke-width="1" />
-      ${bars}
+    <h4>${title}</h4>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="${title}">
+      ${axis}
+      <path d="${areaPath}" fill="#5046E5" opacity="0.08" stroke="none" />
+      <path d="${linePath}" fill="none" stroke="#5046E5" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" />
+      ${dots}
     </svg>
   </div>`;
+}
+
+/** 도넛차트 공통 — 채팅 화면의 ToneDonutChart/CategoryDonutChart와 같은 SVG 패턴(2026-08-12). */
+function donutChart(title: string, ariaLabel: string, segments: { label: string; value: number; color: string }[]) {
+  const total = segments.reduce((sum, s) => sum + s.value, 0);
+  if (total === 0) return '';
+  const R = 54;
+  const C = 2 * Math.PI * R;
+  let cursor = 0;
+  const arcs = segments
+    .filter((s) => s.value > 0)
+    .map((s) => {
+      const dash = (s.value / total) * C;
+      const arc = `<circle r="${R}" cx="0" cy="0" fill="none" stroke="${s.color}" stroke-width="20" stroke-dasharray="${dash} ${C - dash}" stroke-dashoffset="${-cursor}" />`;
+      cursor += dash;
+      return arc;
+    })
+    .join('');
+  const legend = segments
+    .map(
+      (s) => `<div class="donut-legend-row">
+        <span class="donut-dot" style="background:${s.color}"></span>
+        <span>${esc(s.label)}</span>
+        <span class="dimtext">${s.value.toLocaleString()}건 (${Math.round((s.value / total) * 100)}%)</span>
+      </div>`
+    )
+    .join('');
+
+  return `<div class="card chart-card">
+    <h4>${esc(title)}</h4>
+    <div class="donut-wrap">
+      <svg viewBox="0 0 140 140" width="140" height="140" role="img" aria-label="${esc(ariaLabel)}">
+        <g transform="translate(70,70) rotate(-90)">
+          <circle r="${R}" cx="0" cy="0" fill="none" stroke="#EDEAE2" stroke-width="20" />
+          ${arcs}
+        </g>
+        <text x="70" y="66" text-anchor="middle" font-size="20" font-weight="800" fill="#2A2830">${total.toLocaleString()}</text>
+        <text x="70" y="84" text-anchor="middle" font-size="11" fill="#8B8894">건</text>
+      </svg>
+      <div class="donut-legend">${legend}</div>
+    </div>
+  </div>`;
+}
+
+const CATEGORY_COLOR: Record<string, string> = {
+  sparklabs_self: '#5046E5',
+  portfolio_company: '#16A34A',
+  competitor: '#F59E0B',
+  industry_trend: '#3B82F6',
+  executive: '#EC4899',
+  live: '#8B8894',
+};
+
+/** 피칭 점수 순위 막대그래프 — 채팅 화면의 PitchScoreBarChart와 같은 기준(2026-08-12). */
+function pitchScoreBarChart(articles: ChatQueryResult['articles']) {
+  const points = articles.filter((a) => typeof a.pitchScore === 'number').slice(0, 10);
+  if (!points.length) return '';
+  const rows = points
+    .map(
+      (p) => `<div class="row">
+        <span class="row-name">${p.matchedKeyword ? `[${esc(p.matchedKeyword)}] ` : ''}${esc(p.title)}</span>
+        <span class="bar"><i style="width:${Math.max(Math.min(p.pitchScore as number, 100), 6)}%"></i></span>
+        <b>${p.pitchScore}점</b>
+      </div>`
+    )
+    .join('');
+  return `<div class="card chart-card"><h4>피칭 점수 순위</h4>${rows}</div>`;
 }
 
 /**
@@ -168,6 +269,27 @@ export function buildReportHtml(opts: {
     ? `<p class="note">${esc(r.deltaUnavailableReason ?? r.deltaCaution ?? '')}</p>`
     : '';
 
+  // 채팅 화면(ChatWelcome.tsx)에 뜨는 그래프와 저장한 HTML의 그래프가 서로 다르면 안
+  // 된다는 실사용 피드백(2026-08-12)으로, 같은 resultKind 조건으로 같은 차트를 그린다.
+  const toneDonutBlock =
+    res.resultKind === 'search' && r && (r.positiveCount ?? 0) + (r.neutralCount ?? 0) + r.negativeCount > 0
+      ? donutChart('톤 분포', '긍정·중립·부정 톤 비율', [
+          { label: '긍정', value: r.positiveCount ?? 0, color: '#16A34A' },
+          { label: '중립', value: r.neutralCount ?? 0, color: '#8B8894' },
+          { label: '부정', value: r.negativeCount, color: '#DC2626' },
+        ])
+      : '';
+  const categoryDonutBlock =
+    res.resultKind === 'search' && r && r.byCategory.filter((c) => c.count > 0).length > 1
+      ? donutChart(
+          '분류 비율',
+          '분류별 기사 비율',
+          r.byCategory.map((c) => ({ label: categoryLabel(c.category), value: c.count, color: CATEGORY_COLOR[c.category] ?? '#8B8894' }))
+        )
+      : '';
+  const pitchBarBlock =
+    res.resultKind === 'pitch' && r?.articles.some((a) => a.pitchScore != null) ? pitchScoreBarChart(r.articles) : '';
+
   const statBlock = r
     ? `<section>
         <h2>집계</h2>
@@ -186,7 +308,10 @@ export function buildReportHtml(opts: {
           ${statCard('회사·키워드', r.topCompanies)}
           ${statCard('매체', r.topSources)}
         </div>
-        ${r.monthly?.length ? monthlyChart(r.monthly) : ''}
+        ${res.resultKind === 'trend' && r.monthly?.length ? trendChart(r.monthly, r.trendGranularity ?? 'month') : ''}
+        ${toneDonutBlock}
+        ${categoryDonutBlock}
+        ${pitchBarBlock}
       </section>`
     : '';
 
@@ -260,6 +385,11 @@ export function buildReportHtml(opts: {
   .card { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
   .card h4 { margin: 0 0 8px; font-size: 11px; color: var(--muted); font-weight: 700; letter-spacing: .04em; }
   .card h4:empty { display: none; }
+  .chart-card { margin-top: 14px; }
+  .donut-wrap { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .donut-legend { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; }
+  .donut-legend-row { display: flex; align-items: center; gap: 7px; }
+  .donut-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
   .row { display: grid; grid-template-columns: 1fr 46px auto; align-items: center; gap: 8px; margin-bottom: 5px; }
   .row-name { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row b { font-size: 12.5px; font-variant-numeric: tabular-nums; }
