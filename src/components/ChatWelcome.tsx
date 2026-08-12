@@ -1132,6 +1132,9 @@ function ArticleRow({ a, fmtDate, showCompanyTags }: { a: ChatQueryResult['artic
           <span>·</span>
           <span>{categoryLabel(a.category)}</span>
         </div>
+        {a.oneLiner && (
+          <p className="mt-1.5 text-[12px] text-gray-600 leading-relaxed">{a.oneLiner}</p>
+        )}
         {companyTags.length > 0 && (
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
             <span className="text-[10px] text-spark-muted">🏢 관련 포트폴리오사</span>
@@ -1167,6 +1170,23 @@ function ChatResult({
     return `${d.getMonth() + 1}/${d.getDate()}`;
   };
   const organized = asTable ? null : organizeArticles(result.articles);
+
+  // 유사 키워드 추천 — 현재 검색어와 다르면서 자주 나온 키워드들
+  const keywordFreq = new Map<string, number>();
+  result.articles.forEach(a => {
+    if (a.matchedKeyword) {
+      a.matchedKeyword.split(',').forEach(k => {
+        const keyword = k.trim();
+        if (keyword && !result.terms.includes(keyword)) {
+          keywordFreq.set(keyword, (keywordFreq.get(keyword) || 0) + 1);
+        }
+      });
+    }
+  });
+  const suggestedKeywords = Array.from(keywordFreq.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([k]) => k);
 
   return (
     <div className="w-full space-y-2.5">
@@ -1222,6 +1242,24 @@ function ChatResult({
           </div>
         )}
       </div>
+
+      {/* 유사 키워드 제안 */}
+      {suggestedKeywords.length > 0 && (
+        <div className="p-4 bg-purple-50 border border-purple-200 rounded-2xl">
+          <p className="text-[12px] text-purple-700 font-semibold mb-2">혹시 이것도 검색해보시겠어요?</p>
+          <div className="flex flex-wrap gap-2">
+            {suggestedKeywords.map(kw => (
+              <button
+                key={kw}
+                onClick={() => onLiveSearch?.(kw)}
+                className="px-3 py-1.5 bg-purple-200 hover:bg-purple-300 text-purple-900 text-[12px] font-semibold rounded-lg transition"
+              >
+                {kw}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 실시간 검색 제안 — 결과가 8건 미만이면 구글뉴스·네이버뉴스에서 추가 검색할 수 있다 */}
       {result.needsLiveSearch && !loading && onLiveSearch && (
