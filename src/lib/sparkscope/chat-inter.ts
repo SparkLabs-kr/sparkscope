@@ -12,7 +12,7 @@
 import { prisma } from '@/lib/prisma';
 import { PERIOD_LABEL } from './chat-types';
 import type { ChatPeriod, ChatQueryResult } from './chat-types';
-import { resolvePeriod, previousRange } from './chat-query';
+import { resolvePeriod, previousRange, dedupeArticles } from './chat-query';
 
 export type InterInput = {
   period: ChatPeriod;
@@ -138,21 +138,28 @@ export async function runInterQuery(input: InterInput): Promise<InterOutcome> {
     riskCount: 0,
     monthly: null,
     noisyKeywords: null,
-    articles: rows.slice(0, limit).map((r) => ({
-      id: r.id,
-      // 한국어 번역이 있으면 그걸 보여주고, 원문 제목은 아래 줄에 남긴다.
-      title: r.titleKo || r.news.title,
-      link: r.news.url,
-      source: r.news.source,
-      pubDate: r.news.publishedAt.toISOString(),
-      category: r.domain ?? 'inter',
-      // 이 자리는 화면에서 "회사·키워드"로 보인다 — 엮인 포폴사가 있으면 그게 제일 유용하다.
-      matchedKeyword: r.matches.map((m) => m.companyName).join(', ') || r.topicSector || '해외',
-      tone: null,
-      riskFlag: null,
-      oneLiner: r.titleKo ? r.news.title : r.reason,
-      importance: null,
-    })),
+    // 같은 사건을 매체마다 다른 문구로 다룬 기사가 그대로 다 나오는 문제가 있었다
+    // (예: "시온나 낭성섬유증 임상 실패" 기사가 BioPharma Dive·Endpoints News 두 곳에
+    // 각각 실려 화면에 2번 뜸, 2026-08-11 발견). 국내 검색(runChatQuery)이 이미 쓰는
+    // dedupeArticles를 여기도 적용한다 — limit으로 자르기 전에, 300건 전체 풀에서
+    // 먼저 접어야 진짜 서로 다른 사건 수만큼 화면에 채워진다.
+    articles: dedupeArticles(
+      rows.map((r) => ({
+        id: r.id,
+        // 한국어 번역이 있으면 그걸 보여주고, 원문 제목은 아래 줄에 남긴다.
+        title: r.titleKo || r.news.title,
+        link: r.news.url,
+        source: r.news.source,
+        pubDate: r.news.publishedAt.toISOString(),
+        category: r.domain ?? 'inter',
+        // 이 자리는 화면에서 "회사·키워드"로 보인다 — 엮인 포폴사가 있으면 그게 제일 유용하다.
+        matchedKeyword: r.matches.map((m) => m.companyName).join(', ') || r.topicSector || '해외',
+        tone: null as string | null,
+        riskFlag: null as string | null,
+        oneLiner: r.titleKo ? r.news.title : r.reason,
+        importance: null as string | null,
+      }))
+    ).slice(0, limit),
   };
 
   return { result, facets };

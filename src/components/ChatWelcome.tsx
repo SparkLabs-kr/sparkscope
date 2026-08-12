@@ -1016,6 +1016,59 @@ function lastQuestionBefore(messages: Msg[], index: number): string {
 }
 
 /** 조회 결과 — DB 집계 + 기사 목록 */
+/**
+ * 근거 기사를 매체명이 아니라 주제 태그(matchedKeyword — 회사명 또는 해외 트렌드의
+ * topicSector)로 묶는다. 예전엔 그냥 최신순으로 쭉 나열만 해서, 특히 해외 트렌드처럼
+ * 여러 주제가 섞인 결과는 "신약발굴 12건, 항암 8건..."처럼 한눈에 안 들어왔다(2026-08-11
+ * 실사용 피드백). 묶어도 의미가 없는 경우(태그가 하나뿐이거나, 다들 태그가 제각각이라
+ * 묶음 하나에 기사 1건씩만 있는 경우)엔 null을 돌려줘서 호출부가 기존 평범한 목록으로
+ * 그대로 보여주게 한다.
+ */
+function groupArticlesByTag(articles: ChatQueryResult['articles']): { tag: string; items: ChatQueryResult['articles'] }[] | null {
+  const groups = new Map<string, ChatQueryResult['articles']>();
+  for (const a of articles) {
+    const tag = a.matchedKeyword || '기타';
+    if (!groups.has(tag)) groups.set(tag, []);
+    groups.get(tag)!.push(a);
+  }
+  if (groups.size <= 1 || groups.size >= articles.length) return null;
+  return [...groups.entries()]
+    .map(([tag, items]) => ({ tag, items }))
+    .sort((a, b) => b.items.length - a.items.length);
+}
+
+/** 근거 기사 목록의 행 하나 — 태그별 묶음 안에서는 태그가 이미 그룹 제목에 나와있으니 중복 표시 안 함(showTag=false). */
+function ArticleRow({ a, fmtDate, showTag }: { a: ChatQueryResult['articles'][number]; fmtDate: (iso: string) => string; showTag: boolean }) {
+  return (
+    <li>
+      <a href={a.link} target="_blank" rel="noreferrer" className="block px-4 py-3 hover:bg-spark-subtle transition">
+        <div className="flex items-start gap-2">
+          <span className="text-[14px] text-spark-ink leading-snug">{a.title}</span>
+          {a.tone === 'NEGATIVE' && (
+            <span className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-bold">부정</span>
+          )}
+          {a.riskFlag && (
+            <span className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-bold">⚠</span>
+          )}
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-spark-muted">
+          <span>{a.source}</span>
+          <span>·</span>
+          <span>{fmtDate(a.pubDate)}</span>
+          <span>·</span>
+          <span>{categoryLabel(a.category)}</span>
+          {showTag && a.matchedKeyword && (
+            <>
+              <span>·</span>
+              <span className="text-spark-purple font-semibold">{a.matchedKeyword}</span>
+            </>
+          )}
+        </div>
+      </a>
+    </li>
+  );
+}
+
 function ChatResult({
   result,
   scopes,
@@ -1029,6 +1082,7 @@ function ChatResult({
     const d = new Date(iso);
     return `${d.getMonth() + 1}/${d.getDate()}`;
   };
+  const groups = asTable ? null : groupArticlesByTag(result.articles);
 
   return (
     <div className="w-full space-y-2.5">
@@ -1131,42 +1185,33 @@ function ChatResult({
                 </tbody>
               </table>
             </div>
+          ) : groups ? (
+            // 태그별로 묶어서 접었다 펼 수 있게 — <details>는 별도 JS 상태 없이도
+            // 브라우저가 알아서 펼침/접힘을 기억해준다. 건수 많은 태그부터 위로.
+            <div className="divide-y divide-spark-border">
+              {groups.map((g) => (
+                <details key={g.tag} open={groups.length <= 4} className="group">
+                  <summary className="list-none flex items-center justify-between gap-2 px-4 py-2.5 cursor-pointer hover:bg-spark-subtle transition select-none">
+                    <span className="text-[13px] font-semibold text-spark-purple">{g.tag}</span>
+                    <span className="flex items-center gap-2 text-[11px] text-spark-muted">
+                      {g.items.length}건
+                      <span className="transition-transform group-open:rotate-180">▾</span>
+                    </span>
+                  </summary>
+                  <ul className="divide-y divide-spark-border border-t border-spark-border">
+                    {g.items.map((a) => (
+                      <ArticleRow key={a.id} a={a} fmtDate={fmtDate} showTag={false} />
+                    ))}
+                  </ul>
+                </details>
+              ))}
+            </div>
           ) : (
-          <ul className="divide-y divide-spark-border">
-            {result.articles.map((a) => (
-              <li key={a.id}>
-                <a
-                  href={a.link}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block px-4 py-3 hover:bg-spark-subtle transition"
-                >
-                  <div className="flex items-start gap-2">
-                    <span className="text-[14px] text-spark-ink leading-snug">{a.title}</span>
-                    {a.tone === 'NEGATIVE' && (
-                      <span className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-bold">부정</span>
-                    )}
-                    {a.riskFlag && (
-                      <span className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-bold">⚠</span>
-                    )}
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-spark-muted">
-                    <span>{a.source}</span>
-                    <span>·</span>
-                    <span>{fmtDate(a.pubDate)}</span>
-                    <span>·</span>
-                    <span>{categoryLabel(a.category)}</span>
-                    {a.matchedKeyword && (
-                      <>
-                        <span>·</span>
-                        <span className="text-spark-purple font-semibold">{a.matchedKeyword}</span>
-                      </>
-                    )}
-                  </div>
-                </a>
-              </li>
-            ))}
-          </ul>
+            <ul className="divide-y divide-spark-border">
+              {result.articles.map((a) => (
+                <ArticleRow key={a.id} a={a} fmtDate={fmtDate} showTag />
+              ))}
+            </ul>
           )}
         </div>
       )}
