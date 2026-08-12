@@ -30,6 +30,7 @@ const CATEGORY_BADGE: Record<string, { label: string; cls: string }> = {
   portfolio_company: { label: '포트폴리오', cls: 'bg-spark-light-purple text-spark-purple' },
   competitor: { label: 'AC·VC', cls: 'bg-red-100 text-red-800' },
   industry_trend: { label: '스타트업계', cls: 'bg-amber-100 text-amber-800' },
+  live: { label: '실시간🔍', cls: 'bg-blue-100 text-blue-800 font-semibold' },
 };
 
 const TONE_DOT: Record<string, string> = {

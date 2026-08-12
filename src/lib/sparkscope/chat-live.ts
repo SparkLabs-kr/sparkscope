@@ -39,12 +39,27 @@ export async function runLiveSearch(keyword: string): Promise<ChatQueryResult> {
     return true;
   });
 
-  const seen = new Set<string>();
-  const deduped = filtered.filter((a) => {
-    if (seen.has(a.link)) return false;
-    seen.add(a.link);
-    return true;
+  // contextWords 매칭 개수로 정확성 순 정렬 (많을수록 우선)
+  const withScore = filtered.map((a) => {
+    const title = a.title.toLowerCase();
+    let score = 0;
+    if (target?.contextWords) {
+      const contexts = target.contextWords.split(',').map((w) => w.trim().toLowerCase()).filter(Boolean);
+      score = contexts.filter((w) => title.includes(w)).length;
+    }
+    return { a, score };
   });
+
+  const seen = new Set<string>();
+  const deduped = withScore
+    .sort((x, y) => y.score - x.score || +new Date(y.a.pubDate) - +new Date(x.a.pubDate))
+    .filter((item) => {
+      if (seen.has(item.a.link)) return false;
+      seen.add(item.a.link);
+      return true;
+    })
+    .slice(0, 15)
+    .map((item) => item.a);
   deduped.sort((a, b) => +new Date(b.pubDate) - +new Date(a.pubDate));
 
   const articles = deduped.slice(0, 15).map((a, i) => ({

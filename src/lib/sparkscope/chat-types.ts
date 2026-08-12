@@ -25,7 +25,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   competitor: '경쟁사(VC)',
   industry_trend: '업계동향',
   executive: '경영진',
-  live: '실시간 검색',
+  live: '🔍 실시간',
 };
 
 export function categoryLabel(c: string) {

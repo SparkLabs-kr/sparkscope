@@ -1112,9 +1112,10 @@ function organizeArticles(articles: ChatQueryResult['articles']): {
 /** 근거 기사 목록의 행 하나. showCompanyTags=true면 관련 회사를 칩(배지)으로 따로 붙인다. */
 function ArticleRow({ a, fmtDate, showCompanyTags }: { a: ChatQueryResult['articles'][number]; fmtDate: (iso: string) => string; showCompanyTags?: boolean }) {
   const companyTags = showCompanyTags && a.matchedKeyword ? a.matchedKeyword.split(',').map((s) => s.trim()).filter(Boolean) : [];
+  const isLive = a.category === 'live';
   return (
     <li>
-      <a href={a.link} target="_blank" rel="noreferrer" className="block px-4 py-3 hover:bg-spark-subtle transition">
+      <a href={a.link} target="_blank" rel="noreferrer" className={`block px-4 py-3 transition ${isLive ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-spark-subtle'}`}>
         <div className="flex items-start gap-2">
           <span className="text-[14px] text-spark-ink leading-snug">{a.title}</span>
           {a.tone === 'NEGATIVE' && (
@@ -1124,7 +1125,7 @@ function ArticleRow({ a, fmtDate, showCompanyTags }: { a: ChatQueryResult['artic
             <span className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-bold">⚠</span>
           )}
         </div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-spark-muted">
+        <div className={`mt-1 flex flex-wrap items-center gap-x-2 text-[11px] ${isLive ? 'font-semibold text-blue-700' : 'text-spark-muted'}`}>
           <span>{a.source}</span>
           <span>·</span>
           <span>{fmtDate(a.pubDate)}</span>
