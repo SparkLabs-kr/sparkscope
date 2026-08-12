@@ -371,9 +371,9 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
     recognition.start();
   };
 
-  const send = async () => {
-    const question = input.trim();
-    if (!question || loading) return;
+  const send = async (opts?: { live?: boolean; keyword?: string }) => {
+    const question = opts?.live ? '' : input.trim();
+    if (!question && !opts?.live) return;
     // 파일 첨부는 아직 서버로 보내지 않는다(스토리지 연결 전).
     const attached = files.map((f) => f.name);
     setMessages((prev) => [...prev, { role: 'user', text: question, period, scopes: activeScopes, files: attached }]);
@@ -398,7 +398,14 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, period, scopes: activeScopes, modes: activeModes, history }),
+        body: JSON.stringify({
+          question,
+          period,
+          scopes: activeScopes,
+          modes: activeModes,
+          history,
+          ...(opts?.live && { live: true, keyword: opts.keyword || '' }),
+        }),
       });
       if (!res.ok || !res.body) {
         const msg = await res.json().catch(() => null);
@@ -636,6 +643,8 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                         modes={m.modes ?? []}
                         period={m.period ?? 'quarter'}
                         question={lastQuestionBefore(messages, i)}
+                        loading={loading}
+                        onSendLiveSearch={(keyword) => send({ live: true, keyword })}
                       />
                     </div>
                   </div>
@@ -848,7 +857,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                 </button>
                 <button
                   type="button"
-                  onClick={send}
+                  onClick={() => send()}
                   disabled={!canSend}
                   aria-label="보내기"
                   className={`w-9 h-9 shrink-0 grid place-items-center rounded-full transition ${
@@ -957,12 +966,16 @@ function ChatAnswer({
   modes,
   period,
   question,
+  loading,
+  onSendLiveSearch,
 }: {
   res: ChatResponse;
   scopes: string[];
   modes: string[];
   period: string;
   question: string;
+  loading?: boolean;
+  onSendLiveSearch?: (keyword: string) => void;
 }) {
   if (!res) return null;
   return (
@@ -994,6 +1007,8 @@ function ChatAnswer({
           scopes={scopes}
           asTable={modes.includes('table')}
           resultKind={res.resultKind}
+          loading={loading}
+          onLiveSearch={onSendLiveSearch}
         />
       )}
 
@@ -1133,11 +1148,15 @@ function ChatResult({
   scopes,
   asTable,
   resultKind,
+  loading,
+  onLiveSearch,
 }: {
   result: ChatQueryResult;
   scopes: string[];
   asTable?: boolean;
   resultKind?: ResultKind;
+  loading?: boolean;
+  onLiveSearch?: (keyword: string) => void;
 }) {
   const fmtDate = (iso: string) => {
     const d = new Date(iso);
@@ -1199,6 +1218,22 @@ function ChatResult({
           </div>
         )}
       </div>
+
+      {/* 실시간 검색 제안 — 결과가 8건 미만이면 구글뉴스·네이버뉴스에서 추가 검색할 수 있다 */}
+      {result.needsLiveSearch && !loading && onLiveSearch && (
+        <div className="flex flex-col gap-2 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+          <p className="text-[13px] text-amber-900">
+            검색 결과가 많지 않네요. 우리 DB에 아직 수집되지 않은 최신 기사를 실시간으로 찾아볼까요?
+          </p>
+          <button
+            type="button"
+            onClick={() => onLiveSearch(result.terms?.[0] || '')}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold transition text-[13px]"
+          >
+            🔍 실시간 검색 ({result.terms?.[0]})
+          </button>
+        </div>
+      )}
 
       {/* 지표·추이 질문은 숫자 목록보다 달마다 막대가 나란히 놓인 그래프가 흐름이 한눈에
           들어온다 — 예전엔 이 데이터(monthly)가 HTML로 저장할 때만 그래프로 보였고 채팅

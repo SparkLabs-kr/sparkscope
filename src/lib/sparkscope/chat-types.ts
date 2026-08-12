@@ -108,4 +108,6 @@ export type ChatQueryResult = {
   /** 오탐(노이즈)으로 걸러진 기사가 많은 키워드 (키워드·노이즈 질문일 때만) */
   noisyKeywords: NoisyKeyword[] | null;
   articles: ChatArticle[];
+  /** 결과 건수가 너무 적어 (< 8건) 실시간 검색을 제안할 때 true */
+  needsLiveSearch?: boolean;
 };

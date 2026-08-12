@@ -505,9 +505,16 @@ export async function runChatAgent(opts: {
    */
   const finish = (summary: string | null): AgentOutcome => {
     const base = uiResult ?? (monthly || noisyKeywords ? emptyResult() : null);
+    let result = base ? { ...base, monthly: monthly ?? base.monthly, noisyKeywords: noisyKeywords ?? base.noisyKeywords } : null;
+
+    // 결과가 8건 미만이고 아직 실시간 검색을 시도하지 않았다면, 사용자에게 제안
+    if (result && result.total > 0 && result.total < 8 && resultKind !== 'live') {
+      result.needsLiveSearch = true;
+    }
+
     return {
       summary,
-      result: base ? { ...base, monthly: monthly ?? base.monthly, noisyKeywords: noisyKeywords ?? base.noisyKeywords } : null,
+      result,
       resultKind,
       steps,
       usage,

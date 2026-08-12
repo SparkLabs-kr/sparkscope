@@ -8,6 +8,7 @@ import { authOptions } from '@/lib/auth';
 import { OPEN_ACCESS } from '@/lib/flags';
 import { runChatQuery, type ChatPeriod, type ChatScope } from '@/lib/sparkscope/chat-query';
 import { runChatAgent, type AgentTurn } from '@/lib/sparkscope/chat-agent';
+import { runLiveSearch } from '@/lib/sparkscope/chat-live';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,6 +46,8 @@ export async function POST(req: Request) {
   const modes: string[] = Array.isArray(body?.modes) ? body.modes : [];
   const deep = modes.includes('deep');
   const asTable = modes.includes('table');
+  const live = body?.live === true;
+  const keyword = typeof body?.keyword === 'string' ? body.keyword.trim() : '';
 
   // 이전 대화 — 후속 질문("그중 부정적인 것만")을 이해하는 데 쓴다.
   const history: AgentTurn[] = Array.isArray(body?.history)
@@ -73,6 +76,30 @@ export async function POST(req: Request) {
       };
 
       try {
+        // 실시간 검색 (사용자가 "추가 검색할까요?" → "예" 선택했을 때)
+        if (live && keyword) {
+          send({ type: 'progress', phase: 'tool_start', label: '실시간 뉴스 검색' });
+          const result = await runLiveSearch(keyword);
+          send({
+            type: 'progress',
+            phase: 'tool_done',
+            label: '실시간 뉴스 검색',
+            detail: `${keyword} → ${result.total}건`,
+          });
+          send({
+            type: 'done',
+            intent: 'search',
+            note: null,
+            unsupported: null,
+            summary: `"${keyword}"의 실시간 뉴스 검색 결과예요. 우리 DB의 노이즈 필터를 거치지 않은 원본이라 관련 없는 기사가 섞여있을 수 있어요.`,
+            appliedPeriod: period,
+            appliedScopes: scopes,
+            resultKind: 'live',
+            result,
+          });
+          return;
+        }
+
         // 키가 없으면 에이전트를 못 돌린다 — 규칙 기반 단일 조회로 집계만 보여준다.
         if (!process.env.OPENAI_API_KEY) {
           const result = await runChatQuery({ question, period, scopes, limit: 20 });
