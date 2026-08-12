@@ -154,6 +154,9 @@ export async function runInterQuery(input: InterInput): Promise<InterOutcome> {
         category: r.domain ?? 'inter',
         // 이 자리는 화면에서 "회사·키워드"로 보인다 — 엮인 포폴사가 있으면 그게 제일 유용하다.
         matchedKeyword: r.matches.map((m) => m.companyName).join(', ') || r.topicSector || '해외',
+        // 위 matchedKeyword가 포폴사 이름인지 주제 태그인지 구분 — 화면에서 "쿼드메디슨"이
+        // 회사인지 주제인지 헷갈리는 문제가 있었다(2026-08-12).
+        tagKind: (r.matches.length > 0 ? 'company' : 'topic') as 'company' | 'topic',
         tone: null as string | null,
         riskFlag: null as string | null,
         oneLiner: r.titleKo ? r.news.title : r.reason,

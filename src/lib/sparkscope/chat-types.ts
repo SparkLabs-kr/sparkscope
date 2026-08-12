@@ -58,6 +58,14 @@ export type ChatArticle = {
   /** 수집 때 뽑아둔 AI 한 줄 요약 (약 90%의 기사에 있다) */
   oneLiner?: string | null;
   importance?: string | null;
+  /**
+   * matchedKeyword가 무슨 종류의 값인지 — 'company'면 엮인 포트폴리오사 이름(들),
+   * 'topic'이면 신약발굴·항암 같은 주제 태그. 해외 트렌드(inter_trends) 결과는 회사
+   * 매칭이 없으면 topicSector로 대체하는데, 둘을 구분 없이 보여주면 "쿼드메디슨"이
+   * 회사인지 주제인지 헷갈린다(2026-08-12 실사용 피드백). 국내 검색 결과는 항상 회사/
+   * 키워드 매칭이라 'company'로 취급한다.
+   */
+  tagKind?: 'company' | 'topic';
 };
 
 /** 결과가 어떤 조회에서 나왔는지 — HTML 저장이 이걸 보고 표시 방식을 고른다(2026-08-11). */

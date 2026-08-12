@@ -1024,7 +1024,7 @@ function lastQuestionBefore(messages: Msg[], index: number): string {
  * 묶음 하나에 기사 1건씩만 있는 경우)엔 null을 돌려줘서 호출부가 기존 평범한 목록으로
  * 그대로 보여주게 한다.
  */
-function groupArticlesByTag(articles: ChatQueryResult['articles']): { tag: string; items: ChatQueryResult['articles'] }[] | null {
+function groupArticlesByTag(articles: ChatQueryResult['articles']): { tag: string; kind: 'company' | 'topic'; items: ChatQueryResult['articles'] }[] | null {
   const groups = new Map<string, ChatQueryResult['articles']>();
   for (const a of articles) {
     const tag = a.matchedKeyword || '기타';
@@ -1033,7 +1033,9 @@ function groupArticlesByTag(articles: ChatQueryResult['articles']): { tag: strin
   }
   if (groups.size <= 1 || groups.size >= articles.length) return null;
   return [...groups.entries()]
-    .map(([tag, items]) => ({ tag, items }))
+    // tagKind 없는 값(국내 검색 결과 중 예전에 캐싱된 것 등)은 회사/키워드로 취급한다 —
+    // 'topic'은 해외 트렌드에서 회사 매칭이 없을 때만 명시적으로 붙는다.
+    .map(([tag, items]) => ({ tag, kind: (items[0]?.tagKind ?? 'company') as 'company' | 'topic', items }))
     .sort((a, b) => b.items.length - a.items.length);
 }
 
@@ -1192,7 +1194,16 @@ function ChatResult({
               {groups.map((g) => (
                 <details key={g.tag} open={groups.length <= 4} className="group">
                   <summary className="list-none flex items-center justify-between gap-2 px-4 py-2.5 cursor-pointer hover:bg-spark-subtle transition select-none">
-                    <span className="text-[13px] font-semibold text-spark-purple">{g.tag}</span>
+                    <span className="flex items-center gap-1.5 text-[13px] font-semibold text-spark-purple">
+                      {/* "쿼드메디슨"이 회사인지 주제인지 구분 안 되던 문제(2026-08-12) — 아이콘 + 라벨로 명시 */}
+                      <span title={g.kind === 'company' ? '관련 포트폴리오사' : '주제'}>
+                        {g.kind === 'company' ? '🏢' : '📌'}
+                      </span>
+                      <span className="text-[10px] font-normal text-spark-muted">
+                        {g.kind === 'company' ? '관련 포트폴리오사' : '주제'}
+                      </span>
+                      {g.tag}
+                    </span>
                     <span className="flex items-center gap-2 text-[11px] text-spark-muted">
                       {g.items.length}건
                       <span className="transition-transform group-open:rotate-180">▾</span>

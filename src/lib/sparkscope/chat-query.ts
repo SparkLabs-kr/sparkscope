@@ -367,6 +367,9 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
       pubDate: a.pubDate.toISOString(),
       category: a.category,
       matchedKeyword: a.matchedKeyword,
+      // 국내 검색은 항상 회사·감시대상 키워드 매칭이라 'topic'으로 갈 일이 없다(해외
+      // 트렌드만 회사 매칭이 없으면 주제 태그로 대체됨).
+      tagKind: 'company' as const,
       tone: a.tone,
       riskFlag: a.riskFlag,
       oneLiner: a.oneLiner,
