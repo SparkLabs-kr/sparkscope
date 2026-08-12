@@ -116,15 +116,23 @@ async function fetchRecentTabArticles(
   if (!guaranteeRecentDays) {
     return prisma.article.findMany({ where: { ...where, category }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], take });
   }
+  // where.pubDate(사용자가 고른 기간의 gte/lte)를 유지한 채 recentSince 경계만 덧붙여야 한다.
+  // 예전엔 `{ ...where, pubDate: {...} }`로 덮어써서 where.pubDate가 통째로 사라졌고,
+  // 특히 older 쿼리가 since 하한 없이 DB 전체 역사와 priorityScore로 경쟁하는 바람에
+  // 선택 기간 안의 저득점 기사가 상위 take건 밖으로 밀려나 대시보드에 아예 안 보이는
+  // 버그가 있었다(2026-08-12, 포트폴리오사 CSR성 기사 누락으로 발견).
+  const outerPubDate = (where as { pubDate?: { gte?: Date; lte?: Date } }).pubDate;
   const recentSince = new Date(now.getTime() - guaranteeRecentDays * 24 * 60 * 60 * 1000);
+  const recentGte = outerPubDate?.gte && outerPubDate.gte > recentSince ? outerPubDate.gte : recentSince;
   const recent = await prisma.article.findMany({
-    where: { ...where, category, pubDate: { gte: recentSince } },
+    where: { ...where, category, pubDate: { gte: recentGte, lte: outerPubDate?.lte } },
     orderBy: [{ pubDate: 'desc' }],
     take,
   });
   if (recent.length >= take) return recent;
+  const olderLte = outerPubDate?.lte && outerPubDate.lte < recentSince ? outerPubDate.lte : recentSince;
   const older = await prisma.article.findMany({
-    where: { ...where, category, pubDate: { lt: recentSince } },
+    where: { ...where, category, pubDate: { gte: outerPubDate?.gte, lt: olderLte } },
     orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }],
     take: take - recent.length,
   });
