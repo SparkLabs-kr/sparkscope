@@ -1024,23 +1024,39 @@ function lastQuestionBefore(messages: Msg[], index: number): string {
  * 묶음 하나에 기사 1건씩만 있는 경우)엔 null을 돌려줘서 호출부가 기존 평범한 목록으로
  * 그대로 보여주게 한다.
  */
-function groupArticlesByTag(articles: ChatQueryResult['articles']): { tag: string; kind: 'company' | 'topic'; items: ChatQueryResult['articles'] }[] | null {
-  const groups = new Map<string, ChatQueryResult['articles']>();
+/**
+ * 근거 기사를 두 갈래로 나눈다.
+ * - 주제 태그(topic, 예: 신약발굴·항암): 여러 기사가 같은 값을 공유하는 경우가 많아
+ *   그룹으로 묶는 게 유용하다. 그대로 접었다 펼 수 있는 섹션으로 보여준다.
+ * - 회사 태그(company): 해외 트렌드는 엮인 포폴사 조합을 콤마로 이어붙이는데("스카이랩스,
+ *   엘리스헬스케어" vs "스카이랩스, 엘리스헬스케어, 크레파스솔루션"), 조합이 기사마다 거의
+ *   다 달라서 그룹으로 묶으면 1건짜리 그룹이 잔뜩 생겨 오히려 안 읽힌다(2026-08-12 실사용
+ *   피드백). 그룹으로 묶지 않고 그냥 목록으로 보여주되, 기사마다 관련 회사를 칩(배지)으로
+ *   붙여서 "이 기사가 어느 회사와 관련 있는지"만 바로 보이게 한다.
+ */
+function organizeArticles(articles: ChatQueryResult['articles']): { topics: { tag: string; items: ChatQueryResult['articles'] }[]; companyArticles: ChatQueryResult['articles'] } {
+  const topicGroups = new Map<string, ChatQueryResult['articles']>();
+  const companyArticles: ChatQueryResult['articles'] = [];
   for (const a of articles) {
-    const tag = a.matchedKeyword || '기타';
-    if (!groups.has(tag)) groups.set(tag, []);
-    groups.get(tag)!.push(a);
+    if (a.tagKind === 'topic') {
+      const tag = a.matchedKeyword || '기타';
+      if (!topicGroups.has(tag)) topicGroups.set(tag, []);
+      topicGroups.get(tag)!.push(a);
+    } else {
+      companyArticles.push(a);
+    }
   }
-  if (groups.size <= 1 || groups.size >= articles.length) return null;
-  return [...groups.entries()]
-    // tagKind 없는 값(국내 검색 결과 중 예전에 캐싱된 것 등)은 회사/키워드로 취급한다 —
-    // 'topic'은 해외 트렌드에서 회사 매칭이 없을 때만 명시적으로 붙는다.
-    .map(([tag, items]) => ({ tag, kind: (items[0]?.tagKind ?? 'company') as 'company' | 'topic', items }))
+  const topics = [...topicGroups.entries()]
+    .map(([tag, items]) => ({ tag, items }))
+    .filter((g) => g.items.length > 1) // 1건짜리 주제 그룹도 묶는 의미가 없으니 목록으로 내림
     .sort((a, b) => b.items.length - a.items.length);
+  const grouped = new Set(topics.flatMap((g) => g.items.map((a) => a.id)));
+  return { topics, companyArticles: [...companyArticles, ...articles.filter((a) => a.tagKind === 'topic' && !grouped.has(a.id))] };
 }
 
-/** 근거 기사 목록의 행 하나 — 태그별 묶음 안에서는 태그가 이미 그룹 제목에 나와있으니 중복 표시 안 함(showTag=false). */
-function ArticleRow({ a, fmtDate, showTag }: { a: ChatQueryResult['articles'][number]; fmtDate: (iso: string) => string; showTag: boolean }) {
+/** 근거 기사 목록의 행 하나. showCompanyTags=true면 관련 회사를 칩(배지)으로 따로 붙인다. */
+function ArticleRow({ a, fmtDate, showCompanyTags }: { a: ChatQueryResult['articles'][number]; fmtDate: (iso: string) => string; showCompanyTags?: boolean }) {
+  const companyTags = showCompanyTags && a.matchedKeyword ? a.matchedKeyword.split(',').map((s) => s.trim()).filter(Boolean) : [];
   return (
     <li>
       <a href={a.link} target="_blank" rel="noreferrer" className="block px-4 py-3 hover:bg-spark-subtle transition">
@@ -1059,13 +1075,17 @@ function ArticleRow({ a, fmtDate, showTag }: { a: ChatQueryResult['articles'][nu
           <span>{fmtDate(a.pubDate)}</span>
           <span>·</span>
           <span>{categoryLabel(a.category)}</span>
-          {showTag && a.matchedKeyword && (
-            <>
-              <span>·</span>
-              <span className="text-spark-purple font-semibold">{a.matchedKeyword}</span>
-            </>
-          )}
         </div>
+        {companyTags.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            <span className="text-[10px] text-spark-muted">🏢 관련 포트폴리오사</span>
+            {companyTags.map((c) => (
+              <span key={c} className="px-1.5 py-0.5 rounded-md bg-spark-light-purple text-spark-purple text-[10px] font-semibold">
+                {c}
+              </span>
+            ))}
+          </div>
+        )}
       </a>
     </li>
   );
@@ -1084,7 +1104,7 @@ function ChatResult({
     const d = new Date(iso);
     return `${d.getMonth() + 1}/${d.getDate()}`;
   };
-  const groups = asTable ? null : groupArticlesByTag(result.articles);
+  const organized = asTable ? null : organizeArticles(result.articles);
 
   return (
     <div className="w-full space-y-2.5">
@@ -1187,21 +1207,30 @@ function ChatResult({
                 </tbody>
               </table>
             </div>
-          ) : groups ? (
-            // 태그별로 묶어서 접었다 펼 수 있게 — <details>는 별도 JS 상태 없이도
-            // 브라우저가 알아서 펼침/접힘을 기억해준다. 건수 많은 태그부터 위로.
+          ) : organized ? (
             <div className="divide-y divide-spark-border">
-              {groups.map((g) => (
-                <details key={g.tag} open={groups.length <= 4} className="group">
+              {/* 포트폴리오사와 엮인 기사 — 회사 조합별로 나누면 1건짜리 그룹이 잔뜩 생겨서
+                  (2026-08-12 실사용 피드백), 묶지 않고 목록으로 보여주되 기사마다 관련
+                  회사를 칩으로 붙인다. */}
+              {organized.companyArticles.length > 0 && (
+                <div>
+                  <div className="px-4 py-2 text-[11px] font-semibold text-spark-muted bg-spark-subtle/60">
+                    🏢 포트폴리오사와 매칭된 기사 {organized.companyArticles.length}건
+                  </div>
+                  <ul className="divide-y divide-spark-border">
+                    {organized.companyArticles.map((a) => (
+                      <ArticleRow key={a.id} a={a} fmtDate={fmtDate} showCompanyTags />
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {/* 주제 태그(신약발굴·항암 등)는 여러 기사가 값을 공유해서 묶는 게 유용하다 — 접었다 펼 수 있게. */}
+              {organized.topics.map((g) => (
+                <details key={g.tag} open={organized.topics.length <= 4} className="group">
                   <summary className="list-none flex items-center justify-between gap-2 px-4 py-2.5 cursor-pointer hover:bg-spark-subtle transition select-none">
                     <span className="flex items-center gap-1.5 text-[13px] font-semibold text-spark-purple">
-                      {/* "쿼드메디슨"이 회사인지 주제인지 구분 안 되던 문제(2026-08-12) — 아이콘 + 라벨로 명시 */}
-                      <span title={g.kind === 'company' ? '관련 포트폴리오사' : '주제'}>
-                        {g.kind === 'company' ? '🏢' : '📌'}
-                      </span>
-                      <span className="text-[10px] font-normal text-spark-muted">
-                        {g.kind === 'company' ? '관련 포트폴리오사' : '주제'}
-                      </span>
+                      <span>📌</span>
+                      <span className="text-[10px] font-normal text-spark-muted">주제</span>
                       {g.tag}
                     </span>
                     <span className="flex items-center gap-2 text-[11px] text-spark-muted">
@@ -1211,7 +1240,7 @@ function ChatResult({
                   </summary>
                   <ul className="divide-y divide-spark-border border-t border-spark-border">
                     {g.items.map((a) => (
-                      <ArticleRow key={a.id} a={a} fmtDate={fmtDate} showTag={false} />
+                      <ArticleRow key={a.id} a={a} fmtDate={fmtDate} />
                     ))}
                   </ul>
                 </details>
@@ -1220,7 +1249,7 @@ function ChatResult({
           ) : (
             <ul className="divide-y divide-spark-border">
               {result.articles.map((a) => (
-                <ArticleRow key={a.id} a={a} fmtDate={fmtDate} showTag />
+                <ArticleRow key={a.id} a={a} fmtDate={fmtDate} showCompanyTags />
               ))}
             </ul>
           )}
