@@ -1155,6 +1155,20 @@ function organizeArticles(articles: ChatQueryResult['articles']): {
   };
 }
 
+// riskFlag는 DB엔 litigation/crisis/controversy 코드값으로만 있고 화면엔 그냥 "⚠"
+// 아이콘만 떠서 무슨 뜻인지 알 수가 없었다(2026-08-12 피드백) — 뭘 의미하는지 바로 읽히게
+// 배지에 한글 라벨을 붙이고, 마우스를 올리면 더 풀어서 설명한다.
+const RISK_FLAG_LABEL: Record<string, string> = {
+  litigation: '소송·규제',
+  crisis: '사고·재무',
+  controversy: '논란·평판',
+};
+const RISK_FLAG_EXPLAIN: Record<string, string> = {
+  litigation: '소송·수사·규제 이슈로 AI가 위험 신호를 표시한 기사예요',
+  crisis: '사고·재무 관련 이슈로 AI가 위험 신호를 표시한 기사예요',
+  controversy: '논란·평판 이슈로 AI가 위험 신호를 표시한 기사예요',
+};
+
 /** 근거 기사 목록의 행 하나. showCompanyTags=true면 관련 회사를 칩(배지)으로 따로 붙인다. */
 function ArticleRow({ a, fmtDate, showCompanyTags }: { a: ChatQueryResult['articles'][number]; fmtDate: (iso: string) => string; showCompanyTags?: boolean }) {
   // 주제 태그(tagKind==='topic')는 회사명이 아니다 — "🏢 관련 포트폴리오사: 스타트업"처럼
@@ -1174,7 +1188,12 @@ function ArticleRow({ a, fmtDate, showCompanyTags }: { a: ChatQueryResult['artic
             <span className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-bold">부정</span>
           )}
           {a.riskFlag && (
-            <span className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-bold">⚠</span>
+            <span
+              className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-bold"
+              title={RISK_FLAG_EXPLAIN[a.riskFlag] ?? '위험 신호로 표시된 기사예요'}
+            >
+              ⚠ {RISK_FLAG_LABEL[a.riskFlag] ?? '위험'}
+            </span>
           )}
         </div>
         <div className={`mt-1 flex flex-wrap items-center gap-x-2 text-[11px] ${isLive ? 'font-semibold text-blue-700' : 'text-spark-muted'}`}>
