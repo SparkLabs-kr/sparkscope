@@ -1133,7 +1133,9 @@ function ArticleRow({ a, fmtDate, showCompanyTags }: { a: ChatQueryResult['artic
           <span>{categoryLabel(a.category)}</span>
         </div>
         {a.oneLiner && (
-          <p className="mt-1.5 text-[12px] text-gray-600 leading-relaxed">{a.oneLiner}</p>
+          <div className="mt-2 px-2.5 py-1.5 bg-blue-50 border-l-2 border-blue-400 rounded">
+            <p className="text-[12px] text-blue-900 leading-relaxed">💡 {a.oneLiner}</p>
+          </div>
         )}
         {companyTags.length > 0 && (
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
@@ -1245,14 +1247,14 @@ function ChatResult({
 
       {/* 유사 키워드 제안 */}
       {suggestedKeywords.length > 0 && (
-        <div className="p-4 bg-purple-50 border border-purple-200 rounded-2xl">
-          <p className="text-[12px] text-purple-700 font-semibold mb-2">혹시 이것도 검색해보시겠어요?</p>
+        <div className="p-4 bg-gradient-to-r from-purple-100 to-pink-100 border-2 border-purple-300 rounded-2xl">
+          <p className="text-[13px] text-purple-900 font-bold mb-3">🔗 혹시 이것도 찾으신가요?</p>
           <div className="flex flex-wrap gap-2">
             {suggestedKeywords.map(kw => (
               <button
                 key={kw}
                 onClick={() => onLiveSearch?.(kw)}
-                className="px-3 py-1.5 bg-purple-200 hover:bg-purple-300 text-purple-900 text-[12px] font-semibold rounded-lg transition"
+                className="px-3 py-2 bg-white hover:bg-purple-50 border border-purple-300 text-purple-900 text-[12px] font-semibold rounded-lg transition shadow-sm hover:shadow-md"
               >
                 {kw}
               </button>
