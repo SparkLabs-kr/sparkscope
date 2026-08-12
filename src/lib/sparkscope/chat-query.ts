@@ -223,7 +223,37 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
     prevWhere ? prisma.article.count({ where: prevWhere }) : Promise.resolve(null),
   ]);
 
-  const clean = rows.filter((a) => !isBlockedNoise(a));
+  // 글로벌 노이즈 필터 (스포츠, 정치, 광고 등)
+  let clean = rows.filter((a) => !isBlockedNoise(a));
+
+  // matchedKeyword별 contextWords/excludeWords 필터 적용
+  const targets = await prisma.monitoringTarget.findMany({
+    where: { OR: [{ primaryKeyword: { in: [...new Set(clean.map((a) => a.matchedKeyword).filter(Boolean))] } }] },
+    select: { primaryKeyword: true, contextWords: true, excludeWords: true },
+  });
+  const settingsMap = new Map<string, { contextWords: string | null; excludeWords: string | null }>();
+  for (const t of targets) {
+    settingsMap.set(t.primaryKeyword, { contextWords: t.contextWords, excludeWords: t.excludeWords });
+  }
+
+  clean = clean.filter((a) => {
+    if (!a.matchedKeyword) return true;
+    const settings = settingsMap.get(a.matchedKeyword);
+    if (!settings) return true;
+
+    const title = a.title?.toLowerCase() ?? '';
+    // excludeWords: 제목에 이 단어 중 하나라도 있으면 제외
+    if (settings.excludeWords) {
+      const excludes = settings.excludeWords.split(',').map((w) => w.trim().toLowerCase()).filter(Boolean);
+      if (excludes.some((w) => title.includes(w))) return false;
+    }
+    // contextWords: 제목에 이 단어 중 하나라도 있어야 통과 (없으면 true = 통과)
+    if (settings.contextWords) {
+      const contexts = settings.contextWords.split(',').map((w) => w.trim().toLowerCase()).filter(Boolean);
+      if (contexts.length > 0 && !contexts.some((w) => title.includes(w))) return false;
+    }
+    return true;
+  });
 
   // 직전 기간과 비교해도 되는지 — 이번 결과에 10% 이상 기여한 카테고리 중
   // 직전 구간에 데이터가 아예 없던 것(백필 미포함)이 있으면 비교를 막는다.
