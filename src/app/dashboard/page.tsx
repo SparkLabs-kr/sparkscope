@@ -116,11 +116,18 @@ async function fetchRecentTabArticles(
   if (!guaranteeRecentDays) {
     return prisma.article.findMany({ where: { ...where, category }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], take });
   }
-  // where.pubDate(사용자가 고른 기간의 gte/lte)를 유지한 채 recentSince 경계만 덧붙여야 한다.
-  // 예전엔 `{ ...where, pubDate: {...} }`로 덮어써서 where.pubDate가 통째로 사라졌고,
-  // 특히 older 쿼리가 since 하한 없이 DB 전체 역사와 priorityScore로 경쟁하는 바람에
-  // 선택 기간 안의 저득점 기사가 상위 take건 밖으로 밀려나 대시보드에 아예 안 보이는
-  // 버그가 있었다(2026-08-12, 포트폴리오사 CSR성 기사 누락으로 발견).
+  // 선택 기간 전체 건수가 take 이내면 굳이 recent/older로 쪼개지 않고 그냥 다 가져온다.
+  // 예전엔 항상 쪼개서 recentSince 경계로 나눴는데, 그 경계 계산에 KST 보정용 now(실제
+  // UTC epoch에 9시간을 더해 흉내낸 값)와 since/until(문자열을 그대로 new Date()한, 서버
+  // 로컬 타임존 기준) 값을 섞어 비교하는 타임존 불일치가 있었다. 그 탓에 건수가 take보다
+  // 훨씬 적은 주(포트폴리오 127건 < take 150)에도 특정 기사가 recentSince 경계에 걸려
+  // recent·older 어느 쪽에도 안 담기고 통째로 빠지는 문제가 있었다(2026-08-12, 카알로스
+  // 기사 누락으로 발견). 건수가 take를 넘는 경우(기본 3개월 보기처럼 넓은 기간)만 기존의
+  // "최근 N일은 점수 무관 보장 + 나머지는 점수순" 방식을 쓴다.
+  const total = await prisma.article.count({ where: { ...where, category } });
+  if (total <= take) {
+    return prisma.article.findMany({ where: { ...where, category }, orderBy: [{ pubDate: 'desc' }] });
+  }
   const outerPubDate = (where as { pubDate?: { gte?: Date; lte?: Date } }).pubDate;
   const recentSince = new Date(now.getTime() - guaranteeRecentDays * 24 * 60 * 60 * 1000);
   const recentGte = outerPubDate?.gte && outerPubDate.gte > recentSince ? outerPubDate.gte : recentSince;
