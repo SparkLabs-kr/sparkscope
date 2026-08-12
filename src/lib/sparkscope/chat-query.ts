@@ -147,6 +147,8 @@ export type ChatQueryInput = {
   scopes: ChatScope[];
   /** 위기·이슈 질문 — 부정 톤/위험 플래그 기사만 본다 */
   onlyNegative?: boolean;
+  /** 긍정 톤만 본다 */
+  onlyPositive?: boolean;
   /** 지표·추이 질문 — 월별 추이를 같이 뽑는다 */
   withTrend?: boolean;
   /** 키워드·노이즈 질문 — 오탐 많은 키워드를 같이 뽑는다 */
@@ -188,6 +190,10 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
   // 위기·이슈: 부정 톤이거나 위험 플래그가 달린 기사만
   if (input.onlyNegative) {
     and.push({ OR: [{ tone: 'NEGATIVE' }, { riskFlag: { not: null } }] });
+  }
+  // 긍정 톤만
+  if (input.onlyPositive) {
+    and.push({ tone: 'POSITIVE' });
   }
   if (and.length) where.AND = and;
 
