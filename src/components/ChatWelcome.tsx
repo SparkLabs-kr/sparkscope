@@ -296,6 +296,10 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // 답변이 완성되면 스크롤 끝(=긴 답변의 맨 아래)이 아니라 방금 물어본 질문이 화면 맨 위에
+  // 오도록 맞춘다 — 끝까지 내려가버리면 답을 처음부터 읽으려고 매번 위로 다시 스크롤해야
+  // 했다(2026-08-12 피드백).
+  const lastUserRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
   // 대화 기록은 로컬(브라우저)에만 저장한다. 서버 테이블은 아직 없다.
@@ -327,9 +331,24 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
     });
   }, [messages, convoId]);
 
-  // 새 메시지가 붙으면 항상 마지막이 보이도록
+  // 조회 중엔 진행 상황 표시가 보이도록 끝까지 내리고, 답변이 다 오면(loading이 꺼지면)
+  // 그 답을 부른 질문이 화면 맨 위로 오게 스크롤한다 — 답이 길면(차트·기사 목록) 끝까지
+  // 내려버리는 게 오히려 처음부터 읽기 불편했다(2026-08-12).
+  //
+  // behavior:'smooth'는 scrollTo·scrollIntoView 둘 다 이 페이지의 중첩 스크롤 구조에서
+  // 조용히 안 먹는 게 실제로 확인돼서(애니메이션 없이 그냥 무시됨), scrollTop을 직접
+  // 대입한다 — 애니메이션은 포기하지만 실제로 그 위치로 항상 이동하는 게 우선이다.
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+    const el = scrollRef.current;
+    if (!el) return;
+    if (loading) {
+      el.scrollTop = el.scrollHeight;
+    } else if (lastUserRef.current) {
+      const targetRect = lastUserRef.current.getBoundingClientRect();
+      const containerRect = el.getBoundingClientRect();
+      const offset = targetRect.top - containerRect.top + el.scrollTop - 12;
+      el.scrollTop = Math.max(offset, 0);
+    }
   }, [messages, loading]);
 
   const toggle = (list: string[], id: string) =>
@@ -508,6 +527,11 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
 
   const task = TASKS.find((t) => t.id === openTask);
   const canSend = input.trim().length > 0 && !loading;
+  // 스크롤 위치 계산용 — 가장 최근 사용자 질문의 인덱스.
+  let lastUserIndex = -1;
+  messages.forEach((m, i) => {
+    if (m.role === 'user') lastUserIndex = i;
+  });
 
   return (
     <div className="h-screen bg-spark-cream flex">
@@ -614,7 +638,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
             <div className="space-y-5">
               {messages.map((m, i) =>
                 m.role === 'user' ? (
-                  <div key={i} className="flex justify-end animate-rise">
+                  <div key={i} ref={i === lastUserIndex ? lastUserRef : undefined} className="flex justify-end animate-rise">
                     <div className="max-w-[85%]">
                       <div className="bg-spark-purple text-white rounded-2xl rounded-br-md px-4 py-2.5 text-[14px] leading-relaxed whitespace-pre-wrap">
                         {m.text}
@@ -1133,7 +1157,13 @@ function organizeArticles(articles: ChatQueryResult['articles']): {
 
 /** 근거 기사 목록의 행 하나. showCompanyTags=true면 관련 회사를 칩(배지)으로 따로 붙인다. */
 function ArticleRow({ a, fmtDate, showCompanyTags }: { a: ChatQueryResult['articles'][number]; fmtDate: (iso: string) => string; showCompanyTags?: boolean }) {
-  const companyTags = showCompanyTags && a.matchedKeyword ? a.matchedKeyword.split(',').map((s) => s.trim()).filter(Boolean) : [];
+  // 주제 태그(tagKind==='topic')는 회사명이 아니다 — "🏢 관련 포트폴리오사: 스타트업"처럼
+  // 잘못 붙는 걸 막는다. 그룹으로 안 묶여 "그 외 매칭된 기사" 목록에 떨어져도 마찬가지로 막는다
+  // (2026-08-12 피드백 — 피칭 결과의 업계동향 기사에서 실제로 발생).
+  const companyTags =
+    showCompanyTags && a.tagKind !== 'topic' && a.matchedKeyword
+      ? a.matchedKeyword.split(',').map((s) => s.trim()).filter(Boolean)
+      : [];
   const isLive = a.category === 'live';
   return (
     <li>
@@ -1339,11 +1369,11 @@ function ChatResult({
         <CompanyBarChart title="많이 나온 회사·키워드" items={result.topCompanies} />
       )}
 
-      {/* 피칭 소재는 "점수가 높은 것"과 "이미 노출 우선순위가 높은 것"이 다를 수 있어, 목록
-          순위만 봐선 어느 기사가 진짜 소재인지 감이 안 온다. 두 점수를 산점도로 놓으면
-          우상단(둘 다 높음)이 바로 눈에 띈다(2026-08-12). */}
+      {/* 피칭 소재는 산점도로 시도했다가 사용자 피드백으로 뺐다(2026-08-12) — 이미 70점
+          이상만 걸러진 상위권이라 세로축이 좁은 구간에 다 몰려서 못 읽었다. 순위가 궁금한
+          데이터엔 관계보다 "1등부터 몇 등까지" 막대그래프가 바로 읽힌다. */}
       {resultKind === 'pitch' && result.articles.some((a) => a.pitchScore != null) && (
-        <PitchScatterChart articles={result.articles} />
+        <PitchScoreBarChart articles={result.articles} />
       )}
 
       {/* 기사 목록 */}
@@ -1650,44 +1680,36 @@ function CompanyBarChart({ title, items }: { title: string; items: { name: strin
   );
 }
 
-/** 피칭 점수 vs 노출 우선순위 산점도 — 둘 다 높은(우상단) 기사가 가장 좋은 피칭 소재다
- *  (2026-08-12). 점 위치가 겹칠 수 있어 제목은 hover 시 title 툴팁으로만 보여준다. */
-function PitchScatterChart({ articles }: { articles: ChatQueryResult['articles'] }) {
-  const points = articles.filter(
-    (a): a is ChatArticle & { pitchScore: number } => typeof a.pitchScore === 'number'
-  );
+/** 피칭 점수 순위 막대그래프 — 산점도는 이미 70점 이상만 걸러진 데이터라 세로축이
+ *  좁은 구간에 몰려 못 읽힌다는 피드백으로 교체했다(2026-08-12). "1등부터 몇 등까지"가
+ *  궁금한 데이터라 절대 점수(0~100점 기준)를 막대 길이로 바로 비교되게 한다. */
+function PitchScoreBarChart({ articles }: { articles: ChatQueryResult['articles'] }) {
+  const points = articles
+    .filter((a): a is ChatArticle & { pitchScore: number } => typeof a.pitchScore === 'number')
+    .slice(0, 10);
   if (points.length === 0) return null;
-  const W = 640;
-  const H = 260;
-  const padL = 36;
-  const padB = 30;
-  const padT = 14;
-  const padR = 14;
-  const chartW = W - padL - padR;
-  const chartH = H - padT - padB;
-  const maxPriority = Math.max(...points.map((p) => p.priorityScore ?? 0), 100);
 
   return (
     <div className="bg-spark-surface border border-spark-border rounded-2xl shadow-card p-4">
-      <div className="text-[13px] font-semibold text-spark-ink-soft mb-1">피칭 점수 vs 노출 우선순위</div>
-      <div className="text-[11px] text-spark-muted mb-2">우상단에 가까울수록 좋은 피칭 소재예요</div>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label="피칭 점수 대 노출 우선순위 산점도">
-        <line x1={padL} y1={padT} x2={padL} y2={padT + chartH} stroke="#E7E3DB" strokeWidth={1} />
-        <line x1={padL} y1={padT + chartH} x2={W - padR} y2={padT + chartH} stroke="#E7E3DB" strokeWidth={1} />
-        <text x={padL - 8} y={padT + 4} textAnchor="end" fontSize={10} fill="#8B8894">100점</text>
-        <text x={padL - 8} y={padT + chartH} textAnchor="end" fontSize={10} fill="#8B8894">0점</text>
-        <text x={W - padR} y={H - 6} textAnchor="end" fontSize={10} fill="#8B8894">우선순위 →</text>
-        <text x={padL} y={H - 6} textAnchor="start" fontSize={10} fill="#8B8894">피칭 점수 ↑</text>
-        {points.map((p) => {
-          const x = padL + Math.min((p.priorityScore ?? 0) / maxPriority, 1) * chartW;
-          const y = padT + chartH - Math.min(p.pitchScore / 100, 1) * chartH;
-          return (
-            <circle key={p.id} cx={x} cy={y} r={5} fill="#5046E5" opacity={0.72}>
-              <title>{`${p.title} — 피칭 ${p.pitchScore}점 / 우선순위 ${p.priorityScore ?? 0}`}</title>
-            </circle>
-          );
-        })}
-      </svg>
+      <div className="text-[13px] font-semibold text-spark-ink-soft mb-3">피칭 점수 순위</div>
+      <div className="space-y-2.5">
+        {points.map((p) => (
+          <div key={p.id} className="flex items-center gap-2.5 text-[12px]">
+            <span className="w-40 shrink-0 truncate text-spark-ink-soft" title={p.title}>
+              {p.matchedKeyword ? `[${p.matchedKeyword}] ` : ''}
+              {p.title}
+            </span>
+            <div className="flex-1 h-4 rounded-md bg-spark-subtle overflow-hidden">
+              <div
+                className="h-full rounded-md bg-spark-purple flex items-center justify-end px-1.5"
+                style={{ width: `${Math.max(Math.min(p.pitchScore, 100), 6)}%` }}
+              >
+                <span className="text-[10px] font-bold text-white">{p.pitchScore}점</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

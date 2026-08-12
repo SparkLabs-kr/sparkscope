@@ -95,12 +95,18 @@ export async function runPitchQuery(input: {
       pubDate: a.pubDate.toISOString(),
       category: a.category,
       matchedKeyword: a.matchedKeyword,
+      // 업계동향은 matchedKeyword가 "벤처캐피탈"·"스타트업"처럼 회사명이 아니라 주제 태그다.
+      // 이걸 빠뜨리면 화면에 "🏢 관련 포트폴리오사: 스타트업"처럼 표시돼 헷갈린다(2026-08-12 피드백).
+      tagKind: a.category === 'industry_trend' ? 'topic' : 'company',
       tone: a.tone,
       riskFlag: a.riskFlag,
-      // 피칭 화면에선 "왜 이게 소재가 되는지"가 한 줄 요약보다 중요하다.
-      oneLiner: a.pitchTopic ? `[${a.pitchScore}점] ${a.pitchTopic}` : a.oneLiner,
+      // "[92점] 벤처캐피탈, 스타트업, ..."처럼 점수+태그 나열이 자연스러운 요약보다 오히려
+      // 안 읽혔다(2026-08-12 피드백) — 점수는 이제 위쪽 피칭 점수 막대그래프에 이미 나오니
+      // 여기선 원래 AI 한 줄 요약(자연스러운 문장)을 그대로 쓰고, 그마저 없을 때만 주제 태그로
+      // 대체한다.
+      oneLiner: a.oneLiner ?? (a.pitchTopic ? `피칭 포인트: ${a.pitchTopic}` : null),
       importance: a.importance,
-      // 피칭 점수 vs 노출 우선순위 산점도용 — 둘 다 높은 기사(우상단)가 진짜 좋은 소재다.
+      // 피칭 점수 순위 막대그래프용.
       pitchScore: a.pitchScore,
       priorityScore: a.priorityScore,
     })),
