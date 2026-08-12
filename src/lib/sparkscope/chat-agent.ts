@@ -439,6 +439,11 @@ export type AgentOutcome = {
   usage: { calls: number; inputTokens: number; cachedTokens: number; outputTokens: number };
 };
 
+// 한자(CJK 통합 한자, U+4E00~U+9FFF) — 후속 질문은 순한글 문장이어야 하는데, 모델이 드물게
+// 글자를 잘못 생성해 "관련" 대신 "관寺"처럼 한자가 섞여 나올 때가 있다(2026-08-12 실사용 발견).
+// 정상적인 한국어 UI 문구엔 한자가 나올 이유가 없으므로, 섞여 있으면 그 버튼만 버린다.
+const HANJA_RE = /[一-鿿]/;
+
 /** summary 끝의 "###FOLLOWUPS### 질문1 | 질문2" 줄을 분리해낸다. 마커가 없으면 그대로 둔다. */
 function splitFollowUps(raw: string | null): { summary: string | null; followUps: string[] | null } {
   if (!raw) return { summary: raw, followUps: null };
@@ -448,7 +453,7 @@ function splitFollowUps(raw: string | null): { summary: string | null; followUps
   const followUps = m[1]
     .split('|')
     .map((q) => q.trim())
-    .filter((q) => q.length > 0)
+    .filter((q) => q.length > 0 && !HANJA_RE.test(q))
     .slice(0, 3);
   return { summary: raw.replace(re, '').trim() || null, followUps: followUps.length ? followUps : null };
 }
