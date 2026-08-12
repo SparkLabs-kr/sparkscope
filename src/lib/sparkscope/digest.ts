@@ -305,12 +305,12 @@ function takeLine(a: AnalyzedArticle): string {
   if (t) return t;
   // 부정 논조 안내는 스파크랩·포트폴리오에만 (AC·VC는 부정 검사 자체를 안 함)
   const toneScoped = a.category === 'sparklabs_self' || a.category === 'portfolio_company';
-  if (toneScoped && a.tone === 'NEGATIVE') return '부정 논조 보도 — 본부 모니터링·대응 검토가 필요하다.';
-  if (a.pitchScore >= 60) return '기획기사 피칭으로 연결 가능한 주제다.';
-  if (a.category === 'sparklabs_self') return '스파크랩 미디어 노출 — 메시지 확산 관점에서 참고할 보도다.';
-  if (a.category === 'portfolio_company') return '포트폴리오사 언론 노출 — PR 활용 가능성을 살펴볼 보도다.';
-  if (a.category === 'competitor') return '타 하우스 동향 — 경쟁 포지셔닝 참고용이다.';
-  return '업계 흐름 참고 보도다.';
+  if (toneScoped && a.tone === 'NEGATIVE') return '부정 논조 보도 — 본부 모니터링·대응 검토 필요';
+  if (a.pitchScore >= 60) return '기획기사 피칭으로 연결 가능한 주제';
+  if (a.category === 'sparklabs_self') return '스파크랩 미디어 노출 — 메시지 확산 관점 참고 보도';
+  if (a.category === 'portfolio_company') return '포트폴리오사 언론 노출 — PR 활용 가능성 참고 보도';
+  if (a.category === 'competitor') return '타 하우스 동향 — 경쟁 포지셔닝 참고용';
+  return '업계 흐름 참고 보도';
 }
 
 // 자체/인용 휴리스틱 (본문 미저장 상태 — 제목에 스파크랩 노출 여부로 근사)
