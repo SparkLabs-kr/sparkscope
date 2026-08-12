@@ -367,7 +367,16 @@ function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean
 ${deep
       ? '- [심층 분석 켜짐] 6~10문장으로 길게. 기사들을 주제별로 묶고, 왜 이런 흐름인지 원인·맥락까지 짚고, 본부가 무엇을 해야 하는지로 마무리한다.'
       : '- 3~5문장으로 간결하게. 무엇이 잡혔는지와 눈에 띄는 건만 짚는다.'}
-${asTable ? '- [표로 정리 켜짐] 핵심 내용을 마크다운 표로 정리해서 함께 보여준다.' : ''}`;
+${asTable ? '- [표로 정리 켜짐] 핵심 내용을 마크다운 표로 정리해서 함께 보여준다.' : ''}
+
+[후속 질문]
+- 답변 본문을 다 쓴 뒤, 완전히 새 줄에 "###FOLLOWUPS###"로 시작하는 줄을 반드시 하나 추가해라.
+  그 뒤에 이 답변에 이어 물어볼 만한 구체적인 질문 2~3개를 " | "로 구분해서 적어라.
+  예) ###FOLLOWUPS### 이 중 부정 톤 기사만 보여줘 | 지난달과 비교하면 어때 | 경쟁사는 이 주제로 뭐라고 나왔어
+- 방금 조회한 데이터로 실제 도구를 다시 불러 답할 수 있는 질문이어야 한다. 뻔하거나 답변과
+  무관한 질문은 넣지 마라. 이번 답변이 0건이거나 안내/오류였으면 이 줄 자체를 넣지 마라.
+- 이 줄은 사용자에게 문장으로 보여줄 답변이 아니라 시스템이 파싱해서 버튼으로 따로 그린다.
+  그러니 이 줄 앞뒤로 설명을 붙이지 말고, 답변 본문 안에서 언급하지도 마라.`;
 }
 
 /** 도구 결과를 모델에 돌려줄 때 쓰는 압축 형태 — 링크·id 같은 화면 전용 필드는 뺀다. */
@@ -422,11 +431,27 @@ export type AgentOutcome = {
   summary: string | null;
   result: ChatQueryResult | null;
   resultKind: ResultKind;
+  /** 답변에 이어 물어볼 만한 후속 질문 2~3개. 모델이 summary 끝에 붙인 마커를 파싱한 것. */
+  followUps: string[] | null;
   /** 어떤 조회를 몇 번 했는지 — 로그·디버깅용 */
   steps: string[];
   /** 이번 질문에 쓴 토큰. 도구를 여러 번 부르면 왕복마다 쌓이므로 눈에 보이게 남긴다. */
   usage: { calls: number; inputTokens: number; cachedTokens: number; outputTokens: number };
 };
+
+/** summary 끝의 "###FOLLOWUPS### 질문1 | 질문2" 줄을 분리해낸다. 마커가 없으면 그대로 둔다. */
+function splitFollowUps(raw: string | null): { summary: string | null; followUps: string[] | null } {
+  if (!raw) return { summary: raw, followUps: null };
+  const re = /\n?###FOLLOWUPS###\s*(.+)\s*$/;
+  const m = raw.match(re);
+  if (!m) return { summary: raw, followUps: null };
+  const followUps = m[1]
+    .split('|')
+    .map((q) => q.trim())
+    .filter((q) => q.length > 0)
+    .slice(0, 3);
+  return { summary: raw.replace(re, '').trim() || null, followUps: followUps.length ? followUps : null };
+}
 
 /** noise_report만 단독으로 불렸을 때(uiResult가 없을 때) 오탐 데이터를 담을 빈 껍데기. */
 function emptyResult(): ChatQueryResult {
@@ -503,7 +528,7 @@ export async function runChatAgent(opts: {
    * 빈 껍데기에라도 실어 보낸다 — 안 그러면 오탐 점검만 물었을 때 결과가 통째로 null이 돼서
    * 화면·HTML 저장 둘 다 아무것도 못 보여준다(2026-08-11 발견).
    */
-  const finish = (summary: string | null): AgentOutcome => {
+  const finish = (raw: string | null): AgentOutcome => {
     const base = uiResult ?? (monthly || noisyKeywords ? emptyResult() : null);
     let result = base ? { ...base, monthly: monthly ?? base.monthly, noisyKeywords: noisyKeywords ?? base.noisyKeywords } : null;
 
@@ -512,10 +537,12 @@ export async function runChatAgent(opts: {
       result.needsLiveSearch = true;
     }
 
+    const { summary, followUps } = splitFollowUps(raw);
     return {
       summary,
       result,
       resultKind,
+      followUps,
       steps,
       usage,
     };

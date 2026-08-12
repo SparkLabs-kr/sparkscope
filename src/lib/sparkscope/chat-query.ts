@@ -375,6 +375,8 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
   const src = new Map<string, number>();
   const comp = new Map<string, number>();
   let negativeCount = 0;
+  let positiveCount = 0;
+  let neutralCount = 0;
   let riskCount = 0;
   for (const a of clean) {
     if (a.riskFlag) riskCount++;
@@ -382,6 +384,8 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
     bump(src, normalizeSource(a.source));
     if (a.matchedKeyword) bump(comp, a.matchedKeyword);
     if (a.tone === 'NEGATIVE') negativeCount++;
+    else if (a.tone === 'POSITIVE') positiveCount++;
+    else neutralCount++;
   }
   const top = (m: Map<string, number>, n: number) =>
     [...m.entries()]
@@ -432,6 +436,8 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
     topSources: top(src, 5),
     topCompanies: top(comp, 5),
     negativeCount,
+    positiveCount,
+    neutralCount,
     riskCount,
     monthly,
     noisyKeywords,

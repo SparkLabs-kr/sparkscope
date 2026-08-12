@@ -81,6 +81,10 @@ export type ChatResponse = {
   appliedScopes?: ChatScope[];
   resultKind?: ResultKind;
   result: ChatQueryResult | null;
+  /** 방금 답변에 이어 물어볼 만한 질문 2~3개. 비개발자 사용자가 "이 챗봇으로 뭘 더
+   *  물어볼 수 있는지" 스스로 떠올리기 어려워해서(2026-08-12), 모델이 맥락에 맞는
+   *  다음 질문을 직접 뽑아 버튼으로 보여준다. */
+  followUps?: string[] | null;
 };
 
 export type ChatQueryResult = {
@@ -99,6 +103,9 @@ export type ChatQueryResult = {
   topSources: { name: string; count: number }[];
   topCompanies: { name: string; count: number }[];
   negativeCount: number;
+  /** 긍정/중립 톤 건수 — search_articles(DB 조회) 경로에서만 채워진다. 톤 도넛차트용. */
+  positiveCount?: number;
+  neutralCount?: number;
   /** 분류·키워드·매체 집계가 최신 1000건 표본 기준인지 */
   sampled?: boolean;
   /** 위험 플래그가 달린 기사 수 */

@@ -118,7 +118,7 @@ export async function POST(req: Request) {
           return;
         }
 
-        const { summary, result, resultKind, steps, usage } = await runChatAgent({
+        const { summary, result, resultKind, followUps, steps, usage } = await runChatAgent({
           question,
           history,
           period,
@@ -147,6 +147,7 @@ export async function POST(req: Request) {
           appliedScopes: scopes,
           resultKind,
           result,
+          followUps,
         });
       } catch (e) {
         console.error('[api/chat] query failed', e);

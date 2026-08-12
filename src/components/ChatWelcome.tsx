@@ -371,8 +371,8 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
     recognition.start();
   };
 
-  const send = async (opts?: { live?: boolean; keyword?: string }) => {
-    const question = opts?.live ? '' : input.trim();
+  const send = async (opts?: { live?: boolean; keyword?: string; question?: string }) => {
+    const question = opts?.live ? '' : (opts?.question ?? input.trim());
     if (!question && !opts?.live) return;
     // 파일 첨부는 아직 서버로 보내지 않는다(스토리지 연결 전).
     const attached = files.map((f) => f.name);
@@ -648,6 +648,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                         question={lastQuestionBefore(messages, i)}
                         loading={loading}
                         onSendLiveSearch={(keyword) => send({ live: true, keyword })}
+                        onFollowUp={(q) => send({ question: q })}
                       />
                     </div>
                   </div>
@@ -971,6 +972,7 @@ function ChatAnswer({
   question,
   loading,
   onSendLiveSearch,
+  onFollowUp,
 }: {
   res: ChatResponse;
   scopes: string[];
@@ -979,6 +981,7 @@ function ChatAnswer({
   question: string;
   loading?: boolean;
   onSendLiveSearch?: (keyword: string) => void;
+  onFollowUp?: (question: string) => void;
 }) {
   if (!res) return null;
   return (
@@ -1013,6 +1016,24 @@ function ChatAnswer({
           loading={loading}
           onLiveSearch={onSendLiveSearch}
         />
+      )}
+
+      {/* 후속 질문 추천 — 사용자가 "이 챗봇으로 뭘 더 물어볼 수 있는지" 스스로 떠올리기
+          어려워해서(2026-08-12), 방금 답변 맥락에서 모델이 뽑은 다음 질문을 버튼으로 보여준다. */}
+      {!loading && onFollowUp && res.followUps && res.followUps.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] text-spark-muted">이것도 물어보시겠어요?</span>
+          {res.followUps.map((q) => (
+            <button
+              key={q}
+              type="button"
+              onClick={() => onFollowUp(q)}
+              className="px-3 py-1.5 bg-spark-subtle hover:bg-spark-light-purple border border-spark-border hover:border-spark-purple/30 text-spark-ink-soft hover:text-spark-purple text-[12px] font-medium rounded-full transition"
+            >
+              {q}
+            </button>
+          ))}
+        </div>
       )}
 
       {(res.summary || res.result) && (
@@ -1292,6 +1313,18 @@ function ChatResult({
         <NoiseKeywordTable rows={result.noisyKeywords} />
       )}
 
+      {/* "요즘 여론 어때?" 같은 톤 질문은 부정 건수 하나보다 긍정/중립/부정 비율이 한눈에
+          보이는 도넛차트가 더 직관적이다(2026-08-12). trend·noise는 이미 전용 그래프가
+          있으니 일반 검색(search) 결과에서만 보여준다. */}
+      {resultKind === 'search' &&
+        (result.positiveCount ?? 0) + (result.neutralCount ?? 0) + result.negativeCount > 0 && (
+          <ToneDonutChart
+            positive={result.positiveCount ?? 0}
+            neutral={result.neutralCount ?? 0}
+            negative={result.negativeCount}
+          />
+        )}
+
       {/* 기사 목록 */}
       {result.articles.length > 0 && (
         <div className="bg-spark-surface border border-spark-border rounded-2xl shadow-card overflow-hidden">
@@ -1453,6 +1486,69 @@ function MonthlyTrendChart({ items }: { items: { month: string; count: number }[
           );
         })}
       </svg>
+    </div>
+  );
+}
+
+/** 긍정/중립/부정 톤 비율 도넛차트 — MonthlyTrendChart와 같은 SVG 인라인 패턴. */
+function ToneDonutChart({ positive, neutral, negative }: { positive: number; neutral: number; negative: number }) {
+  const total = positive + neutral + negative;
+  if (total === 0) return null;
+  const R = 54;
+  const C = 2 * Math.PI * R;
+  const SEGMENTS = [
+    { label: '긍정', value: positive, color: '#16A34A' },
+    { label: '중립', value: neutral, color: '#8B8894' },
+    { label: '부정', value: negative, color: '#DC2626' },
+  ];
+  let cursor = 0;
+  const arcs = SEGMENTS.filter((s) => s.value > 0).map((s) => {
+    const dash = (s.value / total) * C;
+    const arc = { ...s, dash, offset: -cursor };
+    cursor += dash;
+    return arc;
+  });
+
+  return (
+    <div className="bg-spark-surface border border-spark-border rounded-2xl shadow-card p-4">
+      <div className="text-[13px] font-semibold text-spark-ink-soft mb-2">톤 분포</div>
+      <div className="flex items-center gap-6">
+        <svg viewBox="0 0 140 140" width={140} height={140} role="img" aria-label="긍정·중립·부정 톤 비율">
+          <g transform="translate(70,70) rotate(-90)">
+            <circle r={R} cx={0} cy={0} fill="none" stroke="#EDEAE2" strokeWidth={20} />
+            {arcs.map((a) => (
+              <circle
+                key={a.label}
+                r={R}
+                cx={0}
+                cy={0}
+                fill="none"
+                stroke={a.color}
+                strokeWidth={20}
+                strokeDasharray={`${a.dash} ${C - a.dash}`}
+                strokeDashoffset={a.offset}
+              />
+            ))}
+          </g>
+          <text x={70} y={66} textAnchor="middle" fontSize={20} fontWeight={800} fill="#2A2830">
+            {total.toLocaleString()}
+          </text>
+          <text x={70} y={84} textAnchor="middle" fontSize={11} fill="#8B8894">
+            건
+          </text>
+        </svg>
+        <div className="flex flex-col gap-1.5 text-[12px]">
+          {SEGMENTS.map((s) => (
+            <div key={s.label} className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: s.color }} />
+              <span className="text-spark-ink-soft font-medium">{s.label}</span>
+              <span className="text-spark-muted">
+                {s.value.toLocaleString()}건 ({Math.round((s.value / total) * 100)}%)
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
