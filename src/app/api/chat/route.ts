@@ -8,7 +8,7 @@ import { authOptions } from '@/lib/auth';
 import { OPEN_ACCESS } from '@/lib/flags';
 import { runChatQuery, type ChatPeriod, type ChatScope } from '@/lib/sparkscope/chat-query';
 import { runChatAgent, type AgentTurn } from '@/lib/sparkscope/chat-agent';
-import { runLiveSearch } from '@/lib/sparkscope/chat-live';
+import { runLiveSearch, summarizeLiveSearch } from '@/lib/sparkscope/chat-live';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -87,12 +87,16 @@ export async function POST(req: Request) {
             label: '실시간 뉴스 검색',
             detail: `${keyword} → ${result.total}건`,
           });
+          send({ type: 'progress', phase: 'thinking', label: '결과 정리하는 중' });
+          const summary = await summarizeLiveSearch(keyword, result);
           send({
             type: 'done',
             intent: 'search',
             note: null,
             unsupported: null,
-            summary: `"${keyword}"의 실시간 뉴스 검색 결과예요. 우리 DB의 노이즈 필터를 거치지 않은 원본이라 관련 없는 기사가 섞여있을 수 있어요.`,
+            summary:
+              summary ??
+              `"${keyword}"의 실시간 뉴스 검색 결과예요. 우리 DB의 노이즈 필터를 거치지 않은 원본이라 관련 없는 기사가 섞여있을 수 있어요.`,
             appliedPeriod: period,
             appliedScopes: scopes,
             resultKind: 'live',

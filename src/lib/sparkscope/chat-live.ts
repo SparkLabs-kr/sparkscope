@@ -5,9 +5,11 @@
 // DB 검색과 달리 처음엔 필터를 거치지 않았지만, 노이즈가 많아 excludeWords/contextWords를
 // 적용하도록 수정했다(2026-08-12). search_articles/semantic_search가 0건일 때만 에이전트가
 // 이 도구를 부르도록 chat-agent.ts의 프롬프트에서 안내한다.
+import OpenAI from 'openai';
 import { fetchGoogleNews, fetchNaverNews, naverEnabled } from './collector';
 import { prisma } from '@/lib/prisma';
 import { PERIOD_LABEL, type ChatQueryResult } from './chat-types';
+import { dedupeArticles } from './chat-query';
 
 export async function runLiveSearch(keyword: string): Promise<ChatQueryResult> {
   const jobs = [fetchGoogleNews(keyword).catch(() => [])];
@@ -51,18 +53,21 @@ export async function runLiveSearch(keyword: string): Promise<ChatQueryResult> {
   });
 
   const seen = new Set<string>();
-  const deduped = withScore
+  const linkDeduped = withScore
     .sort((x, y) => y.score - x.score || +new Date(y.a.pubDate) - +new Date(x.a.pubDate))
     .filter((item) => {
       if (seen.has(item.a.link)) return false;
       seen.add(item.a.link);
       return true;
     })
-    .slice(0, 15)
-    .map((item) => item.a);
+    .map((item) => ({ ...item.a, priorityScore: item.score }));
+
+  // 같은 사안을 여러 매체(통신사 기사 받아쓰기)가 실어서 제목만 살짝 다른 경우가 많다 —
+  // DB 검색·해외 트렌드·의미 검색이 이미 쓰는 것과 같은 기준으로 하나로 접는다(2026-08-12).
+  const deduped = dedupeArticles(linkDeduped).slice(0, 15);
   deduped.sort((a, b) => +new Date(b.pubDate) - +new Date(a.pubDate));
 
-  const articles = deduped.slice(0, 15).map((a, i) => ({
+  const articles = deduped.map((a, i) => ({
     id: `live-${i}`,
     title: a.title,
     link: a.link,
@@ -93,4 +98,45 @@ export async function runLiveSearch(keyword: string): Promise<ChatQueryResult> {
     noisyKeywords: null,
     articles,
   };
+}
+
+const LIVE_SUMMARY_MODEL = 'gpt-5.4-mini';
+
+/**
+ * 실시간 검색 결과(제목만 있고 톤·요약이 없는 원본)를 사람이 말하듯 3~4문장으로 요약한다.
+ *
+ * "🔍 실시간 검색" 버튼을 눌렀을 때는 chat-agent를 거치지 않고 이 함수만 호출되는데,
+ * 예전엔 여기 요약이 "노이즈 필터를 안 거쳤다"는 고정 문구 하나뿐이라 챗봇이 실제로 기사를
+ * 읽고 답하는 것처럼 안 느껴졌다(2026-08-12 피드백). gpt-5.4-mini라 기사 15건 요약해도
+ * 호출당 $0.01 미만이라 비용 부담은 거의 없다.
+ */
+export async function summarizeLiveSearch(keyword: string, result: ChatQueryResult): Promise<string | null> {
+  if (!process.env.OPENAI_API_KEY || result.articles.length === 0) return null;
+  try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const list = result.articles
+      .map((a) => `- ${a.title} (${a.source}, ${a.pubDate.slice(0, 10)})`)
+      .join('\n');
+    const res = await openai.chat.completions.create({
+      model: LIVE_SUMMARY_MODEL,
+      max_completion_tokens: 500,
+      messages: [
+        {
+          role: 'system',
+          content:
+            '너는 스파크랩 뉴스 분석 담당이다. 방금 실시간(구글뉴스·네이버뉴스)으로 검색한 기사 제목 목록을 받는다.\n' +
+            '한국어 존댓말로 3~4문장, 실제로 방금 찾아본 것처럼 자연스럽게 답해라.\n' +
+            '- 목록에 실제로 있는 사실만 말해라. 지어내거나 추측하지 마라.\n' +
+            '- 같은 사안을 여러 매체가 받아쓴 게 보이면 그 사실을 짚어라.\n' +
+            '- 굵게(**) 같은 마크다운 강조는 쓰지 마라. 도구 이름을 언급하지 마라.\n' +
+            '- 이 결과가 우리 DB의 노이즈 필터를 거치지 않은 실시간 원본이라는 점을 자연스럽게 한 번 짚어라.',
+        },
+        { role: 'user', content: `"${keyword}" 실시간 검색 결과 ${result.total}건:\n${list}` },
+      ],
+    });
+    return res.choices[0]?.message?.content?.trim() || null;
+  } catch (e) {
+    console.error('[chat-live] 요약 생성 실패', e);
+    return null;
+  }
 }
