@@ -188,7 +188,17 @@ async function loadDashboardData(from: string, to: string, company: string | und
     // 우선순위가 낮아 상위 400건 풀에서부터 밀려남). 카테고리별로 따로 뽑아 합쳐 각 필터가
     // 최소한의 건수를 보장받게 한다. AC·VC·스타트업계는 노이즈성 기사가 상대적으로 많아
     // priorityScore 상위 50건으로 더 좁게(=중요하다고 판단된 것만) 제한.
-    Promise.all(Object.entries({ sparklabs_self: 150, portfolio_company: 150, competitor: 50, industry_trend: 50 }).map(([category, take]) =>
+    //
+    // AC·VC(competitor) 후보를 50→15로 더 좁혔다(2026-08-12). analyzer.ts의 priorityScore
+    // 상한을 완화(15→50)하면서 진짜 중요한 경쟁사 스캔들 기사는 카테고리를 뒤집고 올라올 수
+    // 있게 됐는데, 그 후보 풀 자체가 50개나 있으면 "최근 수집 기사"가 다시 경쟁사로 도배될
+    // 수 있다. 경쟁사는 "🏁 업계 모니터링" 탭에서 전체(최대 3000건)를 이미 볼 수 있으니,
+    // 이 개요 탭엔 정말 상위 몇 건(주요 기사)만 후보로 주면 충분하다.
+    // industry_trend도 50→15로 같이 좁혔다 — 후보를 25로만 줄였을 땐 실제 선정 건수(16건)가
+    // 그대로였다(애초에 50개 후보 중 16개만 이기고 있었음). 15까지 줄여야 경쟁사와 비슷한
+    // 수준(주요 기사 15건 안팎)으로 맞춰지고, 그만큼 포폴사 비중이 늘어난다 — 실사용 확인:
+    // 상한 50 + 경쟁사·업계 후보 각 15 조합이 최종 결과였다.
+    Promise.all(Object.entries({ sparklabs_self: 150, portfolio_company: 150, competitor: 15, industry_trend: 15 }).map(([category, take]) =>
       fetchRecentTabArticles(where, category, take, now, category === 'portfolio_company' ? 3 : undefined),
     )).then(arr => arr.flat()),
     // 톤 분석 — 스파크랩 기준

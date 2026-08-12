@@ -448,22 +448,35 @@ export function heuristicTone(title: string, body?: string): Tone {
   return 'NEUTRAL';
 }
 
+// 중요도·매체·신선도·부정톤 보너스를 다 더하면 최대 80점까지 붙는데, 카테고리 기본점수
+// 차이(포폴사 70 vs 경쟁사 50 = 20점)보다 훨씬 커서, "위기 뉴스"면 무슨 카테고리든 포폴사를
+// 뒤집어버리는 문제가 있었다(2026-08-12, 실사용 확인 — 한국산업은행 국고채 담합 의혹·HL만도
+// 사망사고 같은 경쟁사(AC·VC) 스캔들 기사가 "최근 수집 기사" 상단을 다 차지하고, 정작 포폴사
+// 정상 소식은 밀려남).
+// 처음엔 15로 걸었는데, 그러면 경쟁사(50+15=65)가 포폴사 최저치(70+0=70)보다 항상 낮아져서
+// 아무리 중요한 경쟁사 기사도 절대 상위에 못 올라오는 반대쪽 문제가 생겼다(2026-08-12,
+// 실사용 확인 — "완전히 없애면 어떡해, 중간중간 섞여야지"). 50으로 완화해, 정말 중요·최신·
+// 부정 톤이 겹친 "진짜 큰 기사"만 카테고리 한 단계를 뒤집을 수 있게 하고, 나머지 평범한
+// 기사는 여전히 카테고리 기본점수 순서를 따르게 한다. 경쟁사 쪽 전체 노출량은 이 상한이
+// 아니라 fetchRecentTabArticles의 후보 수(dashboard/page.tsx)로 별도 제한한다 — "최근
+// 수집 기사"엔 주요 기사만, 전체 목록은 업계 모니터링 탭에서 보는 구조.
+const PRIORITY_BONUS_CAP = 50;
+
 function computePriorityScore(article: RawArticle, importance: Importance, tone: Tone): number {
   // ?? 0 안전망: importance가 검증을 뚫고 스키마 밖 값으로 들어와도 NaN 대신 0점 처리.
   // (NaN이 DB Int 컬럼에 들어가면 upsert가 예외를 던져 그 회차 저장이 전부 실패했던 사고가 있었음)
-  let score = article.basePriority || 0;
+  const base = article.basePriority || 0;
   const impBonus = { CRITICAL: 30, HIGH: 20, MEDIUM: 10, LOW: 0 }[importance] ?? 0;
-  score += impBonus;
   // 메이저 매체 가중치
   const major = ['동아일보', '조선비즈', 'Chosunbiz', '매일경제', '한국경제', '전자신문', '디지털데일리', '디지털타임스', '아시아투데이'];
-  if (major.includes(article.source)) score += 15;
+  const mediaBonus = major.includes(article.source) ? 15 : 0;
   // 신선도
   const ageHrs = (Date.now() - article.pubDate.getTime()) / (1000 * 60 * 60);
-  if (ageHrs < 24) score += 15;
-  else if (ageHrs < 48) score += 8;
+  const freshBonus = ageHrs < 24 ? 15 : ageHrs < 48 ? 8 : 0;
   // 부정 톤 가중치 (위기 감지)
-  if (tone === 'NEGATIVE') score += 20;
-  return score;
+  const toneBonus = tone === 'NEGATIVE' ? 20 : 0;
+  const bonus = Math.min(impBonus + mediaBonus + freshBonus + toneBonus, PRIORITY_BONUS_CAP);
+  return base + bonus;
 }
 
 // ===== 유틸 =====
