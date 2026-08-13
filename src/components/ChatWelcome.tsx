@@ -643,7 +643,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
       {/* 대화 기록 */}
       <div className="relative flex-1 min-h-0">
       <div ref={scrollRef} className="h-full overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-6 py-8">
+        <div className={`max-w-3xl mx-auto px-6 py-8 ${messages.length === 0 ? 'h-full flex items-center justify-center' : ''}`}>
           {messages.length === 0 ? (
             <div className="flex flex-col items-center animate-rise">
               <SparkScopeMark />
