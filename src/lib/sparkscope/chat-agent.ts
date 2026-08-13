@@ -15,6 +15,7 @@ import { runInterQuery, compactInter } from './chat-inter';
 import { runPitchQuery, pitchDetailsForModel, runCoverageGap, runDigestArchive } from './chat-ops';
 import { proposeKeywordFix, listPendingSuggestions } from './chat-actions';
 import { runLiveSearch } from './chat-live';
+import { getCompetitorFundSummaries } from './fund-db';
 import { PERIOD_LABEL, SCOPE_LABEL, categoryLabel } from './chat-types';
 import type { ChatPeriod, ChatScope, ChatQueryResult, ResultKind } from './chat-types';
 
@@ -300,6 +301,26 @@ const TOOLS: ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'competitor_funds',
+      description:
+        '경쟁사(VC)의 펀드 포트폴리오 정보를 조회한다. 펀드 개수, 총 운용자산(AUM), 주요 투자 섹터, 펀드 목록을 돌려준다. ' +
+        '"XX펀드의 포트폴리오가 뭐야?", "카카오벤처스가 뭘 투자했어?" 같은 질문에 써라.',
+      parameters: {
+        type: 'object',
+        properties: {
+          competitors: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '조회할 경쟁사(VC) 이름 배열. 예: ["카카오벤처스", "미래에셋벤처투자"]. 감시 대상에 등록된 경쟁사명으로.',
+          },
+        },
+        required: ['competitors'],
+      },
+    },
+  },
 ];
 
 function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean, asTable: boolean) {
@@ -317,6 +338,8 @@ function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean
 3) 감시 대상 명단(운영 중: 포트폴리오사 218, 경쟁사 114, 업계 57, 스파크랩 17)
    — coverage_gap으로 "기사가 안 난 곳"을 찾는다. 기사 검색으로는 못 구하는 값이다.
 4) 발송된 다이제스트 기록 — digest_archive.
+5) 경쟁사(VC) 펀드 포트폴리오 — 각 경쟁사의 펀드 개수·운용자산(AUM)·투자 섹터·펀드 목록.
+   "XX펀드의 포트폴리오가 뭐야?", "카카오벤처스가 뭘 투자했어?" 같은 질문에 competitor_funds를 써라.
 
 [화면에서 고른 값]
 기간 ${PERIOD_LABEL[uiPeriod]} / 범위 ${uiScopes.length ? uiScopes.map((s) => SCOPE_LABEL[s]).join(', ') : '전체'}
@@ -517,6 +540,7 @@ const TOOL_LABEL: Record<string, string> = {
   propose_keyword_fix: '설정 보완 제안 등록',
   pending_suggestions: '대기 중인 제안 확인',
   live_search: '실시간 뉴스 검색',
+  competitor_funds: '경쟁사 펀드 포트폴리오 조회',
 };
 
 export async function runChatAgent(opts: {
@@ -777,6 +801,21 @@ export async function runChatAgent(opts: {
             steps.push(`live(${keyword}) → ${r.total}건`);
             if (!uiResult || r.total > 0) { uiResult = r; resultKind = 'live'; }
             payload = compactResult(r);
+            break;
+          }
+          case 'competitor_funds': {
+            const competitors = Array.isArray(args.competitors) ? args.competitors.map(String) : [];
+            const summaries = await getCompetitorFundSummaries(competitors);
+            const fundsByCompetitor = Array.from(summaries.entries()).map(([name, summary]) => ({
+              competitor: name,
+              investorName: summary.investorName,
+              fundCount: summary.fundCount,
+              totalAum: summary.totalAum,
+              topSectors: summary.topSectors,
+              funds: summary.funds.slice(0, 10),
+            }));
+            steps.push(`경쟁사펀드 → ${fundsByCompetitor.length}곳`);
+            payload = { fundsByCompetitor };
             break;
           }
           default:
