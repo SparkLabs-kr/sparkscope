@@ -174,7 +174,7 @@ const TASKS = [
   },
   {
     id: 'manage',
-    label: '키워드·노이즈',
+    label: '대시보드 모니터링',
     desc: '수집 설정 · 오탐 정리',
     heading: '모니터링 설정 관리',
     icon: <IconSliders />,
