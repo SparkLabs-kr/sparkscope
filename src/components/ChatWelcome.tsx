@@ -1082,25 +1082,9 @@ function ChatAnswer({
           loading={loading}
           onLiveSearch={onSendLiveSearch}
           onSuggestedKeyword={onSuggestedKeyword}
+          followUps={res.followUps}
+          onFollowUp={onFollowUp}
         />
-      )}
-
-      {/* 후속 질문 추천 — 사용자가 "이 챗봇으로 뭘 더 물어볼 수 있는지" 스스로 떠올리기
-          어려워해서(2026-08-12), 방금 답변 맥락에서 모델이 뽑은 다음 질문을 버튼으로 보여준다. */}
-      {!loading && onFollowUp && res.followUps && res.followUps.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] text-spark-muted">이것도 물어보시겠어요?</span>
-          {res.followUps.map((q) => (
-            <button
-              key={q}
-              type="button"
-              onClick={() => onFollowUp(q)}
-              className="px-3 py-1.5 bg-spark-subtle hover:bg-spark-light-purple border border-spark-border hover:border-spark-purple/30 text-spark-ink-soft hover:text-spark-purple text-[12px] font-medium rounded-full transition"
-            >
-              {q}
-            </button>
-          ))}
-        </div>
       )}
 
       {(res.summary || res.result) && (
@@ -1273,6 +1257,8 @@ function ChatResult({
   loading,
   onLiveSearch,
   onSuggestedKeyword,
+  followUps,
+  onFollowUp,
 }: {
   result: ChatQueryResult;
   scopes: string[];
@@ -1281,6 +1267,8 @@ function ChatResult({
   loading?: boolean;
   onLiveSearch?: (keyword: string) => void;
   onSuggestedKeyword?: (keyword: string) => void;
+  followUps?: string[] | null;
+  onFollowUp?: (question: string) => void;
 }) {
   const fmtDate = (iso: string) => {
     const d = new Date(iso);
@@ -1360,21 +1348,33 @@ function ChatResult({
         )}
       </div>
 
-      {/* 유사 키워드 제안 — 누르면 바로 실시간 검색이 아니라, 먼저 우리 DB로 검색해서
-          보여준다. 결과가 적으면 그 밑에 뜨는 "실시간 검색할까요?"를 따로 눌러야 실시간
-          검색으로 넘어간다(2026-08-13 피드백 — 실시간부터 바로 가면 DB에 있는 결과를
-          건너뛰게 된다). */}
-      {suggestedKeywords.length > 0 && (
+      {/* 다음 질문 제안 — 유사 키워드(자주 나온 회사·키워드, 클라이언트에서 집계)와
+          후속 질문(방금 답변 맥락에서 모델이 뽑은 질문)을 한 상자에 같이 보여준다.
+          예전엔 두 상자가 따로 떠서 "다음에 뭘 물어볼지 제안"하는 비슷한 목적의 상자가
+          답변 하나에 중복으로 보였다(2026-08-13 피드백). 키워드를 누르면 바로 실시간
+          검색이 아니라 먼저 우리 DB로 검색해서 보여준다 — 결과가 적으면 그 밑에 뜨는
+          "실시간 검색할까요?"를 따로 눌러야 실시간 검색으로 넘어간다(2026-08-13 피드백 —
+          실시간부터 바로 가면 DB에 있는 결과를 건너뛰게 된다). */}
+      {(suggestedKeywords.length > 0 || (!loading && followUps && followUps.length > 0)) && (
         <div className="p-4 bg-gradient-to-r from-purple-100 to-pink-100 border-2 border-purple-300 rounded-2xl">
-          <p className="text-[13px] text-purple-900 font-bold mb-3">🔗 혹시 이것도 찾으시나요?</p>
+          <p className="text-[13px] text-purple-900 font-bold mb-3">🔗 이것도 물어보시겠어요?</p>
           <div className="flex flex-wrap gap-2">
             {suggestedKeywords.map(kw => (
               <button
-                key={kw}
+                key={`kw-${kw}`}
                 onClick={() => onSuggestedKeyword?.(kw)}
                 className="px-3 py-2 bg-white hover:bg-purple-50 border border-purple-300 text-purple-900 text-[12px] font-semibold rounded-lg transition shadow-sm hover:shadow-md"
               >
                 {kw}
+              </button>
+            ))}
+            {!loading && followUps?.map(q => (
+              <button
+                key={`fu-${q}`}
+                onClick={() => onFollowUp?.(q)}
+                className="px-3 py-2 bg-white hover:bg-purple-50 border border-purple-300 text-purple-900 text-[12px] font-medium rounded-lg transition shadow-sm hover:shadow-md"
+              >
+                {q}
               </button>
             ))}
           </div>
