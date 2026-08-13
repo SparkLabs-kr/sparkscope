@@ -302,6 +302,10 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   // 피드백 — 자동 스크롤이 "튕기는 느낌"이라 아예 없앴다).
   const [showJumpToAnswer, setShowJumpToAnswer] = useState(false);
   const prevLoadingRef = useRef(false);
+  // "혹시 이것도 찾으신가요?" 칩이나 "실시간 검색할까요?" 버튼처럼, 사용자가 답변 안의
+  // 버튼을 직접 눌러서 새 조회를 시킨 경우엔 그 결과가 어디 있는지 안 보이면 알아보기
+  // 힘들다 — 이때만 예외적으로 결과가 오면 자동으로 맨 아래까지 스크롤한다(2026-08-13).
+  const scrollToResultRef = useRef(false);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
   // 대화 기록은 로컬(브라우저)에만 저장한다. 서버 테이블은 아직 없다.
@@ -342,7 +346,13 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
     if (loading) {
       setShowJumpToAnswer(false);
     } else if (prevLoadingRef.current) {
-      setShowJumpToAnswer(true);
+      if (scrollToResultRef.current) {
+        const el = scrollRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+        scrollToResultRef.current = false;
+      } else {
+        setShowJumpToAnswer(true);
+      }
     }
     prevLoadingRef.current = loading;
   }, [messages, loading]);
@@ -406,9 +416,10 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
     recognition.start();
   };
 
-  const send = async (opts?: { live?: boolean; keyword?: string; question?: string }) => {
+  const send = async (opts?: { live?: boolean; keyword?: string; question?: string; scrollToResult?: boolean }) => {
     const question = opts?.live ? '' : (opts?.question ?? input.trim());
     if (!question && !opts?.live) return;
+    scrollToResultRef.current = !!opts?.scrollToResult;
     // 파일 첨부는 아직 서버로 보내지 않는다(스토리지 연결 전).
     const attached = files.map((f) => f.name);
     // live 검색일 때는 사용자 메시지를 추가하지 않는다 (이미 이전 결과가 있는 상태)
@@ -683,8 +694,9 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                         period={m.period ?? 'quarter'}
                         question={lastQuestionBefore(messages, i)}
                         loading={loading}
-                        onSendLiveSearch={(keyword) => send({ live: true, keyword })}
+                        onSendLiveSearch={(keyword) => send({ live: true, keyword, scrollToResult: true })}
                         onFollowUp={(q) => send({ question: q })}
+                        onSuggestedKeyword={(kw) => send({ question: kw, scrollToResult: true })}
                       />
                     </div>
                   </div>
@@ -1025,6 +1037,7 @@ function ChatAnswer({
   loading,
   onSendLiveSearch,
   onFollowUp,
+  onSuggestedKeyword,
 }: {
   res: ChatResponse;
   scopes: string[];
@@ -1034,6 +1047,7 @@ function ChatAnswer({
   loading?: boolean;
   onSendLiveSearch?: (keyword: string) => void;
   onFollowUp?: (question: string) => void;
+  onSuggestedKeyword?: (keyword: string) => void;
 }) {
   if (!res) return null;
   return (
@@ -1067,6 +1081,7 @@ function ChatAnswer({
           resultKind={res.resultKind}
           loading={loading}
           onLiveSearch={onSendLiveSearch}
+          onSuggestedKeyword={onSuggestedKeyword}
         />
       )}
 
@@ -1257,6 +1272,7 @@ function ChatResult({
   resultKind,
   loading,
   onLiveSearch,
+  onSuggestedKeyword,
 }: {
   result: ChatQueryResult;
   scopes: string[];
@@ -1264,6 +1280,7 @@ function ChatResult({
   resultKind?: ResultKind;
   loading?: boolean;
   onLiveSearch?: (keyword: string) => void;
+  onSuggestedKeyword?: (keyword: string) => void;
 }) {
   const fmtDate = (iso: string) => {
     const d = new Date(iso);
@@ -1343,15 +1360,18 @@ function ChatResult({
         )}
       </div>
 
-      {/* 유사 키워드 제안 */}
+      {/* 유사 키워드 제안 — 누르면 바로 실시간 검색이 아니라, 먼저 우리 DB로 검색해서
+          보여준다. 결과가 적으면 그 밑에 뜨는 "실시간 검색할까요?"를 따로 눌러야 실시간
+          검색으로 넘어간다(2026-08-13 피드백 — 실시간부터 바로 가면 DB에 있는 결과를
+          건너뛰게 된다). */}
       {suggestedKeywords.length > 0 && (
         <div className="p-4 bg-gradient-to-r from-purple-100 to-pink-100 border-2 border-purple-300 rounded-2xl">
-          <p className="text-[13px] text-purple-900 font-bold mb-3">🔗 혹시 이것도 찾으신가요?</p>
+          <p className="text-[13px] text-purple-900 font-bold mb-3">🔗 혹시 이것도 찾으시나요?</p>
           <div className="flex flex-wrap gap-2">
             {suggestedKeywords.map(kw => (
               <button
                 key={kw}
-                onClick={() => onLiveSearch?.(kw)}
+                onClick={() => onSuggestedKeyword?.(kw)}
                 className="px-3 py-2 bg-white hover:bg-purple-50 border border-purple-300 text-purple-900 text-[12px] font-semibold rounded-lg transition shadow-sm hover:shadow-md"
               >
                 {kw}
