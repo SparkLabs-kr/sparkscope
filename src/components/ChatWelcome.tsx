@@ -297,10 +297,11 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  // 답변이 완성되면 스크롤 끝(=긴 답변의 맨 아래)이 아니라 방금 물어본 질문이 화면 맨 위에
-  // 오도록 맞춘다 — 끝까지 내려가버리면 답을 처음부터 읽으려고 매번 위로 다시 스크롤해야
-  // 했다(2026-08-12 피드백).
-  const lastUserRef = useRef<HTMLDivElement | null>(null);
+  // 답변이 오거나 로딩이 시작돼도 화면을 자동으로 안 움직인다 — 어디를 보고 있었든 그대로
+  // 두고, 대신 "답변 보기" 버튼을 띄워서 원할 때 직접 맨 아래로 내려가게 한다(2026-08-13
+  // 피드백 — 자동 스크롤이 "튕기는 느낌"이라 아예 없앴다).
+  const [showJumpToAnswer, setShowJumpToAnswer] = useState(false);
+  const prevLoadingRef = useRef(false);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
   // 대화 기록은 로컬(브라우저)에만 저장한다. 서버 테이블은 아직 없다.
@@ -332,25 +333,29 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
     });
   }, [messages, convoId]);
 
-  // 조회 중엔 진행 상황 표시가 보이도록 끝까지 내리고, 답변이 다 오면(loading이 꺼지면)
-  // 그 답을 부른 질문이 화면 맨 위로 오게 스크롤한다 — 답이 길면(차트·기사 목록) 끝까지
-  // 내려버리는 게 오히려 처음부터 읽기 불편했다(2026-08-12).
-  //
-  // behavior:'smooth'는 scrollTo·scrollIntoView 둘 다 이 페이지의 중첩 스크롤 구조에서
-  // 조용히 안 먹는 게 실제로 확인돼서(애니메이션 없이 그냥 무시됨), scrollTop을 직접
-  // 대입한다 — 애니메이션은 포기하지만 실제로 그 위치로 항상 이동하는 게 우선이다.
+  // 답변이 오든 로딩이 시작되든 화면을 절대 자동으로 옮기지 않는다 — 보고 있던 위치 그대로
+  // 둔다. 대신 답변이 다 오면 "답변 보기" 버튼만 띄우고, 누르면 그때 맨 아래로 내린다
+  // (2026-08-13 — 자동 스크롤이 "튕기는 느낌"이라는 피드백으로 아예 없앴다).
+  // prevLoadingRef로 "방금 로딩이 끝난 시점"만 잡아낸다 — 안 그러면 옛 대화를 열 때도
+  // messages가 바뀌어서 버튼이 잘못 뜬다.
   useEffect(() => {
+    if (loading) {
+      setShowJumpToAnswer(false);
+    } else if (prevLoadingRef.current) {
+      setShowJumpToAnswer(true);
+    }
+    prevLoadingRef.current = loading;
+  }, [messages, loading]);
+
+  // "답변 보기" 클릭 시 맨 아래로 이동 — behavior:'smooth'는 scrollTo·scrollIntoView 둘 다
+  // 이 페이지의 중첩 스크롤 구조에서 조용히 안 먹는 게 실제로 확인돼서(애니메이션 없이 그냥
+  // 무시됨), scrollTop을 직접 대입한다.
+  const jumpToAnswer = () => {
     const el = scrollRef.current;
     if (!el) return;
-    if (loading) {
-      el.scrollTop = el.scrollHeight;
-    } else if (lastUserRef.current) {
-      const targetRect = lastUserRef.current.getBoundingClientRect();
-      const containerRect = el.getBoundingClientRect();
-      const offset = targetRect.top - containerRect.top + el.scrollTop - 12;
-      el.scrollTop = Math.max(offset, 0);
-    }
-  }, [messages, loading]);
+    el.scrollTop = el.scrollHeight;
+    setShowJumpToAnswer(false);
+  };
 
   const toggle = (list: string[], id: string) =>
     list.includes(id) ? list.filter((v) => v !== id) : [...list, id];
@@ -537,11 +542,6 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
 
   const task = TASKS.find((t) => t.id === openTask);
   const canSend = input.trim().length > 0 && !loading;
-  // 스크롤 위치 계산용 — 가장 최근 사용자 질문의 인덱스.
-  let lastUserIndex = -1;
-  messages.forEach((m, i) => {
-    if (m.role === 'user') lastUserIndex = i;
-  });
 
   return (
     <div className="h-screen bg-spark-cream flex">
@@ -630,7 +630,8 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
       </header>
 
       {/* 대화 기록 */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+      <div className="relative flex-1 min-h-0">
+      <div ref={scrollRef} className="h-full overflow-y-auto">
         <div className="max-w-3xl mx-auto px-6 py-8">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center animate-rise">
@@ -648,7 +649,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
             <div className="space-y-5">
               {messages.map((m, i) =>
                 m.role === 'user' ? (
-                  <div key={i} ref={i === lastUserIndex ? lastUserRef : undefined} className="flex justify-end animate-rise">
+                  <div key={i} className="flex justify-end animate-rise">
                     <div className="max-w-[85%]">
                       <div className="bg-spark-purple text-white rounded-2xl rounded-br-md px-4 py-2.5 text-[14px] leading-relaxed whitespace-pre-wrap">
                         {m.text}
@@ -730,6 +731,22 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
             </div>
           )}
         </div>
+      </div>
+
+      {/* 답변이 오면 화면을 자동으로 움직이지 않는 대신, 원하면 바로 내려가서 볼 수 있게
+          띄우는 버튼(2026-08-13). */}
+      {showJumpToAnswer && (
+        <button
+          type="button"
+          onClick={jumpToAnswer}
+          className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-spark-purple text-white text-[12px] font-semibold shadow-pop hover:opacity-90 transition animate-rise"
+        >
+          <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5">
+            <path d="M3 6l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          답변 보기
+        </button>
+      )}
       </div>
 
       {/* 입력 도크 */}
