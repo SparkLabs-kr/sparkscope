@@ -125,4 +125,7 @@ export type ChatQueryResult = {
   articles: ChatArticle[];
   /** 결과 건수가 너무 적어 (< 8건) 실시간 검색을 제안할 때 true */
   needsLiveSearch?: boolean;
+  /** 검색어가 감시 대상 이름과 정확히 일치했을 때의 그 대상 정보 — 흔한 단어라도 회사
+   *  얘기로 우선 해석했다는 근거이자, 폐업(Written-off) 여부를 답변에 반영하는 데 쓴다. */
+  matchedEntities?: { name: string; category: string; portfolioStatus: string | null }[];
 };

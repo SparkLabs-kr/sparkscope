@@ -48,7 +48,11 @@ const TOOLS: ChatCompletionTool[] = [
               '"기사에 실제로 어떻게 쓰였을까"로 바꿔서, 같은 뜻의 표현을 여러 개 넣어라. ' +
               '예) "투자 받은 데" → ["투자유치","시리즈A","프리A","시드 투자","라운드"]. ' +
               '띄어쓰기 변형(투자 유치)은 시스템이 자동 처리하니 넣지 마라. ' +
-              '주제를 안 가리는 질문이면 빈 배열로 두고 기간·범위로만 조회해라.',
+              '주제를 안 가리는 질문이면 빈 배열로 두고 기간·범위로만 조회해라. ' +
+              '★ 사용자가 한 단어만 콕 집어 물으면("OO 관련 기사 찾아줘", "OO 어때") 그 단어가 ' +
+              '흔한 일상어(온도·리코·타코·액스처럼)처럼 보여도 십중팔구 회사/감시대상 이름이다 — ' +
+              '뜻으로 풀어서 다른 동의어(예: "온도"→"기온","폭염")로 넓히지 말고 그 단어 자체만 넣어라. ' +
+              '날씨·감정 같은 일반적인 뜻으로 확장하면 전혀 무관한 기사가 섞인다.',
           },
           period: { type: 'string', enum: PERIODS, description: '조회 기간' },
           scopes: {
@@ -328,7 +332,18 @@ ${uiScopes.includes('inter')
 - 답하기 전에 반드시 도구로 실제 데이터를 확인해라. 추측으로 답하지 마라.
 - 조건은 전부 AND로 걸린다. 검색어를 많이 넣을수록 결과가 좁아지는 게 아니라,
   검색어 목록 중 하나라도 걸리는 기사(OR) 중에서 기간·범위·톤을 모두 만족하는 것만 남는다.
-- 첫 검색이 0건이거나 눈에 띄게 적으면 그대로 "없다"고 하지 마라.
+- ★ 이 챗봇은 스파크랩 내부 도구다. 사용자가 한 단어만 콕 집어 물으면("온도 어때?",
+  "피치스 관련 기사 찾아줘") 그 단어가 흔한 일상어처럼 보여도 구글·네이버에 검색하듯
+  일반적인 뜻으로 풀지 말고, 감시 대상(포트폴리오사 등) 이름을 먼저 의심해라 — 여기서
+  검색했다는 것 자체가 회사 얘기라는 신호다.
+- 검색어가 감시 대상 이름 자체였는데 0건이면(예: "온도"), 그건 오류가 아니라 "이 회사는
+  최근 보도가 없다"는 실제 정보다. 이 경우엔 아래 "0건이면 비워서 넓혀라" 규칙을 따르지
+  마라 — terms를 비우면 전혀 무관한 회사 기사들이 섞여 들어와 "이게 왜 나오지" 싶은 답이
+  된다. 0건 그대로 답하고, matchedEntities에 실린 portfolioStatus가 'Live'가 아니면
+  (Exit·Written-off) 그 상태를 먼저 알려라(예: "이 포트폴리오사는 현재 Written-off(청산)
+  상태예요"). needsLiveSearch는 시스템이 자동으로 처리하니 "실시간 검색해볼까요"라고
+  네가 직접 물을 필요는 없다.
+- (그 외) 첫 검색이 0건이거나 눈에 띄게 적으면 그대로 "없다"고 하지 마라.
   이때 가장 먼저 할 일은 검색어를 다른 단어로 바꾸는 게 아니라 아예 비우는 것이다.
   terms를 빼고 기간·범위·톤만으로 조회하면 무엇이 있는지 실제로 보인다. 그 다음에 좁혀라.
   그래도 없으면 semantic_search로 뜻을 서술해서 찾아보고, 기간을 넓히거나 범위를 풀어라.
@@ -391,6 +406,9 @@ function compactResult(r: ChatQueryResult) {
     sampled: r.sampled ?? false,
     negativeCount: r.negativeCount,
     riskCount: r.riskCount,
+    // 검색어가 감시 대상 이름과 정확히 일치했을 때만 채워진다. portfolioStatus가
+    // 'Live'가 아니면(Exit/Written-off) 그 상태를 답변에 반드시 알려야 한다.
+    matchedEntities: r.matchedEntities?.length ? r.matchedEntities : undefined,
     byCategory: r.byCategory.map((c) => ({ name: categoryLabel(c.category), count: c.count })),
     topCompanies: r.topCompanies,
     topSources: r.topSources,
@@ -540,8 +558,13 @@ export async function runChatAgent(opts: {
     const base = uiResult ?? (monthly || noisyKeywords ? emptyResult() : null);
     let result = base ? { ...base, monthly: monthly ?? base.monthly, noisyKeywords: noisyKeywords ?? base.noisyKeywords } : null;
 
-    // 결과가 8건 미만이고 아직 실시간 검색을 시도하지 않았다면, 사용자에게 제안
-    if (result && result.total > 0 && result.total < 8 && resultKind !== 'live') {
+    // 결과가 8건 미만(0건 포함)이고 아직 실시간 검색을 시도하지 않았다면, 사용자에게 제안.
+    // 0건도 포함시킨 이유 — 감시 대상 회사 이름으로 검색했는데 최근 보도가 없는 경우
+    // (예: "온도")가 실제로 있는데, 예전엔 0건일 땐 이 제안이 아예 안 떠서 그 자리에서
+    // 막혀버렸다(2026-08-13 실사용 피드백). noise·inter는 이 흐름과 안 맞아 제외한다 —
+    // noise_report는 설정 점검 질문이라 "기사를 더 찾아볼까요"가 어색하고, inter는 해외
+    // 데이터라 국내 뉴스만 훑는 실시간 검색으로는 애초에 못 채운다.
+    if (result && result.total < 8 && resultKind !== 'live' && resultKind !== 'noise' && resultKind !== 'inter') {
       result.needsLiveSearch = true;
     }
 

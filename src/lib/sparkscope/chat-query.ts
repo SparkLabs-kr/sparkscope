@@ -173,19 +173,42 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
   const and: any[] = [];
   const scopeOr = scopeWhere(input.scopes);
   if (scopeOr) and.push({ OR: scopeOr });
+  // 검색어가 감시 대상 이름과 정확히 일치하면("온도"·"피치스"처럼 흔한 단어인데 실제로는
+  // 회사명) 챗봇이 스파크랩 내부 도구라는 걸 우선한다 — 회사 얘기로 보고 matchedKeyword
+  // 정확 매칭만 쓴다. 아울러 현재 투자 상태(portfolioStatus: Live/Exit/Written-off)를
+  // 같이 실어서, 폐업(Written-off)한 곳인데 최근 보도가 없는 걸 "오류"가 아니라 "그럴 만한
+  // 이유가 있다"고 설명할 수 있게 한다(2026-08-13 실사용 요청).
+  let matchedEntities: { name: string; category: string; portfolioStatus: string | null }[] = [];
   if (terms.length) {
+    const knownTargets = await prisma.monitoringTarget.findMany({
+      where: { OR: [{ primaryKeyword: { in: terms } }, { name: { in: terms } }] },
+      select: { primaryKeyword: true, name: true, category: true, portfolioStatus: true },
+    });
+    matchedEntities = knownTargets.map((t) => ({ name: t.name, category: t.category, portfolioStatus: t.portfolioStatus }));
+    const knownNames = new Set<string>();
+    for (const t of knownTargets) {
+      knownNames.add(t.primaryKeyword.toLowerCase());
+      knownNames.add(t.name.toLowerCase());
+    }
+    const entityTerms = terms.filter((t) => knownNames.has(t.toLowerCase()));
+    const freeTerms = terms.filter((t) => !knownNames.has(t.toLowerCase()));
+
     // 표기 변형까지 펼쳐서 찾는다("투자유치"만 찾으면 "투자 유치" 1,200여 건을 통째로 놓친다).
     // 제목뿐 아니라 수집 때 뽑아둔 한 줄 요약(oneLiner, 90% 채워져 있음)과 등장 회사
     // 목록(relatedCompanies)까지 본다 — 제목에 안 드러난 내용이 여기 담겨 있다.
-    const variants = expandTerms(terms);
-    and.push({
-      OR: variants.flatMap((t) => [
-        { title: { contains: t, mode: 'insensitive' } },
-        { oneLiner: { contains: t, mode: 'insensitive' } },
-        { matchedKeyword: { contains: t, mode: 'insensitive' } },
-        { relatedCompanies: { contains: t, mode: 'insensitive' } },
-      ]),
-    });
+    const orClauses: any[] = entityTerms.map((t) => ({ matchedKeyword: { contains: t, mode: 'insensitive' } }));
+    if (freeTerms.length) {
+      const variants = expandTerms(freeTerms);
+      orClauses.push(
+        ...variants.flatMap((t) => [
+          { title: { contains: t, mode: 'insensitive' } },
+          { oneLiner: { contains: t, mode: 'insensitive' } },
+          { matchedKeyword: { contains: t, mode: 'insensitive' } },
+          { relatedCompanies: { contains: t, mode: 'insensitive' } },
+        ])
+      );
+    }
+    and.push({ OR: orClauses });
   }
   // 위기·이슈: 부정 톤이거나 위험 플래그가 달린 기사만
   if (input.onlyNegative) {
@@ -461,5 +484,6 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
     trendGranularity: input.withTrend ? trendGranularity : undefined,
     noisyKeywords,
     articles,
+    matchedEntities: matchedEntities.length ? matchedEntities : undefined,
   };
 }
