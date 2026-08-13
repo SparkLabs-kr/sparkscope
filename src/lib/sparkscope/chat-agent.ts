@@ -27,7 +27,7 @@ const ARTICLES_PER_TOOL_RESULT = 18;
 export type AgentTurn = { role: 'user' | 'assistant'; text: string };
 
 const PERIODS: ChatPeriod[] = ['today', 'week', 'month', 'quarter', 'all'];
-const SCOPES: ChatScope[] = ['portfolio', 'competitor', 'sparklabs', 'industry'];
+const SCOPES: ChatScope[] = ['portfolio', 'competitor', 'sparklabs', 'industry', 'inter'];
 
 const TOOLS: ChatCompletionTool[] = [
   {
@@ -320,6 +320,9 @@ function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean
 질문에 "지난주", "어제", "올해", "이번 달"처럼 기간이 명시됐을 때만 바꿔라.
 "요즘", "최근", "요새"처럼 모호한 말은 기간 표현이 아니다 — 화면 값을 그대로 써라.
 범위도 마찬가지로, "포폴사만", "경쟁사" 같이 명시됐을 때만 바꾼다.
+${uiScopes.includes('inter')
+  ? '★ 범위로 "해외 트렌드"가 선택돼 있다 — 이번 조회는 inter_trends만 써라. search_articles·semantic_search·pitch_opportunities 등 국내 도구는 절대 부르지 마라(질문이 국내 얘기처럼 보여도 마찬가지 — 화면에서 명시적으로 고른 범위가 우선이다).'
+  : ''}
 
 [도구 사용 원칙]
 - 답하기 전에 반드시 도구로 실제 데이터를 확인해라. 추측으로 답하지 마라.

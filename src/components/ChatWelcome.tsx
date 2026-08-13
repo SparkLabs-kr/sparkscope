@@ -92,12 +92,13 @@ const PERIODS = [
   { id: 'all', label: '전체 기간' },
 ] as const;
 
-/** 2) 검색 범위 — 스파크스코프가 다루는 데이터 축 (Intra 3 + Inter 1) */
+/** 2) 검색 범위 — 스파크스코프가 다루는 데이터 축 (Intra 4 + Inter 1) */
 const SCOPES = [
   { id: 'portfolio', label: '포트폴리오사' },
   { id: 'competitor', label: '경쟁사(VC)' },
   { id: 'sparklabs', label: '스파크랩' },
   { id: 'industry', label: '업계동향' },
+  { id: 'inter', label: '해외 트렌드' },
 ] as const;
 
 /** 3) 카테고리 — 대시보드/인터/인트라 기능별 업무 시나리오 */
@@ -353,6 +354,15 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
 
   const toggle = (list: string[], id: string) =>
     list.includes(id) ? list.filter((v) => v !== id) : [...list, id];
+
+  // "해외 트렌드"는 국내 4개 범위와 완전히 다른 데이터(inter_trends)라 같이 고르면 의미가
+  // 없다 — 국내 범위처럼 겹쳐 고를 수 있는 게 아니라 서로 배타적으로 다룬다(2026-08-13).
+  const toggleScope = (id: string) => {
+    setActiveScopes((prev) => {
+      if (id === 'inter') return prev.includes('inter') ? [] : ['inter'];
+      return toggle(prev.filter((s) => s !== 'inter'), id);
+    });
+  };
 
   const addFiles = (incoming: FileList | null) => {
     if (!incoming?.length) return;
@@ -911,7 +921,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                   <button
                     key={s.id}
                     type="button"
-                    onClick={() => setActiveScopes((prev) => toggle(prev, s.id))}
+                    onClick={() => toggleScope(s.id)}
                     className={`px-2.5 py-1 rounded-lg text-[12px] font-semibold transition border ${
                       on
                         ? 'bg-spark-light-purple text-spark-purple border-spark-purple/30'
