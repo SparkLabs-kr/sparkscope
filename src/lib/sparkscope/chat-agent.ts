@@ -604,7 +604,11 @@ export async function runChatAgent(opts: {
     // 막혀버렸다(2026-08-13 실사용 피드백). noise·inter는 이 흐름과 안 맞아 제외한다 —
     // noise_report는 설정 점검 질문이라 "기사를 더 찾아볼까요"가 어색하고, inter는 해외
     // 데이터라 국내 뉴스만 훑는 실시간 검색으로는 애초에 못 채운다.
-    if (result && result.total < 8 && resultKind !== 'live' && resultKind !== 'noise' && resultKind !== 'inter') {
+    // terms가 비어있으면(기간·범위만으로 조회한 넓은 질문) 실시간 검색이 구글·네이버에
+    // 뭘 검색해야 할지 알 수 없다 — 버튼에 "실시간 검색 ()"처럼 빈 검색어가 뜨고, 눌러도
+    // keyword가 빈 문자열이라 조용히 원래 채팅 흐름으로 되돌아가버렸다(2026-08-14 발견).
+    // 구체적인 검색어가 최소 하나는 있을 때만 제안한다.
+    if (result && result.total < 8 && result.terms.length > 0 && resultKind !== 'live' && resultKind !== 'noise' && resultKind !== 'inter') {
       result.needsLiveSearch = true;
     }
 
