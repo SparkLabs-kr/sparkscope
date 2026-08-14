@@ -731,7 +731,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           <p className="text-[13px] text-spark-muted mt-2">
             {scope === 'inter' ? `${range.label} 해외 매체·논문 데이터 기준` : `${range.label} 데이터 기준`}
             {data.lastCollectTime && (
-              <span> · {data.lastCollectTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })} 기준 수집</span>
+              <span> · {data.lastCollectTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul' })} 기준 수집</span>
             )}
           </p>
         </div>
