@@ -10,6 +10,7 @@ import { fetchGoogleNews, fetchNaverNews, naverEnabled } from './collector';
 import { prisma } from '@/lib/prisma';
 import { PERIOD_LABEL, type ChatQueryResult } from './chat-types';
 import { dedupeArticles } from './chat-query';
+import { matchesAsToken } from './relevance';
 
 export async function runLiveSearch(keyword: string): Promise<ChatQueryResult> {
   // 감시 대상 정보 조회 (이름 변형, 필터링 규칙 포함)
@@ -39,17 +40,19 @@ export async function runLiveSearch(keyword: string): Promise<ChatQueryResult> {
   const raw = (await Promise.all(jobs)).flat();
 
   // DB의 excludeWords/contextWords 필터를 적용해서 노이즈 제거
+  // relevance.ts(DB 수집)와 동일하게 토큰 경계 매칭을 쓴다 — 단순 includes()면
+  // "스파크"/"랩"처럼 회사명 자체에 포함된 제외어가 "스파크랩" 기사까지 걸러버린다.
   const filtered = raw.filter((a) => {
     const title = a.title.toLowerCase();
-    // excludeWords: 제목에 이 단어 중 하나라도 있으면 제외
+    // excludeWords: 제목에 이 단어 중 하나라도 독립 토큰으로 있으면 제외
     if (target?.excludeWords) {
       const excludes = target.excludeWords.split(',').map((w) => w.trim().toLowerCase()).filter(Boolean);
-      if (excludes.some((w) => title.includes(w))) return false;
+      if (excludes.some((w) => matchesAsToken(title, w))) return false;
     }
-    // contextWords: 제목에 이 단어 중 하나라도 있어야 통과 (없으면 true = 통과)
+    // contextWords: 제목에 이 단어 중 하나라도 독립 토큰으로 있어야 통과 (없으면 true = 통과)
     if (target?.contextWords) {
       const contexts = target.contextWords.split(',').map((w) => w.trim().toLowerCase()).filter(Boolean);
-      if (contexts.length > 0 && !contexts.some((w) => title.includes(w))) return false;
+      if (contexts.length > 0 && !contexts.some((w) => matchesAsToken(title, w))) return false;
     }
     return true;
   });
@@ -60,7 +63,7 @@ export async function runLiveSearch(keyword: string): Promise<ChatQueryResult> {
     let score = 0;
     if (target?.contextWords) {
       const contexts = target.contextWords.split(',').map((w) => w.trim().toLowerCase()).filter(Boolean);
-      score = contexts.filter((w) => title.includes(w)).length;
+      score = contexts.filter((w) => matchesAsToken(title, w)).length;
     }
     return { a, score };
   });
