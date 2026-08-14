@@ -202,12 +202,14 @@ async function loadDashboardData(from: string, to: string, company: string | und
     // 필터를 눌러도 몇 건 안 보이는 문제가 있었음(industry_trend은 전체 기사의 대다수를 차지하는데도
     // 우선순위가 낮아 상위 400건 풀에서부터 밀려남). 카테고리별로 따로 뽑아 합쳐 각 필터가
     // 최소한의 건수를 보장받게 한다. AC·VC·스타트업계는 노이즈성 기사가 상대적으로 많아
-    // priorityScore 상위 50건으로 더 좁게(=중요하다고 판단된 것만) 제한.
+    // priorityScore 상위 15건으로 더 좁게(=중요하다고 판단된 것만) 제한.
     //
-    // 한때 50→15로 더 좁혔다가(2026-08-12), AC·VC·스타트업계 필터를 눌러도 15건밖에 안
-    // 보인다는 피드백으로 다시 50으로 되돌림(2026-08-14) — 필터 버튼을 눌렀을 때 보이는
-    // 건수는 여기 take 값이 상한이라, 15로는 날짜 범위를 아무리 넓혀도 15건 이상 못 본다.
-    Promise.all(Object.entries({ sparklabs_self: 150, portfolio_company: 150, competitor: 50, industry_trend: 50 }).map(([category, take]) =>
+    // 50으로 늘려봤다가(2026-08-14 시도) 되돌림 — AC·VC 스캔들 기사는 priorityScore가
+    // 뒤집혀서 오르는 로직 때문에, 후보를 50으로 늘리면 "날짜순 전체보기"(무필터, 상위
+    // 120건)에서 AC·VC가 12행→26행으로 늘고 그만큼 포트폴리오사가 40행→25행으로 줄어드는
+    // 트레이드오프가 실측으로 확인됨. AC·VC·스타트업계 필터를 눌렀을 때 15건 제한은 남지만,
+    // 기본 화면(전체보기)에서 포트폴리오사 비중을 지키는 쪽을 택함.
+    Promise.all(Object.entries({ sparklabs_self: 150, portfolio_company: 150, competitor: 15, industry_trend: 15 }).map(([category, take]) =>
       fetchRecentTabArticles(where, category, take, now, category === 'portfolio_company' ? 3 : undefined),
     )).then(arr => arr.flat()),
     // 톤 분석 — 스파크랩 기준
