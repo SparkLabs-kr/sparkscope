@@ -75,9 +75,10 @@ export async function runLiveSearch(keyword: string): Promise<ChatQueryResult> {
     })
     .map((item) => ({ ...item.a, priorityScore: item.score }));
 
-  // 같은 사안을 여러 매체(통신사 기사 받아쓰기)가 실어서 제목만 살짝 다른 경우가 많다 —
-  // DB 검색·해외 트렌드·의미 검색이 이미 쓰는 것과 같은 기준으로 하나로 접는다(2026-08-12).
-  const deduped = dedupeArticles(linkDeduped).slice(0, 15);
+  // 실시간 검색은 linkDeduped가 이미 링크 기반으로 중복 제거되어 있어서,
+  // dedupeArticles를 추가로 쓰면 같은 사안의 다른 매체 기사까지 과도하게 제거된다.
+  // 상위 15개를 가져와서 최신순으로 정렬한다.
+  const deduped = linkDeduped.slice(0, 15);
   deduped.sort((a, b) => +new Date(b.pubDate) - +new Date(a.pubDate));
 
   const articles = deduped.map((a, i) => ({
