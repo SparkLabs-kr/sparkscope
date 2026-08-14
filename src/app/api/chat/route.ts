@@ -77,6 +77,14 @@ export async function POST(req: Request) {
       };
 
       try {
+        // live=true인데 keyword가 비어있으면(호출부 버그로 검색어를 못 채운 경우)
+        // 예전엔 이 if를 그냥 통과시켜 조용히 아래 일반 채팅 흐름(question='')으로 넘어갔다
+        // — 사용자는 "실시간 검색"을 눌렀는데 실제로는 우리 DB 조회 결과가 나와서 헷갈렸다
+        // (2026-08-14 발견). 명확한 에러로 바로 알려준다.
+        if (live && !keyword) {
+          send({ type: 'error', error: '실시간 검색어를 확인할 수 없습니다. 다시 시도해 주세요.' });
+          return;
+        }
         // 실시간 검색 (사용자가 "추가 검색할까요?" → "예" 선택했을 때)
         if (live && keyword) {
           send({ type: 'progress', phase: 'tool_start', label: '실시간 뉴스 검색' });
