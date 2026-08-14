@@ -551,6 +551,13 @@ async function loadDashboardData(from: string, to: string, company: string | und
     return true;
   });
 
+  const lastCollectLog = await prisma.runLog.findFirst({
+    where: { runType: 'daily-collect', status: 'SUCCESS' },
+    orderBy: { finishedAt: 'desc' },
+    select: { finishedAt: true },
+  });
+  const lastCollectTime = lastCollectLog?.finishedAt;
+
   return {
     range: { from, to },
     kpi: { total, sparklabsCount: sparklabsCountFiltered, portfolioCount, pitchCount, mentionRate, mentionDelta: mentionRate - prevMentionRate },
@@ -592,6 +599,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
       tone: (a.tone ?? 'NEUTRAL') as string,
       riskFlag: a.riskFlag as string | null,
     })),
+    lastCollectTime,
   };
 }
 
@@ -722,6 +730,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight text-spark-ink leading-none">{todayLabel}</h1>
           <p className="text-[13px] text-spark-muted mt-2">
             {scope === 'inter' ? `${range.label} 해외 매체·논문 데이터 기준` : `${range.label} 데이터 기준`}
+            {data.lastCollectTime && (
+              <span> · {data.lastCollectTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' })} 기준 수집</span>
+            )}
           </p>
         </div>
         <div data-tour="header-actions" className="flex items-center gap-2">
