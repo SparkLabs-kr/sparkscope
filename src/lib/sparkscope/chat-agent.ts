@@ -669,9 +669,10 @@ export async function runChatAgent(opts: {
         switch (call.function.name) {
           case 'search_articles': {
             const terms = asTerms(args.terms);
+            const period = resolvePeriodArg(args.period, opts.period, opts.question);
             const r = await runChatQuery({
               question: opts.question,
-              period: resolvePeriodArg(args.period, opts.period, opts.question),
+              period,
               scopes: asScopes(args.scopes),
               terms,
               onlyNegative: args.only_negative === true,
@@ -679,6 +680,17 @@ export async function runChatAgent(opts: {
             });
             steps.push(`search(${terms.join('|') || '전체'}) → ${r.total}건`);
             if (!uiResult || r.total > 0) { uiResult = r; resultKind = 'search'; }
+
+            // "오늘" 기간에 0건이고 검색어가 있으면 실시간 검색 자동 시도
+            if (r.total === 0 && period === 'today' && terms.length > 0) {
+              const liveResult = await runLiveSearch(terms[0]);
+              steps.push(`→ live(${terms[0]}) → ${liveResult.total}건`);
+              if (liveResult.total > 0) { uiResult = liveResult; resultKind = 'live'; }
+              else { payload = { ...compactResult(r), liveSearchAttempted: true }; break; }
+              payload = compactResult(liveResult);
+              break;
+            }
+
             payload = compactResult(r);
             break;
           }
