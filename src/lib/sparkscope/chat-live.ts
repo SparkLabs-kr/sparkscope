@@ -12,21 +12,42 @@ import { PERIOD_LABEL, type ChatQueryResult } from './chat-types';
 import { dedupeArticles } from './chat-query';
 
 export async function runLiveSearch(keyword: string): Promise<ChatQueryResult> {
-  const jobs = [fetchGoogleNews(keyword).catch(() => [])];
-  if (naverEnabled()) jobs.push(fetchNaverNews(keyword).catch(() => []));
-  const raw = (await Promise.all(jobs)).flat();
-
-  // 네이버 뉴스 검색 API는 제목에 키워드가 실제로 없어도 느슨하게(연관 검색 수준으로) 결과를
-  // 준다 — "에큐리바이오"로 검색했는데 무관한 기사가 섞여 나온 걸 실제 확인함(2026-08-11).
-  // DB 검색과 동일하게 제목에 키워드가 실제로 포함된 것만 남긴다.
-  const relevant = raw.filter((a) => a.title.toLowerCase().includes(keyword.toLowerCase()));
-
-  // 우리 DB의 excludeWords/contextWords 필터를 적용해서 노이즈 제거
+  // 감시 대상 정보 조회 (이름 변형, 필터링 규칙 포함)
   const target = await prisma.monitoringTarget.findFirst({
     where: { primaryKeyword: keyword },
   });
 
-  const filtered = relevant.filter((a) => {
+  // DB 검색과 동일하게, 감시 대상의 모든 키워드 변형으로 검색한다
+  // (단일 검색어만으로는 기사를 놓칠 수 있음 — 예: "스파크랩"과 "스파크" 양쪽 다 필요)
+  const searchTerms = new Set<string>();
+  searchTerms.add(keyword);
+  if (target?.name) searchTerms.add(target.name);
+  if (target?.englishName) searchTerms.add(target.englishName);
+  if (target?.helperKeywords) {
+    target.helperKeywords.split(',').forEach(k => {
+      const term = k.trim();
+      if (term) searchTerms.add(term);
+    });
+  }
+
+  // 각 검색어로 Google News + Naver News 검색
+  const jobs: Promise<any[]>[] = [];
+  for (const term of searchTerms) {
+    jobs.push(fetchGoogleNews(term).catch(() => []));
+    if (naverEnabled()) jobs.push(fetchNaverNews(term).catch(() => []));
+  }
+  const raw = (await Promise.all(jobs)).flat();
+
+  // 링크 기반 중복 제거 (같은 기사가 여러 검색어로 반복될 수 있음)
+  const seen = new Set<string>();
+  const linkDeduped = raw.filter(a => {
+    if (seen.has(a.link)) return false;
+    seen.add(a.link);
+    return true;
+  });
+
+  // DB의 excludeWords/contextWords 필터를 적용해서 노이즈 제거
+  const filtered = linkDeduped.filter((a) => {
     const title = a.title.toLowerCase();
     // excludeWords: 제목에 이 단어 중 하나라도 있으면 제외
     if (target?.excludeWords) {
