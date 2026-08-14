@@ -38,16 +38,8 @@ export async function runLiveSearch(keyword: string): Promise<ChatQueryResult> {
   }
   const raw = (await Promise.all(jobs)).flat();
 
-  // 링크 기반 중복 제거 (같은 기사가 여러 검색어로 반복될 수 있음)
-  const seen = new Set<string>();
-  const linkDeduped = raw.filter(a => {
-    if (seen.has(a.link)) return false;
-    seen.add(a.link);
-    return true;
-  });
-
   // DB의 excludeWords/contextWords 필터를 적용해서 노이즈 제거
-  const filtered = linkDeduped.filter((a) => {
+  const filtered = raw.filter((a) => {
     const title = a.title.toLowerCase();
     // excludeWords: 제목에 이 단어 중 하나라도 있으면 제외
     if (target?.excludeWords) {
