@@ -133,7 +133,7 @@ const ENGLISH_ALIASES: Record<string, string> = {
   itdonga: 'IT동아',
 };
 
-/** 도메인·영문·표기편차를 표준 매체명으로 정규화 (미등록 매체는 원문 유지) */
+/** 도메인·영문·표기편차를 표준 매체명으로 정규화. 미등록 도메인은 SLD 추출해서 포맷 */
 export function normalizeSource(source: string): string {
   let s = (source ?? '').trim().replace(/^www\./, '');
   if (!s) return '(미상)';
@@ -157,8 +157,41 @@ export function normalizeSource(source: string): string {
       if (DOMAIN_TO_NAME.has(parent)) return DOMAIN_TO_NAME.get(parent)!;
       if (EXTRA_DOMAIN_ALIASES[parent]) return EXTRA_DOMAIN_ALIASES[parent];
     }
+    // 미등록 도메인이면 SLD(Second-Level Domain) 추출해서 포맷
+    const sld = extractSLD(s);
+    if (sld) return formatDomainName(sld);
   }
   return s;
+}
+
+function extractSLD(domain: string): string | null {
+  const parts = domain.split('.');
+  if (parts.length < 2) return null;
+
+  // .co.kr, .com.kr, .ac.kr 같은 2단 TLD
+  if (parts.length >= 3 &&
+      (parts[parts.length - 2] === 'co' ||
+       parts[parts.length - 2] === 'com' ||
+       parts[parts.length - 2] === 'ac')) {
+    return parts[parts.length - 3];
+  }
+
+  // 일반 TLD (.net, .org, .info 등)
+  if (parts.length >= 2) {
+    return parts[parts.length - 2];
+  }
+
+  return null;
+}
+
+function formatDomainName(sld: string): string {
+  // 숫자와 문자 경계에서 띄어쓰기 추가 (예: "dt24" → "Dt 24")
+  const formatted = sld
+    .replace(/([a-zA-Z])(\d)/g, '$1 $2')
+    .replace(/(\d)([a-zA-Z])/g, '$1 $2');
+
+  // 첫글자 대문자
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
 
 export function isKnownMedia(source: string): boolean {
