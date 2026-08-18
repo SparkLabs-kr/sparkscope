@@ -1355,6 +1355,66 @@ function ArticleRow({ a, fmtDate, showCompanyTags }: { a: ChatQueryResult['artic
   );
 }
 
+/**
+ * '표로 정리' 모드에서 카드(그룹) 하나 안에 들어가는 미니 표.
+ *
+ * 카드 헤더에 이미 회사·주제 이름이 붙어 있으니, 그 안 표에서까지 "회사·키워드" 컬럼을
+ * 반복하면 같은 값이 죽 이어지기만 해서 폭만 차지한다 — 제목/매체/날짜/톤만 남긴다.
+ * showTag가 true인 건 그룹으로 안 묶인 "그 외" 목록뿐이라 예외적으로 태그를 다시 붙인다.
+ */
+function ArticleMiniTable({
+  items,
+  fmtDate,
+  showTag,
+}: {
+  items: ChatQueryResult['articles'];
+  fmtDate: (iso: string) => string;
+  showTag?: boolean;
+}) {
+  return (
+    <div className="overflow-x-auto border-t border-spark-border">
+      <table className="w-full text-[13px] border-collapse">
+        <thead>
+          <tr className="bg-spark-subtle text-spark-muted text-[11px]">
+            {showTag && <th className="text-left font-semibold px-3 py-2">회사·키워드</th>}
+            <th className="text-left font-semibold px-3 py-2">제목</th>
+            <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">매체</th>
+            <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">날짜</th>
+            <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">톤</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-spark-border">
+          {items.map((a) => (
+            <tr key={a.id} className="hover:bg-spark-subtle transition align-top">
+              {showTag && (
+                <td className="px-3 py-2 whitespace-nowrap font-semibold text-spark-purple">
+                  {a.matchedKeyword || '-'}
+                </td>
+              )}
+              <td className="px-3 py-2">
+                <a href={a.link} target="_blank" rel="noreferrer" className="text-spark-ink hover:underline">
+                  {a.title}
+                </a>
+              </td>
+              <td className="px-3 py-2 whitespace-nowrap text-spark-ink-soft">{a.source}</td>
+              <td className="px-3 py-2 whitespace-nowrap text-spark-muted">{fmtDate(a.pubDate)}</td>
+              <td className="px-3 py-2 whitespace-nowrap">
+                {a.tone === 'NEGATIVE' ? (
+                  <span className="text-red-600 font-semibold">부정</span>
+                ) : a.tone === 'POSITIVE' ? (
+                  <span className="text-blue-600 font-semibold">긍정</span>
+                ) : (
+                  <span className="text-spark-muted">-</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ChatResult({
   result,
   scopes,
@@ -1376,7 +1436,9 @@ function ChatResult({
     const d = new Date(iso);
     return `${d.getMonth() + 1}/${d.getDate()}`;
   };
-  const organized = asTable ? null : organizeArticles(result.articles);
+  // '표로 정리'도 이제 이 그룹핑을 함께 쓴다 — 전엔 표 모드만 따로 평문 나열이라
+  // "회사·키워드" 컬럼에 같은 값이 죽 반복돼 스캔하기 힘들었다(2026-08-18 피드백).
+  const organized = organizeArticles(result.articles);
 
   // 유사 키워드 추천 — 현재 검색어와 다르면서 자주 나온 키워드들
   const keywordFreq = new Map<string, number>();
@@ -1546,115 +1608,79 @@ function ChatResult({
           <div className="px-4 py-2.5 border-b border-spark-border text-[13px] font-semibold text-spark-ink-soft">
             근거 기사 {result.articles.length}건 {result.total > result.articles.length && `(전체 ${result.total}건 중)`}
           </div>
-          {asTable ? (
-            // '표로 정리' — 보고서에 그대로 붙여넣기 좋은 형태
-            <div className="overflow-x-auto">
-              <table className="w-full text-[13px] border-collapse">
-                <thead>
-                  <tr className="bg-spark-subtle text-spark-muted text-[11px]">
-                    <th className="text-left font-semibold px-3 py-2">회사·키워드</th>
-                    <th className="text-left font-semibold px-3 py-2">제목</th>
-                    <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">매체</th>
-                    <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">날짜</th>
-                    <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">톤</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-spark-border">
-                  {result.articles.map((a) => (
-                    <tr key={a.id} className="hover:bg-spark-subtle transition align-top">
-                      <td className="px-3 py-2 whitespace-nowrap font-semibold text-spark-purple">
-                        {a.matchedKeyword || '-'}
-                      </td>
-                      <td className="px-3 py-2">
-                        <a href={a.link} target="_blank" rel="noreferrer" className="text-spark-ink hover:underline">
-                          {a.title}
-                        </a>
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-spark-ink-soft">{a.source}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-spark-muted">{fmtDate(a.pubDate)}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {a.tone === 'NEGATIVE' ? (
-                          <span className="text-red-600 font-semibold">부정</span>
-                        ) : a.tone === 'POSITIVE' ? (
-                          <span className="text-blue-600 font-semibold">긍정</span>
-                        ) : (
-                          <span className="text-spark-muted">-</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : organized ? (
-            <div className="divide-y divide-spark-border">
-              {/* 같은 포트폴리오사 기사끼리 묶는다 — 예전엔 회사 "조합"(예: "차차, 원티드랩")을
-                  통째로 그룹 키로 써서 조합이 겹치는 경우가 드물어 1건짜리 그룹만 잔뜩 생겼다
-                  (2026-08-12 이전 피드백으로 한 번 되돌림). 지금은 회사 이름 하나하나를 키로
-                  묶어서 실제 회사 단위 클러스터링이 되고, 기사가 회사를 여러 개 언급하면 각
-                  회사 그룹에 중복으로 들어간다(주제 태그 그룹과 같은 방식, 2026-08-12). */}
-              {organized.companies.map((g) => (
-                <details key={g.tag} open={organized.companies.length <= 4} className="group">
-                  <summary className="list-none flex items-center justify-between gap-2 px-4 py-2.5 cursor-pointer hover:bg-spark-subtle transition select-none">
-                    <span className="flex items-center gap-1.5 text-[13px] font-semibold text-spark-purple">
-                      <span>🏢</span>
-                      {g.tag}
-                    </span>
-                    <span className="flex items-center gap-2 text-[11px] text-spark-muted">
-                      {g.items.length}건
-                      <span className="transition-transform group-open:rotate-180">▾</span>
-                    </span>
-                  </summary>
+          <div className="divide-y divide-spark-border">
+            {/* 같은 포트폴리오사 기사끼리 묶는다 — 예전엔 회사 "조합"(예: "차차, 원티드랩")을
+                통째로 그룹 키로 써서 조합이 겹치는 경우가 드물어 1건짜리 그룹만 잔뜩 생겼다
+                (2026-08-12 이전 피드백으로 한 번 되돌림). 지금은 회사 이름 하나하나를 키로
+                묶어서 실제 회사 단위 클러스터링이 되고, 기사가 회사를 여러 개 언급하면 각
+                회사 그룹에 중복으로 들어간다(주제 태그 그룹과 같은 방식, 2026-08-12). */}
+            {organized.companies.map((g) => (
+              <details key={g.tag} open={organized.companies.length <= 4} className="group">
+                <summary className="list-none flex items-center justify-between gap-2 px-4 py-2.5 cursor-pointer hover:bg-spark-subtle transition select-none">
+                  <span className="flex items-center gap-1.5 text-[13px] font-semibold text-spark-purple">
+                    <span>🏢</span>
+                    {g.tag}
+                  </span>
+                  <span className="flex items-center gap-2 text-[11px] text-spark-muted">
+                    {g.items.length}건
+                    <span className="transition-transform group-open:rotate-180">▾</span>
+                  </span>
+                </summary>
+                {asTable ? (
+                  <ArticleMiniTable items={g.items} fmtDate={fmtDate} />
+                ) : (
                   <ul className="divide-y divide-spark-border border-t border-spark-border">
                     {g.items.map((a) => (
                       <ArticleRow key={a.id} a={a} fmtDate={fmtDate} showCompanyTags />
                     ))}
                   </ul>
-                </details>
-              ))}
-              {/* 위 회사 그룹에 안 묶인 기사(그 회사 기사가 1건뿐이거나 회사 태그가 아예 없는 경우) —
-                  묶어도 의미 없는 1건짜리 그룹을 강제로 만들지 않고 그냥 목록으로 보여준다. */}
-              {organized.companyArticles.length > 0 && (
-                <div>
-                  <div className="px-4 py-2 text-[11px] font-semibold text-spark-muted bg-spark-subtle/60">
-                    🏢 그 외 매칭된 기사 {organized.companyArticles.length}건
-                  </div>
+                )}
+              </details>
+            ))}
+            {/* 위 회사 그룹에 안 묶인 기사(그 회사 기사가 1건뿐이거나 회사 태그가 아예 없는 경우) —
+                묶어도 의미 없는 1건짜리 그룹을 강제로 만들지 않고 그냥 목록으로 보여준다. */}
+            {organized.companyArticles.length > 0 && (
+              <div>
+                <div className="px-4 py-2 text-[11px] font-semibold text-spark-muted bg-spark-subtle/60">
+                  🏢 그 외 매칭된 기사 {organized.companyArticles.length}건
+                </div>
+                {asTable ? (
+                  <ArticleMiniTable items={organized.companyArticles} fmtDate={fmtDate} showTag />
+                ) : (
                   <ul className="divide-y divide-spark-border">
                     {organized.companyArticles.map((a) => (
                       <ArticleRow key={a.id} a={a} fmtDate={fmtDate} showCompanyTags />
                     ))}
                   </ul>
-                </div>
-              )}
-              {/* 주제 태그(신약발굴·항암 등)는 여러 기사가 값을 공유해서 묶는 게 유용하다 — 접었다 펼 수 있게. */}
-              {organized.topics.map((g) => (
-                <details key={g.tag} open={organized.topics.length <= 4} className="group">
-                  <summary className="list-none flex items-center justify-between gap-2 px-4 py-2.5 cursor-pointer hover:bg-spark-subtle transition select-none">
-                    <span className="flex items-center gap-1.5 text-[13px] font-semibold text-spark-purple">
-                      <span>📌</span>
-                      <span className="text-[10px] font-normal text-spark-muted">주제</span>
-                      {g.tag}
-                    </span>
-                    <span className="flex items-center gap-2 text-[11px] text-spark-muted">
-                      {g.items.length}건
-                      <span className="transition-transform group-open:rotate-180">▾</span>
-                    </span>
-                  </summary>
+                )}
+              </div>
+            )}
+            {/* 주제 태그(신약발굴·항암 등)는 여러 기사가 값을 공유해서 묶는 게 유용하다 — 접었다 펼 수 있게. */}
+            {organized.topics.map((g) => (
+              <details key={g.tag} open={organized.topics.length <= 4} className="group">
+                <summary className="list-none flex items-center justify-between gap-2 px-4 py-2.5 cursor-pointer hover:bg-spark-subtle transition select-none">
+                  <span className="flex items-center gap-1.5 text-[13px] font-semibold text-spark-purple">
+                    <span>📌</span>
+                    <span className="text-[10px] font-normal text-spark-muted">주제</span>
+                    {g.tag}
+                  </span>
+                  <span className="flex items-center gap-2 text-[11px] text-spark-muted">
+                    {g.items.length}건
+                    <span className="transition-transform group-open:rotate-180">▾</span>
+                  </span>
+                </summary>
+                {asTable ? (
+                  <ArticleMiniTable items={g.items} fmtDate={fmtDate} />
+                ) : (
                   <ul className="divide-y divide-spark-border border-t border-spark-border">
                     {g.items.map((a) => (
                       <ArticleRow key={a.id} a={a} fmtDate={fmtDate} />
                     ))}
                   </ul>
-                </details>
-              ))}
-            </div>
-          ) : (
-            <ul className="divide-y divide-spark-border">
-              {result.articles.map((a) => (
-                <ArticleRow key={a.id} a={a} fmtDate={fmtDate} showCompanyTags />
-              ))}
-            </ul>
-          )}
+                )}
+              </details>
+            ))}
+          </div>
         </div>
       )}
 
