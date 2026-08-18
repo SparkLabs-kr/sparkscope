@@ -46,12 +46,18 @@ declare global {
   }
 }
 
-/** 1) 답변 방식 — 질문을 어떤 깊이·형식으로 처리할지 */
+/** 1) 답변 방식 — 질문을 어떤 깊이·형식으로 처리할지
+ *
+ * 여기 있는 항목은 전부 실제로 서버 프롬프트를 바꾸는 것만 남긴다.
+ * "근거 기사 첨부" 토글이 있었는데 켜든 끄든 아무 데서도 읽지 않는 죽은 스위치였다
+ * (근거 기사 목록은 어차피 항상 답변 아래에 붙는다) — 2026-08-18에 제거했다.
+ */
 const MODES = [
   {
     id: 'deep',
     label: '심층 분석',
-    hint: '여러 기사를 교차로 읽고 원인·맥락까지 정리 (느리지만 자세함)',
+    hint: '켜면 6~10문장으로 길게 — 기사를 주제별로 묶고 원인·맥락, 본부가 할 일까지 짚어요. 끄면 3~5문장 요약.',
+    off: '지금은 꺼짐 — 3~5문장으로 짧게 답해요.',
     icon: (
       <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
         <circle cx="8" cy="8" r="6.2" stroke="currentColor" strokeWidth="1.6" />
@@ -60,20 +66,10 @@ const MODES = [
     ),
   },
   {
-    id: 'sources',
-    label: '근거 기사 첨부',
-    hint: '답변에 쓰인 원문 기사 링크를 함께 보여줌',
-    icon: (
-      <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
-        <path d="M6.8 9.2a2.6 2.6 0 003.7 0l2-2a2.6 2.6 0 10-3.7-3.7l-.9.9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        <path d="M9.2 6.8a2.6 2.6 0 00-3.7 0l-2 2a2.6 2.6 0 103.7 3.7l.9-.9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
     id: 'table',
     label: '표로 정리',
-    hint: '회사·건수·매체·날짜를 표 형태로 정리해서 답변 (보고서에 붙여넣기 좋게)',
+    hint: '켜면 답변 안에 회사·건수·매체·날짜를 마크다운 표로 함께 정리해요. 보고서에 그대로 붙여넣기 좋아요.',
+    off: '지금은 꺼짐 — 표 없이 문장으로만 답해요.',
     icon: (
       <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
         <rect x="2.2" y="3" width="11.6" height="10" rx="1.4" stroke="currentColor" strokeWidth="1.5" />
@@ -94,11 +90,31 @@ const PERIODS = [
 
 /** 2) 검색 범위 — 스파크스코프가 다루는 데이터 축 (Intra 4 + Inter 1) */
 const SCOPES = [
-  { id: 'portfolio', label: '포트폴리오사' },
-  { id: 'competitor', label: '경쟁사(VC)' },
-  { id: 'sparklabs', label: '스파크랩' },
-  { id: 'industry', label: '업계동향' },
-  { id: 'inter', label: '해외 트렌드' },
+  {
+    id: 'portfolio',
+    label: '포트폴리오사',
+    hint: '스파크랩이 투자한 회사(감시 대상 218곳) 기사만 찾아요. 다른 분류는 답변·건수·그래프에서 빠져요.',
+  },
+  {
+    id: 'competitor',
+    label: '경쟁사(VC)',
+    hint: '다른 VC·액셀러레이터(114곳) 기사만 찾아요. "경쟁사는 뭘 하고 있나" 볼 때.',
+  },
+  {
+    id: 'sparklabs',
+    label: '스파크랩',
+    hint: '우리 회사가 직접 언급된 기사(17개 키워드)만 찾아요. 자사 보도 점검용.',
+  },
+  {
+    id: 'industry',
+    label: '업계동향',
+    hint: '회사가 아니라 국내 업계 전반 기사(투자·창업·정책 등 57개 주제). 해외 기사는 여기 없어요.',
+  },
+  {
+    id: 'inter',
+    label: '해외 트렌드',
+    hint: '국내 기사와 완전히 다른 해외 수집 데이터(섹터·국가·연결된 포폴사)를 봐요. 그래서 위 4개와 같이 고를 수 없고, 켜면 국내 조회는 아예 안 해요.',
+  },
 ] as const;
 
 /** 3) 카테고리 — 대시보드/인터/인트라 기능별 업무 시나리오 */
@@ -129,6 +145,10 @@ const TASKS = [
       '우리 기사를 가장 많이 써준 매체 순위',
       '경쟁 VC별 노출량 비교해줘',
       '최근 6개월 월별 기사 추이 정리해줘',
+      // 감시 대상 명단(coverage_gap)·피칭 점수(pitch_opportunities)는 기사 검색만으로는
+      // 못 구하는 값인데 아무 데서도 안내를 안 해서 아무도 안 물어봤다(2026-08-18).
+      '최근 3개월 동안 기사가 한 건도 없는 포폴사 알려줘',
+      '기획기사로 피칭할 만한 소재 뽑아줘',
     ],
   },
   {
@@ -188,6 +208,61 @@ const TASKS = [
     ],
   },
 ] as const;
+
+/**
+ * 칩에 커서를 올렸을 때 뜨는 설명 풍선.
+ *
+ * 브라우저 기본 title= 툴팁은 1초 넘게 기다려야 뜨고 줄바꿈도 안 돼서, "이 필터를 켜면
+ * 답변이 어떻게 바뀌는지"를 읽히게 하려면 직접 그리는 편이 낫다(2026-08-18 소윤 요청).
+ * 위쪽에 띄우는 이유: 이 칩들이 전부 화면 맨 아래 입력 도크에 붙어 있어서.
+ */
+function Tip({ text, children }: { text: string; children: React.ReactNode }) {
+  const tipRef = useRef<HTMLSpanElement>(null);
+
+  // 칩 가운데에 맞춰 띄우면 줄 맨 앞·맨 뒤 칩에서는 풍선이 화면 밖으로 나가 글자가 잘린다.
+  // 커서를 올리는 순간 실제 위치를 재서 양옆 12px 안쪽으로 밀어 넣는다.
+  const clamp = () => {
+    const el = tipRef.current;
+    if (!el) return;
+    el.style.transform = 'translateX(-50%)';
+    const r = el.getBoundingClientRect();
+    const pad = 12;
+    const shift = r.left < pad ? pad - r.left : r.right > window.innerWidth - pad ? window.innerWidth - pad - r.right : 0;
+    if (shift) el.style.transform = `translateX(calc(-50% + ${Math.round(shift)}px))`;
+  };
+
+  return (
+    <span className="relative group/tip inline-flex" onMouseEnter={clamp} onFocus={clamp}>
+      {children}
+      <span
+        ref={tipRef}
+        role="tooltip"
+        className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 w-64 -translate-x-1/2 rounded-xl border border-spark-border bg-spark-surface px-3 py-2 text-left text-[12px] font-normal leading-[1.5] whitespace-pre-line text-spark-ink-soft opacity-0 shadow-pop transition-opacity duration-150 group-hover/tip:opacity-100"
+      >
+        {text}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * 입력창 안내문에 돌아가며 보여줄 예시 질문.
+ *
+ * 예시가 "이번 주 포폴사 투자유치 기사 정리해줘" 하나뿐이라 이 챗봇이 그것밖에 못 하는 줄
+ * 안다는 얘기가 있어서, 실제로 되는 조회 종류를 골고루 섞어 몇 초마다 바꿔 보여준다
+ * (2026-08-18 소윤 요청). 아래 TASKS의 예시와 겹치지 않게 서로 다른 도구를 쓰는 것으로 골랐다.
+ */
+const PLACEHOLDER_EXAMPLES = [
+  '이번 주 포폴사 투자유치 기사 정리해줘',
+  '요즘 리스크 시그널 잡힌 포폴사 있어?',
+  '최근 3개월 기사가 한 건도 없는 포폴사 알려줘',
+  '기획기사로 피칭할 만한 소재 뽑아줘',
+  '해외에서 요즘 뜨는 AI 섹터가 뭐야?',
+  '경쟁 VC별 노출량 비교해줘',
+  '최근 6개월 월별 기사 추이 보여줘',
+  '오탐이 많은 키워드 찾아줘',
+  '이번 주 다이제스트 초안 만들어줘',
+];
 
 /** 첨부 가능한 파일 — 사내에서 쓰는 문서·미디어 전반 */
 const ACCEPT = [
@@ -279,7 +354,9 @@ function migrateConvos(raw: any): Convo[] {
 
 export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   const [input, setInput] = useState('');
-  const [activeModes, setActiveModes] = useState<string[]>(['sources']);
+  // 기본값은 아무것도 안 켠 상태. 예전 기본값 'sources'는 서버에서 읽지도 않는 값이라
+  // 실제로는 지금과 똑같이 동작했다(2026-08-18에 토글 자체를 없앰).
+  const [activeModes, setActiveModes] = useState<string[]>([]);
   const [period, setPeriod] = useState<string>('quarter');
   const [activeScopes, setActiveScopes] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
@@ -294,6 +371,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   const [convoId, setConvoId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [listening, setListening] = useState(false);
+  const [exampleIdx, setExampleIdx] = useState(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -366,6 +444,14 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
     el.scrollTop = el.scrollHeight;
     setShowJumpToAnswer(false);
   };
+
+  // 안내문 예시를 4초마다 바꾼다. 타이핑 중에는 어차피 안 보이지만, 굳이 계속 돌릴 이유도
+  // 없어서 입력이 비어 있을 때만 돈다.
+  useEffect(() => {
+    if (input) return;
+    const t = setInterval(() => setExampleIdx((i) => (i + 1) % PLACEHOLDER_EXAMPLES.length), 4000);
+    return () => clearInterval(t);
+  }, [input]);
 
   const toggle = (list: string[], id: string) =>
     list.includes(id) ? list.filter((v) => v !== id) : [...list, id];
@@ -807,7 +893,9 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
               setDragging(false);
               addFiles(e.dataTransfer.files);
             }}
-            className={`w-full bg-spark-surface border rounded-2xl shadow-card overflow-hidden transition ${
+            // overflow-hidden을 쓰지 않는다 — 칩 위로 띄우는 설명 풍선(Tip)이 카드 경계에서
+            // 잘려나간다. 안쪽 행들은 배경이 투명해서 모서리가 삐져나올 일도 없다.
+            className={`w-full bg-spark-surface border rounded-2xl shadow-card transition ${
               dragging ? 'border-spark-purple ring-2 ring-spark-purple/20' : 'border-spark-border'
             }`}
           >
@@ -827,7 +915,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                     send();
                   }
                 }}
-                placeholder="무엇이든 물어보세요. 예) 이번 주 포폴사 투자유치 기사 정리해줘"
+                placeholder={`무엇이든 물어보세요. 예) ${PLACEHOLDER_EXAMPLES[exampleIdx]}`}
                 className="w-full resize-none bg-transparent text-[15px] leading-6 text-spark-ink outline-none placeholder:text-spark-muted"
               />
             </div>
@@ -862,8 +950,8 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                 <span className="text-[12px] font-semibold text-spark-muted mr-0.5">답변 방식</span>
 
                 {/* 기간 — 하나만 고르는 선택형 */}
+                <Tip text="이 기간 안에 발행된 기사만 세고 답해요. 질문에 “지난주”처럼 기간을 직접 쓰면 그쪽이 우선이에요.">
                 <label
-                  title="검색할 기간"
                   className="relative flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-full text-[13px] font-semibold bg-spark-light-purple text-spark-purple cursor-pointer"
                 >
                   <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
@@ -885,24 +973,25 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                     ))}
                   </select>
                 </label>
+                </Tip>
 
                 {MODES.map((m) => {
                   const on = activeModes.includes(m.id);
                   return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      title={m.hint}
-                      onClick={() => setActiveModes((prev) => toggle(prev, m.id))}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-semibold transition ${
-                        on
-                          ? 'bg-spark-light-purple text-spark-purple'
-                          : 'bg-spark-subtle text-spark-muted hover:text-spark-ink-soft border border-spark-border'
-                      }`}
-                    >
-                      {m.icon}
-                      <span>{m.label}</span>
-                    </button>
+                    <Tip key={m.id} text={on ? m.hint : `${m.hint}\n${m.off}`}>
+                      <button
+                        type="button"
+                        onClick={() => setActiveModes((prev) => toggle(prev, m.id))}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-semibold transition ${
+                          on
+                            ? 'bg-spark-light-purple text-spark-purple'
+                            : 'bg-spark-subtle text-spark-muted hover:text-spark-ink-soft border border-spark-border'
+                        }`}
+                      >
+                        {m.icon}
+                        <span>{m.label}</span>
+                      </button>
+                    </Tip>
                   );
                 })}
               </div>
@@ -947,18 +1036,19 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
               {SCOPES.map((s) => {
                 const on = activeScopes.includes(s.id);
                 return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => toggleScope(s.id)}
-                    className={`px-2.5 py-1 rounded-lg text-[12px] font-semibold transition border ${
-                      on
-                        ? 'bg-spark-light-purple text-spark-purple border-spark-purple/30'
-                        : 'bg-white text-spark-muted border-spark-border hover:text-spark-ink-soft'
-                    }`}
-                  >
-                    {s.label}
-                  </button>
+                  <Tip key={s.id} text={s.hint}>
+                    <button
+                      type="button"
+                      onClick={() => toggleScope(s.id)}
+                      className={`px-2.5 py-1 rounded-lg text-[12px] font-semibold transition border ${
+                        on
+                          ? 'bg-spark-light-purple text-spark-purple border-spark-purple/30'
+                          : 'bg-white text-spark-muted border-spark-border hover:text-spark-ink-soft'
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  </Tip>
                 );
               })}
               <span className="ml-auto text-[11px] text-spark-muted">
@@ -999,20 +1089,20 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
             {TASKS.map((t) => {
               const on = openTask === t.id;
               return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setOpenTask(on ? null : t.id)}
-                  title={t.desc}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[12px] font-semibold transition ${
-                    on
-                      ? 'bg-spark-light-purple border-spark-purple/30 text-spark-purple'
-                      : 'bg-spark-surface border-spark-border text-spark-ink-soft hover:border-spark-border-strong'
-                  }`}
-                >
-                  <span className={on ? 'text-spark-purple' : 'text-spark-muted'}>{t.icon}</span>
-                  {t.label}
-                </button>
+                <Tip key={t.id} text={`${t.desc} — 눌러서 예시 질문을 고르면 입력창에 채워져요.\n필터가 아니라 질문 모음이라, 이것만 눌러서는 조회되지 않아요.`}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenTask(on ? null : t.id)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[12px] font-semibold transition ${
+                      on
+                        ? 'bg-spark-light-purple border-spark-purple/30 text-spark-purple'
+                        : 'bg-spark-surface border-spark-border text-spark-ink-soft hover:border-spark-border-strong'
+                    }`}
+                  >
+                    <span className={on ? 'text-spark-purple' : 'text-spark-muted'}>{t.icon}</span>
+                    {t.label}
+                  </button>
+                </Tip>
               );
             })}
           </div>
