@@ -12,6 +12,8 @@
 // LLM은 관여하지 않는다. 이미 받아온 응답 데이터로 브라우저에서만 만든다.
 import type { ChatResponse, ChatQueryResult } from './sparkscope/chat-types';
 import { categoryLabel, PERIOD_LABEL, SCOPE_LABEL } from './sparkscope/chat-types';
+// 화면(ChatWelcome)과 같은 규칙으로 기사를 묶는다 — 두 곳이 달라 보이면 안 된다.
+import { organizeArticles } from './sparkscope/group-articles';
 
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -21,24 +23,64 @@ function fmtDate(iso: string) {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** 요약 본문 — "- "로 시작하는 줄은 목록으로 묶는다. */
+/** `| a | b |` 한 줄을 셀 배열로. 양끝 파이프는 버린다. */
+function splitTableRow(line: string) {
+  return line.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
+}
+
+/** `|---|:--:|` 같은 마크다운 표 구분선인지 */
+function isTableDivider(line: string) {
+  return /^\s*\|?[\s:|-]+\|[\s:|-]*$/.test(line) && line.includes('-');
+}
+
+/**
+ * 요약 본문 — "- " 목록과 마크다운 표를 HTML로 바꾼다.
+ *
+ * '표로 정리'를 켜면 모델이 마크다운 표로 답하는데, 예전엔 이 함수가 표를 모르고
+ * 모든 줄을 <p>로 감싸서 저장한 HTML에 "| 구분 | 이번 달 건수 |", "|---|---:|---|"가
+ * 그대로 찍혔다(2026-08-18 피드백 — 화면에서는 AnswerText가 표로 그려주는데 저장
+ * 파일만 깨져 보였다).
+ */
 function renderSummary(text: string) {
   const out: string[] = [];
   let list: string[] = [];
-  const flush = () => {
+  const flushList = () => {
     if (list.length) out.push(`<ul>${list.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>`);
     list = [];
   };
-  for (const raw of text.split('\n')) {
-    const line = raw.trim();
-    if (!line) continue;
+
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // 표: 헤더 줄 + 구분선이 연달아 나와야 표로 인정한다(본문에 파이프가 하나 섞인
+    // 문장을 표로 오인하지 않도록).
+    if (line.includes('|') && i + 1 < lines.length && isTableDivider(lines[i + 1])) {
+      flushList();
+      const head = splitTableRow(line);
+      const body: string[][] = [];
+      let j = i + 2;
+      for (; j < lines.length && lines[j].includes('|'); j++) {
+        if (isTableDivider(lines[j])) continue;
+        body.push(splitTableRow(lines[j]));
+      }
+      out.push(`<table class="md-table">
+        <thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+        <tbody>${body
+          .map((row) => `<tr>${row.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`)
+          .join('')}</tbody>
+      </table>`);
+      i = j - 1;
+      continue;
+    }
+
     if (line.startsWith('- ')) list.push(line.slice(2));
     else {
-      flush();
+      flushList();
       out.push(`<p>${esc(line)}</p>`);
     }
   }
-  flush();
+  flushList();
   return out.join('');
 }
 
@@ -245,6 +287,70 @@ function noiseTable(rows: NonNullable<ChatQueryResult['noisyKeywords']>) {
   </section>`;
 }
 
+/** 그룹 카드 하나 안에 들어가는 기사 표. 카드 제목에 이미 회사·주제가 있으면 그 컬럼은 뺀다. */
+function articleTable(items: ChatQueryResult['articles'], showTag: boolean) {
+  return `<table>
+    <thead><tr>${showTag ? '<th>회사·키워드</th>' : ''}<th>제목</th><th>매체</th><th>날짜</th><th>톤</th></tr></thead>
+    <tbody>
+      ${items
+        .map(
+          (a) => `<tr>
+            ${showTag ? `<td class="kw">${esc(a.matchedKeyword || '-')}</td>` : ''}
+            <td>
+              <a href="${esc(a.link)}" target="_blank" rel="noreferrer">${esc(a.title)}</a>
+              ${a.oneLiner && a.oneLiner !== a.title ? `<div class="one">${esc(a.oneLiner)}</div>` : ''}
+            </td>
+            <td class="dimtext">${esc(a.source)}</td>
+            <td class="nowrap dimtext">${fmtDate(a.pubDate)}</td>
+            <td>${toneBadge(a.tone)}</td>
+          </tr>`
+        )
+        .join('')}
+    </tbody>
+  </table>`;
+}
+
+/**
+ * 근거 기사 — 화면(ChatWelcome)과 똑같이 회사·주제별 카드로 묶는다.
+ *
+ * 예전엔 여기만 그룹핑 없이 전체를 한 표로 뿌려서, 회사·키워드 컬럼에 같은 값이 계속
+ * 반복되고 30건이 한 덩어리로 이어졌다(2026-08-18 피드백). 인쇄(PDF)에서도 카드 하나가
+ * 페이지 중간에 잘리지 않도록 page-break-inside: avoid를 걸어둔다.
+ */
+function articleGroupsHtml(articles: ChatQueryResult['articles']) {
+  const { topics, companies, companyArticles } = organizeArticles(articles);
+
+  const groupCard = (icon: string, tag: string, items: ChatQueryResult['articles'], kindLabel?: string) =>
+    `<div class="group">
+      <div class="group-head">
+        <span class="group-name">${icon} ${kindLabel ? `<span class="group-kind">${esc(kindLabel)}</span> ` : ''}${esc(tag)}</span>
+        <span class="group-count">${items.length}건</span>
+      </div>
+      ${articleTable(items, false)}
+    </div>`;
+
+  const parts = [
+    ...companies.map((g) => groupCard('🏢', g.tag, g.items)),
+    ...topics.map((g) => groupCard('📌', g.tag, g.items, '주제')),
+  ];
+
+  // 어느 그룹에도 안 묶인(그 회사·주제 기사가 1건뿐인) 기사 — 억지로 1건짜리 카드를
+  // 만들지 않고 하나로 모아서 회사·키워드 컬럼을 살려 보여준다.
+  if (companyArticles.length) {
+    parts.push(`<div class="group">
+      <div class="group-head">
+        <span class="group-name">🏢 그 외 매칭된 기사</span>
+        <span class="group-count">${companyArticles.length}건</span>
+      </div>
+      ${articleTable(companyArticles, true)}
+    </div>`);
+  }
+
+  // 그룹이 하나도 안 잡히면(전부 1건씩) 굳이 카드로 감쌀 이유가 없다.
+  if (!companies.length && !topics.length) return articleTable(articles, true);
+  return parts.join('');
+}
+
 export function buildReportHtml(opts: {
   question: string;
   res: ChatResponse;
@@ -318,25 +424,7 @@ export function buildReportHtml(opts: {
   const articleBlock = r?.articles.length
     ? `<section>
         <h2>근거 기사 <span class="count">${r.articles.length}건${r.total > r.articles.length ? ` / 전체 ${r.total.toLocaleString()}건` : ''}</span></h2>
-        <table>
-          <thead><tr><th>회사·키워드</th><th>제목</th><th>매체</th><th>날짜</th><th>톤</th></tr></thead>
-          <tbody>
-            ${r.articles
-              .map(
-                (a) => `<tr>
-                  <td class="kw">${esc(a.matchedKeyword || '-')}</td>
-                  <td>
-                    <a href="${esc(a.link)}" target="_blank" rel="noreferrer">${esc(a.title)}</a>
-                    ${a.oneLiner && a.oneLiner !== a.title ? `<div class="one">${esc(a.oneLiner)}</div>` : ''}
-                  </td>
-                  <td class="dimtext">${esc(a.source)}</td>
-                  <td class="nowrap dimtext">${fmtDate(a.pubDate)}</td>
-                  <td>${toneBadge(a.tone)}</td>
-                </tr>`
-              )
-              .join('')}
-          </tbody>
-        </table>
+        ${articleGroupsHtml(r.articles)}
       </section>`
     : '';
 
@@ -404,6 +492,23 @@ export function buildReportHtml(opts: {
   td a:hover { color: var(--purple); text-decoration: underline; }
   .one { color: var(--muted); font-size: 12px; margin-top: 3px; font-weight: 400; }
   .kw { color: var(--purple); font-weight: 700; white-space: nowrap; font-size: 12.5px; }
+
+  /* 근거 기사 — 회사·주제별 카드 */
+  .group { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+  .group-head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+                background: var(--subtle); padding: 9px 14px; border-bottom: 1px solid var(--border); }
+  .group-name { color: var(--purple); font-weight: 700; font-size: 13px; }
+  .group-kind { color: var(--muted); font-weight: 500; font-size: 10.5px; }
+  .group-count { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .group table { margin-top: 0; }
+  .group th { padding-top: 9px; padding-bottom: 9px; }
+  .group tbody tr:last-child td { border-bottom: none; }
+
+  /* 답변 본문 안의 마크다운 표 */
+  .md-table { margin: 0 0 14px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .md-table th { background: var(--subtle); }
+  .md-table td { font-size: 12.5px; vertical-align: middle; }
+  .md-table tbody tr:last-child td { border-bottom: none; }
   .dimtext { color: var(--muted); font-size: 12px; }
   .nowrap { white-space: nowrap; }
   .badge { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 5px; white-space: nowrap; }
@@ -421,7 +526,7 @@ export function buildReportHtml(opts: {
     h1 { font-size: 18px; }
     .stat-main b { font-size: 24px; }
     tbody tr:hover { background: none; }
-    tr, .card { page-break-inside: avoid; }
+    tr, .card, .group { page-break-inside: avoid; }
     td a { color: var(--ink); text-decoration: none; }
   }
 </style></head>
