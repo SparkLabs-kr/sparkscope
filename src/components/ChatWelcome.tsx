@@ -1412,27 +1412,35 @@ function ChatResult({
 
       {/* "요즘 여론 어때?" 같은 톤 질문은 부정 건수 하나보다 긍정/중립/부정 비율이 한눈에
           보이는 도넛차트가 더 직관적이다(2026-08-12). trend·noise는 이미 전용 그래프가
-          있으니 일반 검색(search) 결과에서만 보여준다. */}
-      {resultKind === 'search' &&
-        (result.positiveCount ?? 0) + (result.neutralCount ?? 0) + result.negativeCount > 0 && (
-          <ToneDonutChart
-            positive={result.positiveCount ?? 0}
-            neutral={result.neutralCount ?? 0}
-            negative={result.negativeCount}
-          />
-        )}
+          있으니 일반 검색(search) 결과에서만 보여준다.
+          "어디서 많이 나왔어?" 같은 회사·매체 비교는 목록보다 막대 길이로 바로 비교되는 게
+          낫다 — 이 둘을 나란히 두면 톤 도넛 옆의 빈 공간이 채워진다(2026-08-13 피드백:
+          도넛차트 하나만 있을 때 카드 우측이 휑하게 비어 보였다). 3곳 미만이면 굳이
+          그래프까지 필요 없어 텍스트 목록으로 충분하니 그럴 땐 도넛이 혼자 한 줄을 차지한다. */}
+      {resultKind === 'search' && (
+        <div className="flex flex-wrap gap-3">
+          {(result.positiveCount ?? 0) + (result.neutralCount ?? 0) + result.negativeCount > 0 && (
+            <div className="flex-1 min-w-[260px]">
+              <ToneDonutChart
+                positive={result.positiveCount ?? 0}
+                neutral={result.neutralCount ?? 0}
+                negative={result.negativeCount}
+              />
+            </div>
+          )}
+          {result.topCompanies.length >= 3 && (
+            <div className="flex-1 min-w-[260px]">
+              <CompanyBarChart title="많이 나온 회사·키워드" items={result.topCompanies} />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* "요즘 어떤 기사가 많아?"처럼 분류 구성을 묻는 질문은 숫자 나열보다 비율이 한눈에
           보이는 도넛차트가 더 직관적이다(2026-08-12). 분류가 2개 이상 섞여 있을 때만 의미가
           있다 — 검색 범위를 하나로 좁혔으면(예: 포트폴리오사만) 어차피 100%라 그릴 필요 없다. */}
       {resultKind === 'search' && result.byCategory.filter((c) => c.count > 0).length > 1 && (
         <CategoryDonutChart items={result.byCategory} />
-      )}
-
-      {/* "어디서 많이 나왔어?" 같은 회사·매체 비교는 목록보다 막대 길이로 바로 비교되는 게
-          낫다(2026-08-12). 3곳 미만이면 굳이 그래프까지 필요 없어 텍스트 목록으로 충분하다. */}
-      {resultKind === 'search' && result.topCompanies.length >= 3 && (
-        <CompanyBarChart title="많이 나온 회사·키워드" items={result.topCompanies} />
       )}
 
       {/* 피칭 소재는 산점도로 시도했다가 사용자 피드백으로 뺐다(2026-08-12) — 이미 70점
