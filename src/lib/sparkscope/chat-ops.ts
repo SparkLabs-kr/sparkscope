@@ -15,6 +15,10 @@ const SCOPE_CATEGORY: Record<ChatScope, string> = {
   competitor: 'competitor',
   sparklabs: 'sparklabs_self',
   industry: 'industry_trend',
+  // inter(해외 트렌드)는 Article 테이블의 카테고리가 아니라 별도 해외 데이터(InterNews)라
+  // 여기서 다루는 국내 기사 집계(피칭 소재·노출 사각지대)에는 대응하는 카테고리가 없다.
+  // 빈 문자열로 두면 scopeCategories의 filter(Boolean)에서 자연히 빠진다.
+  inter: '',
 };
 
 function scopeCategories(scopes: ChatScope[]): string[] | null {
