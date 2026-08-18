@@ -11,6 +11,8 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { exportAnswerToHtml } from '@/lib/chat-export';
 import { AnswerText } from './AnswerText';
+// 근거 기사 그룹핑 — HTML 저장(chat-export.ts)과 같은 규칙을 쓰려고 공용 모듈로 뺐다.
+import { organizeArticles, GROUP_PREVIEW_COUNT } from '@/lib/sparkscope/group-articles';
 // 서버 전용 모듈(prisma)이 클라이언트 번들에 딸려오지 않도록 타입 전용 파일에서 가져온다.
 import {
   categoryLabel,
@@ -46,12 +48,18 @@ declare global {
   }
 }
 
-/** 1) 답변 방식 — 질문을 어떤 깊이·형식으로 처리할지 */
+/** 1) 답변 방식 — 질문을 어떤 깊이·형식으로 처리할지
+ *
+ * 여기 있는 항목은 전부 실제로 서버 프롬프트를 바꾸는 것만 남긴다.
+ * "근거 기사 첨부" 토글이 있었는데 켜든 끄든 아무 데서도 읽지 않는 죽은 스위치였다
+ * (근거 기사 목록은 어차피 항상 답변 아래에 붙는다) — 2026-08-18에 제거했다.
+ */
 const MODES = [
   {
     id: 'deep',
     label: '심층 분석',
-    hint: '여러 기사를 교차로 읽고 원인·맥락까지 정리 (느리지만 자세함)',
+    hint: '켜면 6~10문장으로 길게 — 기사를 주제별로 묶고 원인·맥락, 본부가 할 일까지 짚어요. 끄면 3~5문장 요약.',
+    off: '지금은 꺼짐 — 3~5문장으로 짧게 답해요.',
     icon: (
       <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
         <circle cx="8" cy="8" r="6.2" stroke="currentColor" strokeWidth="1.6" />
@@ -60,20 +68,10 @@ const MODES = [
     ),
   },
   {
-    id: 'sources',
-    label: '근거 기사 첨부',
-    hint: '답변에 쓰인 원문 기사 링크를 함께 보여줌',
-    icon: (
-      <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
-        <path d="M6.8 9.2a2.6 2.6 0 003.7 0l2-2a2.6 2.6 0 10-3.7-3.7l-.9.9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        <path d="M9.2 6.8a2.6 2.6 0 00-3.7 0l-2 2a2.6 2.6 0 103.7 3.7l.9-.9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
     id: 'table',
     label: '표로 정리',
-    hint: '회사·건수·매체·날짜를 표 형태로 정리해서 답변 (보고서에 붙여넣기 좋게)',
+    hint: '켜면 답변 안에 회사·건수·매체·날짜를 마크다운 표로 함께 정리해요. 보고서에 그대로 붙여넣기 좋아요.',
+    off: '지금은 꺼짐 — 표 없이 문장으로만 답해요.',
     icon: (
       <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
         <rect x="2.2" y="3" width="11.6" height="10" rx="1.4" stroke="currentColor" strokeWidth="1.5" />
@@ -94,11 +92,31 @@ const PERIODS = [
 
 /** 2) 검색 범위 — 스파크스코프가 다루는 데이터 축 (Intra 4 + Inter 1) */
 const SCOPES = [
-  { id: 'portfolio', label: '포트폴리오사' },
-  { id: 'competitor', label: '경쟁사(VC)' },
-  { id: 'sparklabs', label: '스파크랩' },
-  { id: 'industry', label: '업계동향' },
-  { id: 'inter', label: '해외 트렌드' },
+  {
+    id: 'portfolio',
+    label: '포트폴리오사',
+    hint: '스파크랩이 투자한 회사(감시 대상 218곳) 기사만 찾아요. 다른 분류는 답변·건수·그래프에서 빠져요.',
+  },
+  {
+    id: 'competitor',
+    label: '경쟁사(VC)',
+    hint: '다른 VC·액셀러레이터(114곳) 기사만 찾아요. "경쟁사는 뭘 하고 있나" 볼 때.',
+  },
+  {
+    id: 'sparklabs',
+    label: '스파크랩',
+    hint: '우리 회사가 직접 언급된 기사(17개 키워드)만 찾아요. 자사 보도 점검용.',
+  },
+  {
+    id: 'industry',
+    label: '업계동향',
+    hint: '회사가 아니라 국내 업계 전반 기사(투자·창업·정책 등 57개 주제). 해외 기사는 여기 없어요.',
+  },
+  {
+    id: 'inter',
+    label: '해외 트렌드',
+    hint: '국내 기사와 완전히 다른 해외 수집 데이터(섹터·국가·연결된 포폴사)를 봐요. 그래서 위 4개와 같이 고를 수 없고, 켜면 국내 조회는 아예 안 해요.',
+  },
 ] as const;
 
 /** 3) 카테고리 — 대시보드/인터/인트라 기능별 업무 시나리오 */
@@ -129,6 +147,10 @@ const TASKS = [
       '우리 기사를 가장 많이 써준 매체 순위',
       '경쟁 VC별 노출량 비교해줘',
       '최근 6개월 월별 기사 추이 정리해줘',
+      // 감시 대상 명단(coverage_gap)·피칭 점수(pitch_opportunities)는 기사 검색만으로는
+      // 못 구하는 값인데 아무 데서도 안내를 안 해서 아무도 안 물어봤다(2026-08-18).
+      '최근 3개월 동안 기사가 한 건도 없는 포폴사 알려줘',
+      '기획기사로 피칭할 만한 소재 뽑아줘',
     ],
   },
   {
@@ -188,6 +210,61 @@ const TASKS = [
     ],
   },
 ] as const;
+
+/**
+ * 칩에 커서를 올렸을 때 뜨는 설명 풍선.
+ *
+ * 브라우저 기본 title= 툴팁은 1초 넘게 기다려야 뜨고 줄바꿈도 안 돼서, "이 필터를 켜면
+ * 답변이 어떻게 바뀌는지"를 읽히게 하려면 직접 그리는 편이 낫다(2026-08-18 소윤 요청).
+ * 위쪽에 띄우는 이유: 이 칩들이 전부 화면 맨 아래 입력 도크에 붙어 있어서.
+ */
+function Tip({ text, children }: { text: string; children: React.ReactNode }) {
+  const tipRef = useRef<HTMLSpanElement>(null);
+
+  // 칩 가운데에 맞춰 띄우면 줄 맨 앞·맨 뒤 칩에서는 풍선이 화면 밖으로 나가 글자가 잘린다.
+  // 커서를 올리는 순간 실제 위치를 재서 양옆 12px 안쪽으로 밀어 넣는다.
+  const clamp = () => {
+    const el = tipRef.current;
+    if (!el) return;
+    el.style.transform = 'translateX(-50%)';
+    const r = el.getBoundingClientRect();
+    const pad = 12;
+    const shift = r.left < pad ? pad - r.left : r.right > window.innerWidth - pad ? window.innerWidth - pad - r.right : 0;
+    if (shift) el.style.transform = `translateX(calc(-50% + ${Math.round(shift)}px))`;
+  };
+
+  return (
+    <span className="relative group/tip inline-flex" onMouseEnter={clamp} onFocus={clamp}>
+      {children}
+      <span
+        ref={tipRef}
+        role="tooltip"
+        className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 w-64 -translate-x-1/2 rounded-xl border border-spark-border bg-spark-surface px-3 py-2 text-left text-[12px] font-normal leading-[1.5] whitespace-pre-line text-spark-ink-soft opacity-0 shadow-pop transition-opacity duration-150 group-hover/tip:opacity-100"
+      >
+        {text}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * 입력창 안내문에 돌아가며 보여줄 예시 질문.
+ *
+ * 예시가 "이번 주 포폴사 투자유치 기사 정리해줘" 하나뿐이라 이 챗봇이 그것밖에 못 하는 줄
+ * 안다는 얘기가 있어서, 실제로 되는 조회 종류를 골고루 섞어 몇 초마다 바꿔 보여준다
+ * (2026-08-18 소윤 요청). 아래 TASKS의 예시와 겹치지 않게 서로 다른 도구를 쓰는 것으로 골랐다.
+ */
+const PLACEHOLDER_EXAMPLES = [
+  '이번 주 포폴사 투자유치 기사 정리해줘',
+  '요즘 리스크 시그널 잡힌 포폴사 있어?',
+  '최근 3개월 기사가 한 건도 없는 포폴사 알려줘',
+  '기획기사로 피칭할 만한 소재 뽑아줘',
+  '해외에서 요즘 뜨는 AI 섹터가 뭐야?',
+  '경쟁 VC별 노출량 비교해줘',
+  '최근 6개월 월별 기사 추이 보여줘',
+  '오탐이 많은 키워드 찾아줘',
+  '이번 주 다이제스트 초안 만들어줘',
+];
 
 /** 첨부 가능한 파일 — 사내에서 쓰는 문서·미디어 전반 */
 const ACCEPT = [
@@ -279,7 +356,9 @@ function migrateConvos(raw: any): Convo[] {
 
 export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   const [input, setInput] = useState('');
-  const [activeModes, setActiveModes] = useState<string[]>(['sources']);
+  // 기본값은 아무것도 안 켠 상태. 예전 기본값 'sources'는 서버에서 읽지도 않는 값이라
+  // 실제로는 지금과 똑같이 동작했다(2026-08-18에 토글 자체를 없앰).
+  const [activeModes, setActiveModes] = useState<string[]>([]);
   const [period, setPeriod] = useState<string>('quarter');
   const [activeScopes, setActiveScopes] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
@@ -294,6 +373,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   const [convoId, setConvoId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [listening, setListening] = useState(false);
+  const [exampleIdx, setExampleIdx] = useState(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -366,6 +446,14 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
     el.scrollTop = el.scrollHeight;
     setShowJumpToAnswer(false);
   };
+
+  // 안내문 예시를 4초마다 바꾼다. 타이핑 중에는 어차피 안 보이지만, 굳이 계속 돌릴 이유도
+  // 없어서 입력이 비어 있을 때만 돈다.
+  useEffect(() => {
+    if (input) return;
+    const t = setInterval(() => setExampleIdx((i) => (i + 1) % PLACEHOLDER_EXAMPLES.length), 4000);
+    return () => clearInterval(t);
+  }, [input]);
 
   const toggle = (list: string[], id: string) =>
     list.includes(id) ? list.filter((v) => v !== id) : [...list, id];
@@ -643,7 +731,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
       {/* 대화 기록 */}
       <div className="relative flex-1 min-h-0">
       <div ref={scrollRef} className="h-full overflow-y-auto">
-        <div className={`max-w-3xl mx-auto px-6 py-8 ${messages.length === 0 ? 'h-full flex items-center justify-center' : ''}`}>
+        <div className="max-w-3xl mx-auto px-6 py-8">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center animate-rise">
               <SparkScopeMark />
@@ -807,7 +895,9 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
               setDragging(false);
               addFiles(e.dataTransfer.files);
             }}
-            className={`w-full bg-spark-surface border rounded-2xl shadow-card overflow-hidden transition ${
+            // overflow-hidden을 쓰지 않는다 — 칩 위로 띄우는 설명 풍선(Tip)이 카드 경계에서
+            // 잘려나간다. 안쪽 행들은 배경이 투명해서 모서리가 삐져나올 일도 없다.
+            className={`w-full bg-spark-surface border rounded-2xl shadow-card transition ${
               dragging ? 'border-spark-purple ring-2 ring-spark-purple/20' : 'border-spark-border'
             }`}
           >
@@ -827,7 +917,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                     send();
                   }
                 }}
-                placeholder="무엇이든 물어보세요. 예) 이번 주 포폴사 투자유치 기사 정리해줘"
+                placeholder={`무엇이든 물어보세요. 예) ${PLACEHOLDER_EXAMPLES[exampleIdx]}`}
                 className="w-full resize-none bg-transparent text-[15px] leading-6 text-spark-ink outline-none placeholder:text-spark-muted"
               />
             </div>
@@ -862,8 +952,8 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                 <span className="text-[12px] font-semibold text-spark-muted mr-0.5">답변 방식</span>
 
                 {/* 기간 — 하나만 고르는 선택형 */}
+                <Tip text="이 기간 안에 발행된 기사만 세고 답해요. 질문에 “지난주”처럼 기간을 직접 쓰면 그쪽이 우선이에요.">
                 <label
-                  title="검색할 기간"
                   className="relative flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-full text-[13px] font-semibold bg-spark-light-purple text-spark-purple cursor-pointer"
                 >
                   <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
@@ -885,24 +975,25 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                     ))}
                   </select>
                 </label>
+                </Tip>
 
                 {MODES.map((m) => {
                   const on = activeModes.includes(m.id);
                   return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      title={m.hint}
-                      onClick={() => setActiveModes((prev) => toggle(prev, m.id))}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-semibold transition ${
-                        on
-                          ? 'bg-spark-light-purple text-spark-purple'
-                          : 'bg-spark-subtle text-spark-muted hover:text-spark-ink-soft border border-spark-border'
-                      }`}
-                    >
-                      {m.icon}
-                      <span>{m.label}</span>
-                    </button>
+                    <Tip key={m.id} text={on ? m.hint : `${m.hint}\n${m.off}`}>
+                      <button
+                        type="button"
+                        onClick={() => setActiveModes((prev) => toggle(prev, m.id))}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-semibold transition ${
+                          on
+                            ? 'bg-spark-light-purple text-spark-purple'
+                            : 'bg-spark-subtle text-spark-muted hover:text-spark-ink-soft border border-spark-border'
+                        }`}
+                      >
+                        {m.icon}
+                        <span>{m.label}</span>
+                      </button>
+                    </Tip>
                   );
                 })}
               </div>
@@ -947,18 +1038,19 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
               {SCOPES.map((s) => {
                 const on = activeScopes.includes(s.id);
                 return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => toggleScope(s.id)}
-                    className={`px-2.5 py-1 rounded-lg text-[12px] font-semibold transition border ${
-                      on
-                        ? 'bg-spark-light-purple text-spark-purple border-spark-purple/30'
-                        : 'bg-white text-spark-muted border-spark-border hover:text-spark-ink-soft'
-                    }`}
-                  >
-                    {s.label}
-                  </button>
+                  <Tip key={s.id} text={s.hint}>
+                    <button
+                      type="button"
+                      onClick={() => toggleScope(s.id)}
+                      className={`px-2.5 py-1 rounded-lg text-[12px] font-semibold transition border ${
+                        on
+                          ? 'bg-spark-light-purple text-spark-purple border-spark-purple/30'
+                          : 'bg-white text-spark-muted border-spark-border hover:text-spark-ink-soft'
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  </Tip>
                 );
               })}
               <span className="ml-auto text-[11px] text-spark-muted">
@@ -999,20 +1091,20 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
             {TASKS.map((t) => {
               const on = openTask === t.id;
               return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setOpenTask(on ? null : t.id)}
-                  title={t.desc}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[12px] font-semibold transition ${
-                    on
-                      ? 'bg-spark-light-purple border-spark-purple/30 text-spark-purple'
-                      : 'bg-spark-surface border-spark-border text-spark-ink-soft hover:border-spark-border-strong'
-                  }`}
-                >
-                  <span className={on ? 'text-spark-purple' : 'text-spark-muted'}>{t.icon}</span>
-                  {t.label}
-                </button>
+                <Tip key={t.id} text={`${t.desc} — 눌러서 예시 질문을 고르면 입력창에 채워져요.\n필터가 아니라 질문 모음이라, 이것만 눌러서는 조회되지 않아요.`}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenTask(on ? null : t.id)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[12px] font-semibold transition ${
+                      on
+                        ? 'bg-spark-light-purple border-spark-purple/30 text-spark-purple'
+                        : 'bg-spark-surface border-spark-border text-spark-ink-soft hover:border-spark-border-strong'
+                    }`}
+                  >
+                    <span className={on ? 'text-spark-purple' : 'text-spark-muted'}>{t.icon}</span>
+                    {t.label}
+                  </button>
+                </Tip>
               );
             })}
           </div>
@@ -1082,9 +1174,25 @@ function ChatAnswer({
           loading={loading}
           onLiveSearch={onSendLiveSearch}
           onSuggestedKeyword={onSuggestedKeyword}
-          followUps={res.followUps}
-          onFollowUp={onFollowUp}
         />
+      )}
+
+      {/* 후속 질문 추천 — 사용자가 "이 챗봇으로 뭘 더 물어볼 수 있는지" 스스로 떠올리기
+          어려워해서(2026-08-12), 방금 답변 맥락에서 모델이 뽑은 다음 질문을 버튼으로 보여준다. */}
+      {!loading && onFollowUp && res.followUps && res.followUps.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] text-spark-muted">이것도 물어보시겠어요?</span>
+          {res.followUps.map((q) => (
+            <button
+              key={q}
+              type="button"
+              onClick={() => onFollowUp(q)}
+              className="px-3 py-1.5 bg-spark-subtle hover:bg-spark-light-purple border border-spark-border hover:border-spark-purple/30 text-spark-ink-soft hover:text-spark-purple text-[12px] font-medium rounded-full transition"
+            >
+              {q}
+            </button>
+          ))}
+        </div>
       )}
 
       {(res.summary || res.result) && (
@@ -1114,72 +1222,6 @@ function lastQuestionBefore(messages: Msg[], index: number): string {
 }
 
 /** 조회 결과 — DB 집계 + 기사 목록 */
-/**
- * 근거 기사를 매체명이 아니라 주제 태그(matchedKeyword — 회사명 또는 해외 트렌드의
- * topicSector)로 묶는다. 예전엔 그냥 최신순으로 쭉 나열만 해서, 특히 해외 트렌드처럼
- * 여러 주제가 섞인 결과는 "신약발굴 12건, 항암 8건..."처럼 한눈에 안 들어왔다(2026-08-11
- * 실사용 피드백). 묶어도 의미가 없는 경우(태그가 하나뿐이거나, 다들 태그가 제각각이라
- * 묶음 하나에 기사 1건씩만 있는 경우)엔 null을 돌려줘서 호출부가 기존 평범한 목록으로
- * 그대로 보여주게 한다.
- */
-/**
- * 근거 기사를 두 갈래로 나눈다.
- * - 주제 태그(topic, 예: 신약발굴·항암): 여러 기사가 같은 값을 공유하는 경우가 많아
- *   그룹으로 묶는 게 유용하다. 그대로 접었다 펼 수 있는 섹션으로 보여준다.
- * - 회사 태그(company): 해외 트렌드는 엮인 포폴사 조합을 콤마로 이어붙이는데("스카이랩스,
- *   엘리스헬스케어" vs "스카이랩스, 엘리스헬스케어, 크레파스솔루션"), 조합이 기사마다 거의
- *   다 달라서 그룹으로 묶으면 1건짜리 그룹이 잔뜩 생겨 오히려 안 읽힌다(2026-08-12 실사용
- *   피드백). 그룹으로 묶지 않고 그냥 목록으로 보여주되, 기사마다 관련 회사를 칩(배지)으로
- *   붙여서 "이 기사가 어느 회사와 관련 있는지"만 바로 보이게 한다.
- */
-function organizeArticles(articles: ChatQueryResult['articles']): {
-  topics: { tag: string; items: ChatQueryResult['articles'] }[];
-  companies: { tag: string; items: ChatQueryResult['articles'] }[];
-  companyArticles: ChatQueryResult['articles'];
-} {
-  const topicGroups = new Map<string, ChatQueryResult['articles']>();
-  const companyGroups = new Map<string, ChatQueryResult['articles']>();
-  const companyTagged: ChatQueryResult['articles'] = [];
-  for (const a of articles) {
-    if (a.tagKind === 'topic') {
-      const tag = a.matchedKeyword || '기타';
-      if (!topicGroups.has(tag)) topicGroups.set(tag, []);
-      topicGroups.get(tag)!.push(a);
-    } else {
-      companyTagged.push(a);
-      // matchedKeyword는 "루센트블록" 하나일 수도, "차차, 원티드랩"처럼 여러 개일 수도 있다.
-      // 예전엔 이 문자열 전체(조합)를 그룹 키로 써서 회사 조합이 겹치는 경우가 드물어
-      // 대부분 1건짜리 그룹으로 쪼개졌다(2026-08-12 실사용 피드백으로 한 번 되돌림). 회사
-      // 이름 하나하나를 키로 쓰면 조합이 아니라 실제 회사 단위로 묶여서, 기사가 회사를
-      // 여러 개 언급해도 각 회사 그룹에 다 들어간다(중복 노출은 허용 — 주제 태그 그룹과 같은 방식).
-      const names = (a.matchedKeyword || '').split(',').map((s) => s.trim()).filter(Boolean);
-      for (const name of names) {
-        if (!companyGroups.has(name)) companyGroups.set(name, []);
-        companyGroups.get(name)!.push(a);
-      }
-    }
-  }
-  const topics = [...topicGroups.entries()]
-    .map(([tag, items]) => ({ tag, items }))
-    .filter((g) => g.items.length > 1) // 1건짜리 주제 그룹도 묶는 의미가 없으니 목록으로 내림
-    .sort((a, b) => b.items.length - a.items.length);
-  const companies = [...companyGroups.entries()]
-    .map(([tag, items]) => ({ tag, items }))
-    .filter((g) => g.items.length > 1) // 그 회사 기사가 1건뿐이면 묶을 의미가 없으니 목록으로 내림
-    .sort((a, b) => b.items.length - a.items.length);
-
-  const groupedTopicIds = new Set(topics.flatMap((g) => g.items.map((a) => a.id)));
-  const groupedCompanyIds = new Set(companies.flatMap((g) => g.items.map((a) => a.id)));
-
-  return {
-    topics,
-    companies,
-    companyArticles: [
-      ...companyTagged.filter((a) => !groupedCompanyIds.has(a.id)),
-      ...articles.filter((a) => a.tagKind === 'topic' && !groupedTopicIds.has(a.id)),
-    ],
-  };
-}
 
 // riskFlag는 DB엔 litigation/crisis/controversy 코드값으로만 있고 화면엔 그냥 "⚠"
 // 아이콘만 떠서 무슨 뜻인지 알 수가 없었다(2026-08-12 피드백) — 뭘 의미하는지 바로 읽히게
@@ -1249,6 +1291,112 @@ function ArticleRow({ a, fmtDate, showCompanyTags }: { a: ChatQueryResult['artic
   );
 }
 
+/**
+ * '표로 정리' 모드에서 카드(그룹) 하나 안에 들어가는 미니 표.
+ *
+ * 카드 헤더에 이미 회사·주제 이름이 붙어 있으니, 그 안 표에서까지 "회사·키워드" 컬럼을
+ * 반복하면 같은 값이 죽 이어지기만 해서 폭만 차지한다 — 제목/매체/날짜/톤만 남긴다.
+ * showTag가 true인 건 그룹으로 안 묶인 "그 외" 목록뿐이라 예외적으로 태그를 다시 붙인다.
+ */
+function ArticleMiniTable({
+  items,
+  fmtDate,
+  showTag,
+}: {
+  items: ChatQueryResult['articles'];
+  fmtDate: (iso: string) => string;
+  showTag?: boolean;
+}) {
+  return (
+    <div className="overflow-x-auto border-t border-spark-border">
+      <table className="w-full text-[13px] border-collapse">
+        <thead>
+          <tr className="bg-spark-subtle text-spark-muted text-[11px]">
+            {showTag && <th className="text-left font-semibold px-3 py-2">회사·키워드</th>}
+            <th className="text-left font-semibold px-3 py-2">제목</th>
+            <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">매체</th>
+            <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">날짜</th>
+            <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">톤</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-spark-border">
+          {items.map((a) => (
+            <tr key={a.id} className="hover:bg-spark-subtle transition align-top">
+              {showTag && (
+                <td className="px-3 py-2 whitespace-nowrap font-semibold text-spark-purple">
+                  {a.matchedKeyword || '-'}
+                </td>
+              )}
+              <td className="px-3 py-2">
+                <a href={a.link} target="_blank" rel="noreferrer" className="text-spark-ink hover:underline">
+                  {a.title}
+                </a>
+              </td>
+              <td className="px-3 py-2 whitespace-nowrap text-spark-ink-soft">{a.source}</td>
+              <td className="px-3 py-2 whitespace-nowrap text-spark-muted">{fmtDate(a.pubDate)}</td>
+              <td className="px-3 py-2 whitespace-nowrap">
+                {a.tone === 'NEGATIVE' ? (
+                  <span className="text-red-600 font-semibold">부정</span>
+                ) : a.tone === 'POSITIVE' ? (
+                  <span className="text-blue-600 font-semibold">긍정</span>
+                ) : (
+                  <span className="text-spark-muted">-</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
+ * 그룹(회사·주제) 하나의 기사 목록 — 관련도 높은 앞 5건만 먼저 보여주고 나머지는 접는다.
+ *
+ * 그룹을 펼쳤을 때 한 회사에 15건씩 쏟아져 결과 전체가 너무 길어졌다(2026-08-18 피드백).
+ * 정렬은 group-articles의 rankByRelevance가 이미 해두므로 여기선 앞에서부터 자르기만 한다.
+ */
+function GroupArticles({
+  items,
+  fmtDate,
+  asTable,
+  showTag,
+}: {
+  items: ChatQueryResult['articles'];
+  fmtDate: (iso: string) => string;
+  asTable?: boolean;
+  /** 그룹으로 안 묶인 "그 외" 목록에서만 회사·키워드를 따로 보여준다 */
+  showTag?: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const rest = items.length - GROUP_PREVIEW_COUNT;
+  const shown = expanded ? items : items.slice(0, GROUP_PREVIEW_COUNT);
+
+  return (
+    <>
+      {asTable ? (
+        <ArticleMiniTable items={shown} fmtDate={fmtDate} showTag={showTag} />
+      ) : (
+        <ul className="divide-y divide-spark-border border-t border-spark-border">
+          {shown.map((a) => (
+            <ArticleRow key={a.id} a={a} fmtDate={fmtDate} showCompanyTags />
+          ))}
+        </ul>
+      )}
+      {rest > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="w-full px-4 py-2 border-t border-spark-border text-[12px] font-semibold text-spark-purple hover:bg-spark-subtle transition"
+        >
+          {expanded ? '접기' : `기사 ${rest}건 더보기`}
+        </button>
+      )}
+    </>
+  );
+}
+
 function ChatResult({
   result,
   scopes,
@@ -1257,8 +1405,6 @@ function ChatResult({
   loading,
   onLiveSearch,
   onSuggestedKeyword,
-  followUps,
-  onFollowUp,
 }: {
   result: ChatQueryResult;
   scopes: string[];
@@ -1267,14 +1413,14 @@ function ChatResult({
   loading?: boolean;
   onLiveSearch?: (keyword: string) => void;
   onSuggestedKeyword?: (keyword: string) => void;
-  followUps?: string[] | null;
-  onFollowUp?: (question: string) => void;
 }) {
   const fmtDate = (iso: string) => {
     const d = new Date(iso);
     return `${d.getMonth() + 1}/${d.getDate()}`;
   };
-  const organized = asTable ? null : organizeArticles(result.articles);
+  // '표로 정리'도 이제 이 그룹핑을 함께 쓴다 — 전엔 표 모드만 따로 평문 나열이라
+  // "회사·키워드" 컬럼에 같은 값이 죽 반복돼 스캔하기 힘들었다(2026-08-18 피드백).
+  const organized = organizeArticles(result.articles);
 
   // 유사 키워드 추천 — 현재 검색어와 다르면서 자주 나온 키워드들
   const keywordFreq = new Map<string, number>();
@@ -1348,33 +1494,21 @@ function ChatResult({
         )}
       </div>
 
-      {/* 다음 질문 제안 — 유사 키워드(자주 나온 회사·키워드, 클라이언트에서 집계)와
-          후속 질문(방금 답변 맥락에서 모델이 뽑은 질문)을 한 상자에 같이 보여준다.
-          예전엔 두 상자가 따로 떠서 "다음에 뭘 물어볼지 제안"하는 비슷한 목적의 상자가
-          답변 하나에 중복으로 보였다(2026-08-13 피드백). 키워드를 누르면 바로 실시간
-          검색이 아니라 먼저 우리 DB로 검색해서 보여준다 — 결과가 적으면 그 밑에 뜨는
-          "실시간 검색할까요?"를 따로 눌러야 실시간 검색으로 넘어간다(2026-08-13 피드백 —
-          실시간부터 바로 가면 DB에 있는 결과를 건너뛰게 된다). */}
-      {(suggestedKeywords.length > 0 || (!loading && followUps && followUps.length > 0)) && (
+      {/* 유사 키워드 제안 — 누르면 바로 실시간 검색이 아니라, 먼저 우리 DB로 검색해서
+          보여준다. 결과가 적으면 그 밑에 뜨는 "실시간 검색할까요?"를 따로 눌러야 실시간
+          검색으로 넘어간다(2026-08-13 피드백 — 실시간부터 바로 가면 DB에 있는 결과를
+          건너뛰게 된다). */}
+      {suggestedKeywords.length > 0 && (
         <div className="p-4 bg-gradient-to-r from-purple-100 to-pink-100 border-2 border-purple-300 rounded-2xl">
-          <p className="text-[13px] text-purple-900 font-bold mb-3">🔗 이것도 물어보시겠어요?</p>
+          <p className="text-[13px] text-purple-900 font-bold mb-3">🔗 혹시 이것도 찾으시나요?</p>
           <div className="flex flex-wrap gap-2">
             {suggestedKeywords.map(kw => (
               <button
-                key={`kw-${kw}`}
+                key={kw}
                 onClick={() => onSuggestedKeyword?.(kw)}
                 className="px-3 py-2 bg-white hover:bg-purple-50 border border-purple-300 text-purple-900 text-[12px] font-semibold rounded-lg transition shadow-sm hover:shadow-md"
               >
                 {kw}
-              </button>
-            ))}
-            {!loading && followUps?.map(q => (
-              <button
-                key={`fu-${q}`}
-                onClick={() => onFollowUp?.(q)}
-                className="px-3 py-2 bg-white hover:bg-purple-50 border border-purple-300 text-purple-900 text-[12px] font-medium rounded-lg transition shadow-sm hover:shadow-md"
-              >
-                {q}
               </button>
             ))}
           </div>
@@ -1456,115 +1590,55 @@ function ChatResult({
           <div className="px-4 py-2.5 border-b border-spark-border text-[13px] font-semibold text-spark-ink-soft">
             근거 기사 {result.articles.length}건 {result.total > result.articles.length && `(전체 ${result.total}건 중)`}
           </div>
-          {asTable ? (
-            // '표로 정리' — 보고서에 그대로 붙여넣기 좋은 형태
-            <div className="overflow-x-auto">
-              <table className="w-full text-[13px] border-collapse">
-                <thead>
-                  <tr className="bg-spark-subtle text-spark-muted text-[11px]">
-                    <th className="text-left font-semibold px-3 py-2">회사·키워드</th>
-                    <th className="text-left font-semibold px-3 py-2">제목</th>
-                    <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">매체</th>
-                    <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">날짜</th>
-                    <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">톤</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-spark-border">
-                  {result.articles.map((a) => (
-                    <tr key={a.id} className="hover:bg-spark-subtle transition align-top">
-                      <td className="px-3 py-2 whitespace-nowrap font-semibold text-spark-purple">
-                        {a.matchedKeyword || '-'}
-                      </td>
-                      <td className="px-3 py-2">
-                        <a href={a.link} target="_blank" rel="noreferrer" className="text-spark-ink hover:underline">
-                          {a.title}
-                        </a>
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-spark-ink-soft">{a.source}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-spark-muted">{fmtDate(a.pubDate)}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {a.tone === 'NEGATIVE' ? (
-                          <span className="text-red-600 font-semibold">부정</span>
-                        ) : a.tone === 'POSITIVE' ? (
-                          <span className="text-blue-600 font-semibold">긍정</span>
-                        ) : (
-                          <span className="text-spark-muted">-</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : organized ? (
-            <div className="divide-y divide-spark-border">
-              {/* 같은 포트폴리오사 기사끼리 묶는다 — 예전엔 회사 "조합"(예: "차차, 원티드랩")을
-                  통째로 그룹 키로 써서 조합이 겹치는 경우가 드물어 1건짜리 그룹만 잔뜩 생겼다
-                  (2026-08-12 이전 피드백으로 한 번 되돌림). 지금은 회사 이름 하나하나를 키로
-                  묶어서 실제 회사 단위 클러스터링이 되고, 기사가 회사를 여러 개 언급하면 각
-                  회사 그룹에 중복으로 들어간다(주제 태그 그룹과 같은 방식, 2026-08-12). */}
-              {organized.companies.map((g) => (
-                <details key={g.tag} open={organized.companies.length <= 4} className="group">
-                  <summary className="list-none flex items-center justify-between gap-2 px-4 py-2.5 cursor-pointer hover:bg-spark-subtle transition select-none">
-                    <span className="flex items-center gap-1.5 text-[13px] font-semibold text-spark-purple">
-                      <span>🏢</span>
-                      {g.tag}
-                    </span>
-                    <span className="flex items-center gap-2 text-[11px] text-spark-muted">
-                      {g.items.length}건
-                      <span className="transition-transform group-open:rotate-180">▾</span>
-                    </span>
-                  </summary>
-                  <ul className="divide-y divide-spark-border border-t border-spark-border">
-                    {g.items.map((a) => (
-                      <ArticleRow key={a.id} a={a} fmtDate={fmtDate} showCompanyTags />
-                    ))}
-                  </ul>
-                </details>
-              ))}
-              {/* 위 회사 그룹에 안 묶인 기사(그 회사 기사가 1건뿐이거나 회사 태그가 아예 없는 경우) —
-                  묶어도 의미 없는 1건짜리 그룹을 강제로 만들지 않고 그냥 목록으로 보여준다. */}
-              {organized.companyArticles.length > 0 && (
-                <div>
-                  <div className="px-4 py-2 text-[11px] font-semibold text-spark-muted bg-spark-subtle/60">
-                    🏢 그 외 매칭된 기사 {organized.companyArticles.length}건
-                  </div>
-                  <ul className="divide-y divide-spark-border">
-                    {organized.companyArticles.map((a) => (
-                      <ArticleRow key={a.id} a={a} fmtDate={fmtDate} showCompanyTags />
-                    ))}
-                  </ul>
+          <div className="divide-y divide-spark-border">
+            {/* 같은 포트폴리오사 기사끼리 묶는다 — 예전엔 회사 "조합"(예: "차차, 원티드랩")을
+                통째로 그룹 키로 써서 조합이 겹치는 경우가 드물어 1건짜리 그룹만 잔뜩 생겼다
+                (2026-08-12 이전 피드백으로 한 번 되돌림). 지금은 회사 이름 하나하나를 키로
+                묶어서 실제 회사 단위 클러스터링이 되고, 기사가 회사를 여러 개 언급하면 각
+                회사 그룹에 중복으로 들어간다(주제 태그 그룹과 같은 방식, 2026-08-12). */}
+            {organized.companies.map((g) => (
+              <details key={g.tag} open={organized.companies.length <= 4} className="group">
+                <summary className="list-none flex items-center justify-between gap-2 px-4 py-2.5 cursor-pointer hover:bg-spark-subtle transition select-none">
+                  <span className="flex items-center gap-1.5 text-[13px] font-semibold text-spark-purple">
+                    <span>🏢</span>
+                    {g.tag}
+                  </span>
+                  <span className="flex items-center gap-2 text-[11px] text-spark-muted">
+                    {g.items.length}건
+                    <span className="transition-transform group-open:rotate-180">▾</span>
+                  </span>
+                </summary>
+                <GroupArticles items={g.items} fmtDate={fmtDate} asTable={asTable} />
+              </details>
+            ))}
+            {/* 위 회사 그룹에 안 묶인 기사(그 회사 기사가 1건뿐이거나 회사 태그가 아예 없는 경우) —
+                묶어도 의미 없는 1건짜리 그룹을 강제로 만들지 않고 그냥 목록으로 보여준다. */}
+            {organized.companyArticles.length > 0 && (
+              <div>
+                <div className="px-4 py-2 text-[11px] font-semibold text-spark-muted bg-spark-subtle/60">
+                  🏢 그 외 매칭된 기사 {organized.companyArticles.length}건
                 </div>
-              )}
-              {/* 주제 태그(신약발굴·항암 등)는 여러 기사가 값을 공유해서 묶는 게 유용하다 — 접었다 펼 수 있게. */}
-              {organized.topics.map((g) => (
-                <details key={g.tag} open={organized.topics.length <= 4} className="group">
-                  <summary className="list-none flex items-center justify-between gap-2 px-4 py-2.5 cursor-pointer hover:bg-spark-subtle transition select-none">
-                    <span className="flex items-center gap-1.5 text-[13px] font-semibold text-spark-purple">
-                      <span>📌</span>
-                      <span className="text-[10px] font-normal text-spark-muted">주제</span>
-                      {g.tag}
-                    </span>
-                    <span className="flex items-center gap-2 text-[11px] text-spark-muted">
-                      {g.items.length}건
-                      <span className="transition-transform group-open:rotate-180">▾</span>
-                    </span>
-                  </summary>
-                  <ul className="divide-y divide-spark-border border-t border-spark-border">
-                    {g.items.map((a) => (
-                      <ArticleRow key={a.id} a={a} fmtDate={fmtDate} />
-                    ))}
-                  </ul>
-                </details>
-              ))}
-            </div>
-          ) : (
-            <ul className="divide-y divide-spark-border">
-              {result.articles.map((a) => (
-                <ArticleRow key={a.id} a={a} fmtDate={fmtDate} showCompanyTags />
-              ))}
-            </ul>
-          )}
+                <GroupArticles items={organized.companyArticles} fmtDate={fmtDate} asTable={asTable} showTag />
+              </div>
+            )}
+            {/* 주제 태그(신약발굴·항암 등)는 여러 기사가 값을 공유해서 묶는 게 유용하다 — 접었다 펼 수 있게. */}
+            {organized.topics.map((g) => (
+              <details key={g.tag} open={organized.topics.length <= 4} className="group">
+                <summary className="list-none flex items-center justify-between gap-2 px-4 py-2.5 cursor-pointer hover:bg-spark-subtle transition select-none">
+                  <span className="flex items-center gap-1.5 text-[13px] font-semibold text-spark-purple">
+                    <span>📌</span>
+                    <span className="text-[10px] font-normal text-spark-muted">주제</span>
+                    {g.tag}
+                  </span>
+                  <span className="flex items-center gap-2 text-[11px] text-spark-muted">
+                    {g.items.length}건
+                    <span className="transition-transform group-open:rotate-180">▾</span>
+                  </span>
+                </summary>
+                <GroupArticles items={g.items} fmtDate={fmtDate} asTable={asTable} />
+              </details>
+            ))}
+          </div>
         </div>
       )}
 
