@@ -309,35 +309,52 @@ export function buildReportHtml(opts: {
           ${statCard('매체', r.topSources)}
         </div>
         ${res.resultKind === 'trend' && r.monthly?.length ? trendChart(r.monthly, r.trendGranularity ?? 'month') : ''}
-        ${toneDonutBlock}
         ${categoryDonutBlock}
         ${pitchBarBlock}
       </section>`
     : '';
 
-  const articleBlock = r?.articles.length
-    ? `<section>
-        <h2>근거 기사 <span class="count">${r.articles.length}건${r.total > r.articles.length ? ` / 전체 ${r.total.toLocaleString()}건` : ''}</span></h2>
-        <table>
-          <thead><tr><th>회사·키워드</th><th>제목</th><th>매체</th><th>날짜</th><th>톤</th></tr></thead>
-          <tbody>
-            ${r.articles
-              .map(
-                (a) => `<tr>
-                  <td class="kw">${esc(a.matchedKeyword || '-')}</td>
-                  <td>
-                    <a href="${esc(a.link)}" target="_blank" rel="noreferrer">${esc(a.title)}</a>
-                    ${a.oneLiner && a.oneLiner !== a.title ? `<div class="one">${esc(a.oneLiner)}</div>` : ''}
-                  </td>
-                  <td class="dimtext">${esc(a.source)}</td>
-                  <td class="nowrap dimtext">${fmtDate(a.pubDate)}</td>
-                  <td>${toneBadge(a.tone)}</td>
-                </tr>`
-              )
-              .join('')}
-          </tbody>
-        </table>
-      </section>`
+  const articleHeading = r?.articles.length
+    ? `근거 기사 <span class="count">${r.articles.length}건${r.total > r.articles.length ? ` / 전체 ${r.total.toLocaleString()}건` : ''}</span>`
+    : '';
+
+  const articleTable = r?.articles.length
+    ? `<table>
+        <thead><tr><th>회사·키워드</th><th>제목</th><th>매체</th><th>날짜</th><th>톤</th></tr></thead>
+        <tbody>
+          ${r.articles
+            .map(
+              (a) => `<tr>
+                <td class="kw">${esc(a.matchedKeyword || '-')}</td>
+                <td>
+                  <a href="${esc(a.link)}" target="_blank" rel="noreferrer">${esc(a.title)}</a>
+                  ${a.oneLiner && a.oneLiner !== a.title ? `<div class="one">${esc(a.oneLiner)}</div>` : ''}
+                </td>
+                <td class="dimtext">${esc(a.source)}</td>
+                <td class="nowrap dimtext">${fmtDate(a.pubDate)}</td>
+                <td>${toneBadge(a.tone)}</td>
+              </tr>`
+            )
+            .join('')}
+        </tbody>
+      </table>`
+    : '';
+
+  // 톤 도넛차트 하나만 있으면 옆에 빈 공간이 남았다(2026-08-13 피드백). 근거 기사 표를
+  // 그 옆에 나란히 붙여서 채운다. 도넛이 없는 결과(추이·오탐 등)는 기사 표를 원래대로
+  // 전체 폭으로 보여준다.
+  const sideBySideBlock =
+    toneDonutBlock && articleTable
+      ? `<section>
+          <div class="donut-article-row">
+            <div>${toneDonutBlock}</div>
+            <div><h2>${articleHeading}</h2>${articleTable}</div>
+          </div>
+        </section>`
+      : '';
+
+  const articleBlock = !sideBySideBlock && articleTable
+    ? `<section><h2>${articleHeading}</h2>${articleTable}</section>`
     : '';
 
   const noiseBlock = r?.noisyKeywords?.length ? noiseTable(r.noisyKeywords) : '';
@@ -386,6 +403,11 @@ export function buildReportHtml(opts: {
   .card h4 { margin: 0 0 8px; font-size: 11px; color: var(--muted); font-weight: 700; letter-spacing: .04em; }
   .card h4:empty { display: none; }
   .chart-card { margin-top: 14px; }
+  /* 톤 도넛(좁은 카드) 옆에 근거 기사 표(넓은 영역)를 나란히 둔다 — 도넛만 있으면
+     남던 빈 공간을 채운다. 좁은 화면에서는 세로로 쌓는다. */
+  .donut-article-row { display: grid; grid-template-columns: minmax(260px, 320px) 1fr; gap: 24px; align-items: start; }
+  .donut-article-row h2 { margin-top: 0; }
+  @media (max-width: 640px) { .donut-article-row { grid-template-columns: 1fr; } }
   .donut-wrap { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
   .donut-legend { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; }
   .donut-legend-row { display: flex; align-items: center; gap: 7px; }
@@ -440,6 +462,7 @@ export function buildReportHtml(opts: {
     ${summaryBlock}
     ${statBlock}
     ${noiseBlock}
+    ${sideBySideBlock}
     ${articleBlock}
     <footer>SparkScope 수집 기사 DB 기반 자동 생성 · 스파크랩 내부 자료 · 외부 공유 금지</footer>
   </div>
