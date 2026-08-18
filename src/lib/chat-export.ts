@@ -384,10 +384,6 @@ export function buildReportHtml(opts: {
     ...scopes.map((s) => SCOPE_LABEL[s as keyof typeof SCOPE_LABEL] ?? s),
   ];
 
-  const summaryBlock = res.summary
-    ? `<section><h2>분석</h2><div class="prose">${renderSummary(res.summary)}</div></section>`
-    : '';
-
   const noteBlock = (r?.deltaUnavailableReason || r?.deltaCaution)
     ? `<p class="note">${esc(r.deltaUnavailableReason ?? r.deltaCaution ?? '')}</p>`
     : '';
@@ -413,6 +409,19 @@ export function buildReportHtml(opts: {
   const pitchBarBlock =
     res.resultKind === 'pitch' && r?.articles.some((a) => a.pitchScore != null) ? pitchScoreBarChart(r.articles) : '';
 
+  // 분석 — 톤 분포 도넛을 요약 문단 옆에 붙인다. 예전엔 도넛이 "집계" 섹션 맨 아래
+  // 혼자 떨어져 있어서 본문과 무슨 관계인지 바로 안 읽혔다(2026-08-18 요청). 요약이
+  // 없거나 도넛을 그릴 톤 데이터가 없으면 한쪽만 자연스럽게 전체 폭을 쓴다.
+  const summaryBlock = res.summary
+    ? `<section>
+        <h2>분석</h2>
+        <div class="${toneDonutBlock ? 'analysis-row' : ''}">
+          <div class="prose">${renderSummary(res.summary)}</div>
+          ${toneDonutBlock}
+        </div>
+      </section>`
+    : '';
+
   const statBlock = r
     ? `<section>
         <h2>집계</h2>
@@ -432,7 +441,8 @@ export function buildReportHtml(opts: {
           ${statCard('매체', r.topSources)}
         </div>
         ${res.resultKind === 'trend' && r.monthly?.length ? trendChart(r.monthly, r.trendGranularity ?? 'month') : ''}
-        ${toneDonutBlock}
+        ${/* 요약이 없어서 도넛을 위로 못 옮긴 경우에만 여기 그대로 둔다 */ ''}
+        ${!res.summary ? toneDonutBlock : ''}
         ${categoryDonutBlock}
         ${pitchBarBlock}
       </section>`
@@ -477,6 +487,10 @@ export function buildReportHtml(opts: {
   .prose p { margin: 0 0 12px; }
   .prose ul { margin: 0 0 12px; padding-left: 18px; }
   .prose li { margin-bottom: 7px; }
+  /* 분석 문단 옆에 톤 분포 도넛을 붙인다 — 요약과 톤 비율을 한눈에 같이 본다(2026-08-18). */
+  .analysis-row { display: grid; grid-template-columns: 1fr 230px; gap: 24px; align-items: start; }
+  .analysis-row .chart-card { margin-top: 0; }
+  @media (max-width: 640px) { .analysis-row { grid-template-columns: 1fr; } }
   .stat { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; }
   .stat-main b { font-size: 34px; font-weight: 800; letter-spacing: -.03em; }
   .stat-main span { font-size: 16px; font-weight: 700; margin-left: 2px; }
