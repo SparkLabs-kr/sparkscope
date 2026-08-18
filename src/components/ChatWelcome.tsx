@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { exportAnswerToHtml } from '@/lib/chat-export';
 import { AnswerText } from './AnswerText';
 // 근거 기사 그룹핑 — HTML 저장(chat-export.ts)과 같은 규칙을 쓰려고 공용 모듈로 뺐다.
-import { organizeArticles } from '@/lib/sparkscope/group-articles';
+import { organizeArticles, GROUP_PREVIEW_COUNT } from '@/lib/sparkscope/group-articles';
 // 서버 전용 모듈(prisma)이 클라이언트 번들에 딸려오지 않도록 타입 전용 파일에서 가져온다.
 import {
   categoryLabel,
@@ -1351,6 +1351,52 @@ function ArticleMiniTable({
   );
 }
 
+/**
+ * 그룹(회사·주제) 하나의 기사 목록 — 관련도 높은 앞 5건만 먼저 보여주고 나머지는 접는다.
+ *
+ * 그룹을 펼쳤을 때 한 회사에 15건씩 쏟아져 결과 전체가 너무 길어졌다(2026-08-18 피드백).
+ * 정렬은 group-articles의 rankByRelevance가 이미 해두므로 여기선 앞에서부터 자르기만 한다.
+ */
+function GroupArticles({
+  items,
+  fmtDate,
+  asTable,
+  showTag,
+}: {
+  items: ChatQueryResult['articles'];
+  fmtDate: (iso: string) => string;
+  asTable?: boolean;
+  /** 그룹으로 안 묶인 "그 외" 목록에서만 회사·키워드를 따로 보여준다 */
+  showTag?: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const rest = items.length - GROUP_PREVIEW_COUNT;
+  const shown = expanded ? items : items.slice(0, GROUP_PREVIEW_COUNT);
+
+  return (
+    <>
+      {asTable ? (
+        <ArticleMiniTable items={shown} fmtDate={fmtDate} showTag={showTag} />
+      ) : (
+        <ul className="divide-y divide-spark-border border-t border-spark-border">
+          {shown.map((a) => (
+            <ArticleRow key={a.id} a={a} fmtDate={fmtDate} showCompanyTags />
+          ))}
+        </ul>
+      )}
+      {rest > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="w-full px-4 py-2 border-t border-spark-border text-[12px] font-semibold text-spark-purple hover:bg-spark-subtle transition"
+        >
+          {expanded ? '접기' : `기사 ${rest}건 더보기`}
+        </button>
+      )}
+    </>
+  );
+}
+
 function ChatResult({
   result,
   scopes,
@@ -1562,15 +1608,7 @@ function ChatResult({
                     <span className="transition-transform group-open:rotate-180">▾</span>
                   </span>
                 </summary>
-                {asTable ? (
-                  <ArticleMiniTable items={g.items} fmtDate={fmtDate} />
-                ) : (
-                  <ul className="divide-y divide-spark-border border-t border-spark-border">
-                    {g.items.map((a) => (
-                      <ArticleRow key={a.id} a={a} fmtDate={fmtDate} showCompanyTags />
-                    ))}
-                  </ul>
-                )}
+                <GroupArticles items={g.items} fmtDate={fmtDate} asTable={asTable} />
               </details>
             ))}
             {/* 위 회사 그룹에 안 묶인 기사(그 회사 기사가 1건뿐이거나 회사 태그가 아예 없는 경우) —
@@ -1580,15 +1618,7 @@ function ChatResult({
                 <div className="px-4 py-2 text-[11px] font-semibold text-spark-muted bg-spark-subtle/60">
                   🏢 그 외 매칭된 기사 {organized.companyArticles.length}건
                 </div>
-                {asTable ? (
-                  <ArticleMiniTable items={organized.companyArticles} fmtDate={fmtDate} showTag />
-                ) : (
-                  <ul className="divide-y divide-spark-border">
-                    {organized.companyArticles.map((a) => (
-                      <ArticleRow key={a.id} a={a} fmtDate={fmtDate} showCompanyTags />
-                    ))}
-                  </ul>
-                )}
+                <GroupArticles items={organized.companyArticles} fmtDate={fmtDate} asTable={asTable} showTag />
               </div>
             )}
             {/* 주제 태그(신약발굴·항암 등)는 여러 기사가 값을 공유해서 묶는 게 유용하다 — 접었다 펼 수 있게. */}
@@ -1605,15 +1635,7 @@ function ChatResult({
                     <span className="transition-transform group-open:rotate-180">▾</span>
                   </span>
                 </summary>
-                {asTable ? (
-                  <ArticleMiniTable items={g.items} fmtDate={fmtDate} />
-                ) : (
-                  <ul className="divide-y divide-spark-border border-t border-spark-border">
-                    {g.items.map((a) => (
-                      <ArticleRow key={a.id} a={a} fmtDate={fmtDate} />
-                    ))}
-                  </ul>
-                )}
+                <GroupArticles items={g.items} fmtDate={fmtDate} asTable={asTable} />
               </details>
             ))}
           </div>

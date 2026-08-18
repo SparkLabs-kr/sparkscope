@@ -13,7 +13,7 @@
 import type { ChatResponse, ChatQueryResult } from './sparkscope/chat-types';
 import { categoryLabel, PERIOD_LABEL, SCOPE_LABEL } from './sparkscope/chat-types';
 // 화면(ChatWelcome)과 같은 규칙으로 기사를 묶는다 — 두 곳이 달라 보이면 안 된다.
-import { organizeArticles } from './sparkscope/group-articles';
+import { organizeArticles, GROUP_PREVIEW_COUNT } from './sparkscope/group-articles';
 
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -287,27 +287,44 @@ function noiseTable(rows: NonNullable<ChatQueryResult['noisyKeywords']>) {
   </section>`;
 }
 
-/** 그룹 카드 하나 안에 들어가는 기사 표. 카드 제목에 이미 회사·주제가 있으면 그 컬럼은 뺀다. */
+function articleRows(items: ChatQueryResult['articles'], showTag: boolean) {
+  return items
+    .map(
+      (a) => `<tr>
+        ${showTag ? `<td class="kw">${esc(a.matchedKeyword || '-')}</td>` : ''}
+        <td>
+          <a href="${esc(a.link)}" target="_blank" rel="noreferrer">${esc(a.title)}</a>
+          ${a.oneLiner && a.oneLiner !== a.title ? `<div class="one">${esc(a.oneLiner)}</div>` : ''}
+        </td>
+        <td class="dimtext">${esc(a.source)}</td>
+        <td class="nowrap dimtext">${fmtDate(a.pubDate)}</td>
+        <td>${toneBadge(a.tone)}</td>
+      </tr>`
+    )
+    .join('');
+}
+
+/**
+ * 그룹 카드 하나 안에 들어가는 기사 표. 카드 제목에 이미 회사·주제가 있으면 그 컬럼은 뺀다.
+ *
+ * 5건이 넘으면 관련도 높은 앞 5건만 보여주고 나머지 행은 숨긴 뒤 "더보기"로 편다
+ * (2026-08-18 피드백 — 한 회사에 15건씩 쏟아져 리포트가 너무 길었다).
+ * 표를 둘로 쪼개면 열 너비가 서로 어긋나므로 표는 하나로 두고 뒷 행에만 클래스를 준다.
+ * 토글은 파일 맨 아래 인라인 스크립트가 담당한다(외부 의존성 없음 — 파일 하나로 열린다).
+ */
 function articleTable(items: ChatQueryResult['articles'], showTag: boolean) {
-  return `<table>
-    <thead><tr>${showTag ? '<th>회사·키워드</th>' : ''}<th>제목</th><th>매체</th><th>날짜</th><th>톤</th></tr></thead>
-    <tbody>
-      ${items
-        .map(
-          (a) => `<tr>
-            ${showTag ? `<td class="kw">${esc(a.matchedKeyword || '-')}</td>` : ''}
-            <td>
-              <a href="${esc(a.link)}" target="_blank" rel="noreferrer">${esc(a.title)}</a>
-              ${a.oneLiner && a.oneLiner !== a.title ? `<div class="one">${esc(a.oneLiner)}</div>` : ''}
-            </td>
-            <td class="dimtext">${esc(a.source)}</td>
-            <td class="nowrap dimtext">${fmtDate(a.pubDate)}</td>
-            <td>${toneBadge(a.tone)}</td>
-          </tr>`
-        )
-        .join('')}
-    </tbody>
-  </table>`;
+  const head = `<thead><tr>${showTag ? '<th>회사·키워드</th>' : ''}<th>제목</th><th>매체</th><th>날짜</th><th>톤</th></tr></thead>`;
+
+  if (items.length <= GROUP_PREVIEW_COUNT) {
+    return `<table>${head}<tbody>${articleRows(items, showTag)}</tbody></table>`;
+  }
+
+  const shown = articleRows(items.slice(0, GROUP_PREVIEW_COUNT), showTag);
+  const rest = items.slice(GROUP_PREVIEW_COUNT);
+  // 숨길 행에 class="extra"를 달아둔다. 인쇄할 땐 CSS가 전부 다시 펴준다.
+  const hidden = articleRows(rest, showTag).replace(/<tr>/g, '<tr class="extra">');
+  return `<table>${head}<tbody>${shown}${hidden}</tbody></table>
+    <button type="button" class="more-btn" data-count="${rest.length}">기사 ${rest.length}건 더보기</button>`;
 }
 
 /**
@@ -503,6 +520,15 @@ export function buildReportHtml(opts: {
   .group table { margin-top: 0; }
   .group th { padding-top: 9px; padding-bottom: 9px; }
   .group tbody tr:last-child td { border-bottom: none; }
+  /* 앞 5건만 보이고, 나머지는 "더보기"를 눌러야 나온다 */
+  .group tr.extra { display: none; }
+  .group.open tr.extra { display: table-row; }
+  .more-btn { display: block; width: 100%; border: none; border-top: 1px solid var(--border);
+              background: #FCFBF9; color: var(--purple); font: inherit; font-size: 12px;
+              font-weight: 700; padding: 8px 14px; cursor: pointer; text-align: center; }
+  .more-btn:hover { background: var(--subtle); }
+  .more-btn::after { content: ' ▾'; }
+  .group.open .more-btn::after { content: ' ▴'; }
 
   /* 답변 본문 안의 마크다운 표 */
   .md-table { margin: 0 0 14px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
@@ -527,6 +553,9 @@ export function buildReportHtml(opts: {
     .stat-main b { font-size: 24px; }
     tbody tr:hover { background: none; }
     tr, .card, .group { page-break-inside: avoid; }
+    /* 인쇄물은 접어둘 이유가 없다 — 숨긴 기사까지 전부 펴서 뽑는다 */
+    .group tr.extra { display: table-row; }
+    .more-btn { display: none; }
     td a { color: var(--ink); text-decoration: none; }
   }
 </style></head>
@@ -548,6 +577,16 @@ export function buildReportHtml(opts: {
     ${articleBlock}
     <footer>SparkScope 수집 기사 DB 기반 자동 생성 · 스파크랩 내부 자료 · 외부 공유 금지</footer>
   </div>
+  <script>
+    // "더보기" 토글. 이거 하나뿐이고 외부 스크립트는 쓰지 않는다 — 파일 하나로 열려야 한다.
+    document.querySelectorAll('.more-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var group = btn.closest('.group');
+        var open = group.classList.toggle('open');
+        btn.textContent = open ? '접기' : '기사 ' + btn.dataset.count + '건 더보기';
+      });
+    });
+  </script>
 </body></html>`;
 }
 
