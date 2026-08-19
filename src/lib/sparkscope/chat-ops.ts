@@ -5,9 +5,9 @@
 //   - MonitoringTarget: 감시 대상 명단 530곳 — "기사가 안 난 곳"은 이게 있어야 알 수 있다
 //   - Digest: 실제로 나간 다이제스트 아카이브
 import { prisma } from '@/lib/prisma';
-import { normalizeSource } from './media';
+import { normalizeSource, TIER_OF, MEDIA_LIST } from './media';
 import { resolvePeriod, dedupeArticles } from './chat-query';
-import { categoryLabel } from './chat-types';
+import { categoryLabel, PERIOD_LABEL } from './chat-types';
 import { isBlockedNoise, matchesAsToken } from './relevance';
 import { NEGATIVE_KEYWORDS, detectCrises, crisisFallbackCause, type ArticleLite } from './insights';
 import { getPrecomputedCrisisCauses, wasInsightsBatchFreshToday } from './dashboard-insights';
@@ -564,5 +564,103 @@ export async function runSavedArticles(input: {
         priorityScore: a.priorityScore,
       })),
     },
+  };
+}
+
+// ───────────────────────── 매체 분석 ─────────────────────────
+
+/**
+ * "어느 매체가 우리를 다루나 / 어디에 아직 안 실렸나".
+ *
+ * 기사 검색도 상위 매체 5곳은 돌려주지만, 그건 "많이 나온 순"일 뿐이라
+ * 홍보 판단에 필요한 두 가지를 답하지 못한다:
+ *   1) 티어 — 조선·중앙 같은 종합일간지(티어1)에 실린 비중. 건수만 많고 전부
+ *      티어4면 "노출은 됐지만 파급은 약하다"는 뜻인데 건수로는 안 보인다.
+ *   2) 아직 안 실린 주요 매체 — 다음에 어디를 뚫어야 하는지. 없는 것을 찾는 거라
+ *      기사 목록을 아무리 봐도 나오지 않는다(coverage_gap과 같은 발상).
+ */
+export async function runMediaAnalysis(input: {
+  period: ChatPeriod;
+  scopes: ChatScope[];
+  company?: string | null;
+  limit?: number;
+}): Promise<{
+  periodLabel: string;
+  total: number;
+  byTier: { tier: number; label: string; count: number; pct: number }[];
+  topMedia: { name: string; tier: number | null; count: number; pct: number }[];
+  unreachedMajor: { name: string; tier: number }[];
+  company?: string;
+  note?: string;
+}> {
+  const range = resolvePeriod(input.period);
+  const cats = scopeCategories(input.scopes);
+  const limit = Math.min(Math.max(input.limit ?? 12, 3), 30);
+
+  // 기사를 통째로 읽어와 세지 않고 DB에서 매체별로 집계한다.
+  //   기간이 넓으면 기사가 수만 건이라, take로 잘라 세면 분포가 조용히 틀린다
+  //   (2026-08-19: take 5000으로 3개월을 세다가 4,996건에서 잘려 나갔다).
+  // 대신 isBlockedNoise 재검사는 못 건다(제목·링크가 필요해서). 수집 때 매긴
+  // isNoise 플래그까지만 걸리는데, 실측상 그 차이는 5,000건에 4건 수준이고
+  // 여기서 필요한 건 "정확한 건수"가 아니라 매체 분포 비율이라 이 쪽이 낫다.
+  const grouped = await prisma.article.groupBy({
+    by: ['source'],
+    where: {
+      isNoise: false,
+      ...(range ? { pubDate: { gte: range.gte, lte: range.lte } } : {}),
+      ...(cats ? { category: { in: cats } } : {}),
+      ...(input.company ? { matchedKeyword: { contains: input.company, mode: 'insensitive' } } : {}),
+    },
+    _count: { _all: true },
+  });
+
+  // 매체명 표기 흔들림(도메인·별칭)을 정규화하면서 합친다.
+  const counts = new Map<string, number>();
+  for (const g of grouped) {
+    const name = normalizeSource(g.source);
+    counts.set(name, (counts.get(name) ?? 0) + g._count._all);
+  }
+  const total = [...counts.values()].reduce((a, b) => a + b, 0);
+  const pct = (n: number) => (total ? Math.round((n / total) * 100) : 0);
+
+  const TIER_LABEL: Record<number, string> = {
+    1: '종합일간지', 2: '통신사·경제일간지', 3: '디지털 경제·종합', 4: '스타트업 전문',
+  };
+  const tierCount = new Map<number, number>();
+  for (const [name, c] of counts) {
+    // 등록 안 된 매체는 0번(기타)으로 모은다 — 티어를 함부로 부여하지 않는다.
+    const t = TIER_OF.get(name) ?? 0;
+    tierCount.set(t, (tierCount.get(t) ?? 0) + c);
+  }
+
+  const byTier = [...tierCount.entries()]
+    .sort((a, b) => (a[0] || 99) - (b[0] || 99))
+    .map(([tier, count]) => ({
+      tier,
+      label: tier === 0 ? '기타(미등록 매체)' : `티어${tier} ${TIER_LABEL[tier]}`,
+      count,
+      pct: pct(count),
+    }));
+
+  const topMedia = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([name, count]) => ({ name, tier: TIER_OF.get(name) ?? null, count, pct: pct(count) }));
+
+  // 티어1·2 중 이 기간에 한 건도 안 실린 곳. "다음에 어디를 뚫을까"의 후보다.
+  const unreachedMajor = MEDIA_LIST
+    .filter((m) => m.tier <= 2 && !counts.has(m.name))
+    .map((m) => ({ name: m.name, tier: m.tier }));
+
+  return {
+    periodLabel: PERIOD_LABEL[input.period] ?? String(input.period),
+    total,
+    byTier,
+    topMedia,
+    unreachedMajor,
+    ...(input.company ? { company: input.company } : {}),
+    ...(total === 0
+      ? { note: '이 조건으로는 기사가 없어 매체 분포를 낼 수 없다. 기간이나 범위를 넓혀보라고 안내해라.' }
+      : {}),
   };
 }

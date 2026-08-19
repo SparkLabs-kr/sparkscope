@@ -19,6 +19,7 @@ import {
   runDigestArchive,
   runCrisisWatch,
   runSavedArticles,
+  runMediaAnalysis,
   crisisArticlesForUi,
 } from './chat-ops';
 import { proposeKeywordFix, listPendingSuggestions } from './chat-actions';
@@ -269,6 +270,39 @@ const TOOLS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'media_analysis',
+      description:
+        '어느 매체가 다루고 있고 어디에 아직 안 실렸는지를 본다. ' +
+        '"어느 매체가 우리를 제일 많이 다뤄?", "티어1 매체에 얼마나 실렸어?", ' +
+        '"아직 안 실린 주요 매체 어디야?", "매체 분포 보여줘" 같은 질문에 써라. ' +
+        '기사 검색도 상위 매체 5곳은 주지만 그건 건수 순일 뿐이다 — ' +
+        '매체 티어(종합일간지/통신사/스타트업 전문) 비중과 "아직 안 실린 주요 매체"는 이걸로만 나온다. ' +
+        'unreachedMajor는 다음 피칭 타깃 후보라는 뜻으로 전해라.',
+      parameters: {
+        type: 'object',
+        properties: {
+          period: {
+            type: 'string',
+            enum: ['today', 'week', 'month', 'quarter', 'all'],
+            description: '집계 기간. 화면에서 고른 기간을 기본으로 쓰되 질문에 기간이 있으면 그쪽을 따른다.',
+          },
+          scopes: {
+            type: 'array',
+            items: { type: 'string', enum: ['portfolio', 'competitor', 'sparklabs', 'industry'] },
+            description: '집계 범위. 비우면 전체.',
+          },
+          company: {
+            type: 'string',
+            description: '특정 회사의 매체 분포만 볼 때 그 회사명. 안 주면 범위 전체.',
+          },
+        },
+        required: ['period', 'scopes'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'coverage_gap',
       description:
         '감시 대상 중 해당 기간에 기사가 하나도 안 난 곳을 찾는다(운영 중인 포트폴리오사 218곳 기준). ' +
@@ -449,6 +483,11 @@ function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean
    내놓지 마라 — 사용자가 직접 찍어둔 그 기사가 아니면 답이 아니다.
    ★ 스크랩은 본부 공용(팀 전체가 같은 목록)이고 북마크는 개인용이다. 둘을 합쳐 답할 때는
    이 차이를 한 줄로 짚어라. 기간은 사용자가 말했을 때만 걸어라(기본은 전체 기간).
+4-3) 매체 분석 — media_analysis. "어느 매체가 많이 다뤄?", "티어1에 얼마나 실렸어?",
+   "아직 안 실린 매체 어디야?"는 이걸로 답해라. 기사 검색의 상위 매체 5곳은 건수 순일
+   뿐이라 티어 비중과 "안 실린 곳"을 답하지 못한다.
+   ★ unreachedMajor(티어1·2 중 이 기간 노출 0)는 "다음에 뚫을 후보"라는 뜻이다. 그냥
+   이름만 나열하지 말고 그렇게 설명해라.
 5) 펀드 정보 — 우리(스파크랩)와 경쟁사(VC) 둘 다. fund_info로 조회한다.
    "우리 펀드 몇 개야?", "만기 다가오는 펀드 있어?", "카카오벤처스 펀드 규모가 얼마야?",
    "우리랑 경쟁사 비교해줘" 같은 질문에 써라(우리 것도 보려면 include_sparklabs=true).
@@ -714,6 +753,7 @@ const TOOL_LABEL: Record<string, string> = {
   pitch_opportunities: '피칭 소재 찾기',
   crisis_watch: '위기 감지 (회사별 부정 기사)',
   saved_articles: '저장한 기사 확인',
+  media_analysis: '매체 분포 분석',
   coverage_gap: '노출 사각지대 확인',
   digest_archive: '다이제스트 기록 확인',
   monthly_trend: '월별 추이 집계',
@@ -979,6 +1019,16 @@ export async function runChatAgent(opts: {
                 oneLiner: a.oneLiner,
               })),
             };
+            break;
+          }
+          case 'media_analysis': {
+            const ma = await runMediaAnalysis({
+              period: resolvePeriodArg(args.period, opts.period, opts.question),
+              scopes: asScopes(args.scopes),
+              company: typeof args.company === 'string' ? args.company : null,
+            });
+            steps.push(`매체 분석(${ma.periodLabel}) → ${ma.total}건 · 미노출 주요매체 ${ma.unreachedMajor.length}곳`);
+            payload = ma;
             break;
           }
           case 'coverage_gap': {
