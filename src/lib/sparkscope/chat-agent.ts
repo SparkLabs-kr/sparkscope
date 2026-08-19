@@ -18,6 +18,7 @@ import {
   runCoverageGap,
   runDigestArchive,
   runCrisisWatch,
+  runSavedArticles,
   crisisArticlesForUi,
 } from './chat-ops';
 import { proposeKeywordFix, listPendingSuggestions } from './chat-actions';
@@ -237,6 +238,37 @@ const TOOLS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'saved_articles',
+      description:
+        '사용자가 저장해둔 기사를 다시 꺼낸다. "내가 스크랩한 거", "북마크해둔 기사", ' +
+        '"저장해둔 거 다시 보여줘", "별표 찍은 기사" 같은 질문에 써라. ' +
+        '검색이 아니라 저장 기록 조회다 — search_articles로는 절대 구할 수 없다. ' +
+        '스크랩은 본부 공용(누가 찍었든 팀 전체가 같은 목록을 본다)이고 북마크는 개인용이라, ' +
+        '둘을 합쳐 답할 때는 성격이 다르다는 걸 짧게 짚어라. 0건이면 note를 그대로 전해라.',
+      parameters: {
+        type: 'object',
+        properties: {
+          kind: {
+            type: 'string',
+            enum: ['scrap', 'bookmark', 'both'],
+            description:
+              '사용자가 "스크랩"만 말하면 scrap, "북마크"만 말하면 bookmark, ' +
+              '"저장해둔 거"처럼 뭉뚱그리면 both(기본).',
+          },
+          days: {
+            type: 'number',
+            description:
+              '최근 며칠 안에 저장한 것만 볼지. **사용자가 기간을 말했을 때만 채워라** — ' +
+              '저장은 오래된 걸 다시 찾으려는 것이라, 기본은 기간 제한 없이 전체다.',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'coverage_gap',
       description:
         '감시 대상 중 해당 기간에 기사가 하나도 안 난 곳을 찾는다(운영 중인 포트폴리오사 218곳 기준). ' +
@@ -412,6 +444,11 @@ function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean
 4-1) 위기 감지 — crisis_watch. 부정 기사가 한 회사에 몰렸는지를 회사 단위로 묶어서 본다
    (대시보드 "위기 감지" 카드와 같은 판정: 기본 최근 3일·부정 2건 이상).
    기사 목록이 아니라 "어느 회사가 지금 문제인가"가 궁금한 질문은 전부 이걸로 답해라.
+4-2) 저장한 기사 — saved_articles. "내가 스크랩한 거", "북마크해둔 기사", "저장해둔 거
+   다시 보여줘"는 검색이 아니라 저장 기록 조회다. search_articles로 비슷한 기사를 찾아
+   내놓지 마라 — 사용자가 직접 찍어둔 그 기사가 아니면 답이 아니다.
+   ★ 스크랩은 본부 공용(팀 전체가 같은 목록)이고 북마크는 개인용이다. 둘을 합쳐 답할 때는
+   이 차이를 한 줄로 짚어라. 기간은 사용자가 말했을 때만 걸어라(기본은 전체 기간).
 5) 펀드 정보 — 우리(스파크랩)와 경쟁사(VC) 둘 다. fund_info로 조회한다.
    "우리 펀드 몇 개야?", "만기 다가오는 펀드 있어?", "카카오벤처스 펀드 규모가 얼마야?",
    "우리랑 경쟁사 비교해줘" 같은 질문에 써라(우리 것도 보려면 include_sparklabs=true).
@@ -676,6 +713,7 @@ const TOOL_LABEL: Record<string, string> = {
   inter_trends: '해외 트렌드 조회',
   pitch_opportunities: '피칭 소재 찾기',
   crisis_watch: '위기 감지 (회사별 부정 기사)',
+  saved_articles: '저장한 기사 확인',
   coverage_gap: '노출 사각지대 확인',
   digest_archive: '다이제스트 기록 확인',
   monthly_trend: '월별 추이 집계',
@@ -912,6 +950,35 @@ export async function runChatAgent(opts: {
             // 사라져서 "아무것도 못 찾았다"처럼 보인다.
             if (watch.crisisCount > 0) { uiResult = uiRows; resultKind = 'search'; }
             payload = watch;
+            break;
+          }
+          case 'saved_articles': {
+            const saved = await runSavedArticles({
+              kind: args.kind === 'scrap' || args.kind === 'bookmark' ? args.kind : 'both',
+              userEmail: opts.userEmail,
+              days: typeof args.days === 'number' ? args.days : null,
+            });
+            steps.push(
+              `저장 기사 → 스크랩 ${saved.scrapCount}건 · 북마크 ${saved.bookmarkCount}건`
+            );
+            // 위기감지와 같은 이유로 0건이면 화면 카드를 덮어쓰지 않는다.
+            if (saved.result.total > 0) { uiResult = saved.result; resultKind = 'search'; }
+            payload = {
+              kind: saved.kind,
+              scrapCount: saved.scrapCount,
+              bookmarkCount: saved.bookmarkCount,
+              total: saved.result.total,
+              periodLabel: saved.periodLabel,
+              ...(saved.note ? { note: saved.note } : {}),
+              articles: saved.result.articles.slice(0, 30).map((a) => ({
+                title: a.title,
+                source: a.source,
+                pubDate: a.pubDate.slice(0, 10),
+                company: a.matchedKeyword,
+                tone: a.tone,
+                oneLiner: a.oneLiner,
+              })),
+            };
             break;
           }
           case 'coverage_gap': {

@@ -422,3 +422,147 @@ export async function runDigestArchive(input: { limit?: number; on?: string | nu
     error: d.errorMsg ?? undefined,
   }));
 }
+
+// ───────────────────────── 저장한 기사(스크랩·북마크) ─────────────────────────
+
+/**
+ * "내가 저장해둔 기사" 조회.
+ *
+ * 저장 방식이 두 가지인데 성격이 다르다 — 섞어서 한 덩어리로 답하면 안 된다.
+ *   - 스크랩(Article.isScrapped): 본부 **공용**. 커뮤니케이션 본부 지정 계정이 찍고
+ *     팀 전체가 같은 목록을 본다. 그래서 누가 찍었는지(scrappedBy)를 같이 보여준다.
+ *   - 북마크(Bookmark): **개인용**. 로그인한 본인 것만 보인다.
+ *
+ * 화면(대시보드 스크랩/북마크 탭)과 같은 데이터를 그대로 읽는다.
+ */
+export async function runSavedArticles(input: {
+  kind?: 'scrap' | 'bookmark' | 'both';
+  userEmail: string;
+  days?: number | null;
+  limit?: number;
+}): Promise<{
+  kind: 'scrap' | 'bookmark' | 'both';
+  scrapCount: number;
+  bookmarkCount: number;
+  periodLabel: string;
+  note?: string;
+  result: ChatQueryResult;
+}> {
+  const kind = input.kind ?? 'both';
+  const limit = Math.min(Math.max(input.limit ?? 30, 1), 100);
+  // days를 안 주면 기간 제한 없이 전부 본다 — 저장은 오래된 걸 다시 찾으려고 하는 것이라
+  // 기본값으로 최근 며칠만 자르면 오히려 원하는 걸 못 찾는다.
+  const days = typeof input.days === 'number' && input.days > 0 ? Math.min(input.days, 3650) : null;
+  const since = days ? new Date(Date.now() - days * 86400_000) : null;
+
+  const SELECT = {
+    id: true, title: true, link: true, source: true, pubDate: true, category: true,
+    matchedKeyword: true, tone: true, riskFlag: true, oneLiner: true, importance: true,
+    priorityScore: true, isScrapped: true, scrappedAt: true, scrappedBy: true,
+  } as const;
+
+  const wantScrap = kind === 'scrap' || kind === 'both';
+  const wantBookmark = kind === 'bookmark' || kind === 'both';
+
+  // 북마크는 Bookmark.userId 기준인데 챗봇이 아는 건 이메일뿐이라 User를 한 번 거친다.
+  const user = wantBookmark
+    ? await prisma.user.findUnique({ where: { email: input.userEmail }, select: { id: true } })
+    : null;
+
+  const [scrapRows, bookmarkRows] = await Promise.all([
+    wantScrap
+      ? prisma.article.findMany({
+          where: { isScrapped: true, ...(since ? { scrappedAt: { gte: since } } : {}) },
+          orderBy: [{ scrappedAt: 'desc' }],
+          take: 200,
+          select: SELECT,
+        })
+      : Promise.resolve([]),
+    user
+      ? prisma.bookmark.findMany({
+          where: { userId: user.id, ...(since ? { createdAt: { gte: since } } : {}) },
+          orderBy: [{ createdAt: 'desc' }],
+          take: 200,
+          select: { articleId: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  // Bookmark에는 Article 관계가 걸려 있지 않아(articleId만 있다) 기사를 따로 읽는다.
+  // 북마크한 기사가 그 사이 지워졌으면 그냥 빠진다.
+  const bookmarkIds = bookmarkRows.map((b) => b.articleId);
+  const bookmarked = bookmarkIds.length
+    ? await prisma.article.findMany({ where: { id: { in: bookmarkIds } }, select: SELECT })
+    : [];
+
+  // 같은 기사를 스크랩도 하고 북마크도 했으면 한 번만 센다.
+  const merged = new Map<string, typeof scrapRows[number]>();
+  for (const a of [...scrapRows, ...bookmarked]) merged.set(a.id, a);
+  const rows = [...merged.values()].sort((a, b) => +b.pubDate - +a.pubDate);
+
+  const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
+  const comp = new Map<string, number>();
+  const src = new Map<string, number>();
+  const cat = new Map<string, number>();
+  for (const a of rows) {
+    if (a.matchedKeyword) bump(comp, a.matchedKeyword);
+    bump(src, normalizeSource(a.source));
+    bump(cat, a.category);
+  }
+  const top = (m: Map<string, number>, n: number) =>
+    [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([name, count]) => ({ name, count }));
+
+  const periodLabel = days ? `최근 ${days}일 저장` : '저장한 기사 전체';
+
+  // 0건일 때 왜 0건인지 구분해서 알려준다 — "저장한 게 없다"와 "볼 권한이 없다"는 다르다.
+  let note: string | undefined;
+  if (rows.length === 0) {
+    if (wantBookmark && !user) {
+      note = wantScrap
+        ? '이 계정으로 북마크한 기록을 찾지 못했다(계정 정보 없음). 스크랩만 확인한 결과다.'
+        : '이 계정으로 북마크한 기록을 찾지 못했다(계정 정보 없음).';
+    } else {
+      note = days
+        ? `최근 ${days}일 안에 저장한 기사가 없다. 기간을 빼고 다시 조회하면 예전 것까지 볼 수 있다.`
+        : '저장해둔 기사가 아직 없다. 대시보드 기사 목록에서 별표(스크랩)나 북마크를 찍으면 여기서 다시 찾을 수 있다.';
+    }
+  }
+
+  return {
+    kind,
+    scrapCount: scrapRows.length,
+    bookmarkCount: bookmarked.length,
+    periodLabel,
+    note,
+    result: {
+      terms: [periodLabel],
+      periodLabel,
+      total: rows.length,
+      sampled: false,
+      prevTotal: null,
+      deltaPct: null,
+      byCategory: [...cat.entries()].map(([category, count]) => ({ category, count })),
+      topSources: top(src, 5),
+      topCompanies: top(comp, 6),
+      negativeCount: rows.filter((a) => a.tone === 'NEGATIVE').length,
+      riskCount: rows.filter((a) => a.riskFlag).length,
+      monthly: null,
+      noisyKeywords: null,
+      articles: rows.slice(0, limit).map((a) => ({
+        id: a.id,
+        title: a.title,
+        link: a.link,
+        source: normalizeSource(a.source),
+        pubDate: a.pubDate.toISOString(),
+        category: a.category,
+        matchedKeyword: a.matchedKeyword,
+        tagKind: 'company' as const,
+        tone: a.tone,
+        riskFlag: a.riskFlag,
+        oneLiner: a.oneLiner,
+        importance: a.importance,
+        priorityScore: a.priorityScore,
+      })),
+    },
+  };
+}
