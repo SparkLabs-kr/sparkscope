@@ -55,6 +55,14 @@ const TOOLS: ChatCompletionTool[] = [
               '날씨·감정 같은 일반적인 뜻으로 확장하면 전혀 무관한 기사가 섞인다.',
           },
           period: { type: 'string', enum: PERIODS, description: '조회 기간' },
+          date_from: {
+            type: 'string',
+            description:
+              '사용자가 "8월 3일부터", "8/3~8/19"처럼 구체적인 시작·끝 날짜를 직접 말했을 때만 ' +
+              'YYYY-MM-DD로 넣어라. 이땐 date_to도 같이 넣고 period는 무시된다(그래도 필수값이라 ' +
+              '아무 값이나 채워라). "이번 주", "최근" 같은 상대 표현에는 쓰지 마라 — period로 충분하다.',
+          },
+          date_to: { type: 'string', description: 'date_from과 짝. YYYY-MM-DD.' },
           scopes: {
             type: 'array',
             items: { type: 'string', enum: SCOPES },
@@ -323,6 +331,10 @@ function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean
 이 값을 함부로 바꾸지 마라. 사용자가 직접 고른 것이다.
 질문에 "지난주", "어제", "올해", "이번 달"처럼 기간이 명시됐을 때만 바꿔라.
 "요즘", "최근", "요새"처럼 모호한 말은 기간 표현이 아니다 — 화면 값을 그대로 써라.
+★ "8월 3일부터 19일까지", "8/3~8/19"처럼 구체적인 시작·끝 날짜를 직접 말했으면 period로는
+표현이 안 된다(오늘/이번주/최근1개월/최근3개월/전체 다섯 구간뿐) — search_articles의
+date_from·date_to에 YYYY-MM-DD로 각각 넣어라. 이때도 period는 필수값이라 아무 값이나
+채우면 되고, date_from·date_to가 있으면 그쪽이 우선한다.
 범위도 마찬가지로, "포폴사만", "경쟁사" 같이 명시됐을 때만 바꾼다.
 ${uiScopes.includes('inter')
   ? '★ 범위로 "해외 트렌드"가 선택돼 있다 — 이번 조회는 inter_trends만 써라. search_articles·semantic_search·pitch_opportunities 등 국내 도구는 절대 부르지 마라(질문이 국내 얘기처럼 보여도 마찬가지 — 화면에서 명시적으로 고른 범위가 우선이다).'
@@ -624,15 +636,19 @@ export async function runChatAgent(opts: {
         switch (call.function.name) {
           case 'search_articles': {
             const terms = asTerms(args.terms);
+            const dateFrom = typeof args.date_from === 'string' ? args.date_from : undefined;
+            const dateTo = typeof args.date_to === 'string' ? args.date_to : undefined;
             const r = await runChatQuery({
               question: opts.question,
               period: resolvePeriodArg(args.period, opts.period, opts.question),
               scopes: asScopes(args.scopes),
               terms,
               onlyNegative: args.only_negative === true,
+              dateFrom,
+              dateTo,
               limit: 30,
             });
-            steps.push(`search(${terms.join('|') || '전체'}) → ${r.total}건`);
+            steps.push(`search(${terms.join('|') || '전체'}) → ${r.total}건${dateFrom ? ` [${dateFrom}~${dateTo ?? ''}]` : ''}`);
             if (!uiResult || r.total > 0) { uiResult = r; resultKind = 'search'; }
             payload = compactResult(r);
             break;

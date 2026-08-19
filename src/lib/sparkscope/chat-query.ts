@@ -156,15 +156,33 @@ export type ChatQueryInput = {
   /** 의도 분석기가 뽑아준 검색어. 없으면 질문에서 규칙 기반으로 뽑는다. */
   terms?: string[];
   limit?: number;
+  /**
+   * "8월 3일부터 19일까지"처럼 사용자가 명시한 절대 날짜 범위(YYYY-MM-DD).
+   * 있으면 period(today/week/month/quarter/all) 대신 이 범위를 그대로 쓴다 — period는
+   * 고정된 다섯 구간뿐이라 임의 날짜 범위를 표현할 수 없다(2026-08-19 발견: "8/3부터
+   * 19까지 다 뽑아줘"를 못 받아서 quarter/all로 엉뚱하게 넓혀 답했다).
+   */
+  dateFrom?: string;
+  dateTo?: string;
 };
 
 function fmtYmd(d: Date) {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** dateFrom/dateTo(YYYY-MM-DD)를 하루 끝까지 포함하는 범위로. 잘못된 날짜면 null. */
+function resolveCustomRange(dateFrom?: string, dateTo?: string): { gte: Date; lte: Date } | null {
+  if (!dateFrom && !dateTo) return null;
+  const gte = dateFrom ? new Date(`${dateFrom}T00:00:00`) : new Date(0);
+  const lte = dateTo ? new Date(`${dateTo}T23:59:59.999`) : new Date();
+  if (Number.isNaN(+gte) || Number.isNaN(+lte)) return null;
+  return { gte, lte };
+}
+
 export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResult> {
   const limit = Math.min(input.limit ?? 20, 50);
-  const range = resolvePeriod(input.period);
+  const customRange = resolveCustomRange(input.dateFrom, input.dateTo);
+  const range = customRange ?? resolvePeriod(input.period);
   const terms = input.terms ?? extractTerms(input.question);
 
   const where: any = { isNoise: false };
@@ -459,7 +477,7 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
 
   return {
     terms,
-    periodLabel: PERIOD_LABEL[input.period],
+    periodLabel: customRange ? `${fmtYmd(customRange.gte)}~${fmtYmd(customRange.lte)}` : PERIOD_LABEL[input.period],
     // 1000건 상한에 걸리지 않았으면 정제 후 개수가 더 정확하다.
     total: rows.length < 1000 ? clean.length : total,
     // 1000건 상한에 걸리면 아래 분류·키워드·매체 집계는 최신 1000건 표본 기준이다.
