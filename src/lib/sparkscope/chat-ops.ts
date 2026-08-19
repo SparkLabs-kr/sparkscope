@@ -8,6 +8,9 @@ import { prisma } from '@/lib/prisma';
 import { normalizeSource } from './media';
 import { resolvePeriod, dedupeArticles } from './chat-query';
 import { categoryLabel } from './chat-types';
+import { isBlockedNoise, matchesAsToken } from './relevance';
+import { NEGATIVE_KEYWORDS, detectCrises, crisisFallbackCause, type ArticleLite } from './insights';
+import { getPrecomputedCrisisCauses, wasInsightsBatchFreshToday } from './dashboard-insights';
 import type { ChatPeriod, ChatScope, ChatQueryResult } from './chat-types';
 
 const SCOPE_CATEGORY: Record<ChatScope, string> = {
@@ -206,6 +209,189 @@ export async function runCoverageGap(input: {
       .slice(0, 60)
       .map((t) => (t.tier ? `${t.name}(${t.tier})` : t.name)),
     thin: thin.slice(0, 30).map((t) => `${t.name} ${t.count}건`),
+  };
+}
+
+// ───────────────────────── 위기 감지 ─────────────────────────
+
+/**
+ * 부정 기사가 몰린 회사를 찾는다 — 대시보드 위기 카드와 같은 판정.
+ *
+ * 챗봇엔 부정 톤 "기사 목록"을 주는 필터(only_negative)밖에 없어서, "지금 위기인 포폴사
+ * 있어?"에 기사만 죽 나열하고 정작 "어느 회사에 몰렸는지"를 못 알려줬다(2026-08-19).
+ * 대시보드는 detectCrises()로 회사 단위로 묶어 보여주는데 그 로직을 챗봇이 안 쓰고 있었다.
+ *
+ * 판정 로직(detectCrises·negativeInfo)과 원인 문장(사전계산 → 폴백)을 대시보드와 그대로
+ * 공유한다. 두 화면이 같은 회사를 두고 다른 소리를 하면 안 된다.
+ */
+export async function runCrisisWatch(input: {
+  /** 며칠치를 볼지. 대시보드 기본값은 3일 */
+  days?: number;
+  /** 부정 기사 몇 건부터 위기로 볼지. 대시보드 기본값은 2건 */
+  threshold?: number;
+  /** 특정 회사만 보고 싶을 때 */
+  company?: string | null;
+}) {
+  const days = Math.min(Math.max(input.days ?? 3, 1), 90);
+  const threshold = Math.max(input.threshold ?? 2, 1);
+
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  since.setHours(0, 0, 0, 0);
+
+  // 대시보드와 같은 조건: 부정 톤이거나 제목에 부정 키워드가 있는 포트폴리오사 기사.
+  const negOr = [
+    { tone: 'NEGATIVE' as string | null },
+    ...NEGATIVE_KEYWORDS.map((k) => ({ title: { contains: k } })),
+  ];
+  const where: any = {
+    pubDate: { gte: since },
+    isNoise: false,
+    category: 'portfolio_company',
+    OR: negOr,
+  };
+  if (input.company) where.matchedKeyword = input.company;
+
+  const [rows, targets] = await Promise.all([
+    prisma.article.findMany({
+      where,
+      select: {
+        id: true, title: true, link: true, source: true, pubDate: true,
+        matchedKeyword: true, category: true, tone: true,
+      },
+      take: 800,
+    }),
+    prisma.monitoringTarget.findMany({
+      where: { category: 'portfolio_company', status: 'ACTIVE' },
+      select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true },
+    }),
+  ]);
+
+  // 회사명이 제목에 토큰으로 실제 등장하는지 확인 — 부분문자열 오탐(동명이인 등)을 막는다.
+  // 대시보드의 passesName과 같은 기준.
+  const keyMap = new Map<string, string[]>();
+  for (const t of targets) {
+    const keys = [t.primaryKeyword, t.name, t.englishName, ...(t.helperKeywords?.split(',') ?? [])]
+      .map((k) => k?.trim())
+      .filter((k): k is string => !!k);
+    keyMap.set(t.primaryKeyword, keys.length ? keys : [t.primaryKeyword]);
+  }
+  const clean = rows.filter((a) => {
+    if (isBlockedNoise({ title: a.title, link: a.link, source: a.source })) return false;
+    const keys = keyMap.get(a.matchedKeyword) ?? [a.matchedKeyword];
+    return keys.some((k) => matchesAsToken(a.title, k));
+  });
+
+  const cards = detectCrises(clean as ArticleLite[], threshold);
+
+  // 원인 문장 — 대시보드와 같은 우선순위(오늘 배치 결과 → 폴백 문구).
+  // 챗봇에서는 실시간 LLM 호출까지는 하지 않는다(이미 에이전트가 답변을 쓰면서
+  // 기사 제목을 직접 읽고 원인을 설명한다 — 여기서 또 부르면 중복 비용이다).
+  const batchFresh = await wasInsightsBatchFreshToday();
+  const precomputed = batchFresh
+    ? await getPrecomputedCrisisCauses(cards.map((c) => c.company))
+    : new Map<string, { cause: string; computedAt: Date }>();
+
+  return {
+    windowDays: days,
+    threshold,
+    crisisCount: cards.length,
+    // 0건도 의미 있는 답이다 — "조용하다"는 걸 분명히 말해주라고 붙인다.
+    note: cards.length
+      ? undefined
+      : `최근 ${days}일간 부정 기사가 ${threshold}건 이상 몰린 포트폴리오사는 없다. 조용한 상태라고 답해라.`,
+    companies: cards.map((c) => {
+      const pre = precomputed.get(c.company);
+      return {
+        company: c.company,
+        negCount: c.negCount,
+        reasonKeywords: c.reasonKeywords,
+        cause: pre?.cause ?? crisisFallbackCause(c.reasonKeywords),
+        causeSource: pre ? ('ai' as const) : ('keyword' as const),
+        titles: c.titles,
+        representative: {
+          title: c.article.title,
+          source: normalizeSource(c.article.source),
+          date: c.article.pubDate.toISOString().slice(0, 10),
+        },
+      };
+    }),
+  };
+}
+
+/** 위기 감지 결과를 화면 카드(ChatQueryResult)로도 보여주기 위한 기사 목록. */
+export async function crisisArticlesForUi(input: {
+  days?: number;
+  threshold?: number;
+  company?: string | null;
+}): Promise<ChatQueryResult> {
+  const days = Math.min(Math.max(input.days ?? 3, 1), 90);
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  since.setHours(0, 0, 0, 0);
+
+  const watch = await runCrisisWatch(input);
+  const companies = new Set(watch.companies.map((c) => c.company));
+
+  const rows = companies.size
+    ? await prisma.article.findMany({
+        where: {
+          pubDate: { gte: since },
+          isNoise: false,
+          category: 'portfolio_company',
+          matchedKeyword: { in: [...companies] },
+          OR: [{ tone: 'NEGATIVE' }, ...NEGATIVE_KEYWORDS.map((k) => ({ title: { contains: k } }))],
+        },
+        orderBy: [{ pubDate: 'desc' }],
+        take: 200,
+        select: {
+          id: true, title: true, link: true, source: true, pubDate: true, category: true,
+          matchedKeyword: true, tone: true, riskFlag: true, oneLiner: true, importance: true,
+          priorityScore: true,
+        },
+      })
+    : [];
+
+  const clean = dedupeArticles(rows);
+  const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
+  const comp = new Map<string, number>();
+  const src = new Map<string, number>();
+  for (const a of clean) {
+    if (a.matchedKeyword) bump(comp, a.matchedKeyword);
+    bump(src, normalizeSource(a.source));
+  }
+  const top = (m: Map<string, number>, n: number) =>
+    [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([name, count]) => ({ name, count }));
+
+  return {
+    terms: [`최근 ${days}일 위기 감지`],
+    periodLabel: `최근 ${days}일`,
+    total: clean.length,
+    sampled: false,
+    prevTotal: null,
+    deltaPct: null,
+    byCategory: [{ category: 'portfolio_company', count: clean.length }],
+    topSources: top(src, 5),
+    topCompanies: top(comp, 6),
+    negativeCount: clean.filter((a) => a.tone === 'NEGATIVE').length,
+    riskCount: clean.filter((a) => a.riskFlag).length,
+    monthly: null,
+    noisyKeywords: null,
+    articles: clean.slice(0, 30).map((a) => ({
+      id: a.id,
+      title: a.title,
+      link: a.link,
+      source: normalizeSource(a.source),
+      pubDate: a.pubDate.toISOString(),
+      category: a.category,
+      matchedKeyword: a.matchedKeyword,
+      tagKind: 'company' as const,
+      tone: a.tone,
+      riskFlag: a.riskFlag,
+      oneLiner: a.oneLiner,
+      importance: a.importance,
+      priorityScore: a.priorityScore,
+    })),
   };
 }
 

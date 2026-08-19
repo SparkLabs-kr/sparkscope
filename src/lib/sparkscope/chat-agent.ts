@@ -12,7 +12,14 @@ import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/reso
 import { runChatQuery, getCoverageSummary } from './chat-query';
 import { runSemanticQuery } from './chat-semantic';
 import { runInterQuery, compactInter } from './chat-inter';
-import { runPitchQuery, pitchDetailsForModel, runCoverageGap, runDigestArchive } from './chat-ops';
+import {
+  runPitchQuery,
+  pitchDetailsForModel,
+  runCoverageGap,
+  runDigestArchive,
+  runCrisisWatch,
+  crisisArticlesForUi,
+} from './chat-ops';
 import { proposeKeywordFix, listPendingSuggestions } from './chat-actions';
 import { runLiveSearch } from './chat-live';
 import { getCompetitorFundSummaries, getSparkLabsFundSummary } from './fund-db';
@@ -184,6 +191,39 @@ const TOOLS: ChatCompletionTool[] = [
           min_score: { type: 'number', description: '점수 하한(기본 70). 결과가 없으면 낮춰서 다시 불러라' },
         },
         required: ['period', 'scopes'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'crisis_watch',
+      description:
+        '부정 기사가 몰린 포트폴리오사를 회사 단위로 찾는다. 대시보드 "위기 감지" 카드와 같은 판정이다. ' +
+        '"지금 위기인 포폴사 있어?", "요즘 시끄러운 데 없나", "리스크 시그널 잡힌 곳", "터진 데 있어?" 같은 ' +
+        '질문에는 search_articles(only_negative)가 아니라 반드시 이걸 써라 — ' +
+        'only_negative는 부정 기사를 나열만 할 뿐 "어느 회사에 몇 건 몰렸는지"를 묶어주지 못한다. ' +
+        '회사별 부정 기사 건수·원인 요약·대표 기사를 함께 돌려준다. ' +
+        '결과가 0건이면 그것도 답이다 — "지금은 조용하다"고 분명히 말해라(억지로 기사를 찾아 나열하지 마라).',
+      parameters: {
+        type: 'object',
+        properties: {
+          days: {
+            type: 'number',
+            description:
+              '며칠치를 볼지(기본 3일 — 대시보드와 같은 기준). "이번 주"면 7, "최근 한 달"이면 30처럼 바꿔라.',
+          },
+          threshold: {
+            type: 'number',
+            description:
+              '부정 기사 몇 건부터 위기로 볼지(기본 2건). 0건으로 나왔는데 더 넓게 보고 싶으면 1로 낮춰서 다시 불러라.',
+          },
+          company: {
+            type: 'string',
+            description: '특정 회사만 볼 때 그 회사명. 안 주면 전체 포트폴리오사.',
+          },
+        },
+        required: [],
       },
     },
   },
@@ -362,6 +402,9 @@ function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean
 3) 감시 대상 명단(운영 중: 포트폴리오사 218, 경쟁사 114, 업계 57, 스파크랩 17)
    — coverage_gap으로 "기사가 안 난 곳"을 찾는다. 기사 검색으로는 못 구하는 값이다.
 4) 발송된 다이제스트 기록 — digest_archive.
+4-1) 위기 감지 — crisis_watch. 부정 기사가 한 회사에 몰렸는지를 회사 단위로 묶어서 본다
+   (대시보드 "위기 감지" 카드와 같은 판정: 기본 최근 3일·부정 2건 이상).
+   기사 목록이 아니라 "어느 회사가 지금 문제인가"가 궁금한 질문은 전부 이걸로 답해라.
 5) 펀드 정보 — 우리(스파크랩)와 경쟁사(VC) 둘 다. fund_info로 조회한다.
    "우리 펀드 몇 개야?", "만기 다가오는 펀드 있어?", "카카오벤처스 펀드 규모가 얼마야?",
    "우리랑 경쟁사 비교해줘" 같은 질문에 써라(우리 것도 보려면 include_sparklabs=true).
@@ -414,8 +457,13 @@ ${uiScopes.includes('inter')
   그래도 없으면 semantic_search로 뜻을 서술해서 찾아보고, 기간을 넓히거나 범위를 풀어라.
 - 질문이 "해외 나가는 데", "새로 뭐 시작한 곳"처럼 주제를 상황으로 물어서 딱 떨어지는
   검색어를 못 고르겠으면, 처음부터 semantic_search를 써라. 그게 이 도구의 용도다.
-- 좋다/나쁘다를 묻는 질문("시끄러운 데", "잘나가는 데")은 톤 필터가 답이다.
-  only_negative=true로 조회해라. 검색어나 meaning에 "논란", "안 좋은" 같은 말을 넣는 게 아니다.
+- ★ "지금 위기인 데 있어?", "요즘 시끄러운 데 없나", "리스크 잡힌 곳", "터진 데 있어?"처럼
+  어느 회사가 문제인지를 묻는 질문은 crisis_watch를 써라. only_negative로 기사만 나열하면
+  "어느 회사에 몇 건 몰렸는지"가 안 보여서 질문에 답이 안 된다. crisis_watch가 0곳으로
+  나오면 "지금은 조용하다"고 그대로 답해라 — 억지로 부정 기사를 긁어와 나열하지 마라.
+- 그 밖에 좋다/나쁘다 톤으로 기사 목록 자체를 원하는 질문("부정 기사만 보여줘",
+  "잘나가는 데")은 톤 필터가 답이다. only_negative=true(또는 긍정)로 조회해라.
+  검색어나 meaning에 "논란", "안 좋은" 같은 말을 넣는 게 아니다.
 - 반대로 결과가 수천 건이면 너무 넓은 것이다. 검색어를 좁혀서 다시 불러라.
 - 도구는 최대 ${MAX_STEPS}번까지 부를 수 있다. 2~3번 안에 끝내는 게 보통이다.
 - search_articles(검색어 비우기까지)·semantic_search를 다 시도했는데도 0건이면, 포기하고
@@ -620,6 +668,7 @@ const TOOL_LABEL: Record<string, string> = {
   semantic_search: '의미로 검색',
   inter_trends: '해외 트렌드 조회',
   pitch_opportunities: '피칭 소재 찾기',
+  crisis_watch: '위기 감지 (회사별 부정 기사)',
   coverage_gap: '노출 사각지대 확인',
   digest_archive: '다이제스트 기록 확인',
   monthly_trend: '월별 추이 집계',
@@ -841,6 +890,21 @@ export async function runChatAgent(opts: {
               candidates: details,
               hint: '점수는 수집 때 매긴 피칭 가능성이다. ourTake는 본부 관점 코멘트라 피칭 각도로 그대로 쓸 수 있다.',
             };
+            break;
+          }
+          case 'crisis_watch': {
+            const cw = {
+              days: typeof args.days === 'number' ? args.days : undefined,
+              threshold: typeof args.threshold === 'number' ? args.threshold : undefined,
+              company: typeof args.company === 'string' ? args.company : null,
+            };
+            // 회사별 판정(모델에게 줄 것)과 화면 카드용 기사 목록을 같이 만든다.
+            const [watch, uiRows] = await Promise.all([runCrisisWatch(cw), crisisArticlesForUi(cw)]);
+            steps.push(`위기감지(최근 ${watch.windowDays}일) → ${watch.crisisCount}곳`);
+            // 0건이면 화면 카드를 덮어쓰지 않는다 — 빈 카드로 갈아치우면 앞선 조회 결과가
+            // 사라져서 "아무것도 못 찾았다"처럼 보인다.
+            if (watch.crisisCount > 0) { uiResult = uiRows; resultKind = 'search'; }
+            payload = watch;
             break;
           }
           case 'coverage_gap': {
