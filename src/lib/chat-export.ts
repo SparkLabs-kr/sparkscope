@@ -379,10 +379,29 @@ export function buildReportHtml(opts: {
   const today = new Date();
   const stamp = `${today.getFullYear()}.${String(today.getMonth() + 1).padStart(2, '0')}.${String(today.getDate()).padStart(2, '0')}`;
 
+  // 기간 칩은 실제로 조회에 쓰인 기간을 보여준다. 화면에서 고른 값(period)을 그대로 쓰면
+  // "8/2부터 8/17까지" 같은 질문에 모델이 날짜 범위로 조회했는데도 칩엔 "최근 3개월"이
+  // 떠서 리포트가 거짓말을 한다(2026-08-19 발견).
   const chips = [
-    PERIOD_LABEL[period as keyof typeof PERIOD_LABEL] ?? period,
+    r?.periodLabel || PERIOD_LABEL[period as keyof typeof PERIOD_LABEL] || period,
     ...scopes.map((s) => SCOPE_LABEL[s as keyof typeof SCOPE_LABEL] ?? s),
   ];
+
+  /**
+   * 리포트 제목 — 모델이 지어준 게 있으면 그걸 쓴다.
+   *
+   * 예전엔 사용자가 친 질문을 그대로 h1에 박았는데, 실제 질문은 "8/2부터 8/17까지 스파크랩이랑
+   * 경쟁사 기사 싹다 찾아서 정리해줘봐"처럼 구어체라 보고서 표지로 쓸 수 없었다(2026-08-19).
+   * 모델 제목이 없는 경우(옛 대화, 모델이 마커를 빼먹은 경우)엔 조회 결과에서 만들어 쓴다.
+   */
+  const fallbackTitle = () => {
+    const scopeLabel = scopes.length
+      ? scopes.map((s) => SCOPE_LABEL[s as keyof typeof SCOPE_LABEL] ?? s).join('·')
+      : '전체';
+    if (r?.total) return `${scopeLabel} 보도 분석 ${r.total.toLocaleString()}건`;
+    return `${scopeLabel} 보도 분석`;
+  };
+  const reportTitle = res.title?.trim() || fallbackTitle();
 
   const noteBlock = (r?.deltaUnavailableReason || r?.deltaCaution)
     ? `<p class="note">${esc(r.deltaUnavailableReason ?? r.deltaCaution ?? '')}</p>`
@@ -459,7 +478,7 @@ export function buildReportHtml(opts: {
 
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>SparkScope · ${esc(question).slice(0, 40)}</title>
+<title>SparkScope · ${esc(reportTitle).slice(0, 60)}</title>
 <style>
   :root {
     --purple: #5046E5; --ink: #1A1A1A; --soft: #514E5C; --muted: #8B8894;
@@ -475,7 +494,8 @@ export function buildReportHtml(opts: {
            box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 8px 32px rgba(0,0,0,.06); padding: 40px 44px 48px; }
   header { border-bottom: 3px solid var(--purple); padding-bottom: 18px; margin-bottom: 8px; }
   .brand { color: var(--purple); font-weight: 800; letter-spacing: .18em; font-size: 11px; }
-  h1 { font-size: 25px; line-height: 1.35; margin: 10px 0 14px; letter-spacing: -.02em; }
+  h1 { font-size: 25px; line-height: 1.35; margin: 10px 0 6px; letter-spacing: -.02em; }
+  .asked { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
   .chip { background: #EEECFB; color: var(--purple); font-size: 12px; font-weight: 700;
           padding: 3px 10px; border-radius: 999px; }
@@ -577,7 +597,8 @@ export function buildReportHtml(opts: {
   <div class="sheet">
     <header>
       <div class="brand">SPARKSCOPE</div>
-      <h1>${esc(question)}</h1>
+      <h1>${esc(reportTitle)}</h1>
+      <p class="asked">질문: ${esc(question)}</p>
       <div class="chips">
         ${chips.map((c) => `<span class="chip">${esc(c)}</span>`).join('')}
         ${(r?.terms ?? []).map((t) => `<span class="chip plain">${esc(t)}</span>`).join('')}
@@ -616,7 +637,11 @@ export function exportAnswerToHtml(opts: {
   const url = URL.createObjectURL(blob);
   const today = new Date();
   const stamp = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
-  const safe = opts.question.slice(0, 24).replace(/[\\/:*?"<>|]/g, '').trim() || '리포트';
+  // 파일명도 질문("~싹다 정리해줘봐")이 아니라 리포트 제목을 쓴다.
+  const safe = (opts.res.title?.trim() || opts.question)
+    .slice(0, 30)
+    .replace(/[\\/:*?"<>|]/g, '')
+    .trim() || '리포트';
 
   const a = document.createElement('a');
   a.href = url;

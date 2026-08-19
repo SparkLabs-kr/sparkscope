@@ -15,7 +15,7 @@ import { runInterQuery, compactInter } from './chat-inter';
 import { runPitchQuery, pitchDetailsForModel, runCoverageGap, runDigestArchive } from './chat-ops';
 import { proposeKeywordFix, listPendingSuggestions } from './chat-actions';
 import { runLiveSearch } from './chat-live';
-import { getCompetitorFundSummaries } from './fund-db';
+import { getCompetitorFundSummaries, getSparkLabsFundSummary } from './fund-db';
 import { PERIOD_LABEL, SCOPE_LABEL, categoryLabel } from './chat-types';
 import type { ChatPeriod, ChatScope, ChatQueryResult, ResultKind } from './chat-types';
 
@@ -312,12 +312,17 @@ const TOOLS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
-      name: 'competitor_funds',
+      name: 'fund_info',
       description:
-        '경쟁사(VC)가 운용하는 펀드 자체의 정보를 조회한다. 펀드 개수, 총 운용자산(AUM), 주요 투자 섹터, 펀드 목록(이름·조성연도·만기)을 돌려준다. ' +
-        '"카카오벤처스 펀드 규모가 얼마야?", "OO벤처스는 펀드를 몇 개 운용해?" 같은 질문에 써라. ' +
+        '펀드 자체의 정보를 조회한다 — 우리(스파크랩)와 경쟁사(VC) 둘 다. 펀드 개수·조성연도·만기, ' +
+        '경쟁사는 운용자산(AUM)과 주요 투자 섹터까지 돌려준다. ' +
+        '"우리 펀드 몇 개야?", "스파크랩 만기 다가오는 펀드 있어?", "카카오벤처스 펀드 규모가 얼마야?", ' +
+        '"우리랑 경쟁사 펀드 비교해줘" 같은 질문에 써라. ' +
+        '★ 우리(스파크랩) 펀드에는 AUM(운용자산) 데이터가 없다 — 별도 테이블이라 금액이 안 들어있다. ' +
+        'totalAum이 0으로 와도 "운용자산 0원"이 아니라 "이 데이터엔 금액이 없다"는 뜻이니, ' +
+        '금액을 0이라고 말하거나 경쟁사 AUM과 숫자로 비교하지 마라. 우리 쪽은 펀드 개수·조성연도·만기로만 말해라. ' +
         '★ 이 데이터에는 각 펀드가 실제로 투자한 개별 회사(포트폴리오사) 명단이 없다 — 펀드 그릇의 크기·개수·섹터까지만 안다. ' +
-        '"OO벤처스가 어디에 투자했어?"처럼 투자사 이름 자체를 물으면 이 도구로는 답할 수 없다는 걸 요약에 분명히 밝혀라 ' +
+        '"OO벤처스가 어디에 투자했어?"처럼 투자처를 물으면 이 도구로는 답할 수 없다는 걸 요약에 분명히 밝혀라 ' +
         '("다시 물어보면 확인해드릴게요"처럼 있는 것처럼 말하지 마라).',
       parameters: {
         type: 'object',
@@ -325,7 +330,15 @@ const TOOLS: ChatCompletionTool[] = [
           competitors: {
             type: 'array',
             items: { type: 'string' },
-            description: '조회할 경쟁사(VC) 이름 배열. 예: ["카카오벤처스", "미래에셋벤처투자"]. 감시 대상에 등록된 경쟁사명으로.',
+            description:
+              '조회할 경쟁사(VC) 이름 배열. 예: ["카카오벤처스", "미래에셋벤처투자"]. 감시 대상에 등록된 경쟁사명으로. ' +
+              '우리 펀드만 궁금하면 빈 배열로 두고 include_sparklabs만 true로 해라.',
+          },
+          include_sparklabs: {
+            type: 'boolean',
+            description:
+              '우리(스파크랩) 펀드도 같이 볼지. "우리", "자사", "스파크랩" 펀드를 물었거나 ' +
+              '경쟁사와 비교해달라고 하면 true.',
           },
         },
         required: ['competitors'],
@@ -349,10 +362,14 @@ function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean
 3) 감시 대상 명단(운영 중: 포트폴리오사 218, 경쟁사 114, 업계 57, 스파크랩 17)
    — coverage_gap으로 "기사가 안 난 곳"을 찾는다. 기사 검색으로는 못 구하는 값이다.
 4) 발송된 다이제스트 기록 — digest_archive.
-5) 경쟁사(VC) 펀드 정보 — 각 경쟁사가 운용하는 펀드 개수·운용자산(AUM)·투자 섹터·펀드 목록(이름·연도·만기).
-   "카카오벤처스 펀드 규모가 얼마야?" 같은 질문에 competitor_funds를 써라.
+5) 펀드 정보 — 우리(스파크랩)와 경쟁사(VC) 둘 다. fund_info로 조회한다.
+   "우리 펀드 몇 개야?", "만기 다가오는 펀드 있어?", "카카오벤처스 펀드 규모가 얼마야?",
+   "우리랑 경쟁사 비교해줘" 같은 질문에 써라(우리 것도 보려면 include_sparklabs=true).
+   ★ 우리 펀드에는 운용자산(AUM) 금액이 아예 없다(다른 테이블이라 금액 칸이 없음). 0으로 오더라도
+   "운용자산 0원"이라고 말하거나 경쟁사 AUM과 숫자로 비교하지 마라 — 우리 쪽은 펀드 개수·조성연도·
+   만기로만 말하고, 금액 비교를 요청받으면 "우리 펀드는 금액 데이터가 없어 비교가 안 된다"고 밝혀라.
    ★ 이 데이터엔 각 펀드가 실제로 투자한 개별 회사(포트폴리오사) 명단이 없다. "OO벤처스가 어디에
-   투자했어?"처럼 투자사 목록을 물으면 competitor_funds로도 답이 안 나온다는 걸 그대로 알려라 —
+   투자했어?"처럼 투자처를 물으면 fund_info로도 답이 안 나온다는 걸 그대로 알려라 —
    "개별 투자사가 필요하면 다시 물어보세요"처럼 있는 것처럼 안내하지 마라.
 
 [화면에서 고른 값]
@@ -409,7 +426,7 @@ ${uiScopes.includes('inter')
 - 키워드·오탐·수집 설정을 물으면 noise_report를 써라.
 - ★ 경쟁사(VC)를 통틀어 물으면("OO에 대해 알려줘", "OO 어때") 기사 통계(건수·매체·톤)와
   펀드 정보(펀드 개수·AUM) 둘 다 궁금한 것으로 보고 두 도구를 다 불러라 — search_articles로
-  최근 기사 건수·매체·톤을 확인하고, 대상이 경쟁사(VC)면 competitor_funds도 같이 불러서
+  최근 기사 건수·매체·톤을 확인하고, 대상이 경쟁사(VC)면 fund_info도 같이 불러서
   펀드 규모까지 한 답변에 담아라. 펀드 정보만 주고 기사 통계를 빼먹거나 반대로 기사만
   주고 펀드 정보를 빼먹지 마라. 화면 카드는 "마지막으로 성공한 조회" 기준이니, 두 도구를
   다 부른 뒤에는 search_articles를 마지막에 한 번 더 불러 카드에 기사 통계(건수·톤·매체)가
@@ -452,7 +469,16 @@ ${asTable ? '- [표로 정리 켜짐] 핵심 내용을 마크다운 표로 정�
 - 방금 조회한 데이터로 실제 도구를 다시 불러 답할 수 있는 질문이어야 한다. 뻔하거나 답변과
   무관한 질문은 넣지 마라. 이번 답변이 0건이거나 안내/오류였으면 이 줄 자체를 넣지 마라.
 - 이 줄은 사용자에게 문장으로 보여줄 답변이 아니라 시스템이 파싱해서 버튼으로 따로 그린다.
-  그러니 이 줄 앞뒤로 설명을 붙이지 말고, 답변 본문 안에서 언급하지도 마라.`;
+  그러니 이 줄 앞뒤로 설명을 붙이지 말고, 답변 본문 안에서 언급하지도 마라.
+
+[리포트 제목]
+- 후속 질문 줄 다음, 완전히 새 줄에 "###TITLE###"로 시작하는 줄을 하나 더 추가해라.
+  그 뒤에 이 답변을 리포트로 저장했을 때 쓸 제목을 한 줄로 적어라(공백 포함 40자 이내).
+  예) ###TITLE### 스파크클로 부트캠프 개시와 경쟁사 대형기관 리스크 이슈
+- 사용자가 친 질문을 그대로 옮기지 마라("싹다 찾아서 정리해줘봐" 같은 말투는 제목이 아니다).
+  무엇을 조회했고 무엇이 나왔는지를 요약한, 보고서 표지에 올려도 되는 명사형 제목으로 써라.
+- 기간·건수는 시스템이 따로 붙이니 제목에 넣지 마라. 마침표로 끝내지 마라.
+- 이 줄도 화면에 문장으로 보여주지 않는다. 앞뒤로 설명을 붙이지 마라.`;
 }
 
 /** 도구 결과를 모델에 돌려줄 때 쓰는 압축 형태 — 링크·id 같은 화면 전용 필드는 뺀다. */
@@ -512,6 +538,8 @@ export type AgentOutcome = {
   resultKind: ResultKind;
   /** 답변에 이어 물어볼 만한 후속 질문 2~3개. 모델이 summary 끝에 붙인 마커를 파싱한 것. */
   followUps: string[] | null;
+  /** HTML 리포트로 저장할 때 쓸 제목. 이것도 summary 끝 마커에서 파싱한다. */
+  title: string | null;
   /** 어떤 조회를 몇 번 했는지 — 로그·디버깅용 */
   steps: string[];
   /** 이번 질문에 쓴 토큰. 도구를 여러 번 부르면 왕복마다 쌓이므로 눈에 보이게 남긴다. */
@@ -523,18 +551,46 @@ export type AgentOutcome = {
 // 정상적인 한국어 UI 문구엔 한자가 나올 이유가 없으므로, 섞여 있으면 그 버튼만 버린다.
 const HANJA_RE = /[一-鿿]/;
 
-/** summary 끝의 "###FOLLOWUPS### 질문1 | 질문2" 줄을 분리해낸다. 마커가 없으면 그대로 둔다. */
-function splitFollowUps(raw: string | null): { summary: string | null; followUps: string[] | null } {
-  if (!raw) return { summary: raw, followUps: null };
+/**
+ * summary 끝에 붙은 시스템 마커 줄들을 떼어낸다.
+ *   ###FOLLOWUPS### 질문1 | 질문2   → 후속 질문 버튼
+ *   ###TITLE### 리포트 제목          → HTML 저장 시 제목
+ * 마커가 없으면 그대로 둔다(옛 대화·모델이 빼먹은 경우 모두 정상 동작해야 한다).
+ *
+ * TITLE을 FOLLOWUPS보다 먼저 떼는 이유: TITLE이 뒷줄이라 먼저 잘라내야
+ * FOLLOWUPS 정규식의 "$"(문자열 끝) 앵커가 맞는다.
+ */
+function splitMarkers(raw: string | null): {
+  summary: string | null;
+  followUps: string[] | null;
+  title: string | null;
+} {
+  if (!raw) return { summary: raw, followUps: null, title: null };
+
+  let rest = raw;
+  let title: string | null = null;
+  const titleRe = /\n?###TITLE###\s*(.+?)\s*$/;
+  const tm = rest.match(titleRe);
+  if (tm) {
+    const t = tm[1].trim().replace(/[.。]+$/, '');
+    // 한자가 섞였거나 비정상적으로 길면 제목으로 쓰지 않는다(호출부가 알아서 대체).
+    if (t && !HANJA_RE.test(t) && t.length <= 60) title = t;
+    rest = rest.replace(titleRe, '');
+  }
+
   const re = /\n?###FOLLOWUPS###\s*(.+)\s*$/;
-  const m = raw.match(re);
-  if (!m) return { summary: raw, followUps: null };
+  const m = rest.match(re);
+  if (!m) return { summary: rest.trim() || null, followUps: null, title };
   const followUps = m[1]
     .split('|')
     .map((q) => q.trim())
     .filter((q) => q.length > 0 && !HANJA_RE.test(q))
     .slice(0, 3);
-  return { summary: raw.replace(re, '').trim() || null, followUps: followUps.length ? followUps : null };
+  return {
+    summary: rest.replace(re, '').trim() || null,
+    followUps: followUps.length ? followUps : null,
+    title,
+  };
 }
 
 /** noise_report만 단독으로 불렸을 때(uiResult가 없을 때) 오탐 데이터를 담을 빈 껍데기. */
@@ -572,7 +628,7 @@ const TOOL_LABEL: Record<string, string> = {
   propose_keyword_fix: '설정 보완 제안 등록',
   pending_suggestions: '대기 중인 제안 확인',
   live_search: '실시간 뉴스 검색',
-  competitor_funds: '경쟁사 펀드 포트폴리오 조회',
+  fund_info: '펀드 정보 조회',
 };
 
 export async function runChatAgent(opts: {
@@ -628,12 +684,13 @@ export async function runChatAgent(opts: {
       result.needsLiveSearch = true;
     }
 
-    const { summary, followUps } = splitFollowUps(raw);
+    const { summary, followUps, title } = splitMarkers(raw);
     return {
       summary,
       result,
       resultKind,
       followUps,
+      title,
       steps,
       usage,
     };
@@ -855,9 +912,15 @@ export async function runChatAgent(opts: {
             payload = compactResult(r);
             break;
           }
-          case 'competitor_funds': {
+          case 'fund_info': {
             const competitors = Array.isArray(args.competitors) ? args.competitors.map(String) : [];
-            const summaries = await getCompetitorFundSummaries(competitors);
+            // 자사 펀드는 대시보드 스파크랩 탭이 쓰는 것과 같은 함수를 그대로 쓴다 —
+            // 화면과 챗봇이 다른 숫자를 말하면 안 된다.
+            const wantSparkLabs = args.include_sparklabs === true;
+            const [summaries, sparkLabs] = await Promise.all([
+              competitors.length ? getCompetitorFundSummaries(competitors) : new Map(),
+              wantSparkLabs ? getSparkLabsFundSummary() : null,
+            ]);
             const fundsByCompetitor = Array.from(summaries.entries()).map(([name, summary]) => ({
               competitor: name,
               investorName: summary.investorName,
@@ -866,8 +929,27 @@ export async function runChatAgent(opts: {
               topSectors: summary.topSectors,
               funds: summary.funds.slice(0, 10),
             }));
-            steps.push(`경쟁사펀드 → ${fundsByCompetitor.length}곳`);
-            payload = { fundsByCompetitor };
+            steps.push(
+              `펀드조회 → ${wantSparkLabs ? '스파크랩' : ''}${wantSparkLabs && fundsByCompetitor.length ? '+' : ''}${fundsByCompetitor.length ? `경쟁사 ${fundsByCompetitor.length}곳` : ''}`
+            );
+            payload = {
+              ...(sparkLabs
+                ? {
+                    sparklabs: {
+                      fundCount: sparkLabs.fundCount,
+                      latestVintage: sparkLabs.latestVintage,
+                      funds: sparkLabs.funds.slice(0, 15),
+                      // 금액이 0으로 오는 걸 "규모 0원"으로 오해하지 않도록 못을 박는다.
+                      aumNote:
+                        '우리 펀드 데이터에는 운용자산(AUM) 금액이 없다. 금액을 0이라고 말하거나 경쟁사 AUM과 숫자로 비교하지 마라.',
+                    },
+                  }
+                : {}),
+              ...(fundsByCompetitor.length ? { fundsByCompetitor } : {}),
+              ...(wantSparkLabs && !sparkLabs
+                ? { sparklabsError: '자사 펀드 데이터를 불러오지 못했다(펀드 DB 연결 없음). 모른다고 답해라.' }
+                : {}),
+            };
             break;
           }
           default:
