@@ -203,8 +203,15 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
       select: { primaryKeyword: true, name: true, category: true, portfolioStatus: true },
     });
     matchedEntities = knownTargets.map((t) => ({ name: t.name, category: t.category, portfolioStatus: t.portfolioStatus }));
+    // "정확 매칭만" 규칙은 **회사 이름**에만 건다. industry_trend는 회사가 아니라
+    // "투자유치"·"딥테크" 같은 주제어라, 회사와 같이 취급하면 matchedKeyword 정확
+    // 매칭에 갇혀 표기 변형·제목 검색을 통째로 잃는다.
+    //   2026-08-19 실측: "투자유치"는 industry_trend 감시대상으로도 등록돼 있어서
+    //   제목에 "투자유치"(220건)·"투자 유치"(1,004건)가 있는 기사를 다 놓치고 72건만 나왔다.
+    const ENTITY_CATEGORIES = new Set(['portfolio_company', 'competitor', 'sparklabs_self']);
     const knownNames = new Set<string>();
     for (const t of knownTargets) {
+      if (!ENTITY_CATEGORIES.has(t.category)) continue;
       knownNames.add(t.primaryKeyword.toLowerCase());
       knownNames.add(t.name.toLowerCase());
     }
