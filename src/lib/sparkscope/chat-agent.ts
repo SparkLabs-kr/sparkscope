@@ -22,7 +22,12 @@ import {
 } from './chat-ops';
 import { proposeKeywordFix, listPendingSuggestions } from './chat-actions';
 import { runLiveSearch } from './chat-live';
-import { getCompetitorFundSummaries, getSparkLabsFundSummary } from './fund-db';
+import {
+  getCompetitorFundSummaries,
+  getSparkLabsFundSummary,
+  isFundDbConfigured,
+  type CompetitorFundSummary,
+} from './fund-db';
 import { PERIOD_LABEL, SCOPE_LABEL, categoryLabel } from './chat-types';
 import type { ChatPeriod, ChatScope, ChatQueryResult, ResultKind } from './chat-types';
 
@@ -977,22 +982,34 @@ export async function runChatAgent(opts: {
             break;
           }
           case 'fund_info': {
-            const competitors = Array.isArray(args.competitors) ? args.competitors.map(String) : [];
+            const competitors: string[] = Array.isArray(args.competitors) ? args.competitors.map(String) : [];
             // 자사 펀드는 대시보드 스파크랩 탭이 쓰는 것과 같은 함수를 그대로 쓴다 —
             // 화면과 챗봇이 다른 숫자를 말하면 안 된다.
             const wantSparkLabs = args.include_sparklabs === true;
             const [summaries, sparkLabs] = await Promise.all([
-              competitors.length ? getCompetitorFundSummaries(competitors) : new Map(),
+              competitors.length
+                ? getCompetitorFundSummaries(competitors)
+                : Promise.resolve(new Map<string, CompetitorFundSummary>()),
               wantSparkLabs ? getSparkLabsFundSummary() : null,
             ]);
             const fundsByCompetitor = Array.from(summaries.entries()).map(([name, summary]) => ({
               competitor: name,
               investorName: summary.investorName,
               fundCount: summary.fundCount,
-              totalAum: summary.totalAum,
+              // 키 이름에 단위를 박는다 — 그냥 totalAum으로 주면 모델이 "총 운용자산 4043"처럼
+              // 단위 없는 숫자를 그대로 뱉는다(2026-08-19 실제 사례).
+              totalAumEokWon: summary.totalAum,
               topSectors: summary.topSectors,
-              funds: summary.funds.slice(0, 10),
+              funds: summary.funds.slice(0, 10).map((f) => ({
+                name: f.name,
+                vintage: f.vintage,
+                aumEokWon: f.aum,
+                maturityDate: f.maturityDate,
+              })),
             }));
+            // 펀드 DB에 매핑이 없는 곳은 조용히 빠지면 모델이 "펀드가 없다"로 오해한다.
+            // 조회 자체를 못 했다는 사실을 명시적으로 넘긴다.
+            const unavailable = competitors.filter((c) => !summaries.has(c));
             steps.push(
               `펀드조회 → ${wantSparkLabs ? '스파크랩' : ''}${wantSparkLabs && fundsByCompetitor.length ? '+' : ''}${fundsByCompetitor.length ? `경쟁사 ${fundsByCompetitor.length}곳` : ''}`
             );
@@ -1002,14 +1019,29 @@ export async function runChatAgent(opts: {
                     sparklabs: {
                       fundCount: sparkLabs.fundCount,
                       latestVintage: sparkLabs.latestVintage,
-                      funds: sparkLabs.funds.slice(0, 15),
+                      // aum 필드 자체를 빼서 넘긴다. 0을 보여주고 "0으로 읽지 마라"고
+                      // 당부하는 것보다, 아예 안 보이는 게 확실하다.
+                      funds: sparkLabs.funds.slice(0, 15).map((f) => ({
+                        name: f.name,
+                        vintage: f.vintage,
+                        maturityDate: f.maturityDate,
+                      })),
                       // 금액이 0으로 오는 걸 "규모 0원"으로 오해하지 않도록 못을 박는다.
                       aumNote:
                         '우리 펀드 데이터에는 운용자산(AUM) 금액이 없다. 금액을 0이라고 말하거나 경쟁사 AUM과 숫자로 비교하지 마라.',
                     },
                   }
                 : {}),
-              ...(fundsByCompetitor.length ? { fundsByCompetitor } : {}),
+              ...(fundsByCompetitor.length ? { fundsByCompetitor, aumUnitNote: 'AUM 숫자의 단위는 억원이다. 답할 때 반드시 "억원"을 붙여라.' } : {}),
+              ...(unavailable.length
+                ? {
+                    unavailableCompetitors: unavailable,
+                    unavailableNote: isFundDbConfigured()
+                      ? `${unavailable.join(', ')}는 우리 펀드 DB(국내 VC 공시 기준)에 없어 조회 자체가 안 된다. ` +
+                        '"펀드가 없다"가 아니라 "이 DB에서는 확인할 수 없다"고 답해라.'
+                      : '펀드 DB 연결이 없어 경쟁사 펀드를 하나도 조회하지 못했다. 펀드 정보는 모른다고 답해라.',
+                  }
+                : {}),
               ...(wantSparkLabs && !sparkLabs
                 ? { sparklabsError: '자사 펀드 데이터를 불러오지 못했다(펀드 DB 연결 없음). 모른다고 답해라.' }
                 : {}),

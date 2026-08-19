@@ -86,6 +86,14 @@ function getFundPool(): Pool | null {
   return global.__fundPool;
 }
 
+/**
+ * 펀드 DB에 연결할 수 있는 환경인지. 조회 결과가 비었을 때 "그 회사가 DB에 없다"인지
+ * "DB 자체를 못 봤다"인지 구분하려고 호출부가 쓴다 — 둘을 섞으면 챗봇이 거짓말을 한다.
+ */
+export function isFundDbConfigured(): boolean {
+  return Boolean(process.env.FUND_DB_URL);
+}
+
 export async function getCompetitorFundSummaries(
   competitorNames: string[],
 ): Promise<Map<string, CompetitorFundSummary>> {
