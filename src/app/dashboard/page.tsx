@@ -202,17 +202,13 @@ async function loadDashboardData(from: string, to: string, company: string | und
     // 필터를 눌러도 몇 건 안 보이는 문제가 있었음(industry_trend은 전체 기사의 대다수를 차지하는데도
     // 우선순위가 낮아 상위 400건 풀에서부터 밀려남). 카테고리별로 따로 뽑아 합쳐 각 필터가
     // 최소한의 건수를 보장받게 한다. AC·VC·스타트업계는 노이즈성 기사가 상대적으로 많아
-    // priorityScore 상위 50건으로 더 좁게(=중요하다고 판단된 것만) 제한.
+    // priorityScore 상위 15건으로 더 좁게(=중요하다고 판단된 것만) 제한.
     //
-    // AC·VC(competitor) 후보를 50→15로 더 좁혔다(2026-08-12). analyzer.ts의 priorityScore
-    // 상한을 완화(15→50)하면서 진짜 중요한 경쟁사 스캔들 기사는 카테고리를 뒤집고 올라올 수
-    // 있게 됐는데, 그 후보 풀 자체가 50개나 있으면 "최근 수집 기사"가 다시 경쟁사로 도배될
-    // 수 있다. 경쟁사는 "🏁 업계 모니터링" 탭에서 전체(최대 3000건)를 이미 볼 수 있으니,
-    // 이 개요 탭엔 정말 상위 몇 건(주요 기사)만 후보로 주면 충분하다.
-    // industry_trend도 50→15로 같이 좁혔다 — 후보를 25로만 줄였을 땐 실제 선정 건수(16건)가
-    // 그대로였다(애초에 50개 후보 중 16개만 이기고 있었음). 15까지 줄여야 경쟁사와 비슷한
-    // 수준(주요 기사 15건 안팎)으로 맞춰지고, 그만큼 포폴사 비중이 늘어난다 — 실사용 확인:
-    // 상한 50 + 경쟁사·업계 후보 각 15 조합이 최종 결과였다.
+    // 50으로 늘려봤다가(2026-08-14 시도) 되돌림 — AC·VC 스캔들 기사는 priorityScore가
+    // 뒤집혀서 오르는 로직 때문에, 후보를 50으로 늘리면 "날짜순 전체보기"(무필터, 상위
+    // 120건)에서 AC·VC가 12행→26행으로 늘고 그만큼 포트폴리오사가 40행→25행으로 줄어드는
+    // 트레이드오프가 실측으로 확인됨. AC·VC·스타트업계 필터를 눌렀을 때 15건 제한은 남지만,
+    // 기본 화면(전체보기)에서 포트폴리오사 비중을 지키는 쪽을 택함.
     Promise.all(Object.entries({ sparklabs_self: 150, portfolio_company: 150, competitor: 15, industry_trend: 15 }).map(([category, take]) =>
       fetchRecentTabArticles(where, category, take, now, category === 'portfolio_company' ? 3 : undefined),
     )).then(arr => arr.flat()),
@@ -555,6 +551,13 @@ async function loadDashboardData(from: string, to: string, company: string | und
     return true;
   });
 
+  const lastCollectLog = await prisma.runLog.findFirst({
+    where: { runType: 'daily-collect', status: 'SUCCESS' },
+    orderBy: { finishedAt: 'desc' },
+    select: { finishedAt: true },
+  });
+  const lastCollectTime = lastCollectLog?.finishedAt;
+
   return {
     range: { from, to },
     kpi: { total, sparklabsCount: sparklabsCountFiltered, portfolioCount, pitchCount, mentionRate, mentionDelta: mentionRate - prevMentionRate },
@@ -596,6 +599,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
       tone: (a.tone ?? 'NEUTRAL') as string,
       riskFlag: a.riskFlag as string | null,
     })),
+    lastCollectTime,
   };
 }
 
@@ -726,6 +730,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight text-spark-ink leading-none">{todayLabel}</h1>
           <p className="text-[13px] text-spark-muted mt-2">
             {scope === 'inter' ? `${range.label} 해외 매체·논문 데이터 기준` : `${range.label} 데이터 기준`}
+            {data.lastCollectTime && (
+              <span> · {data.lastCollectTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul' })} 기준 수집</span>
+            )}
           </p>
         </div>
         <div data-tour="header-actions" className="flex items-center gap-2">

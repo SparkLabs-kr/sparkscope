@@ -10,33 +10,49 @@ import { fetchGoogleNews, fetchNaverNews, naverEnabled } from './collector';
 import { prisma } from '@/lib/prisma';
 import { PERIOD_LABEL, type ChatQueryResult } from './chat-types';
 import { dedupeArticles } from './chat-query';
+import { matchesAsToken } from './relevance';
 
 export async function runLiveSearch(keyword: string): Promise<ChatQueryResult> {
-  const jobs = [fetchGoogleNews(keyword).catch(() => [])];
-  if (naverEnabled()) jobs.push(fetchNaverNews(keyword).catch(() => []));
-  const raw = (await Promise.all(jobs)).flat();
-
-  // 네이버 뉴스 검색 API는 제목에 키워드가 실제로 없어도 느슨하게(연관 검색 수준으로) 결과를
-  // 준다 — "에큐리바이오"로 검색했는데 무관한 기사가 섞여 나온 걸 실제 확인함(2026-08-11).
-  // DB 검색과 동일하게 제목에 키워드가 실제로 포함된 것만 남긴다.
-  const relevant = raw.filter((a) => a.title.toLowerCase().includes(keyword.toLowerCase()));
-
-  // 우리 DB의 excludeWords/contextWords 필터를 적용해서 노이즈 제거
+  // 감시 대상 정보 조회 (이름 변형, 필터링 규칙 포함)
   const target = await prisma.monitoringTarget.findFirst({
     where: { primaryKeyword: keyword },
   });
 
-  const filtered = relevant.filter((a) => {
+  // DB 검색과 동일하게, 감시 대상의 모든 키워드 변형으로 검색한다
+  // (단일 검색어만으로는 기사를 놓칠 수 있음 — 예: "스파크랩"과 "스파크" 양쪽 다 필요)
+  const searchTerms = new Set<string>();
+  searchTerms.add(keyword);
+  if (target?.name) searchTerms.add(target.name);
+  if (target?.englishName) searchTerms.add(target.englishName);
+  if (target?.helperKeywords) {
+    target.helperKeywords.split(',').forEach(k => {
+      const term = k.trim();
+      if (term) searchTerms.add(term);
+    });
+  }
+
+  // 각 검색어로 Google News + Naver News 검색
+  const jobs: Promise<any[]>[] = [];
+  for (const term of searchTerms) {
+    jobs.push(fetchGoogleNews(term).catch(() => []));
+    if (naverEnabled()) jobs.push(fetchNaverNews(term).catch(() => []));
+  }
+  const raw = (await Promise.all(jobs)).flat();
+
+  // DB의 excludeWords/contextWords 필터를 적용해서 노이즈 제거
+  // relevance.ts(DB 수집)와 동일하게 토큰 경계 매칭을 쓴다 — 단순 includes()면
+  // "스파크"/"랩"처럼 회사명 자체에 포함된 제외어가 "스파크랩" 기사까지 걸러버린다.
+  const filtered = raw.filter((a) => {
     const title = a.title.toLowerCase();
-    // excludeWords: 제목에 이 단어 중 하나라도 있으면 제외
+    // excludeWords: 제목에 이 단어 중 하나라도 독립 토큰으로 있으면 제외
     if (target?.excludeWords) {
       const excludes = target.excludeWords.split(',').map((w) => w.trim().toLowerCase()).filter(Boolean);
-      if (excludes.some((w) => title.includes(w))) return false;
+      if (excludes.some((w) => matchesAsToken(title, w))) return false;
     }
-    // contextWords: 제목에 이 단어 중 하나라도 있어야 통과 (없으면 true = 통과)
+    // contextWords: 제목에 이 단어 중 하나라도 독립 토큰으로 있어야 통과 (없으면 true = 통과)
     if (target?.contextWords) {
       const contexts = target.contextWords.split(',').map((w) => w.trim().toLowerCase()).filter(Boolean);
-      if (contexts.length > 0 && !contexts.some((w) => title.includes(w))) return false;
+      if (contexts.length > 0 && !contexts.some((w) => matchesAsToken(title, w))) return false;
     }
     return true;
   });
@@ -47,7 +63,7 @@ export async function runLiveSearch(keyword: string): Promise<ChatQueryResult> {
     let score = 0;
     if (target?.contextWords) {
       const contexts = target.contextWords.split(',').map((w) => w.trim().toLowerCase()).filter(Boolean);
-      score = contexts.filter((w) => title.includes(w)).length;
+      score = contexts.filter((w) => matchesAsToken(title, w)).length;
     }
     return { a, score };
   });
@@ -62,9 +78,10 @@ export async function runLiveSearch(keyword: string): Promise<ChatQueryResult> {
     })
     .map((item) => ({ ...item.a, priorityScore: item.score }));
 
-  // 같은 사안을 여러 매체(통신사 기사 받아쓰기)가 실어서 제목만 살짝 다른 경우가 많다 —
-  // DB 검색·해외 트렌드·의미 검색이 이미 쓰는 것과 같은 기준으로 하나로 접는다(2026-08-12).
-  const deduped = dedupeArticles(linkDeduped).slice(0, 15);
+  // 실시간 검색은 linkDeduped가 이미 링크 기반으로 중복 제거되어 있어서,
+  // dedupeArticles를 추가로 쓰면 같은 사안의 다른 매체 기사까지 과도하게 제거된다.
+  // 상위 15개를 가져와서 최신순으로 정렬한다.
+  const deduped = linkDeduped.slice(0, 15);
   deduped.sort((a, b) => +new Date(b.pubDate) - +new Date(a.pubDate));
 
   const articles = deduped.map((a, i) => ({

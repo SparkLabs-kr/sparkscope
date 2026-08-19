@@ -78,8 +78,10 @@ function pickBestPerStory(list: AnalyzedArticle[]): AnalyzedArticle[] {
 
 export async function runDailyDigest(opts: RunOptions = {}) {
   await cleanupStaleRunLogs();
+  // 대시보드가 "실제로 수집이 돈 시각"만 보여줘야 하므로, 수집을 건너뛴 발송 전용
+  // 실행(daily-send-only, skipCollect=true)과 실제 수집 실행을 runType으로 구분한다.
   const log = await prisma.runLog.create({
-    data: { runType: 'daily', status: 'RUNNING' },
+    data: { runType: opts.skipCollect ? 'daily-send' : 'daily-collect', status: 'RUNNING' },
   });
 
   try {

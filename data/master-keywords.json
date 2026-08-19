@@ -5,9 +5,10 @@
     "category": "sparklabs_self",
     "status": "ACTIVE",
     "primaryKeyword": "스파크랩",
-    "helperKeywords": "SparkClaw, 토큰밸리",
+    "helperKeywords": "SparkClaw",
     "excludeWords": "스파크, Spark, 랩, Labs",
-    "notes": "한국 본사 / 액셀러레이터"
+    "contextWords": "스파크랩, SparkLabs, SparkClaw",
+    "notes": "한국 본사 / 액셀러레이터. 헬퍼키워드 '토큰밸리'는 구글/네이버 검색이 '토큰'·'밸리'만 겹쳐도 느슨하게 매칭해 무관 기사(바운드포·모나시스 등)를 끌어와 2026-08-14 제거."
   },
   {
     "name": "스파크랩 벤처스",
@@ -1830,7 +1831,7 @@
   {
     "name": "HL만도",
     "englishName": null,
-    "category": "competitor",
+    "category": "industry_trend",
     "status": "ACTIVE",
     "tier": null,
     "primaryKeyword": "HL만도",
@@ -4096,8 +4097,8 @@
     "tier": "A",
     "primaryKeyword": "리빗",
     "helperKeywords": "이정민 온실가스",
-    "excludeWords": null,
-    "contextWords": null,
+    "excludeWords": "캐롤라인",
+    "contextWords": "온실가스, 탄소 관리, 탄소 감축, 탄소배출권, ESG, 이정민, LIVIT",
     "notes": "탄소 관리 솔루션 기업. 기업 온실가스 배출량 관리 및 탄소 감축 자금 매칭 서비스"
   },
   {

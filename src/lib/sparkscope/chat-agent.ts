@@ -15,6 +15,7 @@ import { runInterQuery, compactInter } from './chat-inter';
 import { runPitchQuery, pitchDetailsForModel, runCoverageGap, runDigestArchive } from './chat-ops';
 import { proposeKeywordFix, listPendingSuggestions } from './chat-actions';
 import { runLiveSearch } from './chat-live';
+import { getCompetitorFundSummaries } from './fund-db';
 import { PERIOD_LABEL, SCOPE_LABEL, categoryLabel } from './chat-types';
 import type { ChatPeriod, ChatScope, ChatQueryResult, ResultKind } from './chat-types';
 
@@ -308,6 +309,29 @@ const TOOLS: ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'competitor_funds',
+      description:
+        '경쟁사(VC)가 운용하는 펀드 자체의 정보를 조회한다. 펀드 개수, 총 운용자산(AUM), 주요 투자 섹터, 펀드 목록(이름·조성연도·만기)을 돌려준다. ' +
+        '"카카오벤처스 펀드 규모가 얼마야?", "OO벤처스는 펀드를 몇 개 운용해?" 같은 질문에 써라. ' +
+        '★ 이 데이터에는 각 펀드가 실제로 투자한 개별 회사(포트폴리오사) 명단이 없다 — 펀드 그릇의 크기·개수·섹터까지만 안다. ' +
+        '"OO벤처스가 어디에 투자했어?"처럼 투자사 이름 자체를 물으면 이 도구로는 답할 수 없다는 걸 요약에 분명히 밝혀라 ' +
+        '("다시 물어보면 확인해드릴게요"처럼 있는 것처럼 말하지 마라).',
+      parameters: {
+        type: 'object',
+        properties: {
+          competitors: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '조회할 경쟁사(VC) 이름 배열. 예: ["카카오벤처스", "미래에셋벤처투자"]. 감시 대상에 등록된 경쟁사명으로.',
+          },
+        },
+        required: ['competitors'],
+      },
+    },
+  },
 ];
 
 function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean, asTable: boolean) {
@@ -325,6 +349,11 @@ function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean
 3) 감시 대상 명단(운영 중: 포트폴리오사 218, 경쟁사 114, 업계 57, 스파크랩 17)
    — coverage_gap으로 "기사가 안 난 곳"을 찾는다. 기사 검색으로는 못 구하는 값이다.
 4) 발송된 다이제스트 기록 — digest_archive.
+5) 경쟁사(VC) 펀드 정보 — 각 경쟁사가 운용하는 펀드 개수·운용자산(AUM)·투자 섹터·펀드 목록(이름·연도·만기).
+   "카카오벤처스 펀드 규모가 얼마야?" 같은 질문에 competitor_funds를 써라.
+   ★ 이 데이터엔 각 펀드가 실제로 투자한 개별 회사(포트폴리오사) 명단이 없다. "OO벤처스가 어디에
+   투자했어?"처럼 투자사 목록을 물으면 competitor_funds로도 답이 안 나온다는 걸 그대로 알려라 —
+   "개별 투자사가 필요하면 다시 물어보세요"처럼 있는 것처럼 안내하지 마라.
 
 [화면에서 고른 값]
 기간 ${PERIOD_LABEL[uiPeriod]} / 범위 ${uiScopes.length ? uiScopes.map((s) => SCOPE_LABEL[s]).join(', ') : '전체'}
@@ -348,13 +377,20 @@ ${uiScopes.includes('inter')
   "피치스 관련 기사 찾아줘") 그 단어가 흔한 일상어처럼 보여도 구글·네이버에 검색하듯
   일반적인 뜻으로 풀지 말고, 감시 대상(포트폴리오사 등) 이름을 먼저 의심해라 — 여기서
   검색했다는 것 자체가 회사 얘기라는 신호다.
+- ★ 회사명이나 감시 대상이 명시되면 무조건 terms에 포함해라. 범위와 별개다. 예를 들어
+  사용자가 "스파크랩 기사"라고 물으면, 범위에 sparklabs가 있어도 terms에도 "스파크랩"을
+  넣어야 한다. 그래야 0건일 때 "실시간 검색할까요?"가 뜬다. 범위만으로 조회하면 terms가
+  비어서 실시간 검색을 못 제안한다.
 - 검색어가 감시 대상 이름 자체였는데 0건이면(예: "온도"), 그건 오류가 아니라 "이 회사는
   최근 보도가 없다"는 실제 정보다. 이 경우엔 아래 "0건이면 비워서 넓혀라" 규칙을 따르지
   마라 — terms를 비우면 전혀 무관한 회사 기사들이 섞여 들어와 "이게 왜 나오지" 싶은 답이
   된다. 0건 그대로 답하고, matchedEntities에 실린 portfolioStatus가 'Live'가 아니면
   (Exit·Written-off) 그 상태를 먼저 알려라(예: "이 포트폴리오사는 현재 Written-off(청산)
-  상태예요"). needsLiveSearch는 시스템이 자동으로 처리하니 "실시간 검색해볼까요"라고
-  네가 직접 물을 필요는 없다.
+  상태예요").
+  ★ "오늘", "방금", "최신"처럼 신선도를 묻는 질문은 이야기가 다르다 — 우리 수집은
+  하루 한 번(보통 오전)만 돌아서, "오늘 0건"은 "그 회사 소식이 없다"가 아니라 "오늘
+  수집 이후에 나온 기사를 우리가 아직 못 받았다"일 가능성이 크다. 이런 질문엔 terms가
+  있으면 live_search를 직접 불러서 실제로 오늘 나온 기사가 있는지 확인한 뒤 답해라.
 - (그 외) 첫 검색이 0건이거나 눈에 띄게 적으면 그대로 "없다"고 하지 마라.
   이때 가장 먼저 할 일은 검색어를 다른 단어로 바꾸는 게 아니라 아예 비우는 것이다.
   terms를 빼고 기간·범위·톤만으로 조회하면 무엇이 있는지 실제로 보인다. 그 다음에 좁혀라.
@@ -371,6 +407,13 @@ ${uiScopes.includes('inter')
 - "늘었나/줄었나", "추세", "흐름", "언제부터" 같은 질문에는 반드시 monthly_trend를 불러라.
   직전 기간 한 개와의 비교만으로 추세를 말하지 마라 — 백필 구간에 걸려 왜곡되기 쉽다.
 - 키워드·오탐·수집 설정을 물으면 noise_report를 써라.
+- ★ 경쟁사(VC)를 통틀어 물으면("OO에 대해 알려줘", "OO 어때") 기사 통계(건수·매체·톤)와
+  펀드 정보(펀드 개수·AUM) 둘 다 궁금한 것으로 보고 두 도구를 다 불러라 — search_articles로
+  최근 기사 건수·매체·톤을 확인하고, 대상이 경쟁사(VC)면 competitor_funds도 같이 불러서
+  펀드 규모까지 한 답변에 담아라. 펀드 정보만 주고 기사 통계를 빼먹거나 반대로 기사만
+  주고 펀드 정보를 빼먹지 마라. 화면 카드는 "마지막으로 성공한 조회" 기준이니, 두 도구를
+  다 부른 뒤에는 search_articles를 마지막에 한 번 더 불러 카드에 기사 통계(건수·톤·매체)가
+  뜨게 해라.
 - ★ 화면 카드(건수·집계·근거 기사 목록)에는 "마지막으로 성공한 조회" 결과가 뜬다.
   그러니 사용자에게 근거로 보여줄 조회를 맨 마지막에 해라. 예를 들어 해외 트렌드를
   물었으면 inter_trends를 마지막에 부른 상태로 답을 마쳐야 화면과 답변이 맞는다.
@@ -529,6 +572,7 @@ const TOOL_LABEL: Record<string, string> = {
   propose_keyword_fix: '설정 보완 제안 등록',
   pending_suggestions: '대기 중인 제안 확인',
   live_search: '실시간 뉴스 검색',
+  competitor_funds: '경쟁사 펀드 포트폴리오 조회',
 };
 
 export async function runChatAgent(opts: {
@@ -579,6 +623,7 @@ export async function runChatAgent(opts: {
     // 막혀버렸다(2026-08-13 실사용 피드백). noise·inter는 이 흐름과 안 맞아 제외한다 —
     // noise_report는 설정 점검 질문이라 "기사를 더 찾아볼까요"가 어색하고, inter는 해외
     // 데이터라 국내 뉴스만 훑는 실시간 검색으로는 애초에 못 채운다.
+    // 결과가 8건 미만이면 실시간 검색 제안 (terms가 비어있어도, 원래 question을 검색어로 사용)
     if (result && result.total < 8 && resultKind !== 'live' && resultKind !== 'noise' && resultKind !== 'inter') {
       result.needsLiveSearch = true;
     }
@@ -636,11 +681,12 @@ export async function runChatAgent(opts: {
         switch (call.function.name) {
           case 'search_articles': {
             const terms = asTerms(args.terms);
+            const period = resolvePeriodArg(args.period, opts.period, opts.question);
             const dateFrom = typeof args.date_from === 'string' ? args.date_from : undefined;
             const dateTo = typeof args.date_to === 'string' ? args.date_to : undefined;
             const r = await runChatQuery({
               question: opts.question,
-              period: resolvePeriodArg(args.period, opts.period, opts.question),
+              period,
               scopes: asScopes(args.scopes),
               terms,
               onlyNegative: args.only_negative === true,
@@ -650,6 +696,20 @@ export async function runChatAgent(opts: {
             });
             steps.push(`search(${terms.join('|') || '전체'}) → ${r.total}건${dateFrom ? ` [${dateFrom}~${dateTo ?? ''}]` : ''}`);
             if (!uiResult || r.total > 0) { uiResult = r; resultKind = 'search'; }
+
+            // "오늘" 기간에 0건이고 검색어가 있으면 실시간 검색 자동 시도.
+            // 단 date_from/date_to로 조회했으면 period는 무시된 값이라(모델이 필수값이라
+            // 아무거나 채운다) 여기 걸리면 안 된다 — "8/3~8/19" 질문에 오늘 기사를
+            // 실시간 검색해서 답하는 꼴이 된다.
+            if (r.total === 0 && period === 'today' && terms.length > 0 && !dateFrom && !dateTo) {
+              const liveResult = await runLiveSearch(terms[0]);
+              steps.push(`→ live(${terms[0]}) → ${liveResult.total}건`);
+              if (liveResult.total > 0) { uiResult = liveResult; resultKind = 'live'; }
+              else { payload = { ...compactResult(r), liveSearchAttempted: true }; break; }
+              payload = compactResult(liveResult);
+              break;
+            }
+
             payload = compactResult(r);
             break;
           }
@@ -793,6 +853,21 @@ export async function runChatAgent(opts: {
             steps.push(`live(${keyword}) → ${r.total}건`);
             if (!uiResult || r.total > 0) { uiResult = r; resultKind = 'live'; }
             payload = compactResult(r);
+            break;
+          }
+          case 'competitor_funds': {
+            const competitors = Array.isArray(args.competitors) ? args.competitors.map(String) : [];
+            const summaries = await getCompetitorFundSummaries(competitors);
+            const fundsByCompetitor = Array.from(summaries.entries()).map(([name, summary]) => ({
+              competitor: name,
+              investorName: summary.investorName,
+              fundCount: summary.fundCount,
+              totalAum: summary.totalAum,
+              topSectors: summary.topSectors,
+              funds: summary.funds.slice(0, 10),
+            }));
+            steps.push(`경쟁사펀드 → ${fundsByCompetitor.length}곳`);
+            payload = { fundsByCompetitor };
             break;
           }
           default:
