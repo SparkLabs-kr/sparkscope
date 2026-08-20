@@ -94,6 +94,46 @@ export function isFundDbConfigured(): boolean {
   return Boolean(process.env.FUND_DB_URL);
 }
 
+/**
+ * sparkscope 경쟁사명 → 펀드 DB의 investor_name.
+ *
+ * 이름표를 손으로 다 적어둘 수는 없다. 매핑에 없으면 조용히 건너뛰는 대신 DB에서
+ * 직접 찾아본다 — 그전에는 알토스벤처스처럼 표에 빠진 곳이 "펀드 정보 없음"으로
+ * 보였는데, 실제로는 조회를 아예 안 한 것이었다(2026-08-19).
+ *
+ * 잘못 붙는 게 못 찾는 것보다 나쁘니 느슨하게 걸지 않는다:
+ *   - 3자 미만은 아예 시도하지 않는다(부분일치 오탐이 커진다)
+ *   - 후보가 여럿이면 띄어쓰기만 다른 완전일치가 있을 때만 받아들인다
+ */
+async function resolveInvestorName(pool: Pool, name: string): Promise<string | null> {
+  const mapped = INVESTOR_NAME_MAP[name];
+  if (mapped) return mapped;
+
+  const bare = name.replace(/\s+/g, '');
+  if (bare.length < 3) return null;
+
+  try {
+    const res = await pool.query(
+      `SELECT investor_name, COUNT(*) AS cnt
+       FROM shared_ro.external_funds
+       WHERE REPLACE(investor_name, ' ', '') ILIKE $1
+       GROUP BY investor_name
+       ORDER BY cnt DESC
+       LIMIT 5`,
+      [`%${bare}%`],
+    );
+    if (res.rows.length === 0) return null;
+    if (res.rows.length === 1) return res.rows[0].investor_name as string;
+    const exact = res.rows.find(
+      (r: { investor_name: string }) => r.investor_name.replace(/\s+/g, '') === bare,
+    );
+    return exact ? (exact.investor_name as string) : null;
+  } catch (e) {
+    console.error('[fund-db] investor_name 탐색 실패', name, (e as Error).message);
+    return null;
+  }
+}
+
 export async function getCompetitorFundSummaries(
   competitorNames: string[],
 ): Promise<Map<string, CompetitorFundSummary>> {
@@ -103,7 +143,7 @@ export async function getCompetitorFundSummaries(
   if (!pool) return result;
 
   await Promise.all(competitorNames.map(async (name) => {
-    const investorName = INVESTOR_NAME_MAP[name];
+    const investorName = await resolveInvestorName(pool, name);
     if (!investorName) return;
 
     try {
