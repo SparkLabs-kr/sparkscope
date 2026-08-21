@@ -85,6 +85,9 @@ export type ChatResponse = {
   appliedPeriod?: ChatPeriod;
   appliedScopes?: ChatScope[];
   resultKind?: ResultKind;
+  /** 다이제스트 메일 레이아웃 HTML. 다이제스트를 보여달라는 질문에서만 채워지고,
+   *  있으면 답변 위에 실제 메일과 같은 모양으로 그려진다(2026-08-21). */
+  digestHtml?: string | null;
   result: ChatQueryResult | null;
   /** 방금 답변에 이어 물어볼 만한 질문 2~3개. 비개발자 사용자가 "이 챗봇으로 뭘 더
    *  물어볼 수 있는지" 스스로 떠올리기 어려워해서(2026-08-12), 모델이 맥락에 맞는

@@ -128,11 +128,12 @@ const TASKS = [
     heading: '기사 검색 · 조회',
     icon: <IconSearch />,
     suggestions: [
-      '이번 주 포트폴리오사 투자유치 기사 모아줘',
-      '오늘 새로 수집된 기사 중 스파크랩 언급된 것',
-      '지난달 시리즈A 관련 기사만 최신순으로',
-      '이 회사 이름으로 최근 3개월 기사 전부 찾아줘',
-      '내가 스크랩·북마크해둔 기사 다시 보여줘',
+      '지난 30일 포폴사 투자유치 기사 중 티어1 매체에 실린 것만 회사별로 묶어줘',
+      '오늘 수집분에서 스파크랩이 언급된 기사만, 단순 명단 나열 기사는 빼고 보여줘',
+      '지난달 시리즈A·시리즈B 기사를 라운드별로 나눠서 투자사까지 같이 정리해줘',
+      '최근 3개월 이 회사 기사를 주제별로 묶고, 같은 사안 중복 보도는 하나로 합쳐줘',
+      '내가 스크랩·북마크해둔 기사를 주제별로 묶어서 다시 보여줘',
+      '두 회사 이름이 같이 나온 기사만 찾아서 무슨 접점인지 정리해줘',
     ],
   },
   {
@@ -142,11 +143,11 @@ const TASKS = [
     heading: '수치와 추이',
     icon: <IconChart />,
     suggestions: [
-      '이번 주 보도량 TOP 10 포폴사 알려줘',
-      '지난 분기 대비 포폴사 기사량 얼마나 늘었어?',
-      '우리 기사를 가장 많이 써준 매체 순위',
-      '경쟁 VC별 노출량 비교해줘',
-      '최근 6개월 월별 기사 추이 정리해줘',
+      '이번 주 보도량 TOP 10 포폴사를 지난주 순위와 비교해서 등락까지 보여줘',
+      '지난 분기 대비 포폴사 기사량 증감을 회사별로 나눠, 가장 많이 빠진 곳부터 정리해줘',
+      '최근 3개월 스파크랩 기사의 매체 티어별 분포와, 아직 한 번도 안 실린 주요 매체를 알려줘',
+      '경쟁 VC별 노출량을 최근 6개월 기준으로 비교하고 우리 순위가 몇 위인지 짚어줘',
+      '최근 12개월 월별 기사 추이에서 평소보다 튄 달을 골라 그 달에 뭐가 있었는지 설명해줘',
       // 감시 대상 명단(coverage_gap)·피칭 점수(pitch_opportunities)는 기사 검색만으로는
       // 못 구하는 값인데 아무 데서도 안내를 안 해서 아무도 안 물어봤다(2026-08-18).
       '최근 3개월 동안 기사가 한 건도 없는 포폴사 알려줘',
@@ -160,11 +161,11 @@ const TASKS = [
     heading: '위기 감지와 원인 분석',
     icon: <IconAlert />,
     suggestions: [
-      '지금 리스크 시그널이 잡힌 포폴사 있어?',
-      '최근 7일 부정 톤 기사만 모아줘',
-      '이 회사 기사가 갑자기 늘어난 이유가 뭐야?',
-      '같은 사안을 다룬 매체별 논조 차이 비교해줘',
-      '어제 대비 오늘 새로 뜬 부정 기사',
+      '최근 7일 부정 톤 기사가 늘어난 포폴사를 찾고, 각각 왜 늘었는지 원인까지 짚어줘',
+      '지금 리스크 시그널이 잡힌 회사들을 심각도 순으로 줄 세우고 근거 기사를 붙여줘',
+      '이 회사 기사가 갑자기 늘어난 게 악재 때문인지 그냥 홍보 물량인지 구분해줘',
+      '같은 사안을 다룬 매체별 논조 차이를 티어1과 그 외로 나눠서 비교해줘',
+      '최근 한 달 부정 기사를 이슈 종류별로 묶고, 아직 안 끝난 건이 뭔지 알려줘',
     ],
   },
   {
@@ -174,11 +175,11 @@ const TASKS = [
     heading: '해외 시장(Inter) 분석',
     icon: <IconGlobe />,
     suggestions: [
-      '최근 뜨는 해외 AI 섹터가 뭐야?',
-      '바이오 섹터 중 급증한 주제 알려줘',
-      '미국·유럽 기사에서 자주 나오는 키워드는?',
-      '이 해외 트렌드와 겹치는 우리 포폴사가 있어?',
-      '이번 주 인터 브리핑 요약해줘',
+      '최근 뜨는 해외 AI 섹터를 급증 폭 순으로 정리하고, 겹치는 우리 포폴사까지 붙여줘',
+      '바이오 섹터에서 최근 급증한 주제를 지난 분기와 비교해 새로 등장한 것만 골라줘',
+      '미국과 유럽에서 같은 시기에 함께 뜬 키워드와, 한쪽에서만 뜬 키워드를 나눠줘',
+      '해외에서는 뜨는데 국내 기사에는 거의 안 잡히는 주제를 찾아줘',
+      '이번 주 해외 트렌드를 국내 보도와 비교해 시차가 얼마나 나는지 정리해줘',
     ],
   },
   {
@@ -188,11 +189,11 @@ const TASKS = [
     heading: '리포트 작성',
     icon: <IconPen />,
     suggestions: [
-      '이번 주 다이제스트 초안 만들어줘',
-      '이 기사 3줄 요약하고 시사점 뽑아줘',
-      '경영진 보고용으로 한 문단 정리해줘',
-      '포폴사별 이번 달 하이라이트 표로 정리',
-      '이 이슈 타임라인 순서대로 정리해줘',
+      '이번 주 다이제스트 초안을 포폴사·경쟁사·해외 세 섹션으로 나눠 만들어줘',
+      '이번 달 포폴사 하이라이트를 회사·핵심 이슈·매체·날짜 표로 정리해줘',
+      '경영진 보고용으로 이번 분기 가장 중요한 세 가지만, 근거 기사와 함께 한 문단씩 써줘',
+      '이 이슈를 시간순 타임라인으로 정리하고 국면이 바뀐 지점을 표시해줘',
+      '지난번 다이제스트 이후 새로 생긴 변화만 추려서 후속 보고를 써줘',
     ],
   },
   {
@@ -202,11 +203,11 @@ const TASKS = [
     heading: '모니터링 설정 관리',
     icon: <IconSliders />,
     suggestions: [
-      '이 회사 키워드에 문맥어 뭘 넣으면 좋을까?',
-      '요즘 오탐이 많은 키워드 찾아줘',
-      '이 기사 노이즈로 신고하고 싶어',
-      '수집은 되는데 한 건도 안 걸리는 키워드 있어?',
-      '동명이인 때문에 잘못 잡히는 기사 정리해줘',
+      '요즘 오탐이 많은 키워드를 찾아서, 각각 어떤 문맥어를 넣으면 좋을지까지 제안해줘',
+      '동명이인이나 부분문자열 때문에 잘못 잡히는 기사를 키워드별로 묶어서 보여줘',
+      '등록은 돼 있는데 최근 3개월 한 건도 안 걸린 키워드를 찾아 원인을 추정해줘',
+      '이 회사 키워드 설정이 지금 적절한지, 최근 기사와 대조해서 점검해줘',
+      '지금 대기 중인 설정 보완 제안이 뭐가 있는지 보여줘',
     ],
   },
 ] as const;
@@ -265,6 +266,36 @@ const PLACEHOLDER_EXAMPLES = [
   '오탐이 많은 키워드 찾아줘',
   '이번 주 다이제스트 초안 만들어줘',
 ];
+
+/**
+ * 첫 화면에 바로 보여주는 시작 질문 카드.
+ *
+ * 안내문 예시(PLACEHOLDER_EXAMPLES)는 입력창 안에 흐릿하게 떠 있다가 타이핑하면 사라져서,
+ * "뭘 물어볼 수 있는지 모르겠다"는 얘기가 계속 나왔다(2026-08-21 소윤). 클릭 한 번으로
+ * 질문이 되는 카드를 눈에 보이게 깔아 둔다. 서로 다른 도구를 쓰는 것으로 4개만 고른다 —
+ * 많이 깔면 그것도 결국 안 읽힌다.
+ */
+const STARTERS = [
+  {
+    q: '지난 30일 포폴사 투자유치 기사 중 티어1 매체에 실린 것만 회사별로 묶어줘',
+    hint: '기사 검색 + 매체 분포',
+  },
+  {
+    q: '최근 7일 부정 톤 기사가 늘어난 포폴사를 찾고, 각각 왜 늘었는지 원인까지 짚어줘',
+    hint: '위기 감지 + 원인 분석',
+  },
+  {
+    q: '최근 3개월 기사가 한 건도 없는 포폴사 중 해외에서 뜨는 섹터와 겹치는 곳을 골라줘',
+    hint: '노출 사각지대 + 해외 트렌드',
+  },
+  {
+    q: '스파크랩스와 알토스벤처스 운용 펀드를 결성연도·규모로 비교해줘',
+    hint: '펀드 정보 조회',
+  },
+] as const;
+
+/** 도움말 서랍에 "N개 주제"로 표시할 값 — TASKS를 늘리면 같이 늘어난다. */
+const TOTAL_SUGGESTIONS = TASKS.reduce((n, t) => n + t.suggestions.length, 0);
 
 /** 첨부 가능한 파일 — 사내에서 쓰는 문서·미디어 전반 */
 const ACCEPT = [
@@ -363,6 +394,8 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   const [activeScopes, setActiveScopes] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [openTask, setOpenTask] = useState<string | null>(null);
+  // 오른쪽에서 밀려 나오는 "뭘 물어볼 수 있나요?" 서랍 — 전체 질문 목록을 주제별로 한눈에.
+  const [askOpen, setAskOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
   /** 조회 진행 상황 — 서버가 도구를 부를 때마다 흘려보내는 것을 쌓아 보여준다 */
@@ -743,6 +776,41 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                   스파크스코프가 모아둔 기사에서 찾아보고, 흐름까지 정리해드릴게요.
                 </p>
               </div>
+
+              {/* 시작 질문 카드 — 기존 카테고리 칩(아래 도크)은 그대로 두고, 첫 화면에만 얹는다 */}
+              <div className="w-full">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <p className="text-[13px] text-spark-ink-soft">
+                    예시 질문으로 무엇을 물어볼 수 있는지 확인해 보세요.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setAskOpen(true)}
+                    className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-spark-border bg-spark-surface text-[12px] font-semibold text-spark-ink-soft hover:border-spark-border-strong hover:text-spark-ink transition"
+                  >
+                    <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5">
+                      <rect x="2" y="2" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.4" />
+                      <rect x="9" y="2" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.4" />
+                      <rect x="2" y="9" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.4" />
+                      <rect x="9" y="9" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.4" />
+                    </svg>
+                    뭘 물어볼 수 있나요?
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {STARTERS.map((s) => (
+                    <button
+                      key={s.q}
+                      type="button"
+                      onClick={() => pick(s.q)}
+                      className="text-left px-4 py-3.5 rounded-2xl border border-spark-border bg-spark-surface hover:border-spark-purple/40 hover:bg-spark-light-purple/30 transition shadow-card"
+                    >
+                      <span className="block text-[14px] font-semibold text-spark-ink leading-snug">{s.q}</span>
+                      <span className="mt-1 block text-[12px] text-spark-muted">{s.hint}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           ) : (
             <div className="space-y-5">
@@ -1115,6 +1183,65 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
         </div>
       </div>
       </div>
+
+      {/* 뭘 물어볼 수 있나요? — 주제별 전체 질문 목록 서랍 */}
+      {askOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/25"
+            onClick={() => setAskOpen(false)}
+            aria-hidden
+          />
+          <aside
+            role="dialog"
+            aria-label="뭘 물어볼 수 있나요?"
+            className="fixed right-0 top-0 z-50 h-screen w-full sm:w-[420px] bg-spark-surface border-l border-spark-border shadow-pop flex flex-col animate-rise"
+          >
+            <div className="shrink-0 px-5 py-4 border-b border-spark-border flex items-start gap-3">
+              <div className="min-w-0">
+                <h2 className="text-[17px] font-bold text-spark-ink">뭘 물어볼 수 있나요?</h2>
+                <p className="mt-0.5 text-[12px] text-spark-muted">
+                  {TASKS.length}개 주제 · {TOTAL_SUGGESTIONS}개 예시 · 누르면 아래 입력창에 채워집니다
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAskOpen(false)}
+                aria-label="닫기"
+                className="ml-auto shrink-0 w-7 h-7 grid place-items-center rounded-lg text-spark-muted hover:text-spark-ink hover:bg-spark-subtle"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-6">
+              {TASKS.map((t) => (
+                <section key={t.id}>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <span className="text-spark-purple">{t.icon}</span>
+                    <h3 className="text-[13px] font-semibold text-spark-ink-soft">{t.heading}</h3>
+                  </div>
+                  <ul className="space-y-2">
+                    {t.suggestions.map((sug) => (
+                      <li key={sug}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            pick(sug);
+                            setAskOpen(false);
+                          }}
+                          className="w-full text-left px-3.5 py-2.5 rounded-xl border border-spark-border bg-spark-cream/50 hover:border-spark-purple/40 hover:bg-spark-light-purple/30 transition text-[13.5px] text-spark-ink"
+                        >
+                          {sug}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          </aside>
+        </>
+      )}
     </div>
   );
 }
@@ -1164,6 +1291,9 @@ function ChatAnswer({
           <AnswerText text={res.summary} />
         </div>
       )}
+
+      {/* 다이제스트 레이아웃 — 실제 발송 메일과 같은 렌더러가 만든 HTML */}
+      {res.digestHtml && <DigestPreview html={res.digestHtml} />}
 
       {res.result && (
         <ChatResult
@@ -2086,5 +2216,47 @@ function IconSliders() {
       <circle cx="8" cy="6" r="2.1" fill="none" stroke="currentColor" strokeWidth="1.7" />
       <circle cx="13" cy="14" r="2.1" fill="none" stroke="currentColor" strokeWidth="1.7" />
     </svg>
+  );
+}
+
+/**
+ * 다이제스트를 실제 메일 모양 그대로 보여준다.
+ *
+ * 메일 HTML은 자기 스타일을 통째로 들고 있어서 페이지에 그냥 붙이면 챗봇 화면 CSS와
+ * 서로 덮어쓴다. iframe에 격리해서 그린다.
+ *   - sandbox에 allow-scripts를 주지 않는다. 메일 본문에는 스크립트가 없고,
+ *     넣어줄 이유도 없다. 대신 높이를 재려면 allow-same-origin은 필요하다.
+ *   - 내용 높이에 맞춰 늘린다 — 안쪽에 스크롤바가 또 생기면 읽기 나쁘다.
+ */
+function DigestPreview({ html }: { html: string }) {
+  const ref = useRef<HTMLIFrameElement>(null);
+  const [height, setHeight] = useState(600);
+
+  const fit = () => {
+    const doc = ref.current?.contentDocument;
+    if (!doc?.body) return;
+    setHeight(Math.max(doc.body.scrollHeight, doc.documentElement.scrollHeight) + 16);
+  };
+
+  return (
+    <div className="rounded-2xl border border-spark-border bg-white overflow-hidden shadow-card">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-spark-border bg-spark-subtle">
+        <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5 text-spark-purple">
+          <rect x="1.5" y="3" width="13" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.4" />
+          <path d="M2 4l6 4.5L14 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        </svg>
+        <span className="text-[12px] font-semibold text-spark-ink-soft">다이제스트 미리보기</span>
+        <span className="text-[11px] text-spark-muted">실제 발송 메일과 같은 레이아웃</span>
+      </div>
+      <iframe
+        ref={ref}
+        srcDoc={html}
+        title="다이제스트 미리보기"
+        sandbox="allow-same-origin"
+        onLoad={fit}
+        className="w-full block bg-white"
+        style={{ height }}
+      />
+    </div>
   );
 }

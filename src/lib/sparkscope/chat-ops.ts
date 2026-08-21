@@ -12,6 +12,8 @@ import { isBlockedNoise, matchesAsToken } from './relevance';
 import { NEGATIVE_KEYWORDS, detectCrises, crisisFallbackCause, type ArticleLite } from './insights';
 import { getPrecomputedCrisisCauses, wasInsightsBatchFreshToday } from './dashboard-insights';
 import type { ChatPeriod, ChatScope, ChatQueryResult } from './chat-types';
+import { loadDigestCandidates, buildReviewDigest } from './review';
+import { renderDigestHtml } from './digest';
 
 const SCOPE_CATEGORY: Record<ChatScope, string> = {
   portfolio: 'portfolio_company',
@@ -662,5 +664,110 @@ export async function runMediaAnalysis(input: {
     ...(total === 0
       ? { note: '이 조건으로는 기사가 없어 매체 분포를 낼 수 없다. 기간이나 범위를 넓혀보라고 안내해라.' }
       : {}),
+  };
+}
+
+// ───────────────────────── 다이제스트 미리보기(레이아웃 그대로) ─────────────────────────
+
+/**
+ * 다이제스트 질문에 실제 메일과 같은 레이아웃을 그려서 돌려준다.
+ *
+ * 왜 따로 두는가 — 예전엔 모델이 기사 제목·매체·날짜를 답변 문장 안에 전부 다시
+ * 타이핑했다. 출력 토큰(비싼 쪽)이 상한 가까이 차는데 결과물은 그냥 긴 목록이었다.
+ * 레이아웃은 이미 renderDigestHtml()이 AI 없이 그리므로, 렌더링은 서버가 하고
+ * 모델은 인트로 한두 문장만 쓰게 한다. 추가 비용은 사실상 0이고 출력은 오히려 준다
+ * (2026-08-21 소윤 요청).
+ *
+ * ★ 반환되는 html은 모델에게 주지 않는다 — 모델 컨텍스트에 넣으면 절약한 토큰을
+ *   그대로 도로 쓰는 꼴이다. 화면에만 내려보낸다.
+ */
+export async function runDigestPreview(input: {
+  source: 'archive' | 'draft';
+  /** archive일 때 특정 날짜(YYYY-MM-DD). 없으면 가장 최근 발송본 */
+  on?: string | null;
+  /** draft일 때 모델이 써 준 편집자 한 줄 */
+  intro?: string | null;
+}): Promise<{
+  html: string | null;
+  meta: {
+    source: 'archive' | 'draft';
+    dateLabel: string | null;
+    subject: string | null;
+    sent: boolean | null;
+    recipients: number | null;
+    stats: Record<string, number> | null;
+    note: string;
+  };
+}> {
+  if (input.source === 'archive') {
+    const where: Record<string, unknown> = {};
+    if (input.on) {
+      const d = new Date(input.on);
+      if (!Number.isNaN(+d)) {
+        const next = new Date(d);
+        next.setDate(next.getDate() + 1);
+        where.date = { gte: d, lt: next };
+      }
+    }
+    const row = await prisma.digest.findFirst({
+      where,
+      orderBy: { date: 'desc' },
+      select: { date: true, subject: true, htmlBody: true, recipients: true, sentAt: true },
+    });
+    if (!row) {
+      return {
+        html: null,
+        meta: {
+          source: 'archive', dateLabel: null, subject: null, sent: null, recipients: null, stats: null,
+          note: input.on
+            ? `${input.on}에 발송된 다이제스트 기록이 없다. 날짜를 확인하거나 최근 발송본을 보겠냐고 물어라.`
+            : '발송된 다이제스트 기록이 아직 없다.',
+        },
+      };
+    }
+    return {
+      html: row.htmlBody,
+      meta: {
+        source: 'archive',
+        dateLabel: row.date.toISOString().slice(0, 10),
+        subject: row.subject,
+        sent: !!row.sentAt,
+        recipients: row.recipients,
+        stats: null,
+        note:
+          '실제로 발송된 그 메일을 화면에 그대로 띄웠다. 기사 목록을 다시 나열하지 마라 — ' +
+          '사용자 화면에 이미 전부 보인다. 언제 몇 명에게 나갔는지와 눈에 띄는 점만 두세 줄로 짚어라.',
+      },
+    };
+  }
+
+  // draft — 검수 콘솔이 쓰는 것과 같은 후보·같은 렌더러. AI 호출 없음.
+  const candidates = await loadDigestCandidates();
+  if (candidates.length === 0) {
+    return {
+      html: null,
+      meta: {
+        source: 'draft', dateLabel: null, subject: null, sent: null, recipients: null, stats: null,
+        note: '최근 7일 안에 다이제스트에 실을 만한 기사가 없다. 초안을 만들 수 없다고 답해라.',
+      },
+    };
+  }
+  const intro = (input.intro ?? '').trim();
+  const data = buildReviewDigest(candidates, intro ? { editorIntro: intro } : {});
+  return {
+    html: renderDigestHtml(data),
+    meta: {
+      source: 'draft',
+      dateLabel: data.dateLabel,
+      subject: null,
+      sent: null,
+      recipients: null,
+      stats: data.stats as unknown as Record<string, number>,
+      note:
+        '초안 레이아웃을 실제 발송 메일과 같은 형태로 화면에 그렸다(후보는 최근 7일, ' +
+        '검수 콘솔과 같은 기준). 기사 제목을 다시 나열하지 마라 — 화면에 이미 다 있다. ' +
+        '무엇을 골랐고 왜 그렇게 묶였는지, 검수에서 손볼 만한 곳은 어딘지만 짧게 써라. ' +
+        '아직 발송된 것이 아니라 초안이라는 점을 반드시 밝혀라.',
+    },
   };
 }

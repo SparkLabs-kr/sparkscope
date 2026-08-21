@@ -17,6 +17,7 @@ import {
   pitchDetailsForModel,
   runCoverageGap,
   runDigestArchive,
+  runDigestPreview,
   runCrisisWatch,
   runSavedArticles,
   runMediaAnalysis,
@@ -339,6 +340,38 @@ const TOOLS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'digest_preview',
+      description:
+        '다이제스트를 실제 발송 메일과 똑같은 레이아웃으로 화면에 그린다. ' +
+        '"다이제스트 초안 만들어줘", "이번 주 다이제스트 뽑아줘", "지난주에 나간 메일 보여줘"처럼 ' +
+        '다이제스트 자체를 보고 싶어하는 질문에만 써라. ' +
+        '★ 그냥 기사를 정리해 달라는 질문(예: "이번 주 투자유치 기사 정리해줘")에는 쓰지 마라 — ' +
+        'search_articles로 답할 것을 메일 형태로 내놓으면 오히려 읽기 나쁘다. ' +
+        '★ 이 도구를 쓰면 기사 목록이 화면에 이미 그려지므로, 답변에서 기사 제목을 다시 나열하지 마라.',
+      parameters: {
+        type: 'object',
+        properties: {
+          source: {
+            type: 'string',
+            enum: ['archive', 'draft'],
+            description:
+              'archive=이미 발송된 실제 메일을 그대로 보여준다("지난주 메일 보여줘"). ' +
+              'draft=지금 데이터로 새 초안을 만든다("초안 만들어줘"). 애매하면 draft.',
+          },
+          on: { type: 'string', description: 'archive에서 특정 날짜(YYYY-MM-DD). 없으면 가장 최근 발송본' },
+          intro: {
+            type: 'string',
+            description:
+              'draft일 때 맨 위에 들어갈 편집자 한 줄(1~2문장). 이번 기간을 한마디로 요약하는 문장을 네가 직접 써라.',
+          },
+        },
+        required: ['source'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'noise_report',
       description:
         '오탐(노이즈)으로 걸러진 기사가 많은 수집 키워드를 돌려준다. ' +
@@ -474,7 +507,12 @@ function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean
    ★ "업계동향"은 국내 업계 기사지 해외가 아니다. 해외를 물으면 반드시 inter_trends를 써라.
 3) 감시 대상 명단(운영 중: 포트폴리오사 218, 경쟁사 114, 업계 57, 스파크랩 17)
    — coverage_gap으로 "기사가 안 난 곳"을 찾는다. 기사 검색으로는 못 구하는 값이다.
-4) 발송된 다이제스트 기록 — digest_archive.
+4) 발송된 다이제스트 기록 — digest_archive. 날짜·제목·수신자 수만 볼 때.
+4-0) 다이제스트 화면 — digest_preview. "다이제스트를 보여줘/만들어줘"처럼 다이제스트
+   자체가 목적인 질문은 이걸 써라. 실제 메일과 같은 레이아웃이 화면에 그려진다.
+   ★ 쓰고 나면 기사 제목·매체·날짜를 답변에 다시 적지 마라. 화면에 이미 다 있고,
+     같은 내용을 두 번 쓰는 꼴이다. 무엇을 골랐는지·눈에 띄는 점만 짧게 써라.
+   ★ 그냥 기사 정리 요청("이번 주 투자유치 기사 정리해줘")에는 쓰지 마라.
 4-1) 위기 감지 — crisis_watch. 부정 기사가 한 회사에 몰렸는지를 회사 단위로 묶어서 본다
    (대시보드 "위기 감지" 카드와 같은 판정: 기본 최근 3일·부정 2건 이상).
    기사 목록이 아니라 "어느 회사가 지금 문제인가"가 궁금한 질문은 전부 이걸로 답해라.
@@ -667,6 +705,8 @@ export type AgentOutcome = {
   summary: string | null;
   result: ChatQueryResult | null;
   resultKind: ResultKind;
+  /** 다이제스트 메일 레이아웃 HTML — digest_preview를 썼을 때만. 화면 전용(모델에는 안 준다). */
+  digestHtml: string | null;
   /** 답변에 이어 물어볼 만한 후속 질문 2~3개. 모델이 summary 끝에 붙인 마커를 파싱한 것. */
   followUps: string[] | null;
   /** HTML 리포트로 저장할 때 쓸 제목. 이것도 summary 끝 마커에서 파싱한다. */
@@ -756,6 +796,7 @@ const TOOL_LABEL: Record<string, string> = {
   media_analysis: '매체 분포 분석',
   coverage_gap: '노출 사각지대 확인',
   digest_archive: '다이제스트 기록 확인',
+  digest_preview: '다이제스트 화면 구성',
   monthly_trend: '월별 추이 집계',
   noise_report: '오탐 키워드 점검',
   data_coverage: '데이터 현황 확인',
@@ -788,6 +829,8 @@ export async function runChatAgent(opts: {
   let monthly: ChatQueryResult['monthly'] = null;
   let noisyKeywords: ChatQueryResult['noisyKeywords'] = null;
   let resultKind: ResultKind = null;
+  // 다이제스트 레이아웃 HTML — 모델에는 안 주고 화면에만 내려보낸다(runDigestPreview 참고).
+  let digestHtml: string | null = null;
 
   const usage = { calls: 0, inputTokens: 0, cachedTokens: 0, outputTokens: 0 };
   const track = (u: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } } | undefined) => {
@@ -823,6 +866,7 @@ export async function runChatAgent(opts: {
       summary,
       result,
       resultKind,
+      digestHtml,
       followUps,
       title,
       steps,
@@ -1045,6 +1089,19 @@ export async function runChatAgent(opts: {
             const rows = await runDigestArchive({ limit: args.limit, on: args.on ?? null });
             steps.push(`digest → ${rows.length}건`);
             payload = { digests: rows };
+            break;
+          }
+          case 'digest_preview': {
+            const source = args.source === 'archive' ? 'archive' : 'draft';
+            const r = await runDigestPreview({
+              source,
+              on: typeof args.on === 'string' ? args.on : null,
+              intro: typeof args.intro === 'string' ? args.intro : null,
+            });
+            steps.push(`digest_preview(${source}) → ${r.html ? '레이아웃 생성' : '없음'}`);
+            // html은 화면으로만 내려보낸다. payload(=모델 컨텍스트)에는 절대 넣지 않는다.
+            if (r.html) digestHtml = r.html;
+            payload = r.meta;
             break;
           }
           case 'noise_report': {
