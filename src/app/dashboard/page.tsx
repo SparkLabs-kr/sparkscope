@@ -1,5 +1,7 @@
 // 메인 대시보드 — 기간 선택(달력) 기반. KPI/차트/위기감지/급증/스크랩 지표.
 import Link from 'next/link';
+import { getLocale, getT } from '@/lib/i18n/server';
+import { ensureArticleEnDeep } from '@/lib/sparkscope/translate-content';
 import { prisma } from '@/lib/prisma';
 import { ArticleListView } from '@/components/ArticleListView';
 import { PortfolioFilter } from '@/components/PortfolioFilter';
@@ -96,7 +98,7 @@ function resolveRange(searchParams: { from?: string; to?: string }) {
   // 라벨: 기본(최근 3개월)이면 "최근 3개월", 아니면 "YYYY.M.D ~ YYYY.M.D"
   const isDefaultRange = to === todayStr && from === fmt(def);
   const pretty = (s: string) => { const [y, m, d] = s.split('-'); return `${y}.${Number(m)}.${Number(d)}`; };
-  const label = isDefaultRange ? '최근 3개월' : `${pretty(from)} ~ ${pretty(to)}`;
+  const label = isDefaultRange ? getT()('최근 3개월') : `${pretty(from)} ~ ${pretty(to)}`;
   return { from, to, label, isDefaultRange };
 }
 
@@ -147,6 +149,10 @@ async function fetchRecentTabArticles(
 }
 
 async function loadDashboardData(from: string, to: string, company: string | undefined, isDefaultRange: boolean) {
+  // AI가 생성한 문장(위기 원인·경쟁사 트렌드)은 사전계산된 한국어를 저장해두므로,
+  // EN 화면이면 그 문장의 영어판을 채워서 읽는다(DashboardInsight JSON 안에 캐시된다).
+  const insightLocale = getLocale();
+  const tr = getT();
   const since = new Date(`${from}T00:00:00`);
   const until = new Date(`${to}T23:59:59`);
   const where = { pubDate: { gte: since, lte: until }, isNoise: false };
@@ -216,26 +222,26 @@ async function loadDashboardData(from: string, to: string, company: string | und
     prisma.article.groupBy({ by: ['tone'], where: sparklabsWhere, _count: { _all: true } }),
     prisma.article.findMany({ where: { ...where, pitchScore: { gte: 60 } }, orderBy: { pitchScore: 'desc' }, take: 20 }),
     prisma.article.findMany({ where: portfolioWhere, select: { matchedKeyword: true, pubDate: true }, take: 20000 }),
-    prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'portfolio_company' }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true } }),
+    prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'portfolio_company' }, select: { id: true, title: true, titleEn: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true } }),
     prisma.article.findMany({ where: { pubDate: { gte: bl, lt: rc }, isNoise: false, category: 'portfolio_company' }, select: { matchedKeyword: true } }),
     // 실시간 위기 감지용: 기간 선택과 무관하게 "최근 3일" 포트폴리오 부정 기사
-    prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'portfolio_company', OR: negOr }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true }, take: 800 }),
+    prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'portfolio_company', OR: negOr }, select: { id: true, title: true, titleEn: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true }, take: 800 }),
     // 표시 단계 관련성 가드용: 포트폴리오 감시대상 키워드맵 (primaryKeyword → [이름·영문·보조])
     prisma.monitoringTarget.findMany({ where: { category: 'portfolio_company', status: 'ACTIVE' }, select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true, portfolioStatus: true } }),
     // 포트폴리오 vs 타 하우스 비교용: competitor(타 AC·VC 하우스) 노출 상위 3개 (실제 이름) — 업계 키워드 제외
     prisma.article.groupBy({ by: ['matchedKeyword'], where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor', matchedKeyword: { notIn: INDUSTRY_TREND_KEYWORDS } }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 3 }),
     // 경쟁사 모니터링 섹션용: 기간 내 competitor 기사 전체(matchedKeyword=실제 경쟁사명별 집계)
-    prisma.article.findMany({ where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor' }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, source: true, pubDate: true, link: true, tone: true, matchedKeyword: true }, take: 3000 }),
+    prisma.article.findMany({ where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor' }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, titleEn: true, source: true, pubDate: true, link: true, tone: true, matchedKeyword: true }, take: 3000 }),
     // 경쟁사 비교 기준선: 기간 내 '스파크랩' 언급 기사 수 (엔티티 자체 + 제목 언급)
     prisma.article.count({ where: { pubDate: { gte: since, lte: until }, isNoise: false, OR: [{ category: 'sparklabs_self' }, { title: { contains: '스파크랩' } }] } }),
     // 가장 많이 언급된 포트폴리오사 TOP 15 (기간 내 노출 건수) — 업계 키워드 제외
     prisma.article.groupBy({ by: ['matchedKeyword'], where: { ...portfolioWhere, matchedKeyword: { notIn: INDUSTRY_TREND_KEYWORDS } }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 15 }),
     // 포트폴리오 부정 기사 (기간 내 부정 논조 — 회사·제목 확인용)
-    prisma.article.findMany({ where: { ...portfolioWhere, OR: negOr }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true, riskFlag: true }, take: 80 }),
+    prisma.article.findMany({ where: { ...portfolioWhere, OR: negOr }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, titleEn: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true, riskFlag: true }, take: 80 }),
     // 스파크랩 자사 기사 (톤 분석 클릭 시 펼쳐볼 목록)
-    prisma.article.findMany({ where: sparklabsWhere, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, link: true, source: true, pubDate: true, tone: true, matchedKeyword: true, category: true, riskFlag: true }, take: 300 }),
+    prisma.article.findMany({ where: sparklabsWhere, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, titleEn: true, link: true, source: true, pubDate: true, tone: true, matchedKeyword: true, category: true, riskFlag: true }, take: 300 }),
     // 포트폴리오 긍정 하이라이트 (호재 기사)
-    prisma.article.findMany({ where: { ...portfolioWhere, OR: posOr }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], select: { id: true, title: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true }, take: 120 }),
+    prisma.article.findMany({ where: { ...portfolioWhere, OR: posOr }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], select: { id: true, title: true, titleEn: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true }, take: 120 }),
   ]);
 
   // TOP15 증감%(같은 길이 직전 기간 대비) — TOP15 회사로만 범위 좁혀 추가 조회
@@ -247,7 +253,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
     // 같은 사건이 여러 매체에 다른 문구로 실려 3칸이 전부 같은 내용으로 채워지는 걸 막기 위해
     // 넉넉히(15건) 가져온 뒤 clusterArticles로 같은 사건을 묶어 대표 1건씩만 남긴다.
     Promise.all(top15Keywords.map(k =>
-      prisma.article.findMany({ where: { ...portfolioWhere, matchedKeyword: k }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, link: true, source: true, pubDate: true }, take: 15 }),
+      prisma.article.findMany({ where: { ...portfolioWhere, matchedKeyword: k }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, titleEn: true, link: true, source: true, pubDate: true }, take: 15 }),
     )),
   ]) : [[], []];
   const prevCountOf = new Map(prevTop15Counts.map(g => [g.matchedKeyword, g._count._all]));
@@ -271,6 +277,11 @@ async function loadDashboardData(from: string, to: string, company: string | und
     where: { category: 'competitor' },
     select: { primaryKeyword: true, englishName: true },
   });
+  // EN 화면에서는 등록된 영문명을 회사 이름 자리에 그대로 쓴다(없으면 한국어 이름).
+  // 등록된 영문명 → 사전(en.ts) → 한국어 원문 순서로 고른다. matchedKeyword가 primaryKeyword와
+  // 다르게 잡히는 경우(보조키워드로 매칭)에도 사전이 받아주도록 t()를 마지막에 둔다.
+  const displayCompetitor = (koName: string) =>
+    insightLocale === 'en' ? (competitorEnglishOf.get(koName) || tr(koName)) : koName;
   const competitorEnglishOf = new Map(
     competitorTargets.filter(t => t.englishName).map(t => [t.primaryKeyword, t.englishName as string]),
   );
@@ -285,7 +296,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
     if (!name) continue;
     let s = competitorStatMap.get(name);
     if (!s) {
-      s = { name, english: competitorEnglishOf.get(name) ?? '', count: 0, negCount: 0, articles: [], negatives: [], titles: [] };
+      s = { name: displayCompetitor(name), english: insightLocale === 'en' ? '' : (competitorEnglishOf.get(name) ?? ''), count: 0, negCount: 0, articles: [], negatives: [], titles: [] };
       competitorStatMap.set(name, s);
     }
     s.count++;
@@ -293,7 +304,8 @@ async function loadDashboardData(from: string, to: string, company: string | und
     // 인한 오탐을 피한다. 2026-08-05, tone 필드 오탐과 같은 원인으로 여기도 같이 발견·수정.
     const neg = a.tone === 'NEGATIVE' || hasNegativeKeyword(a.title) || !!hasCrisisKeyword(a.title);
     if (neg) s.negCount++;
-    const art = { id: a.id, title: a.title, source: normalizeSource(a.source), pubDate: a.pubDate, link: a.link, neg }; // 입력이 최신순
+    // titleEn을 빼먹으면 EN 화면에서 경쟁사 카드 제목만 한국어로 남는다(번역 캐시를 못 찾음).
+    const art = { id: a.id, title: a.title, titleEn: a.titleEn ?? null, source: normalizeSource(a.source), pubDate: a.pubDate, link: a.link, neg }; // 입력이 최신순
     if (s.articles.length < ARTICLES_PER_CARD) s.articles.push(art);
     if (neg) s.negatives.push(art);
     if (s.titles.length < 40) s.titles.push(a.title); // AI 트렌드 요약 입력용(최신순)
@@ -305,7 +317,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
   const pinnedAggs = PINNED_COMPETITORS.map(({ keyword, displayName }) => {
     const agg = competitorStatMap.get(keyword);
     const name = displayName ?? keyword;
-    if (!agg) return { name, english: competitorEnglishOf.get(keyword) ?? '', count: 0, negCount: 0, articles: [], negatives: [], titles: [] };
+    if (!agg) return { name: displayCompetitor(keyword), english: insightLocale === 'en' ? '' : (competitorEnglishOf.get(keyword) ?? ''), count: 0, negCount: 0, articles: [], negatives: [], titles: [] };
     return { ...agg, name };
   });
 
@@ -331,7 +343,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
     : periodDays >= 25 ? `${Math.round(periodDays / 30)}개월간`
     : `${periodDays}일간`;
   if (isDefaultRange && batchFresh) {
-    const pre = await getPrecomputedCompetitorInsights();
+    const pre = await getPrecomputedCompetitorInsights(insightLocale);
     overallTrend = pre.overall?.lines ?? null;
     companyTrends = competitorAggs.map(c => pre.byCompany.get(c.name)?.points ?? null);
     pinnedCompanyTrends = pinnedAggs.map(c => pre.byCompany.get(c.name)?.points ?? null);
@@ -360,13 +372,13 @@ async function loadDashboardData(from: string, to: string, company: string | und
   // 급증 배너와 같은 "최근 3일" 창(rc~now)을 그대로 써서 두 배너의 시점이 어긋나 보이지 않게 한다.
   let categoryPulses: Map<string, string>;
   if (batchFresh) {
-    const pre = await getPrecomputedCategoryPulses();
+    const pre = await getPrecomputedCategoryPulses(insightLocale);
     categoryPulses = new Map([...pre].map(([k, v]) => [k, v.line]));
   } else {
     const pulseCacheKey = `pulse_${fmt(getKstNow())}`;
     const [competitorRecent, industryRecent] = await Promise.all([
-      prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'competitor' }, select: { title: true, link: true, source: true }, take: 300 }),
-      prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'industry_trend' }, select: { title: true, link: true, source: true }, take: 300 }),
+      prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'competitor' }, select: { title: true, titleEn: true, link: true, source: true }, take: 300 }),
+      prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'industry_trend' }, select: { title: true, titleEn: true, link: true, source: true }, take: 300 }),
     ]);
     const [competitorPulse, industryPulse] = await Promise.all([
       summarizeCategoryPulse('AC·VC(경쟁사)', competitorRecent.filter(a => !isBlockedNoise(a)).map(a => a.title), pulseCacheKey, '최근 3일간'),
@@ -451,7 +463,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
   // (센터/기관 명칭 제외는 detectCrises() 내부(insights.ts)에서 처리 — page.tsx에서 중복 필터링하지 않음)
   const crisesRaw = detectCrises(crisisNeg.filter(notNoise).filter(passesName) as ArticleLite[]);
   const precomputedCauses = batchFresh
-    ? await getPrecomputedCrisisCauses(crisesRaw.map(c => c.company))
+    ? await getPrecomputedCrisisCauses(crisesRaw.map(c => c.company), insightLocale)
     : new Map<string, { cause: string; computedAt: Date }>();
   const crises = await Promise.all(
     crisesRaw.map(async c => {
@@ -471,10 +483,14 @@ async function loadDashboardData(from: string, to: string, company: string | und
 
   // 포트폴리오사 선택 필터: 드롭다운 목록 + (선택 시) 해당 회사의 기간 내 기사 전체.
   const portfolioNames = portfolioTargets
-    .map(t => ({ value: t.primaryKeyword, label: t.name }))
-    .sort((a, b) => a.label.localeCompare(b.label, 'ko'));
+    .map(t => ({ value: t.primaryKeyword, label: insightLocale === 'en' ? (t.englishName || tr(t.name)) : t.name }))
+    .sort((a, b) => a.label.localeCompare(b.label, insightLocale === 'en' ? 'en' : 'ko'));
   const selectedCompanyName = company
-    ? portfolioTargets.find(t => t.primaryKeyword === company)?.name ?? company
+    ? (() => {
+        const target = portfolioTargets.find(x => x.primaryKeyword === company);
+        if (!target) return company;
+        return insightLocale === 'en' ? (target.englishName || tr(target.name)) : target.name;
+      })()
     : undefined;
   let companyArticles: typeof cleanedArticles = [];
   if (company) {
@@ -488,7 +504,11 @@ async function loadDashboardData(from: string, to: string, company: string | und
   }
 
   // 포트폴리오 TOP 15 (표시명 매핑) + 부정 기사(관련성 가드 후 상위 15건)
-  const portfolioNameOf = new Map(portfolioTargets.map(t => [t.primaryKeyword, t.name]));
+  // EN 화면이면 감시대상에 등록된 공식 영문명(englishName)을 쓴다. 없으면 한국어 이름 그대로 —
+  // 임의로 로마자화하면 회사가 실제로 쓰는 표기와 어긋나서 오히려 못 알아본다.
+  const portfolioNameOf = new Map(
+    portfolioTargets.map(t => [t.primaryKeyword, insightLocale === 'en' ? (t.englishName || tr(t.name)) : t.name]),
+  );
   const portfolioStatusOf = new Map(portfolioTargets.map(t => [t.primaryKeyword, t.portfolioStatus]));
   const enrichedArticles = cleanedArticles.map(a => ({
     ...a,
@@ -517,7 +537,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
   const portfolioTopPrevRangeLabel = `${prettyUtc(effectivePrevSince)} ~ ${prettyUtc(prevUntil)}`;
   // 긍정/부정 하이라이트: 회사(matchedKeyword)별로 묶어 "언급 매체 수" 많은 순 → 동률이면 최신순, TOP 3만.
   // (Article에 검색노출도 필드가 없어 매체 다양성을 대리 지표로 사용)
-  const top3ByMedia = (rows: { matchedKeyword: string; title: string; source: string; pubDate: Date; link: string; riskFlag?: string | null }[]) => {
+  const top3ByMedia = (rows: { id?: string; matchedKeyword: string; title: string; titleEn?: string | null; source: string; pubDate: Date; link: string; riskFlag?: string | null }[]) => {
     const g = new Map<string, { company: string; sources: Set<string>; rep: (typeof rows)[number] }>();
     for (const a of rows) {
       if (!notNoise(a)) continue;
@@ -531,7 +551,8 @@ async function loadDashboardData(from: string, to: string, company: string | und
     return Array.from(g.values())
       .sort((x, y) => y.sources.size - x.sources.size || new Date(y.rep.pubDate).getTime() - new Date(x.rep.pubDate).getTime())
       .slice(0, 3)
-      .map(e => ({ company: e.company, title: e.rep.title, source: normalizeSource(e.rep.source), pubDate: e.rep.pubDate, link: e.rep.link, mediaCount: e.sources.size, riskFlag: e.rep.riskFlag ?? null }));
+      // id·titleEn을 함께 넘긴다 — 없으면 EN 화면에서 제목이 한국어로 남는다(번역 캐시를 못 찾음).
+      .map(e => ({ id: (e.rep as { id?: string }).id ?? '', company: e.company, title: e.rep.title, titleEn: e.rep.titleEn ?? null, source: normalizeSource(e.rep.source), pubDate: e.rep.pubDate, link: e.rep.link, mediaCount: e.sources.size, riskFlag: e.rep.riskFlag ?? null }));
   };
   const portfolioNegatives = top3ByMedia(portfolioNeg);
   const portfolioPositives = top3ByMedia(portfolioPos);
@@ -573,7 +594,10 @@ async function loadDashboardData(from: string, to: string, company: string | und
     pitches: dedupedPitches,
     crises,
     crisisOverview,
-    spikes: detectSpikes(spikeRecent as ArticleLite[], spikeBaseline, 3, 60),
+    spikes: detectSpikes(spikeRecent as ArticleLite[], spikeBaseline, 3, 60, {
+      locale: insightLocale,
+      nameOf: c => portfolioNameOf.get(c) ?? c,
+    }),
     categoryPulses,
     trendData: buildTrendData(trendArticles, since, until),
     compare: {
@@ -593,6 +617,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
     toneArticles: sparklabsArticles.map(a => ({
       id: a.id,
       title: a.title,
+      titleEn: a.titleEn,
       link: a.link,
       source: normalizeSource(a.source),
       pubDate: a.pubDate,
@@ -658,6 +683,9 @@ function buildTrendData(records: { matchedKeyword: string; pubDate: Date }[], si
 }
 
 export default async function DashboardPage({ searchParams }: { searchParams: { from?: string; to?: string; company?: string; tab?: string; scope?: string; domain?: string; country?: string } }) {
+  const tr = getT();
+  const isEn = getLocale() === 'en';
+  const intlLocale = isEn ? 'en-US' : 'ko-KR';
   const range = resolveRange(searchParams);
   const company = typeof searchParams.company === 'string' && searchParams.company ? searchParams.company : undefined;
   const tab = resolveTab(searchParams.tab);
@@ -680,9 +708,26 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     : new Set<string>();
   const articlesWithBookmark = data.articles.map(a => ({ ...a, isBookmarked: bookmarkedIds.has(a.id) }));
   const companyArticlesWithBookmark = data.companyArticles.map(a => ({ ...a, isBookmarked: bookmarkedIds.has(a.id) }));
+
+  // EN 화면이면 이 화면에 뜰 기사 제목을 영어로 채운다(Article.titleEn 캐시 — 두 번째부터는 LLM 호출 없음).
+  // 군집화·검색 fallback은 계속 한국어 원문(title)을 쓰므로 묶음 결과가 달라지지 않는다.
+  if (isEn) {
+    await ensureArticleEnDeep([
+      articlesWithBookmark,
+      companyArticlesWithBookmark,
+      data.pitches,
+      data.toneArticles,
+      data.portfolioNegatives,
+      data.portfolioPositives,
+      data.crises.map(c => c.article),
+      ...data.portfolioTop.map(t => t.recentArticles),
+      ...data.competitors.map(c => c.articles),
+      ...data.competitors.map(c => c.negatives),
+    ]);
+  }
   // getKstNow()의 KST 값은 UTC 필드에 들어있으므로, toLocaleDateString도 timeZone: 'UTC'로
   // 읽어야 한다 — 안 그러면 실행 환경 시스템 시간대에 따라 다시 밀린다.
-  const todayLabel = getKstNow().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long', timeZone: 'UTC' });
+  const todayLabel = getKstNow().toLocaleDateString(intlLocale, { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long', timeZone: 'UTC' });
 
   // 탭 링크: 현재 기간·회사 필터를 유지한 채 tab만 바꾼다.
   const tabHref = (t: TabId) => {
@@ -717,7 +762,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             );
           })}
         </div>
-        <span className="text-[11px] text-spark-muted">{activeScope.desc}</span>
+        <span className="text-[11px] text-spark-muted">{tr(activeScope.desc)}</span>
       </div>
 
       {/* 헤더(오늘 날짜 · 제목 · 스크랩함) — Intra/Inter 두 스코프에서 동일하게 보인다.
@@ -729,17 +774,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           </div>
           <h1 className="text-2xl sm:text-[28px] font-extrabold tracking-tight text-spark-ink leading-none">{todayLabel}</h1>
           <p className="text-[13px] text-spark-muted mt-2">
-            {scope === 'inter' ? `${range.label} 해외 매체·논문 데이터 기준` : `${range.label} 데이터 기준`}
+            {scope === 'inter' ? tr('{range} 해외 매체·논문 데이터 기준', { range: range.label }) : tr('{range} 데이터 기준', { range: range.label })}
             {data.lastCollectTime && (
-              <span> · {data.lastCollectTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul' })} 기준 수집</span>
+              <span> · {tr('{time} 기준 수집', { time: data.lastCollectTime.toLocaleTimeString(intlLocale, { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul' }) })}</span>
             )}
           </p>
         </div>
         <div data-tour="header-actions" className="flex items-center gap-2">
-          {canScrap && <Link href="/dashboard/scraps" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⭐ 스크랩함</Link>}
-          {canBookmark && <Link href="/dashboard/bookmarks" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔖 내 북마크</Link>}
-          {canScrap && <Link href="/dashboard/keywords" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⚙️ 키워드 관리</Link>}
-          {canScrap && <Link href="/dashboard/noise-suggestions" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔍 노이즈 제안{(pendingSuggestionCount + pendingReportCount) > 0 ? ` (${pendingSuggestionCount + pendingReportCount})` : ''}</Link>}
+          {canScrap && <Link href="/dashboard/scraps" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⭐ {tr('스크랩함')}</Link>}
+          {canBookmark && <Link href="/dashboard/bookmarks" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔖 {tr('내 북마크')}</Link>}
+          {canScrap && <Link href="/dashboard/keywords" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⚙️ {tr('키워드 관리')}</Link>}
+          {canScrap && <Link href="/dashboard/noise-suggestions" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔍 {tr('노이즈 제안')}{(pendingSuggestionCount + pendingReportCount) > 0 ? ` (${pendingSuggestionCount + pendingReportCount})` : ''}</Link>}
         </div>
       </div>
 
@@ -750,7 +795,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       ) : (
       <>
       {/* 섹션 탭 — 스크롤 대신 화면 전환. 선택된 탭만 보라색으로 강조. */}
-      <nav data-tour="intra-tabs" className="flex flex-wrap gap-2 mb-3" aria-label="대시보드 섹션">
+      <nav data-tour="intra-tabs" className="flex flex-wrap gap-2 mb-3" aria-label={tr('대시보드 섹션')}>
         {TABS.map(t => {
           const active = t.id === tab;
           return (
@@ -764,7 +809,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                   : 'bg-white border-spark-border text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple'
               }`}
             >
-              {t.label}
+              {tr(t.label)}
             </Link>
           );
         })}
@@ -787,48 +832,48 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           {tab === 'articles' && (data.categoryPulses.get('competitor') || data.categoryPulses.get('industry_trend')) && (
             <div className="mb-6 space-y-2">
               {data.categoryPulses.get('competitor') && (
-                <CategoryPulseBanner label="AC·VC" line={data.categoryPulses.get('competitor')!} color="red" />
+                <CategoryPulseBanner label={tr('AC·VC')} line={data.categoryPulses.get('competitor')!} color="red" />
               )}
               {data.categoryPulses.get('industry_trend') && (
-                <CategoryPulseBanner label="스타트업계" line={data.categoryPulses.get('industry_trend')!} color="amber" />
+                <CategoryPulseBanner label={tr('스타트업계')} line={data.categoryPulses.get('industry_trend')!} color="amber" />
               )}
             </div>
           )}
           <div data-tour="kpi" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <KpiCard label="총 수집 기사" value={data.kpi.total} hint="선택한 기간 내 수집된 모든 기사 수 (노이즈 제외)" />
-            <KpiCard label="스파크랩 직접 언급" value={data.kpi.sparklabsCount} hint="기사 제목에 '스파크랩'이 언급된 건수" />
-            <KpiCard label="포트폴리오사 노출" value={data.kpi.portfolioCount} hint="스파크랩이 투자한 포트폴리오사가 언급된 기사 건수" />
-            <KpiCard label="피칭 기회" value={data.kpi.pitchCount} hint="AI가 기획기사 피칭 가능성을 75점 이상으로 평가한 건수" highlight />
+            <KpiCard label={tr('총 수집 기사')} value={data.kpi.total} hint={tr('선택한 기간 내 수집된 모든 기사 수 (노이즈 제외)')} />
+            <KpiCard label={tr('스파크랩 직접 언급')} value={data.kpi.sparklabsCount} hint={tr("기사 제목에 '스파크랩'이 언급된 건수")} />
+            <KpiCard label={tr('포트폴리오사 노출')} value={data.kpi.portfolioCount} hint={tr('스파크랩이 투자한 포트폴리오사가 언급된 기사 건수')} />
+            <KpiCard label={tr('피칭 기회')} value={data.kpi.pitchCount} hint={tr('AI가 기획기사 피칭 가능성을 75점 이상으로 평가한 건수')} highlight />
           </div>
         </>
       )}
 
       {/* ── 스파크랩 (가장 궁금한 정보) ── */}
       {tab === 'sparklabs' && <>
-      <SectionTitle title="🏢 스파크랩" sub="우리 자사가 어디에, 어떤 논조로 보도되는가" />
+      <SectionTitle title={`🏢 ${tr('스파크랩')}`} sub={tr('우리 자사가 어디에, 어떤 논조로 보도되는가')} />
       <div className="flex flex-col gap-4 mb-8">
         <div data-tour="media-panel" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
-          <div className="font-bold mb-4">📰 매체별 노출 분포 (스파크랩) <InfoTip text="선택 기간 동안 '스파크랩' 기사를 다룬 매체 분포입니다(주요 26개 매체 기준).\n어느 매체가 우리를 가장 많이 써주는지 보여줍니다." /></div>
+          <div className="font-bold mb-4">📰 {tr('매체별 노출 분포 (스파크랩)')} <InfoTip text={tr("선택 기간 동안 '스파크랩' 기사를 다룬 매체 분포입니다(주요 26개 매체 기준).\n어느 매체가 우리를 가장 많이 써주는지 보여줍니다.")} /></div>
           <MediaPanel data={data.sources} defaultCount={12} />
         </div>
         <div data-tour="tone-panel" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
-          <div className="font-bold mb-4">💬 톤 분석 (스파크랩) <InfoTip text="'스파크랩' 기사의 긍정·중립·부정 논조 비율입니다. 각 논조의 기사 목록이 바로 아래에 표시됩니다." /></div>
+          <div className="font-bold mb-4">💬 {tr('톤 분석 (스파크랩)')} <InfoTip text={tr("'스파크랩' 기사의 긍정·중립·부정 논조 비율입니다. 각 논조의 기사 목록이 바로 아래에 표시됩니다.")} /></div>
           <ToneBreakdown articles={data.toneArticles as any} />
         </div>
 
         {/* 스파크랩 펀드 현황 */}
         {data.sparkLabsFundSummary && (
           <div data-tour="fund-panel" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
-            <div className="font-bold mb-4">🏦 스파크랩 펀드 현황</div>
+            <div className="font-bold mb-4">🏦 {tr('스파크랩 펀드 현황')}</div>
             <div className="flex flex-wrap gap-4 mb-4">
               <div className="flex flex-col items-center px-4 py-3 rounded-xl bg-spark-light-purple/40 min-w-[80px]">
                 <span className="text-2xl font-extrabold text-spark-purple tabular-nums">{data.sparkLabsFundSummary.fundCount}</span>
-                <span className="text-xs text-spark-muted mt-0.5">펀드 수</span>
+                <span className="text-xs text-spark-muted mt-0.5">{tr('펀드 수')}</span>
               </div>
               {data.sparkLabsFundSummary.latestVintage && (
                 <div className="flex flex-col items-center px-4 py-3 rounded-xl bg-spark-light-purple/40 min-w-[80px]">
                   <span className="text-2xl font-extrabold text-spark-purple tabular-nums">{data.sparkLabsFundSummary.latestVintage}</span>
-                  <span className="text-xs text-spark-muted mt-0.5">최근 빈티지</span>
+                  <span className="text-xs text-spark-muted mt-0.5">{tr('최근 빈티지')}</span>
                 </div>
               )}
             </div>
@@ -836,10 +881,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-spark-border text-spark-muted text-left">
-                    <th className="py-2 pr-4 font-semibold">펀드명</th>
-                    <th className="py-2 pr-4 font-semibold text-right tabular-nums">빈티지</th>
-                    <th className="py-2 pr-4 font-semibold">상태</th>
-                    <th className="py-2 font-semibold text-right tabular-nums">만기 D-day</th>
+                    <th className="py-2 pr-4 font-semibold">{tr('펀드명')}</th>
+                    <th className="py-2 pr-4 font-semibold text-right tabular-nums">{tr('빈티지')}</th>
+                    <th className="py-2 pr-4 font-semibold">{tr('상태')}</th>
+                    <th className="py-2 font-semibold text-right tabular-nums">{tr('만기 D-day')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -852,7 +897,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                         <td className="py-2 pr-4">
                           {f.status && (
                             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${f.status === '운용 중' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                              {f.status}
+                              {tr(f.status)}
                             </span>
                           )}
                         </td>
@@ -876,13 +921,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
       {/* ── 포트폴리오사 ── */}
       {tab === 'portfolio' && <>
-      <SectionTitle title="📊 포트폴리오사" sub="어느 포트폴리오사가 활발히 노출되고, 부정 이슈는 없는가" />
+      <SectionTitle title={`📊 ${tr('포트폴리오사')}`} sub={tr('어느 포트폴리오사가 활발히 노출되고, 부정 이슈는 없는가')} />
 
       {/* 실시간 위기 감지 — 위기 없을 땐 '정상' 상태를 명시해 기능이 살아있음을 표시 */}
       <div data-tour="crisis-panel" className="mb-6">
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-sm font-bold text-red-700">🚨 실시간 위기 감지</span>
-          <InfoTip text={`최근 ${CRISIS_WINDOW_DAYS}일간 포트폴리오사별 부정 논조 기사(부정 키워드·부정 톤)를 모아, 2건 이상 급증한 회사를 감지합니다.\n원인은 AI가 실제 기사 제목에서 요약합니다.`} />
+          <span className="text-sm font-bold text-red-700">🚨 {tr('실시간 위기 감지')}</span>
+          <InfoTip text={tr('최근 {days}일간 포트폴리오사별 부정 논조 기사(부정 키워드·부정 톤)를 모아, 2건 이상 급증한 회사를 감지합니다.\n원인은 AI가 실제 기사 제목에서 요약합니다.', { days: CRISIS_WINDOW_DAYS })} />
         </div>
         <CrisisPanel crises={data.crises} overview={data.crisisOverview} windowDays={CRISIS_WINDOW_DAYS} summaryThreshold={CRISIS_SUMMARY_THRESHOLD} />
       </div>
@@ -899,21 +944,21 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           <PortfolioTopList items={data.portfolioTop} rangeLabel={range.label} prevRangeLabel={data.portfolioTopPrevRangeLabel} showChange={data.portfolioTopHasEnoughPrevData} />
         </div>
         <div data-tour="pitch" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
-          <div className="font-bold mb-3">🎯 기획기사 피칭 <InfoTip text={`AI가 각 기사를 0~100점으로 평가한 '기획기사 피칭 점수'입니다.\n이 주제로 우리 포트폴리오사를 엮어 기획기사를 제안하면 성사 가능성이 높은 기사를 뜻합니다.\n· 60점 이상: 아래 목록에 표시\n· 75점 이상: 상단 '피칭 기회' 지표에 집계`} /></div>
+          <div className="font-bold mb-3">🎯 {tr('기획기사 피칭')} <InfoTip text={tr("AI가 각 기사를 0~100점으로 평가한 '기획기사 피칭 점수'입니다.\n이 주제로 우리 포트폴리오사를 엮어 기획기사를 제안하면 성사 가능성이 높은 기사를 뜻합니다.\n· 60점 이상: 아래 목록에 표시\n· 75점 이상: 상단 '피칭 기회' 지표에 집계")} /></div>
           {data.pitches.length > 0 ? (
             <div className="space-y-3">
               {data.pitches.slice(0, 5).map(p => (
                 <div key={p.id} className="p-3 bg-gradient-to-br from-amber-50 to-amber-100 border-l-4 border-amber-500 rounded-r-lg">
                   <div className="flex items-center gap-2 mb-1 min-w-0">
-                    <div className="text-sm font-bold text-amber-900 flex-1 min-w-0 truncate">{p.pitchTopic ?? p.matchedKeyword}</div>
-                    <div className="text-xs px-2 py-0.5 bg-amber-500 text-white rounded-full font-bold flex-shrink-0 whitespace-nowrap">{p.pitchScore}점</div>
+                    <div className="text-sm font-bold text-amber-900 flex-1 min-w-0 truncate">{p.pitchTopicEn || p.pitchTopic || p.matchedKeyword}</div>
+                    <div className="text-xs px-2 py-0.5 bg-amber-500 text-white rounded-full font-bold flex-shrink-0 whitespace-nowrap">{tr('{n}점', { n: p.pitchScore ?? 0 })}</div>
                   </div>
-                  <div className="text-xs text-amber-800 truncate">{p.title}</div>
+                  <div className="text-xs text-amber-800 truncate">{p.titleEn || p.title}</div>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-gray-400">{range.label} 내 피칭 기회 (60점 이상) 없음</p>
+            <p className="text-sm text-gray-400">{tr('{range} 내 피칭 기회 (60점 이상) 없음', { range: range.label })}</p>
           )}
         </div>
       </div>
@@ -938,18 +983,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         <div className="mb-4">
           <div className="flex flex-wrap justify-between items-start gap-3">
             <div>
-              <div className="font-bold">📋 {data.selectedCompanyName ? `${data.selectedCompanyName} 기사` : '최근 수집 기사'}</div>
+              <div className="font-bold">📋 {data.selectedCompanyName ? tr('{company} 기사', { company: data.selectedCompanyName }) : tr('최근 수집 기사')}</div>
               <div className="text-xs text-gray-500 mt-0.5">
                 {data.selectedCompanyName
-                  ? `${range.label} · 이 회사 기사 전체 ${data.companyArticles.length}건`
-                  : `${range.label} · 최신 상위 ${data.articles.length}건 · 분류·검색·정렬로 탐색`}
+                  ? tr('{range} · 이 회사 기사 전체 {n}건', { range: range.label, n: data.companyArticles.length })
+                  : tr('{range} · 최신 상위 {n}건 · 분류·검색·정렬로 탐색', { range: range.label, n: data.articles.length })}
               </div>
             </div>
             <PortfolioFilter companies={data.portfolioNames} selected={data.selectedCompany} from={range.from} to={range.to} tab={tab} />
           </div>
           {/* 이 자리에서 바로 기간을 바꿀 수 있게 (맨 위로 안 올라가도 됨) */}
           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-spark-border/60 pt-3">
-            <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">📅 기간</span>
+            <span className="text-xs font-semibold text-gray-500 whitespace-nowrap">📅 {tr('기간')}</span>
             <DateRangePicker key={`${range.from}_${range.to}`} from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())} company={data.selectedCompany} tab={tab} />
           </div>
         </div>
@@ -961,8 +1006,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             canReport={canScrap}
             canRequestReport={canRequestReport}
             showSearch={false}
-            csvName={data.selectedCompanyName ?? '포트폴리오사'}
-            emptyText={`${range.label} 내 ${data.selectedCompanyName} 기사가 없습니다.`}
+            csvName={data.selectedCompanyName ?? tr('포트폴리오사')}
+            emptyText={tr('{range} 내 {company} 기사가 없습니다.', { range: range.label, company: data.selectedCompanyName ?? '' })}
           />
         ) : (
           <ArticleListView
@@ -973,8 +1018,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             canRequestReport={canRequestReport}
             showSearch={true}
             showCategory={true}
-            csvName="최근수집기사"
-            emptyText={`${range.label} 내 기사가 없습니다.`}
+            csvName={tr('최근수집기사')}
+            emptyText={tr('{range} 내 기사가 없습니다.', { range: range.label })}
           />
         )}
       </div>
@@ -986,11 +1031,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 }
 
 function SpikeBanner({ s }: { s: SpikeCard }) {
+  const tr = getT();
   return (
     <div className="rounded-xl border-l-4 border-spark-purple bg-spark-light-purple/40 p-3 flex items-center gap-2">
       <span className="text-lg">📈</span>
       <span className="text-sm font-semibold text-gray-800">{s.message}</span>
-      <span className="text-xs text-gray-500">(최근 3일 {s.recentCount}건)</span>
+      <span className="text-xs text-gray-500">{tr('(최근 3일 {n}건)', { n: s.recentCount })}</span>
     </div>
   );
 }
@@ -1039,14 +1085,15 @@ function PortfolioStatusBadge({ status }: { status: string | null }) {
   return <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold border ${cls}`}>{status}</span>;
 }
 
-function PortfolioTopList({ items, rangeLabel, prevRangeLabel, showChange }: { items: { name: string; count: number; portfolioStatus?: string | null; changePct: number | null; recentArticles: { title: string; link: string; source: string; pubDate: Date }[] }[]; rangeLabel: string; prevRangeLabel: string; showChange: boolean }) {
+function PortfolioTopList({ items, rangeLabel, prevRangeLabel, showChange }: { items: { name: string; count: number; portfolioStatus?: string | null; changePct: number | null; recentArticles: { title: string; titleEn?: string | null; link: string; source: string; pubDate: Date }[] }[]; rangeLabel: string; prevRangeLabel: string; showChange: boolean }) {
+  const tr = getT();
   const max = Math.max(...items.map(i => i.count), 1);
   return (
     <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
-      <div className="font-bold mb-1">🔥 가장 많이 언급된 포트폴리오사 TOP 15 <InfoTip text={`${rangeLabel} 동안 언론 노출(기사 수)이 많은 포트폴리오사 순위입니다.\n최근 홍보 활동이 활발하거나 이슈가 되고 있는 회사를 보여줍니다.\n증감은 선택한 기간과 같은 길이의 직전 기간 대비입니다 (예: 최근 7일 선택 시 직전 7일과 비교).\n회사명에 마우스를 올리면(모바일은 탭) 최근 기사를 바로 볼 수 있습니다.`} /></div>
+      <div className="font-bold mb-1">🔥 {tr('가장 많이 언급된 포트폴리오사 TOP 15')} <InfoTip text={tr('{range} 동안 언론 노출(기사 수)이 많은 포트폴리오사 순위입니다.\n최근 홍보 활동이 활발하거나 이슈가 되고 있는 회사를 보여줍니다.\n증감은 선택한 기간과 같은 길이의 직전 기간 대비입니다 (예: 최근 7일 선택 시 직전 7일과 비교).\n회사명에 마우스를 올리면(모바일은 탭) 최근 기사를 바로 볼 수 있습니다.', { range: rangeLabel })} /></div>
       <div className="text-xs text-gray-500 mb-4">
-        {rangeLabel} · 언론 노출 건수 기준
-        {showChange ? ` · 증감은 직전 기간(${prevRangeLabel}) 대비` : ' · 선택 기간이 길어 직전 기간 데이터가 부족해 증감은 표시하지 않음'}
+        {tr('{range} · 언론 노출 건수 기준', { range: rangeLabel })}
+        {showChange ? ` · ${tr('증감은 직전 기간({prev}) 대비', { prev: prevRangeLabel })}` : ` · ${tr('선택 기간이 길어 직전 기간 데이터가 부족해 증감은 표시하지 않음')}`}
       </div>
       {items.length > 0 ? (
         <div className="space-y-2">
@@ -1063,24 +1110,25 @@ function PortfolioTopList({ items, rangeLabel, prevRangeLabel, showChange }: { i
                 <span className={`w-14 text-right text-xs font-semibold tabular-nums whitespace-nowrap ${
                   it.changePct === null ? 'text-blue-500' : it.changePct > 0 ? 'text-emerald-600' : it.changePct < 0 ? 'text-red-500' : 'text-gray-400'
                 }`}>
-                  {it.changePct === null ? '신규' : it.changePct === 0 ? '0%' : `${it.changePct > 0 ? '+' : ''}${it.changePct}%`}
+                  {it.changePct === null ? tr('신규') : it.changePct === 0 ? '0%' : `${it.changePct > 0 ? '+' : ''}${it.changePct}%`}
                 </span>
               )}
             </div>
           ))}
         </div>
       ) : (
-        <p className="text-sm text-gray-400 py-8 text-center">{rangeLabel} 내 포트폴리오사 노출이 없습니다.</p>
+        <p className="text-sm text-gray-400 py-8 text-center">{tr('{range} 내 포트폴리오사 노출이 없습니다.', { range: rangeLabel })}</p>
       )}
     </div>
   );
 }
 
-function PortfolioPositives({ items, rangeLabel }: { items: { company: string; title: string; source: string; pubDate: Date; link: string; mediaCount?: number }[]; rangeLabel: string }) {
+function PortfolioPositives({ items, rangeLabel }: { items: { id?: string; company: string; title: string; titleEn?: string | null; source: string; pubDate: Date; link: string; mediaCount?: number }[]; rangeLabel: string }) {
+  const tr = getT();
   return (
     <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
-      <div className="font-bold mb-1">✨ 포트폴리오 긍정 하이라이트 <InfoTip text={`${rangeLabel} 동안 포트폴리오사의 긍정 논조(투자유치·상장·수상·파트너십 등) 기사 중, 여러 매체가 다룬 순으로 TOP 3.`} /></div>
-      <div className="text-xs text-spark-muted mb-4">{rangeLabel} · 매체 노출 많은 순 TOP {items.length}</div>
+      <div className="font-bold mb-1">✨ {tr('포트폴리오 긍정 하이라이트')} <InfoTip text={tr('{range} 동안 포트폴리오사의 긍정 논조(투자유치·상장·수상·파트너십 등) 기사 중, 여러 매체가 다룬 순으로 TOP 3.', { range: rangeLabel })} /></div>
+      <div className="text-xs text-spark-muted mb-4">{tr('{range} · 매체 노출 많은 순 TOP {n}', { range: rangeLabel, n: items.length })}</div>
       {items.length > 0 ? (
         <div className="space-y-2 max-h-80 overflow-y-auto scroll-slim pr-1">
           {items.map((a, i) => {
@@ -1089,26 +1137,27 @@ function PortfolioPositives({ items, rangeLabel }: { items: { company: string; t
               <a key={i} href={safeArticleHref(a.link, a.title, a.source)} target="_blank" rel="noopener noreferrer" className="block rounded-lg border border-emerald-100 bg-emerald-50/50 p-2.5 hover:bg-emerald-50 transition-colors">
                 <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold whitespace-nowrap">{a.company}</span>
-                  {a.mediaCount && a.mediaCount > 1 ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-600/10 text-emerald-700 font-semibold whitespace-nowrap">{a.mediaCount}개 매체</span> : null}
-                  <span className="text-[10px] text-spark-muted">{a.source} · {d.getMonth() + 1}.{d.getDate()}</span>
+                  {a.mediaCount && a.mediaCount > 1 ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-600/10 text-emerald-700 font-semibold whitespace-nowrap">{tr('{n}개 매체', { n: a.mediaCount ?? 0 })}</span> : null}
+                  <span className="text-[10px] text-spark-muted">{tr(a.source)} · {d.getMonth() + 1}.{d.getDate()}</span>
                 </div>
-                <div className="text-xs text-spark-ink leading-snug line-clamp-2">{a.title}</div>
+                <div className="text-xs text-spark-ink leading-snug line-clamp-2">{a.titleEn || a.title}</div>
               </a>
             );
           })}
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-spark-border bg-spark-subtle px-4 py-12 text-center text-sm text-spark-muted">{rangeLabel} 내 포트폴리오 긍정 기사가 아직 없습니다.</div>
+        <div className="rounded-lg border border-dashed border-spark-border bg-spark-subtle px-4 py-12 text-center text-sm text-spark-muted">{tr('{range} 내 포트폴리오 긍정 기사가 아직 없습니다.', { range: rangeLabel })}</div>
       )}
     </div>
   );
 }
 
-function PortfolioNegatives({ items, rangeLabel }: { items: { company: string; title: string; source: string; pubDate: Date; link: string; mediaCount?: number; riskFlag?: string | null }[]; rangeLabel: string }) {
+function PortfolioNegatives({ items, rangeLabel }: { items: { id?: string; company: string; title: string; titleEn?: string | null; source: string; pubDate: Date; link: string; mediaCount?: number; riskFlag?: string | null }[]; rangeLabel: string }) {
+  const tr = getT();
   return (
     <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
-      <div className="font-bold mb-1">⚠️ 포트폴리오 부정 기사 <InfoTip text={`${rangeLabel} 동안 포트폴리오사 부정 논조 기사 중, 여러 매체가 다룬 순으로 TOP 3.`} /></div>
-      <div className="text-xs text-gray-500 mb-4">{rangeLabel} · 매체 노출 많은 순 TOP {items.length}</div>
+      <div className="font-bold mb-1">⚠️ {tr('포트폴리오 부정 기사')} <InfoTip text={tr('{range} 동안 포트폴리오사 부정 논조 기사 중, 여러 매체가 다룬 순으로 TOP 3.', { range: rangeLabel })} /></div>
+      <div className="text-xs text-gray-500 mb-4">{tr('{range} · 매체 노출 많은 순 TOP {n}', { range: rangeLabel, n: items.length })}</div>
       {items.length > 0 ? (
         <div className="space-y-2 max-h-80 overflow-y-auto pr-1 scroll-slim">
           {items.map((a, i) => {
@@ -1119,19 +1168,19 @@ function PortfolioNegatives({ items, rangeLabel }: { items: { company: string; t
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold whitespace-nowrap">{a.company}</span>
                   {a.riskFlag && RISK_FLAGS[a.riskFlag] && (
                     <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold whitespace-nowrap ${RISK_FLAGS[a.riskFlag].cls}`}>
-                      {RISK_FLAGS[a.riskFlag].label}
+                      {tr(RISK_FLAGS[a.riskFlag].label)}
                     </span>
                   )}
-                  {a.mediaCount && a.mediaCount > 1 ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-600/10 text-red-700 font-semibold whitespace-nowrap">{a.mediaCount}개 매체</span> : null}
-                  <span className="text-[10px] text-gray-400">{a.source} · {d.getMonth() + 1}.{d.getDate()}</span>
+                  {a.mediaCount && a.mediaCount > 1 ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-600/10 text-red-700 font-semibold whitespace-nowrap">{tr('{n}개 매체', { n: a.mediaCount ?? 0 })}</span> : null}
+                  <span className="text-[10px] text-gray-400">{tr(a.source)} · {d.getMonth() + 1}.{d.getDate()}</span>
                 </div>
-                <div className="text-xs text-gray-800 leading-snug line-clamp-2">{a.title}</div>
+                <div className="text-xs text-gray-800 leading-snug line-clamp-2">{a.titleEn || a.title}</div>
               </a>
             );
           })}
         </div>
       ) : (
-        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-8 text-center text-sm text-green-800">🟢 {rangeLabel} 내 포트폴리오 부정 기사가 없습니다.</div>
+        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-8 text-center text-sm text-green-800">🟢 {tr('{range} 내 포트폴리오 부정 기사가 없습니다.', { range: rangeLabel })}</div>
       )}
     </div>
   );
@@ -1175,6 +1224,7 @@ function KpiCard({ label, value, hint, note, delta, highlight }: { label: string
 }
 
 function ToneBars({ tones }: { tones: { tone: string; count: number }[] }) {
+  const tr = getT();
   const map = new Map(tones.map(t => [t.tone, t.count]));
   const positive = map.get('POSITIVE') ?? 0;
   const neutral = map.get('NEUTRAL') ?? 0;
@@ -1183,9 +1233,9 @@ function ToneBars({ tones }: { tones: { tone: string; count: number }[] }) {
 
   return (
     <div className="space-y-3 mt-4">
-      <ToneRow label="긍정" count={positive} total={total} color="bg-green-600" />
-      <ToneRow label="중립" count={neutral} total={total} color="bg-slate-400" />
-      <ToneRow label="부정" count={negative} total={total} color="bg-red-600" />
+      <ToneRow label={tr('긍정')} count={positive} total={total} color="bg-green-600" />
+      <ToneRow label={tr('중립')} count={neutral} total={total} color="bg-slate-400" />
+      <ToneRow label={tr('부정')} count={negative} total={total} color="bg-red-600" />
     </div>
   );
 }

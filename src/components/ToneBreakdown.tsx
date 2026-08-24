@@ -1,6 +1,7 @@
 'use client';
 // 톤 분석 — 클릭 없이 세 논조(긍정/중립/부정)의 비율과 기사 목록이 한 화면에 바로 보인다.
 import { useState } from 'react';
+import { useT } from '@/lib/i18n/client';
 import { RISK_FLAGS } from '@/lib/sparkscope/risk-flags';
 import { clusterArticles } from '@/lib/sparkscope/cluster';
 import { safeArticleHref } from '@/lib/sparkscope/article-link';
@@ -13,6 +14,7 @@ interface ToneArticle {
   pubDate: Date | string;
   tone: string;
   riskFlag?: string | null;
+  titleEn?: string | null;
 }
 
 const TONES = [
@@ -22,6 +24,7 @@ const TONES = [
 ];
 
 export function ToneBreakdown({ articles }: { articles: ToneArticle[] }) {
+  const tr = useT();
   // 펼쳐진 클러스터(대표 기사 id) 집합 — "+N개 매체 더보기" 토글 상태.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggle = (id: string) => setExpanded(prev => {
@@ -33,6 +36,7 @@ export function ToneBreakdown({ articles }: { articles: ToneArticle[] }) {
   const total = articles.length || 1;
   const groups = TONES.map(t => ({
     ...t,
+    label: tr(t.label),
     // 비율/건수는 클러스터링 전 전체 기사 수 기준 유지 — "몇 건이 보도됐는지"라는 의미가 왜곡되지 않게.
     list: articles.filter(a => (a.tone || 'NEUTRAL') === t.key),
   }));
@@ -44,7 +48,7 @@ export function ToneBreakdown({ articles }: { articles: ToneArticle[] }) {
         <div className="flex h-3 w-full overflow-hidden rounded-full bg-spark-subtle">
           {groups.map(g => (
             g.list.length > 0 && (
-              <span key={g.key} className={g.bar} style={{ width: `${(g.list.length / total) * 100}%` }} title={`${g.label} ${g.list.length}건`} />
+              <span key={g.key} className={g.bar} style={{ width: `${(g.list.length / total) * 100}%` }} title={tr('{label} {n}건', { label: g.label, n: g.list.length })} />
             )
           ))}
         </div>
@@ -69,11 +73,11 @@ export function ToneBreakdown({ articles }: { articles: ToneArticle[] }) {
                 <span className={`w-2 h-2 rounded-full ${g.dot}`} />
                 {g.label}
               </span>
-              <span className="tabular-nums">{g.list.length}건</span>
+              <span className="tabular-nums">{tr('{n}건', { n: g.list.length })}</span>
             </div>
             <div className="p-2 space-y-1.5 max-h-72 overflow-y-auto scroll-slim">
               {g.list.length === 0 ? (
-                <p className="text-[11px] text-spark-muted px-1 py-2">해당 논조 기사 없음</p>
+                <p className="text-[11px] text-spark-muted px-1 py-2">{tr('해당 논조 기사 없음')}</p>
               ) : clusterArticles(g.list).map(c => {
                 const d = new Date(c.rep.pubDate);
                 const isOpen = expanded.has(c.rep.id);
@@ -82,11 +86,11 @@ export function ToneBreakdown({ articles }: { articles: ToneArticle[] }) {
                     <a href={safeArticleHref(c.rep.link, c.rep.title, c.rep.source)} target="_blank" rel="noopener noreferrer" className="block p-2">
                       {c.rep.riskFlag && RISK_FLAGS[c.rep.riskFlag] && (
                         <span className={`inline-block mb-1 px-1.5 py-0.5 rounded text-[9px] font-semibold ${RISK_FLAGS[c.rep.riskFlag].cls}`}>
-                          {RISK_FLAGS[c.rep.riskFlag].label}
+                          {tr(RISK_FLAGS[c.rep.riskFlag].label)}
                         </span>
                       )}
-                      <div className="text-xs text-spark-ink leading-snug line-clamp-2">{c.rep.title}</div>
-                      <div className="text-[10px] text-spark-muted mt-0.5">{c.rep.source} · {d.getMonth() + 1}.{d.getDate()}</div>
+                      <div className="text-xs text-spark-ink leading-snug line-clamp-2">{c.rep.titleEn || c.rep.title}</div>
+                      <div className="text-[10px] text-spark-muted mt-0.5">{tr(c.rep.source)} · {d.getMonth() + 1}.{d.getDate()}</div>
                     </a>
                     {c.others.length > 0 && (
                       <div className="px-2 pb-1.5 -mt-1">
@@ -95,7 +99,7 @@ export function ToneBreakdown({ articles }: { articles: ToneArticle[] }) {
                           onClick={() => toggle(c.rep.id)}
                           className="text-[10px] font-semibold text-spark-purple hover:underline"
                         >
-                          {isOpen ? '접기 ▲' : `+${c.others.length}개 매체 더보기 ▼`}
+                          {isOpen ? tr('접기 ▲') : tr('+{n}개 매체 더보기 ▼', { n: c.others.length })}
                         </button>
                         {isOpen && (
                           <div className="mt-1 space-y-1 border-l-2 border-spark-border pl-2">
@@ -103,7 +107,7 @@ export function ToneBreakdown({ articles }: { articles: ToneArticle[] }) {
                               const od = new Date(o.pubDate);
                               return (
                                 <a key={o.id} href={safeArticleHref(o.link, o.title, o.source)} target="_blank" rel="noopener noreferrer" className="block text-[10px] text-spark-muted hover:text-spark-ink">
-                                  {o.source} · {od.getMonth() + 1}.{od.getDate()}
+                                  {tr(o.source)} · {od.getMonth() + 1}.{od.getDate()}
                                 </a>
                               );
                             })}

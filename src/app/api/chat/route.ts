@@ -9,6 +9,8 @@ import { OPEN_ACCESS } from '@/lib/flags';
 import { runChatQuery, type ChatPeriod, type ChatScope } from '@/lib/sparkscope/chat-query';
 import { runChatAgent, type AgentTurn } from '@/lib/sparkscope/chat-agent';
 import { runLiveSearch, summarizeLiveSearch } from '@/lib/sparkscope/chat-live';
+import { getLocale } from '@/lib/i18n/server';
+import { ensureArticleEnDeep } from '@/lib/sparkscope/translate-content';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,6 +47,9 @@ export async function POST(req: Request) {
   const scopes: ChatScope[] = Array.isArray(body?.scopes)
     ? body.scopes.filter((s: any): s is ChatScope => SCOPES.includes(s))
     : [];
+
+  // 답변 언어 — UI 토글과 같은 쿠키를 읽는다.
+  const locale = getLocale();
 
   const modes: string[] = Array.isArray(body?.modes) ? body.modes : [];
   const deep = modes.includes('deep');
@@ -138,8 +143,15 @@ export async function POST(req: Request) {
           deep,
           asTable,
           userEmail: session.user.email,
+          locale,
           onProgress: (e) => send({ type: 'progress', ...e }),
         });
+
+        // 근거 기사 목록의 제목도 영어로 — 답변 본문만 영어면 목록이 따로 노는 느낌이 난다.
+        // 실시간 검색(live) 결과는 우리 DB에 없는 기사라 캐시할 대상이 없어 건너뛴다.
+        if (locale === 'en' && result?.articles?.length) {
+          await ensureArticleEnDeep([result.articles]);
+        }
 
         // gpt-5.4-mini 단가($/1M): 입력 0.75 / 캐시된 입력 0.075 / 출력 4.50
         const cost =

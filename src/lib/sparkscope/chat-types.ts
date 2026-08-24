@@ -49,6 +49,9 @@ export type NoisyKeyword = {
 export type ChatArticle = {
   id: string;
   title: string;
+  /** EN 화면용 번역 제목·요약. 검색·군집화는 계속 원문(title)을 쓴다. */
+  titleEn?: string | null;
+  oneLinerEn?: string | null;
   link: string;
   source: string;
   pubDate: string;

@@ -58,7 +58,7 @@ export async function runPitchQuery(input: {
       orderBy: [{ pitchScore: 'desc' }, { pubDate: 'desc' }],
       take: 200,
       select: {
-        id: true, title: true, link: true, source: true, pubDate: true, category: true,
+        id: true, title: true, titleEn: true, link: true, source: true, pubDate: true, category: true,
         matchedKeyword: true, tone: true, riskFlag: true, oneLiner: true, ourTake: true,
         importance: true, pitchScore: true, pitchTopic: true, priorityScore: true,
       },
@@ -99,6 +99,7 @@ export async function runPitchQuery(input: {
     articles: clean.slice(0, limit).map((a) => ({
       id: a.id,
       title: a.title,
+      titleEn: (a as any).titleEn ?? null,
       link: a.link,
       source: normalizeSource(a.source),
       pubDate: a.pubDate.toISOString(),
@@ -139,12 +140,13 @@ export async function pitchDetailsForModel(input: {
     orderBy: [{ pitchScore: 'desc' }, { pubDate: 'desc' }],
     take: 18,
     select: {
-      title: true, source: true, pubDate: true, matchedKeyword: true,
+      title: true, titleEn: true, source: true, pubDate: true, matchedKeyword: true,
       pitchScore: true, pitchTopic: true, ourTake: true, oneLiner: true,
     },
   });
   return rows.map((a) => ({
     title: a.title,
+    titleEn: (a as any).titleEn ?? null,
     company: a.matchedKeyword,
     source: normalizeSource(a.source),
     date: a.pubDate.toISOString().slice(0, 10),
@@ -258,7 +260,7 @@ export async function runCrisisWatch(input: {
     prisma.article.findMany({
       where,
       select: {
-        id: true, title: true, link: true, source: true, pubDate: true,
+        id: true, title: true, titleEn: true, link: true, source: true, pubDate: true,
         matchedKeyword: true, category: true, tone: true,
       },
       take: 800,
@@ -347,7 +349,7 @@ export async function crisisArticlesForUi(input: {
         orderBy: [{ pubDate: 'desc' }],
         take: 200,
         select: {
-          id: true, title: true, link: true, source: true, pubDate: true, category: true,
+          id: true, title: true, titleEn: true, link: true, source: true, pubDate: true, category: true,
           matchedKeyword: true, tone: true, riskFlag: true, oneLiner: true, importance: true,
           priorityScore: true,
         },
@@ -382,6 +384,7 @@ export async function crisisArticlesForUi(input: {
     articles: clean.slice(0, 30).map((a) => ({
       id: a.id,
       title: a.title,
+      titleEn: (a as any).titleEn ?? null,
       link: a.link,
       source: normalizeSource(a.source),
       pubDate: a.pubDate.toISOString(),
@@ -458,7 +461,7 @@ export async function runSavedArticles(input: {
   const since = days ? new Date(Date.now() - days * 86400_000) : null;
 
   const SELECT = {
-    id: true, title: true, link: true, source: true, pubDate: true, category: true,
+    id: true, title: true, titleEn: true, link: true, source: true, pubDate: true, category: true,
     matchedKeyword: true, tone: true, riskFlag: true, oneLiner: true, importance: true,
     priorityScore: true, isScrapped: true, scrappedAt: true, scrappedBy: true,
   } as const;
@@ -553,6 +556,7 @@ export async function runSavedArticles(input: {
       articles: rows.slice(0, limit).map((a) => ({
         id: a.id,
         title: a.title,
+        titleEn: (a as any).titleEn ?? null,
         link: a.link,
         source: normalizeSource(a.source),
         pubDate: a.pubDate.toISOString(),

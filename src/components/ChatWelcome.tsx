@@ -1,4 +1,6 @@
 'use client';
+import { useT } from '@/lib/i18n/client';
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 // SparkScope 챗봇 첫 화면(초안). 아직 실제 응답 백엔드/DB는 붙어 있지 않고,
 // 입력 → 답변 방식 → 검색 범위 → 파일 첨부 → 전송까지의 UI 흐름만 구현되어 있다.
@@ -386,6 +388,7 @@ function migrateConvos(raw: any): Convo[] {
 }
 
 export function ChatWelcome({ userEmail }: { userEmail?: string }) {
+  const tr = useT();
   const [input, setInput] = useState('');
   // 기본값은 아무것도 안 켠 상태. 예전 기본값 'sources'는 서버에서 읽지도 않는 값이라
   // 실제로는 지금과 똑같이 동작했다(2026-08-18에 토글 자체를 없앰).
@@ -435,7 +438,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   useEffect(() => {
     if (messages.length === 0) return;
     const firstUser = messages.find((m) => m.role === 'user');
-    const title = firstUser && firstUser.role === 'user' ? firstUser.text : '새 대화';
+    const title = firstUser && firstUser.role === 'user' ? firstUser.text : tr('새 대화');
     setConvos((prev) => {
       const id = convoId ?? String(Date.now());
       if (!convoId) setConvoId(id);
@@ -518,7 +521,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
     }
     const Ctor = window.SpeechRecognition ?? window.webkitSpeechRecognition;
     if (!Ctor) {
-      alert('이 브라우저는 음성 입력을 지원하지 않아요.');
+      alert(tr('이 브라우저는 음성 입력을 지원하지 않아요.'));
       return;
     }
     const recognition = new Ctor();
@@ -579,7 +582,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
       });
       if (!res.ok || !res.body) {
         const msg = await res.json().catch(() => null);
-        throw new Error(msg?.error ?? '조회에 실패했어요.');
+        throw new Error(msg?.error ?? tr('조회에 실패했어요.'));
       }
 
       // NDJSON 스트림을 한 줄씩 읽는다. 마지막 done 이벤트가 실제 답변이고,
@@ -617,11 +620,11 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
           } else if (ev.type === 'done') {
             done = ev;
           } else if (ev.type === 'error') {
-            throw new Error(ev.error ?? '조회에 실패했어요.');
+            throw new Error(ev.error ?? tr('조회에 실패했어요.'));
           }
         }
       }
-      if (!done) throw new Error('응답이 중간에 끊겼어요. 다시 시도해 주세요.');
+      if (!done) throw new Error(tr('응답이 중간에 끊겼어요. 다시 시도해 주세요.'));
 
       setMessages((prev) => [
         ...prev,
@@ -634,7 +637,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
         },
       ]);
     } catch (e: any) {
-      setMessages((prev) => [...prev, { role: 'error', text: e?.message ?? '조회에 실패했어요.' }]);
+      setMessages((prev) => [...prev, { role: 'error', text: e?.message ?? tr('조회에 실패했어요.') }]);
     } finally {
       setLoading(false);
       setProgress([]);
@@ -689,16 +692,16 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
             onClick={reset}
             className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-spark-purple text-white text-[13px] font-semibold hover:opacity-90 transition"
           >
-            + 새 대화
+            + {tr('새 대화')}
           </button>
         </div>
         <div className="flex-1 overflow-y-auto px-2 pb-3">
-          <div className="px-2 py-1.5 text-[11px] font-bold text-spark-muted">대화 기록</div>
+          <div className="px-2 py-1.5 text-[11px] font-bold text-spark-muted">{tr('대화 기록')}</div>
           {convos.length === 0 ? (
             <p className="px-2 text-[12px] text-spark-muted leading-relaxed">
-              아직 없어요.
+              {tr('아직 없어요.')}
               <br />
-              질문하면 여기에 쌓입니다.
+              {tr('질문하면 여기에 쌓입니다.')}
             </p>
           ) : (
             <ul className="space-y-0.5">
@@ -719,7 +722,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                   <button
                     type="button"
                     onClick={() => deleteConvo(c.id)}
-                    aria-label="대화 삭제"
+                    aria-label={tr('대화 삭제')}
                     className="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 grid place-items-center rounded text-spark-muted opacity-0 group-hover:opacity-100 hover:bg-spark-border/60 hover:text-spark-ink transition"
                   >
                     ×
@@ -738,7 +741,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
         <button
           type="button"
           onClick={() => setSidebarOpen((v) => !v)}
-          aria-label="대화 목록 접기/펼치기"
+          aria-label={tr('대화 목록 접기/펼치기')}
           className="w-7 h-7 grid place-items-center rounded-lg text-spark-muted hover:text-spark-ink hover:bg-spark-subtle transition"
         >
           <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
@@ -746,17 +749,18 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
             <path d="M6.2 3v10" stroke="currentColor" strokeWidth="1.5" />
           </svg>
         </button>
-        <button type="button" onClick={reset} className="flex items-center gap-2 group" title="새 대화 시작">
+        <button type="button" onClick={reset} className="flex items-center gap-2 group" title={tr('새 대화 시작')}>
           <SparkScopeMark size="sm" />
           <span className="text-spark-ink font-extrabold tracking-tight text-[15px]">SparkScope</span>
         </button>
-        <span className="hidden sm:inline text-[12px] text-spark-muted">챗봇</span>
+        <span className="hidden sm:inline text-[12px] text-spark-muted">{tr('챗봇')}</span>
         <div className="ml-auto flex items-center gap-2">
+          <LanguageSwitcher />
           <Link
             href="/dashboard"
             className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-[12px] font-semibold hover:bg-blue-700 transition"
           >
-            대시보드로 이동
+            {tr('대시보드로 이동')}
           </Link>
         </div>
       </header>
@@ -770,10 +774,10 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
               <SparkScopeMark />
               <div className="mt-4 mb-7 text-center">
                 <h1 className="text-3xl sm:text-[34px] font-extrabold tracking-tight text-spark-ink mb-2">
-                  어떤 기사를 찾고 계세요?
+                  {tr('어떤 기사를 찾고 계세요?')}
                 </h1>
                 <p className="text-spark-ink-soft text-[15px]">
-                  스파크스코프가 모아둔 기사에서 찾아보고, 흐름까지 정리해드릴게요.
+                  {tr('스파크스코프가 모아둔 기사에서 찾아보고, 흐름까지 정리해드릴게요.')}
                 </p>
               </div>
 
@@ -781,7 +785,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
               <div className="w-full">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <p className="text-[13px] text-spark-ink-soft">
-                    예시 질문으로 무엇을 물어볼 수 있는지 확인해 보세요.
+                    {tr('예시 질문으로 무엇을 물어볼 수 있는지 확인해 보세요.')}
                   </p>
                   <button
                     type="button"
@@ -794,7 +798,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                       <rect x="2" y="9" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.4" />
                       <rect x="9" y="9" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.4" />
                     </svg>
-                    뭘 물어볼 수 있나요?
+                    {tr('뭘 물어볼 수 있나요?')}
                   </button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -805,8 +809,8 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                       onClick={() => pick(s.q)}
                       className="text-left px-4 py-3.5 rounded-2xl border border-spark-border bg-spark-surface hover:border-spark-purple/40 hover:bg-spark-light-purple/30 transition shadow-card"
                     >
-                      <span className="block text-[14px] font-semibold text-spark-ink leading-snug">{s.q}</span>
-                      <span className="mt-1 block text-[12px] text-spark-muted">{s.hint}</span>
+                      <span className="block text-[14px] font-semibold text-spark-ink leading-snug">{tr(s.q)}</span>
+                      <span className="mt-1 block text-[12px] text-spark-muted">{tr(s.hint)}</span>
                     </button>
                   ))}
                 </div>
@@ -824,7 +828,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                       <div className="mt-1 flex flex-wrap justify-end items-center gap-1 text-[11px] text-spark-muted">
                         <span>{PERIOD_LABEL[m.period as keyof typeof PERIOD_LABEL] ?? m.period}</span>
                         {m.scopes.map((sc) => (
-                          <span key={sc}>· {SCOPE_LABEL[sc as keyof typeof SCOPE_LABEL] ?? sc}</span>
+                          <span key={sc}>· {tr(SCOPE_LABEL[sc as keyof typeof SCOPE_LABEL] ?? sc)}</span>
                         ))}
                         {m.files.map((f) => (
                           <span key={f}>· 📎 {f}</span>
@@ -866,7 +870,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                     {progress.length === 0 ? (
                       <div className="flex items-center gap-2 text-spark-ink-soft">
                         <span className="w-2.5 h-2.5 rounded-full bg-spark-purple animate-pulse" />
-                        질문 이해하는 중…
+                        {tr('질문 이해하는 중…')}
                       </div>
                     ) : (
                       <ul className="space-y-1.5">
@@ -882,7 +886,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                                 <span className="w-2.5 h-2.5 mt-1 shrink-0 rounded-full bg-spark-purple animate-pulse" />
                               )}
                               <span className={last && !p.done ? 'text-spark-ink' : 'text-spark-muted'}>
-                                {p.label}
+                                {tr(p.label)}
                                 {/* detail은 "search(투자유치|시리즈A) → 169건" 같은 실제 조회 결과 */}
                                 {p.detail && (
                                   <span className="block text-[11px] text-spark-muted/80 mt-0.5 break-all">{p.detail}</span>
@@ -912,7 +916,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
           <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5">
             <path d="M3 6l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          답변 보기
+          {tr('답변 보기')}
         </button>
       )}
       </div>
@@ -925,11 +929,11 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
             <div className="mb-2 bg-spark-surface border border-spark-border rounded-2xl shadow-pop overflow-hidden animate-rise">
               <div className="px-4 py-2 border-b border-spark-border flex items-center gap-2">
                 <span className="text-spark-purple">{task.icon}</span>
-                <span className="text-[13px] font-semibold text-spark-ink-soft">{task.heading}</span>
+                <span className="text-[13px] font-semibold text-spark-ink-soft">{tr(task.heading)}</span>
                 <button
                   type="button"
                   onClick={() => setOpenTask(null)}
-                  aria-label="닫기"
+                  aria-label={tr('닫기')}
                   className="ml-auto w-5 h-5 grid place-items-center rounded text-spark-muted hover:text-spark-ink hover:bg-spark-subtle"
                 >
                   ×
@@ -943,7 +947,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                       onClick={() => pick(sug)}
                       className="w-full text-left px-4 py-2.5 hover:bg-spark-subtle transition text-[14px] text-spark-ink-soft"
                     >
-                      {sug}
+                      {tr(sug)}
                     </button>
                   </li>
                 ))}
@@ -985,7 +989,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                     send();
                   }
                 }}
-                placeholder={`무엇이든 물어보세요. 예) ${PLACEHOLDER_EXAMPLES[exampleIdx]}`}
+                placeholder={tr('무엇이든 물어보세요. 예) {ex}', { ex: tr(PLACEHOLDER_EXAMPLES[exampleIdx]) })}
                 className="w-full resize-none bg-transparent text-[15px] leading-6 text-spark-ink outline-none placeholder:text-spark-muted"
               />
             </div>
@@ -1003,7 +1007,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                     <span className="text-spark-muted">{fmtSize(f.size)}</span>
                     <button
                       type="button"
-                      aria-label={`${f.name} 첨부 취소`}
+                      aria-label={tr('{name} 첨부 취소', { name: f.name })}
                       onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
                       className="w-4 h-4 grid place-items-center rounded text-spark-muted hover:text-spark-ink hover:bg-spark-border/60"
                     >
@@ -1017,10 +1021,10 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
             {/* 답변 방식 + 전송 */}
             <div className="px-4 pb-3 flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[12px] font-semibold text-spark-muted mr-0.5">답변 방식</span>
+                <span className="text-[12px] font-semibold text-spark-muted mr-0.5">{tr('답변 방식')}</span>
 
                 {/* 기간 — 하나만 고르는 선택형 */}
-                <Tip text="이 기간 안에 발행된 기사만 세고 답해요. 질문에 “지난주”처럼 기간을 직접 쓰면 그쪽이 우선이에요.">
+                <Tip text={tr('이 기간 안에 발행된 기사만 세고 답해요. 질문에 “지난주”처럼 기간을 직접 쓰면 그쪽이 우선이에요.')}>
                 <label
                   className="relative flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-full text-[13px] font-semibold bg-spark-light-purple text-spark-purple cursor-pointer"
                 >
@@ -1028,17 +1032,17 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                     <rect x="2.2" y="3.2" width="11.6" height="10" rx="1.6" stroke="currentColor" strokeWidth="1.5" />
                     <path d="M2.2 6.4h11.6M5.6 1.8v2.6M10.4 1.8v2.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                   </svg>
-                  <span>{PERIODS.find((p) => p.id === period)?.label}</span>
+                  <span>{tr(PERIODS.find((p) => p.id === period)?.label ?? '')}</span>
                   <span aria-hidden className="text-[10px] leading-none">▾</span>
                   <select
                     value={period}
                     onChange={(e) => setPeriod(e.target.value)}
-                    aria-label="검색 기간"
+                    aria-label={tr('검색 기간')}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   >
                     {PERIODS.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.label}
+                        {tr(p.label)}
                       </option>
                     ))}
                   </select>
@@ -1048,7 +1052,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                 {MODES.map((m) => {
                   const on = activeModes.includes(m.id);
                   return (
-                    <Tip key={m.id} text={on ? m.hint : `${m.hint}\n${m.off}`}>
+                    <Tip key={m.id} text={on ? tr(m.hint) : `${tr(m.hint)}\n${tr(m.off)}`}>
                       <button
                         type="button"
                         onClick={() => setActiveModes((prev) => toggle(prev, m.id))}
@@ -1059,7 +1063,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                         }`}
                       >
                         {m.icon}
-                        <span>{m.label}</span>
+                        <span>{tr(m.label)}</span>
                       </button>
                     </Tip>
                   );
@@ -1069,8 +1073,8 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                 <button
                   type="button"
                   onClick={toggleMic}
-                  aria-label={listening ? '음성 입력 중지' : '음성으로 질문 입력'}
-                  title="음성으로 질문 입력"
+                  aria-label={listening ? tr('음성 입력 중지') : tr('음성으로 질문 입력')}
+                  title={tr('음성으로 질문 입력')}
                   className={`w-9 h-9 shrink-0 grid place-items-center rounded-full border transition ${
                     listening
                       ? 'bg-red-50 text-red-600 border-red-200 animate-pulse'
@@ -1086,7 +1090,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                   type="button"
                   onClick={() => send()}
                   disabled={!canSend}
-                  aria-label="보내기"
+                  aria-label={tr('보내기')}
                   className={`w-9 h-9 shrink-0 grid place-items-center rounded-full transition ${
                     canSend
                       ? 'bg-spark-purple text-white hover:opacity-90'
@@ -1102,11 +1106,11 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
 
             {/* 검색 범위 */}
             <div className="px-4 py-2.5 border-t border-spark-border flex flex-wrap items-center gap-2">
-              <span className="text-[12px] font-semibold text-spark-muted mr-0.5">검색 범위</span>
+              <span className="text-[12px] font-semibold text-spark-muted mr-0.5">{tr('검색 범위')}</span>
               {SCOPES.map((s) => {
                 const on = activeScopes.includes(s.id);
                 return (
-                  <Tip key={s.id} text={s.hint}>
+                  <Tip key={s.id} text={tr(s.hint)}>
                     <button
                       type="button"
                       onClick={() => toggleScope(s.id)}
@@ -1116,13 +1120,13 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                           : 'bg-white text-spark-muted border-spark-border hover:text-spark-ink-soft'
                       }`}
                     >
-                      {s.label}
+                      {tr(s.label)}
                     </button>
                   </Tip>
                 );
               })}
               <span className="ml-auto text-[11px] text-spark-muted">
-                {activeScopes.length === 0 ? '선택하지 않을시 전체에서 찾아요' : `${activeScopes.length}개 범위 선택됨`}
+                {activeScopes.length === 0 ? tr('선택하지 않을시 전체에서 찾아요') : tr('{n}개 범위 선택됨', { n: activeScopes.length })}
               </span>
             </div>
 
@@ -1147,10 +1151,10 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                 <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
                   <path d="M8 3.5v9M3.5 8h9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                 </svg>
-                파일 첨부
+                {tr('파일 첨부')}
               </button>
               <span className="text-[11px] text-spark-muted">
-                PDF · 워드 · 한글 · 엑셀 · PPT · 이미지 · 음성(mp3) · 영상(mp4) — 끌어다 놓아도 돼요
+                {tr('PDF · 워드 · 한글 · 엑셀 · PPT · 이미지 · 음성(mp3) · 영상(mp4) — 끌어다 놓아도 돼요')}
               </span>
             </div>
           </div>
@@ -1159,7 +1163,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
             {TASKS.map((t) => {
               const on = openTask === t.id;
               return (
-                <Tip key={t.id} text={`${t.desc} — 눌러서 예시 질문을 고르면 입력창에 채워져요.\n필터가 아니라 질문 모음이라, 이것만 눌러서는 조회되지 않아요.`}>
+                <Tip key={t.id} text={`${tr(t.desc)} — ${tr('눌러서 예시 질문을 고르면 입력창에 채워져요.\n필터가 아니라 질문 모음이라, 이것만 눌러서는 조회되지 않아요.')}`}>
                   <button
                     type="button"
                     onClick={() => setOpenTask(on ? null : t.id)}
@@ -1170,7 +1174,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                     }`}
                   >
                     <span className={on ? 'text-spark-purple' : 'text-spark-muted'}>{t.icon}</span>
-                    {t.label}
+                    {tr(t.label)}
                   </button>
                 </Tip>
               );
@@ -1178,7 +1182,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
           </div>
 
           <div className="mt-2 text-[11px] text-spark-muted text-center">
-            답변은 수집된 기사 기반 초안입니다 · 외부 공유 금지{userEmail ? ` · ${userEmail}` : ''}
+            {tr('답변은 수집된 기사 기반 초안입니다 · 외부 공유 금지')}{userEmail ? ` · ${userEmail}` : ''}
           </div>
         </div>
       </div>
@@ -1194,20 +1198,20 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
           />
           <aside
             role="dialog"
-            aria-label="뭘 물어볼 수 있나요?"
+            aria-label={tr('뭘 물어볼 수 있나요?')}
             className="fixed right-0 top-0 z-50 h-screen w-full sm:w-[420px] bg-spark-surface border-l border-spark-border shadow-pop flex flex-col animate-rise"
           >
             <div className="shrink-0 px-5 py-4 border-b border-spark-border flex items-start gap-3">
               <div className="min-w-0">
-                <h2 className="text-[17px] font-bold text-spark-ink">뭘 물어볼 수 있나요?</h2>
+                <h2 className="text-[17px] font-bold text-spark-ink">{tr('뭘 물어볼 수 있나요?')}</h2>
                 <p className="mt-0.5 text-[12px] text-spark-muted">
-                  {TASKS.length}개 주제 · {TOTAL_SUGGESTIONS}개 예시 · 누르면 아래 입력창에 채워집니다
+                  {tr('{n}개 주제 · {m}개 예시 · 누르면 아래 입력창에 채워집니다', { n: TASKS.length, m: TOTAL_SUGGESTIONS })}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setAskOpen(false)}
-                aria-label="닫기"
+                aria-label={tr('닫기')}
                 className="ml-auto shrink-0 w-7 h-7 grid place-items-center rounded-lg text-spark-muted hover:text-spark-ink hover:bg-spark-subtle"
               >
                 ×
@@ -1218,7 +1222,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                 <section key={t.id}>
                   <div className="flex items-center gap-1.5 mb-2">
                     <span className="text-spark-purple">{t.icon}</span>
-                    <h3 className="text-[13px] font-semibold text-spark-ink-soft">{t.heading}</h3>
+                    <h3 className="text-[13px] font-semibold text-spark-ink-soft">{tr(t.heading)}</h3>
                   </div>
                   <ul className="space-y-2">
                     {t.suggestions.map((sug) => (
@@ -1231,7 +1235,7 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                           }}
                           className="w-full text-left px-3.5 py-2.5 rounded-xl border border-spark-border bg-spark-cream/50 hover:border-spark-purple/40 hover:bg-spark-light-purple/30 transition text-[13.5px] text-spark-ink"
                         >
-                          {sug}
+                          {tr(sug)}
                         </button>
                       </li>
                     ))}
@@ -1268,13 +1272,14 @@ function ChatAnswer({
   onFollowUp?: (question: string) => void;
   onSuggestedKeyword?: (keyword: string) => void;
 }) {
+  const tr = useT();
   if (!res) return null;
   return (
     <div className="w-full space-y-2.5">
       {/* 아직 못 하는 요청 안내 */}
       {res.unsupported && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-2.5 text-[13px] text-amber-800">
-          <span className="font-semibold">아직 안 되는 기능: {res.unsupported}</span>
+          <span className="font-semibold">{tr('아직 안 되는 기능')}: {res.unsupported}</span>
           {res.note && <span className="block mt-0.5">{res.note}</span>}
         </div>
       )}
@@ -1287,7 +1292,7 @@ function ChatAnswer({
       {/* 심층 분석 요약 */}
       {res.summary && (
         <div className="bg-spark-light-purple/60 border border-spark-purple/20 rounded-2xl px-4 py-3">
-          <div className="text-[11px] font-bold text-spark-purple mb-1">🤖 심층 분석</div>
+          <div className="text-[11px] font-bold text-spark-purple mb-1">🤖 {tr('심층 분석')}</div>
           <AnswerText text={res.summary} />
         </div>
       )}
@@ -1311,7 +1316,7 @@ function ChatAnswer({
           어려워해서(2026-08-12), 방금 답변 맥락에서 모델이 뽑은 다음 질문을 버튼으로 보여준다. */}
       {!loading && onFollowUp && res.followUps && res.followUps.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] text-spark-muted">이것도 물어보시겠어요?</span>
+          <span className="text-[11px] text-spark-muted">{tr('이것도 물어보시겠어요?')}</span>
           {res.followUps.map((q) => (
             <button
               key={q}
@@ -1335,7 +1340,7 @@ function ChatAnswer({
             <path d="M8 2v7M8 9L5 6M8 9l3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
             <path d="M2.5 11v2.5h11V11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
           </svg>
-          HTML로 저장
+          {tr('HTML로 저장')}
         </button>
       )}
     </div>
@@ -1369,6 +1374,7 @@ const RISK_FLAG_EXPLAIN: Record<string, string> = {
 
 /** 근거 기사 목록의 행 하나. showCompanyTags=true면 관련 회사를 칩(배지)으로 따로 붙인다. */
 function ArticleRow({ a, fmtDate, showCompanyTags }: { a: ChatQueryResult['articles'][number]; fmtDate: (iso: string) => string; showCompanyTags?: boolean }) {
+  const tr = useT();
   // 주제 태그(tagKind==='topic')는 회사명이 아니다 — "🏢 관련 포트폴리오사: 스타트업"처럼
   // 잘못 붙는 걸 막는다. 그룹으로 안 묶여 "그 외 매칭된 기사" 목록에 떨어져도 마찬가지로 막는다
   // (2026-08-12 피드백 — 피칭 결과의 업계동향 기사에서 실제로 발생).
@@ -1381,37 +1387,37 @@ function ArticleRow({ a, fmtDate, showCompanyTags }: { a: ChatQueryResult['artic
     <li>
       <a href={a.link} target="_blank" rel="noreferrer" className={`block px-4 py-3 transition ${isLive ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-spark-subtle'}`}>
         <div className="flex items-start gap-2">
-          <span className="text-[14px] text-spark-ink leading-snug">{a.title}</span>
+          <span className="text-[14px] text-spark-ink leading-snug">{a.titleEn || a.title}</span>
           {a.tone === 'NEGATIVE' && (
-            <span className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-bold">부정</span>
+            <span className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-bold">{tr('부정')}</span>
           )}
           {a.riskFlag && (
             <span
               className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-bold"
-              title={RISK_FLAG_EXPLAIN[a.riskFlag] ?? '위험 신호로 표시된 기사예요'}
+              title={tr(RISK_FLAG_EXPLAIN[a.riskFlag] ?? '위험 신호로 표시된 기사예요')}
             >
-              ⚠ {RISK_FLAG_LABEL[a.riskFlag] ?? '위험'}
+              ⚠ {tr(RISK_FLAG_LABEL[a.riskFlag] ?? '위험')}
             </span>
           )}
         </div>
         <div className={`mt-1 flex flex-wrap items-center gap-x-2 text-[11px] ${isLive ? 'font-semibold text-blue-700' : 'text-spark-muted'}`}>
-          <span>{a.source}</span>
+          <span>{tr(a.source)}</span>
           <span>·</span>
           <span>{fmtDate(a.pubDate)}</span>
           <span>·</span>
-          <span>{categoryLabel(a.category)}</span>
+          <span>{tr(categoryLabel(a.category))}</span>
         </div>
         {a.oneLiner && (
           <div className="mt-2 px-2.5 py-1.5 bg-blue-50 border-l-2 border-blue-400 rounded">
-            <p className="text-[12px] text-blue-900 leading-relaxed">💡 {a.oneLiner}</p>
+            <p className="text-[12px] text-blue-900 leading-relaxed">💡 {a.oneLinerEn || a.oneLiner}</p>
           </div>
         )}
         {companyTags.length > 0 && (
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
-            <span className="text-[10px] text-spark-muted">🏢 관련 포트폴리오사</span>
+            <span className="text-[10px] text-spark-muted">🏢 {tr('관련 포트폴리오사')}</span>
             {companyTags.map((c) => (
               <span key={c} className="px-1.5 py-0.5 rounded-md bg-spark-light-purple text-spark-purple text-[10px] font-semibold">
-                {c}
+                {tr(c)}
               </span>
             ))}
           </div>
@@ -1437,16 +1443,17 @@ function ArticleMiniTable({
   fmtDate: (iso: string) => string;
   showTag?: boolean;
 }) {
+  const tr = useT();
   return (
     <div className="overflow-x-auto border-t border-spark-border">
       <table className="w-full text-[13px] border-collapse">
         <thead>
           <tr className="bg-spark-subtle text-spark-muted text-[11px]">
-            {showTag && <th className="text-left font-semibold px-3 py-2">회사·키워드</th>}
-            <th className="text-left font-semibold px-3 py-2">제목</th>
-            <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">매체</th>
-            <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">날짜</th>
-            <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">톤</th>
+            {showTag && <th className="text-left font-semibold px-3 py-2">{tr('회사·키워드')}</th>}
+            <th className="text-left font-semibold px-3 py-2">{tr('제목')}</th>
+            <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">{tr('매체')}</th>
+            <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">{tr('날짜')}</th>
+            <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">{tr('톤')}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-spark-border">
@@ -1459,16 +1466,16 @@ function ArticleMiniTable({
               )}
               <td className="px-3 py-2">
                 <a href={a.link} target="_blank" rel="noreferrer" className="text-spark-ink hover:underline">
-                  {a.title}
+                  {a.titleEn || a.title}
                 </a>
               </td>
-              <td className="px-3 py-2 whitespace-nowrap text-spark-ink-soft">{a.source}</td>
+              <td className="px-3 py-2 whitespace-nowrap text-spark-ink-soft">{tr(a.source)}</td>
               <td className="px-3 py-2 whitespace-nowrap text-spark-muted">{fmtDate(a.pubDate)}</td>
               <td className="px-3 py-2 whitespace-nowrap">
                 {a.tone === 'NEGATIVE' ? (
-                  <span className="text-red-600 font-semibold">부정</span>
+                  <span className="text-red-600 font-semibold">{tr('부정')}</span>
                 ) : a.tone === 'POSITIVE' ? (
-                  <span className="text-blue-600 font-semibold">긍정</span>
+                  <span className="text-blue-600 font-semibold">{tr('긍정')}</span>
                 ) : (
                   <span className="text-spark-muted">-</span>
                 )}
@@ -1499,6 +1506,7 @@ function GroupArticles({
   /** 그룹으로 안 묶인 "그 외" 목록에서만 회사·키워드를 따로 보여준다 */
   showTag?: boolean;
 }) {
+  const tr = useT();
   const [expanded, setExpanded] = useState(false);
   const rest = items.length - GROUP_PREVIEW_COUNT;
   const shown = expanded ? items : items.slice(0, GROUP_PREVIEW_COUNT);
@@ -1520,7 +1528,7 @@ function GroupArticles({
           onClick={() => setExpanded((v) => !v)}
           className="w-full px-4 py-2 border-t border-spark-border text-[12px] font-semibold text-spark-purple hover:bg-spark-subtle transition"
         >
-          {expanded ? '접기' : `기사 ${rest}건 더보기`}
+          {expanded ? tr('접기') : tr('기사 {n}건 더보기', { n: rest })}
         </button>
       )}
     </>
@@ -1544,6 +1552,7 @@ function ChatResult({
   onLiveSearch?: (keyword: string) => void;
   onSuggestedKeyword?: (keyword: string) => void;
 }) {
+  const tr = useT();
   const fmtDate = (iso: string) => {
     const d = new Date(iso);
     return `${d.getMonth() + 1}/${d.getDate()}`;
@@ -1575,29 +1584,29 @@ function ChatResult({
         <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-spark-muted">
           {scopes.map((sc) => (
             <span key={sc} className="px-2 py-0.5 rounded-md bg-spark-light-purple text-spark-purple font-semibold">
-              {SCOPE_LABEL[sc as keyof typeof SCOPE_LABEL] ?? sc}
+              {tr(SCOPE_LABEL[sc as keyof typeof SCOPE_LABEL] ?? sc)}
             </span>
           ))}
-          {result.terms.length > 0 && <span>검색어: {result.terms.join(' · ')}</span>}
+          {result.terms.length > 0 && <span>{tr('검색어')}: {result.terms.join(' · ')}</span>}
         </div>
       )}
 
       {/* 집계 */}
       <div className="bg-spark-surface border border-spark-border rounded-2xl shadow-card p-4">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-3">
-          <span className="text-2xl font-extrabold text-spark-ink">{result.total.toLocaleString()}건</span>
-          <span className="text-[13px] text-spark-muted">{result.periodLabel} 기준</span>
+          <span className="text-2xl font-extrabold text-spark-ink">{tr('{n}건', { n: result.total.toLocaleString() })}</span>
+          <span className="text-[13px] text-spark-muted">{tr('{period} 기준', { period: tr(result.periodLabel) })}</span>
           {typeof result.prevTotal === 'number' && (
             <span
               className="px-1.5 py-0.5 rounded-md text-[12px] font-semibold bg-spark-subtle text-spark-ink-soft"
-              title={result.deltaCaution ?? '같은 길이의 직전 기간 건수'}
+              title={result.deltaCaution ?? tr('같은 길이의 직전 기간 건수')}
             >
-              직전 기간 {result.prevTotal.toLocaleString()}건{result.deltaCaution ? ' ⚠' : ''}
+              {tr('직전 기간 {n}건', { n: result.prevTotal.toLocaleString() })}{result.deltaCaution ? ' ⚠' : ''}
             </span>
           )}
           {result.negativeCount > 0 && (
             <span className="ml-auto text-[12px] font-semibold text-red-600">
-              부정 톤 {result.negativeCount}건
+              {tr('부정 톤 {n}건', { n: result.negativeCount })}
             </span>
           )}
         </div>
@@ -1610,16 +1619,16 @@ function ChatResult({
 
         {result.total === 0 ? (
           <p className="text-[14px] text-spark-ink-soft">
-            조건에 맞는 기사가 없어요. 기간을 넓히거나 검색어를 줄여보세요.
+            {tr('조건에 맞는 기사가 없어요. 기간을 넓히거나 검색어를 줄여보세요.')}
           </p>
         ) : (
           <div className="grid sm:grid-cols-3 gap-3 text-[13px]">
             <StatList
-              title="분류"
-              items={result.byCategory.map((c) => ({ name: categoryLabel(c.category), count: c.count }))}
+              title={tr('분류')}
+              items={result.byCategory.map((c) => ({ name: tr(categoryLabel(c.category)), count: c.count }))}
             />
-            <StatList title="많이 나온 회사·키워드" items={result.topCompanies} />
-            <StatList title="매체" items={result.topSources} />
+            <StatList title={tr('많이 나온 회사·키워드')} items={result.topCompanies} />
+            <StatList title={tr('매체')} items={result.topSources} />
           </div>
         )}
       </div>
@@ -1630,7 +1639,7 @@ function ChatResult({
           건너뛰게 된다). */}
       {suggestedKeywords.length > 0 && (
         <div className="p-4 bg-gradient-to-r from-purple-100 to-pink-100 border-2 border-purple-300 rounded-2xl">
-          <p className="text-[13px] text-purple-900 font-bold mb-3">🔗 혹시 이것도 찾으시나요?</p>
+          <p className="text-[13px] text-purple-900 font-bold mb-3">🔗 {tr('혹시 이것도 찾으시나요?')}</p>
           <div className="flex flex-wrap gap-2">
             {suggestedKeywords.map(kw => (
               <button
@@ -1649,14 +1658,14 @@ function ChatResult({
       {result.needsLiveSearch && !loading && onLiveSearch && (
         <div className="flex flex-col gap-2 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
           <p className="text-[13px] text-amber-900">
-            검색 결과가 많지 않네요. 우리 DB에 아직 수집되지 않은 최신 기사를 실시간으로 찾아볼까요?
+            {tr('검색 결과가 많지 않네요. 우리 DB에 아직 수집되지 않은 최신 기사를 실시간으로 찾아볼까요?')}
           </p>
           <button
             type="button"
             onClick={() => onLiveSearch(result.terms?.[0] || '')}
             className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold transition text-[13px]"
           >
-            🔍 실시간 검색 ({result.terms?.[0]})
+            🔍 {tr('실시간 검색')} ({result.terms?.[0]})
           </button>
         </div>
       )}
@@ -1718,7 +1727,7 @@ function ChatResult({
       {result.articles.length > 0 && (
         <div className="bg-spark-surface border border-spark-border rounded-2xl shadow-card overflow-hidden">
           <div className="px-4 py-2.5 border-b border-spark-border text-[13px] font-semibold text-spark-ink-soft">
-            근거 기사 {result.articles.length}건 {result.total > result.articles.length && `(전체 ${result.total}건 중)`}
+            {tr('근거 기사 {n}건', { n: result.articles.length })} {result.total > result.articles.length && tr('(전체 {n}건 중)', { n: result.total })}
           </div>
           <div className="divide-y divide-spark-border">
             {/* 같은 포트폴리오사 기사끼리 묶는다 — 예전엔 회사 "조합"(예: "차차, 원티드랩")을
@@ -1731,7 +1740,7 @@ function ChatResult({
                 <summary className="list-none flex items-center justify-between gap-2 px-4 py-2.5 cursor-pointer hover:bg-spark-subtle transition select-none">
                   <span className="flex items-center gap-1.5 text-[13px] font-semibold text-spark-purple">
                     <span>🏢</span>
-                    {g.tag}
+                    {tr(g.tag)}
                   </span>
                   <span className="flex items-center gap-2 text-[11px] text-spark-muted">
                     {g.items.length}건
@@ -1746,7 +1755,7 @@ function ChatResult({
             {organized.companyArticles.length > 0 && (
               <div>
                 <div className="px-4 py-2 text-[11px] font-semibold text-spark-muted bg-spark-subtle/60">
-                  🏢 그 외 매칭된 기사 {organized.companyArticles.length}건
+                  🏢 {tr('그 외 매칭된 기사 {n}건', { n: organized.companyArticles.length })}
                 </div>
                 <GroupArticles items={organized.companyArticles} fmtDate={fmtDate} asTable={asTable} showTag />
               </div>
@@ -1757,8 +1766,8 @@ function ChatResult({
                 <summary className="list-none flex items-center justify-between gap-2 px-4 py-2.5 cursor-pointer hover:bg-spark-subtle transition select-none">
                   <span className="flex items-center gap-1.5 text-[13px] font-semibold text-spark-purple">
                     <span>📌</span>
-                    <span className="text-[10px] font-normal text-spark-muted">주제</span>
-                    {g.tag}
+                    <span className="text-[10px] font-normal text-spark-muted">{tr('주제')}</span>
+                    {tr(g.tag)}
                   </span>
                   <span className="flex items-center gap-2 text-[11px] text-spark-muted">
                     {g.items.length}건
@@ -1772,7 +1781,7 @@ function ChatResult({
         </div>
       )}
 
-      <p className="text-[11px] text-spark-muted">수집된 기사 DB 조회 결과입니다</p>
+      <p className="text-[11px] text-spark-muted">{tr('수집된 기사 DB 조회 결과입니다')}</p>
     </div>
   );
 }
@@ -1785,6 +1794,7 @@ function ChatResult({
  *   하루하루 건수를 비교하기 쉽다. (연속값 구간을 나눈 히스토그램과는 다름 — 여기선 안 씀.)
  */
 function TrendChart({ items, granularity }: { items: { month: string; count: number }[]; granularity: 'day' | 'month' }) {
+  const tr = useT();
   const max = Math.max(...items.map((i) => i.count), 1);
   const W = 640;
   const H = 180;
@@ -1795,14 +1805,14 @@ function TrendChart({ items, granularity }: { items: { month: string; count: num
   const chartH = H - padT - padB;
   const n = items.length;
   const gap = chartW / n;
-  const title = granularity === 'day' ? '일별 추이 (최근 14일)' : '월별 추이 (최근 6개월)';
+  const title = granularity === 'day' ? tr('일별 추이 (최근 14일)') : tr('월별 추이 (최근 6개월)');
   const label = (raw: string) => {
     if (granularity === 'day') {
       const [m, d] = raw.split('-');
       return m && d ? `${parseInt(m, 10)}/${parseInt(d, 10)}` : raw;
     }
     const [, m] = raw.split('-');
-    return m ? `${parseInt(m, 10)}월` : raw;
+    return m ? tr('{n}월', { n: parseInt(m, 10) }) : raw;
   };
 
   if (granularity === 'day') {
@@ -1869,14 +1879,15 @@ function TrendChart({ items, granularity }: { items: { month: string; count: num
 
 /** 긍정/중립/부정 톤 비율 도넛차트 — TrendChart와 같은 SVG 인라인 패턴. */
 function ToneDonutChart({ positive, neutral, negative }: { positive: number; neutral: number; negative: number }) {
+  const tr = useT();
   const total = positive + neutral + negative;
   if (total === 0) return null;
   const R = 54;
   const C = 2 * Math.PI * R;
   const SEGMENTS = [
-    { label: '긍정', value: positive, color: '#16A34A' },
-    { label: '중립', value: neutral, color: '#8B8894' },
-    { label: '부정', value: negative, color: '#DC2626' },
+    { label: tr('긍정'), value: positive, color: '#16A34A' },
+    { label: tr('중립'), value: neutral, color: '#8B8894' },
+    { label: tr('부정'), value: negative, color: '#DC2626' },
   ];
   let cursor = 0;
   const arcs = SEGMENTS.filter((s) => s.value > 0).map((s) => {
@@ -1888,9 +1899,9 @@ function ToneDonutChart({ positive, neutral, negative }: { positive: number; neu
 
   return (
     <div className="bg-spark-surface border border-spark-border rounded-2xl shadow-card p-4">
-      <div className="text-[13px] font-semibold text-spark-ink-soft mb-2">톤 분포</div>
+      <div className="text-[13px] font-semibold text-spark-ink-soft mb-2">{tr('톤 분포')}</div>
       <div className="flex items-center gap-6">
-        <svg viewBox="0 0 140 140" width={140} height={140} role="img" aria-label="긍정·중립·부정 톤 비율">
+        <svg viewBox="0 0 140 140" width={140} height={140} role="img" aria-label={tr('긍정·중립·부정 톤 비율')}>
           <g transform="translate(70,70) rotate(-90)">
             <circle r={R} cx={0} cy={0} fill="none" stroke="#EDEAE2" strokeWidth={20} />
             {arcs.map((a) => (
@@ -1962,6 +1973,7 @@ function CompanyBarChart({ title, items }: { title: string; items: { name: strin
  *  좁은 구간에 몰려 못 읽힌다는 피드백으로 교체했다(2026-08-12). "1등부터 몇 등까지"가
  *  궁금한 데이터라 절대 점수(0~100점 기준)를 막대 길이로 바로 비교되게 한다. */
 function PitchScoreBarChart({ articles }: { articles: ChatQueryResult['articles'] }) {
+  const tr = useT();
   const points = articles
     .filter((a): a is ChatArticle & { pitchScore: number } => typeof a.pitchScore === 'number')
     .slice(0, 10);
@@ -1969,20 +1981,20 @@ function PitchScoreBarChart({ articles }: { articles: ChatQueryResult['articles'
 
   return (
     <div className="bg-spark-surface border border-spark-border rounded-2xl shadow-card p-4">
-      <div className="text-[13px] font-semibold text-spark-ink-soft mb-3">피칭 점수 순위</div>
+      <div className="text-[13px] font-semibold text-spark-ink-soft mb-3">{tr('피칭 점수 순위')}</div>
       <div className="space-y-2.5">
         {points.map((p) => (
           <div key={p.id} className="flex items-center gap-2.5 text-[12px]">
-            <span className="w-40 shrink-0 truncate text-spark-ink-soft" title={p.title}>
+            <span className="w-40 shrink-0 truncate text-spark-ink-soft" title={p.titleEn || p.title}>
               {p.matchedKeyword ? `[${p.matchedKeyword}] ` : ''}
-              {p.title}
+              {p.titleEn || p.title}
             </span>
             <div className="flex-1 h-4 rounded-md bg-spark-subtle overflow-hidden">
               <div
                 className="h-full rounded-md bg-spark-purple flex items-center justify-end px-1.5"
                 style={{ width: `${Math.max(Math.min(p.pitchScore, 100), 6)}%` }}
               >
-                <span className="text-[10px] font-bold text-white">{p.pitchScore}점</span>
+                <span className="text-[10px] font-bold text-white">{tr('{n}점', { n: p.pitchScore ?? 0 })}</span>
               </div>
             </div>
           </div>
@@ -1994,21 +2006,22 @@ function PitchScoreBarChart({ articles }: { articles: ChatQueryResult['articles'
 
 /** 오탐 많은 키워드 표 — HTML 저장(chat-export.ts)의 noiseTable()과 같은 정보를 채팅 화면에도 보여준다. */
 function NoiseKeywordTable({ rows }: { rows: NonNullable<ChatQueryResult['noisyKeywords']> }) {
+  const tr = useT();
   return (
     <div className="bg-spark-surface border border-spark-border rounded-2xl shadow-card overflow-hidden">
       <div className="px-4 py-2.5 border-b border-spark-border text-[13px] font-semibold text-spark-ink-soft">
-        오탐 많은 키워드 {rows.length}개
+        {tr('오탐 많은 키워드 {n}개', { n: rows.length })}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-[13px] border-collapse">
           <thead>
             <tr className="bg-spark-subtle text-spark-muted text-[11px]">
-              <th className="text-left font-semibold px-3 py-2">키워드</th>
-              <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">상태</th>
-              <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">오탐</th>
-              <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">정상</th>
-              <th className="text-left font-semibold px-3 py-2">현재 설정</th>
-              <th className="text-left font-semibold px-3 py-2">오탐 예시</th>
+              <th className="text-left font-semibold px-3 py-2">{tr('키워드')}</th>
+              <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">{tr('상태')}</th>
+              <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">{tr('오탐')}</th>
+              <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">{tr('정상')}</th>
+              <th className="text-left font-semibold px-3 py-2">{tr('현재 설정')}</th>
+              <th className="text-left font-semibold px-3 py-2">{tr('오탐 예시')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-spark-border">
@@ -2026,12 +2039,12 @@ function NoiseKeywordTable({ rows }: { rows: NonNullable<ChatQueryResult['noisyK
                     </span>
                   )}
                 </td>
-                <td className="px-3 py-2 font-bold text-spark-ink whitespace-nowrap">{r.noise.toLocaleString()}건</td>
-                <td className="px-3 py-2 text-spark-muted whitespace-nowrap">{r.kept.toLocaleString()}건</td>
+                <td className="px-3 py-2 font-bold text-spark-ink whitespace-nowrap">{tr('{n}건', { n: r.noise.toLocaleString() })}</td>
+                <td className="px-3 py-2 text-spark-muted whitespace-nowrap">{tr('{n}건', { n: r.kept.toLocaleString() })}</td>
                 <td className="px-3 py-2 text-spark-muted text-[12px]">
-                  {r.current?.contextWords && <div>문맥어: {r.current.contextWords}</div>}
-                  {r.current?.excludeWords && <div>제외어: {r.current.excludeWords}</div>}
-                  {!r.current?.contextWords && !r.current?.excludeWords && '없음'}
+                  {r.current?.contextWords && <div>{tr('문맥어')}: {r.current.contextWords}</div>}
+                  {r.current?.excludeWords && <div>{tr('제외어')}: {r.current.excludeWords}</div>}
+                  {!r.current?.contextWords && !r.current?.excludeWords && tr('없음')}
                 </td>
                 <td className="px-3 py-2 text-spark-muted text-[12px]">
                   {(r.samples ?? []).slice(0, 3).map((s, i) => (
@@ -2086,6 +2099,7 @@ const CATEGORY_COLOR: Record<string, string> = {
 const CATEGORY_COLOR_FALLBACK = '#8B8894';
 
 function CategoryDonutChart({ items }: { items: { category: string; count: number }[] }) {
+  const tr = useT();
   const total = items.reduce((sum, i) => sum + i.count, 0);
   if (total === 0) return null;
   const R = 54;
@@ -2103,9 +2117,9 @@ function CategoryDonutChart({ items }: { items: { category: string; count: numbe
 
   return (
     <div className="bg-spark-surface border border-spark-border rounded-2xl shadow-card p-4">
-      <div className="text-[13px] font-semibold text-spark-ink-soft mb-2">분류 비율</div>
+      <div className="text-[13px] font-semibold text-spark-ink-soft mb-2">{tr('분류 비율')}</div>
       <div className="flex items-center gap-6">
-        <svg viewBox="0 0 140 140" width={140} height={140} role="img" aria-label="분류별 기사 비율">
+        <svg viewBox="0 0 140 140" width={140} height={140} role="img" aria-label={tr('분류별 기사 비율')}>
           <g transform="translate(70,70) rotate(-90)">
             <circle r={R} cx={0} cy={0} fill="none" stroke="#EDEAE2" strokeWidth={20} />
             {arcs.map((a) => (
@@ -2229,6 +2243,7 @@ function IconSliders() {
  *   - 내용 높이에 맞춰 늘린다 — 안쪽에 스크롤바가 또 생기면 읽기 나쁘다.
  */
 function DigestPreview({ html }: { html: string }) {
+  const tr = useT();
   const ref = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(600);
 
@@ -2245,13 +2260,13 @@ function DigestPreview({ html }: { html: string }) {
           <rect x="1.5" y="3" width="13" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.4" />
           <path d="M2 4l6 4.5L14 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
         </svg>
-        <span className="text-[12px] font-semibold text-spark-ink-soft">다이제스트 미리보기</span>
-        <span className="text-[11px] text-spark-muted">실제 발송 메일과 같은 레이아웃</span>
+        <span className="text-[12px] font-semibold text-spark-ink-soft">{tr('다이제스트 미리보기')}</span>
+        <span className="text-[11px] text-spark-muted">{tr('실제 발송 메일과 같은 레이아웃')}</span>
       </div>
       <iframe
         ref={ref}
         srcDoc={html}
-        title="다이제스트 미리보기"
+        title={tr('다이제스트 미리보기')}
         sandbox="allow-same-origin"
         onLoad={fit}
         className="w-full block bg-white"

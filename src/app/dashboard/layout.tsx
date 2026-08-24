@@ -6,6 +6,8 @@ import { OPEN_ACCESS } from '@/lib/flags';
 import { SignOutButton } from '@/components/SignOutButton';
 import { ScrollTopButton } from '@/components/ScrollTopButton';
 import { DashboardTutorial } from '@/components/DashboardTutorial';
+import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import { getT } from '@/lib/i18n/server';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   // 협업 개발 단계(OPEN_ACCESS)면 로그인 없이 임시 세션 사용
@@ -15,6 +17,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!session?.user?.email) redirect('/login');
 
   const initial = session.user.email[0].toUpperCase();
+  const t = getT();
 
   return (
     <div className="min-h-screen bg-spark-cream">
@@ -25,11 +28,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <span className="text-spark-ink font-extrabold tracking-tight text-[15px]">SparkScope</span>
           </Link>
           <span className="hidden sm:inline h-3.5 w-px bg-spark-border" />
-          <span className="hidden sm:inline text-xs font-medium text-spark-muted">본부 인사이트 대시보드</span>
-          <Link href="/chat" className="hidden sm:inline text-xs font-semibold text-spark-muted hover:text-spark-purple transition">💬 챗봇</Link>
+          <span className="hidden sm:inline text-xs font-medium text-spark-muted">{t('본부 인사이트 대시보드')}</span>
+          <Link href="/chat" className="hidden sm:inline text-xs font-semibold text-spark-muted hover:text-spark-purple transition">💬 {t('챗봇')}</Link>
           <DashboardTutorial />
         </div>
         <div className="flex items-center gap-3 text-sm text-spark-muted">
+          <LanguageSwitcher />
           <span className="hidden md:inline px-2 py-0.5 rounded-md bg-spark-subtle border border-spark-border text-[11px] font-semibold tracking-wide text-spark-ink-soft">🔒 INTERNAL</span>
           <span className="hidden md:inline text-[13px]">{session.user.email}</span>
           <div className="w-7 h-7 rounded-full bg-spark-purple text-white grid place-items-center text-xs font-bold">{initial}</div>

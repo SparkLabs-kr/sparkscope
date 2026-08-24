@@ -1,7 +1,9 @@
 'use client';
 import { useState } from 'react';
+import { useT } from '@/lib/i18n/client';
 
 export function ScrapStar({ id, initial }: { id: string; initial: boolean }) {
+  const t = useT();
   const [on, setOn] = useState(initial);
   const [busy, setBusy] = useState(false);
 
@@ -21,7 +23,7 @@ export function ScrapStar({ id, initial }: { id: string; initial: boolean }) {
     <button
       onClick={toggle}
       disabled={busy}
-      title={on ? '스크랩 해제' : '스크랩'}
+      title={on ? t('스크랩 해제') : t('스크랩')}
       className={`text-lg leading-none transition-colors ${on ? 'text-amber-500' : 'text-gray-300 hover:text-amber-400'}`}
     >
       {on ? '★' : '☆'}

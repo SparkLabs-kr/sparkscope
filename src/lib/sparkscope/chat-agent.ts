@@ -493,7 +493,7 @@ const TOOLS: ChatCompletionTool[] = [
   },
 ];
 
-function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean, asTable: boolean) {
+function systemPrompt(uiPeriod: ChatPeriod, uiScopes: ChatScope[], deep: boolean, asTable: boolean, locale: 'ko' | 'en' = 'ko') {
   return `너는 스파크랩(초기투자 VC) 커뮤니케이션 본부의 뉴스 분석 담당이다.
 수집된 국내 뉴스 기사 DB를 도구로 조회해서 질문에 답한다.
 
@@ -647,8 +647,22 @@ ${asTable ? '- [표로 정리 켜짐] 핵심 내용을 마크다운 표로 정�
 - 사용자가 친 질문을 그대로 옮기지 마라("싹다 찾아서 정리해줘봐" 같은 말투는 제목이 아니다).
   무엇을 조회했고 무엇이 나왔는지를 요약한, 보고서 표지에 올려도 되는 명사형 제목으로 써라.
 - 기간·건수는 시스템이 따로 붙이니 제목에 넣지 마라. 마침표로 끝내지 마라.
-- 이 줄도 화면에 문장으로 보여주지 않는다. 앞뒤로 설명을 붙이지 마라.`;
+- 이 줄도 화면에 문장으로 보여주지 않는다. 앞뒤로 설명을 붙이지 마라.
+${locale === 'en' ? EN_ANSWER_RULE : ''}`;
 }
+
+// 화면이 영어(EN)일 때만 붙는 규칙.
+// 도구 인자(검색어·회사명)는 계속 한국어여야 한다 — DB와 감시 키워드가 한국어라
+// 영어로 검색하면 결과가 비어버린다. 바뀌는 건 사용자에게 보여줄 문장뿐이다.
+const EN_ANSWER_RULE = `
+[언어 — 중요]
+- 사용자 화면이 영어다. 사용자에게 보여줄 모든 문장을 자연스러운 영어로 써라.
+  요약 본문, ###FOLLOWUP### 항목, ###TITLE### 제목까지 전부 영어다.
+- 반대로 도구에 넘기는 인자(검색어·회사명·키워드)는 반드시 한국어 원문을 그대로 써라.
+  DB와 감시 대상 명단이 한국어여서, 영어로 검색하면 결과가 0건이 된다.
+- 기사 제목을 인용할 때는 영어로 옮겨 적되, 회사·인물·매체 이름은 공식 영문 표기를 쓴다
+  (스파크랩 → SparkLabs). 공식 표기가 없으면 로마자로 적는다.
+- 금액 단위는 영어 관행으로 옮긴다 (30억원 → KRW 3B).`;
 
 /** 도구 결과를 모델에 돌려줄 때 쓰는 압축 형태 — 링크·id 같은 화면 전용 필드는 뺀다. */
 function compactResult(r: ChatQueryResult) {
@@ -816,6 +830,11 @@ export async function runChatAgent(opts: {
   deep: boolean;
   asTable: boolean;
   /**
+   * 답변 언어. 'en'이면 답변만 영어로 쓴다 — 도구 호출·검색어는 계속 한국어를 쓴다
+   * (DB와 감시 키워드가 한국어라, 검색어를 영어로 바꾸면 결과 자체가 나빠진다).
+   */
+  locale?: 'ko' | 'en';
+  /**
    * 진행 상황 알림. 도구를 부르기 직전과 결과가 나온 직후에 호출된다.
    * 화면에서 "지금 뭐 하는 중"을 보여주는 데 쓴다(조회가 5~20초 걸려서 빈 화면이 길다).
    */
@@ -875,7 +894,7 @@ export async function runChatAgent(opts: {
   };
 
   const messages: ChatCompletionMessageParam[] = [
-    { role: 'system', content: systemPrompt(opts.period, opts.scopes, opts.deep, opts.asTable) },
+    { role: 'system', content: systemPrompt(opts.period, opts.scopes, opts.deep, opts.asTable, opts.locale ?? 'ko') },
     // 이전 대화 — 후속 질문("그중 부정적인 것만")을 이해하려면 필요하다. 최근 6턴만.
     ...opts.history.slice(-6).map((t) => ({ role: t.role, content: t.text }) as ChatCompletionMessageParam),
     { role: 'user', content: opts.question },

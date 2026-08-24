@@ -2,6 +2,7 @@
 // 기사 목록 뷰 — 검색(옵션) + 정렬(최신순/오래된순/매체 티어순) + CSV 내보내기.
 // CSV: 날짜, 매체, 기사제목, URL (엑셀 한글 대응 BOM 포함).
 import { useMemo, useState } from 'react';
+import { useT } from '@/lib/i18n/client';
 import { ArticlesTable } from '@/components/ArticlesTable';
 import { normalizeSource, TIER_OF } from '@/lib/sparkscope/media';
 
@@ -18,6 +19,7 @@ interface Article {
   pitchScore: number | null;
   priorityScore: number;
   isScrapped?: boolean;
+  titleEn?: string | null;
   isBookmarked?: boolean;
   isNoise?: boolean;
   titleOnlyFallback?: boolean;
@@ -63,6 +65,7 @@ export function ArticleListView({ articles, canScrap = false, canBookmark = fals
   showCategory?: boolean;
   csvName?: string;
 }) {
+  const t = useT();
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<SortKey>('recent');
   const [cat, setCat] = useState('');
@@ -90,7 +93,7 @@ export function ArticleListView({ articles, canScrap = false, canBookmark = fals
       const s = q.trim().toLowerCase();
       list = list.filter(a => {
         const catLabel = CATEGORY_LABELS[a.category] ?? a.category;
-        return [a.title, a.source, a.matchedKeyword, a.category, catLabel]
+        return [a.title, a.titleEn, a.source, t(a.source), a.matchedKeyword, a.category, catLabel, t(catLabel)]
           .some(v => String(v ?? '').toLowerCase().includes(s));
       });
     }
@@ -102,8 +105,8 @@ export function ArticleListView({ articles, canScrap = false, canBookmark = fals
   }, [articles, q, sort, cat, showSearch]);
 
   const downloadCsv = () => {
-    const header = ['날짜', '매체', '기사제목', 'URL'];
-    const body = view.map(a => [ymd(a.pubDate), normalizeSource(a.source), a.title, a.link]);
+    const header = [t('날짜'), t('매체'), t('기사제목'), 'URL'];
+    const body = view.map(a => [ymd(a.pubDate), normalizeSource(a.source), a.titleEn || a.title, a.link]);
     const csv = [header, ...body].map(r => r.map(csvCell).join(',')).join('\r\n');
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -129,7 +132,7 @@ export function ArticleListView({ articles, canScrap = false, canBookmark = fals
               cat === '' ? 'bg-spark-ink border-spark-ink text-white' : 'bg-white border-spark-border text-spark-ink-soft hover:border-spark-ink'
             }`}
           >
-            📅 날짜순 전체보기
+            📅 {t('날짜순 전체보기')}
           </button>
           <span className="h-5 w-px bg-spark-border" aria-hidden />
           {CATEGORY_BUTTONS.filter(b => (catCounts.get(b.id) ?? 0) > 0).map(b => {
@@ -141,7 +144,7 @@ export function ArticleListView({ articles, canScrap = false, canBookmark = fals
                 aria-pressed={active}
                 className={`rounded-lg border px-3.5 py-1.5 text-sm font-bold whitespace-nowrap transition-colors ${active ? b.on : b.off}`}
               >
-                {b.label} <span className="font-semibold opacity-70">{catCounts.get(b.id)}</span>
+                {t(b.label)} <span className="font-semibold opacity-70">{catCounts.get(b.id)}</span>
               </button>
             );
           })}
@@ -156,31 +159,31 @@ export function ArticleListView({ articles, canScrap = false, canBookmark = fals
               type="text"
               value={q}
               onChange={e => setQ(e.target.value)}
-              placeholder="제목·매체·회사명·분류로 검색"
+              placeholder={t('제목·매체·회사명·분류로 검색')}
               className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pl-9 pr-9 text-sm focus:border-spark-purple focus:bg-white focus:outline-none"
             />
             {q && (
-              <button onClick={() => setQ('')} className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-0.5 text-xs text-gray-400 hover:bg-gray-100" aria-label="검색어 지우기">✕</button>
+              <button onClick={() => setQ('')} className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-0.5 text-xs text-gray-400 hover:bg-gray-100" aria-label={t('검색어 지우기')}>✕</button>
             )}
           </div>
         )}
-        <select value={sort} onChange={e => setSort(e.target.value as SortKey)} className={selCls} aria-label="정렬">
-          <option value="recent">최신순</option>
-          <option value="oldest">오래된순</option>
-          <option value="tier">매체 티어순 (높은 티어 먼저)</option>
+        <select value={sort} onChange={e => setSort(e.target.value as SortKey)} className={selCls} aria-label={t('정렬')}>
+          <option value="recent">{t('최신순')}</option>
+          <option value="oldest">{t('오래된순')}</option>
+          <option value="tier">{t('매체 티어순 (높은 티어 먼저)')}</option>
         </select>
         <button
           onClick={downloadCsv}
           className="rounded-lg border border-spark-purple bg-spark-light-purple/40 px-3 py-1.5 text-sm font-semibold text-spark-purple hover:bg-spark-light-purple/70 whitespace-nowrap"
-          title="현재 목록을 CSV(날짜·매체·제목·URL)로 저장"
+          title={t('현재 목록을 CSV(날짜·매체·제목·URL)로 저장')}
         >
-          ⬇ CSV 내보내기
+          ⬇ {t('CSV 내보내기')}
         </button>
       </div>
 
       {showSearch && q.trim() && (
         <div className="mb-2 text-xs text-gray-500">
-          ‘<span className="font-semibold text-gray-700">{q.trim()}</span>’ 검색 결과 {view.length}건
+          ‘<span className="font-semibold text-gray-700">{q.trim()}</span>’ {t('검색 결과 {n}건', { n: view.length })}
         </div>
       )}
 
@@ -192,7 +195,7 @@ export function ArticleListView({ articles, canScrap = false, canBookmark = fals
         canRequestReport={canRequestReport}
         showCategoryColumn={!cat}
         showKeywordColumn={cat === 'competitor' || cat === 'industry_trend'}
-        emptyText={showSearch && q.trim() ? `‘${q.trim()}’에 맞는 기사가 없습니다.` : emptyText}
+        emptyText={showSearch && q.trim() ? t('‘{q}’에 맞는 기사가 없습니다.', { q: q.trim() }) : emptyText}
       />
     </div>
   );

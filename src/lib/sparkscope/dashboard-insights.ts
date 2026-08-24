@@ -17,6 +17,7 @@
  *    정상 작동, 장애는 RunLog에만 기록 — 사용자에게는 티 내지 않음)
  */
 import { prisma } from '@/lib/prisma';
+import { ensureInsightEn } from './translate-content';
 import { normalizeSource } from './media';
 import { isBlockedNoise } from './relevance';
 import { NEGATIVE_KEYWORDS, INDUSTRY_TREND_KEYWORDS, PINNED_COMPETITORS, detectCrises, type ArticleLite } from './insights';
@@ -55,7 +56,10 @@ export async function wasInsightsBatchFreshToday(): Promise<boolean> {
   return kstDateKey(last.finishedAt) === kstDateKey(new Date());
 }
 
-export async function getPrecomputedCrisisCauses(companies: string[]): Promise<Map<string, { cause: string; computedAt: Date }>> {
+export async function getPrecomputedCrisisCauses(
+  companies: string[],
+  locale: 'ko' | 'en' = 'ko',
+): Promise<Map<string, { cause: string; computedAt: Date }>> {
   const result = new Map<string, { cause: string; computedAt: Date }>();
   if (companies.length === 0) return result;
   const rows = await prisma.dashboardInsight.findMany({
@@ -65,7 +69,10 @@ export async function getPrecomputedCrisisCauses(companies: string[]): Promise<M
     try {
       const parsed = JSON.parse(r.value);
       if (typeof parsed?.cause === 'string' && parsed.cause.trim()) {
-        result.set(r.key, { cause: parsed.cause, computedAt: r.computedAt });
+        const cause = locale === 'en'
+          ? (await ensureInsightEn('crisis_cause', r.key, parsed, 'cause', [parsed.cause]))[0]
+          : parsed.cause;
+        result.set(r.key, { cause, computedAt: r.computedAt });
       }
     } catch {
       // 저장된 값이 깨져 있으면 그냥 건너뛴다 — 호출부가 폴백(케이스 A)으로 처리
@@ -74,7 +81,7 @@ export async function getPrecomputedCrisisCauses(companies: string[]): Promise<M
   return result;
 }
 
-export async function getPrecomputedCompetitorInsights(): Promise<{
+export async function getPrecomputedCompetitorInsights(locale: 'ko' | 'en' = 'ko'): Promise<{
   overall: { lines: string[]; computedAt: Date } | null;
   byCompany: Map<string, { points: string[]; computedAt: Date }>;
 }> {
@@ -87,9 +94,15 @@ export async function getPrecomputedCompetitorInsights(): Promise<{
     try {
       const parsed = JSON.parse(r.value);
       if (r.kind === 'competitor_overall' && Array.isArray(parsed?.lines)) {
-        overall = { lines: parsed.lines, computedAt: r.computedAt };
+        const lines = locale === 'en'
+          ? await ensureInsightEn('competitor_overall', r.key, parsed, 'lines', parsed.lines)
+          : parsed.lines;
+        overall = { lines, computedAt: r.computedAt };
       } else if (r.kind === 'competitor_trend' && Array.isArray(parsed?.points)) {
-        byCompany.set(r.key, { points: parsed.points, computedAt: r.computedAt });
+        const points = locale === 'en'
+          ? await ensureInsightEn('competitor_trend', r.key, parsed, 'points', parsed.points)
+          : parsed.points;
+        byCompany.set(r.key, { points, computedAt: r.computedAt });
       }
     } catch {
       // 무시 — 호출부는 그 회사만 null(요약 준비 중)로 처리
@@ -99,14 +112,17 @@ export async function getPrecomputedCompetitorInsights(): Promise<{
 }
 
 /** AC·VC(competitor)/스타트업계(industry_trend) "지금 흐름" 한 줄 — 포트폴리오 급증 배너 옆에 표시. */
-export async function getPrecomputedCategoryPulses(): Promise<Map<string, { line: string; computedAt: Date }>> {
+export async function getPrecomputedCategoryPulses(locale: 'ko' | 'en' = 'ko'): Promise<Map<string, { line: string; computedAt: Date }>> {
   const result = new Map<string, { line: string; computedAt: Date }>();
   const rows = await prisma.dashboardInsight.findMany({ where: { kind: 'category_pulse' } });
   for (const r of rows) {
     try {
       const parsed = JSON.parse(r.value);
       if (typeof parsed?.line === 'string' && parsed.line.trim()) {
-        result.set(r.key, { line: parsed.line, computedAt: r.computedAt });
+        const line = locale === 'en'
+          ? (await ensureInsightEn('category_pulse', r.key, parsed, 'line', [parsed.line]))[0]
+          : parsed.line;
+        result.set(r.key, { line, computedAt: r.computedAt });
       }
     } catch {
       // 무시 — 호출부는 그 카테고리만 null(실시간 폴백)로 처리

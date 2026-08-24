@@ -3,6 +3,7 @@
  * 본문 미저장 상태이므로 제목 + 톤(tone) 기반 휴리스틱. 데이터 보강 시 정확도 자동 상향.
  */
 import { NEGATIVE_KEYWORDS_DATA } from './keywords-data';
+import { makeT } from '@/lib/i18n/translate';
 
 // data/negative-keywords.csv에서 키워드만 추출
 export const NEGATIVE_KEYWORDS = NEGATIVE_KEYWORDS_DATA.map(k => k.keyword);
@@ -184,8 +185,12 @@ export function detectSpikes(
   baselineRecords: { matchedKeyword: string }[],
   recentWindowDays: number,
   baselineDays: number,
-  opts: { minAbsolute?: number; ratio?: number } = {},
+  opts: { minAbsolute?: number; ratio?: number; locale?: 'ko' | 'en'; nameOf?: (company: string) => string } = {},
 ): SpikeCard[] {
+  // 배너 문구는 회사명이 박힌 한 문장이라 사전에 자리표시자로 넣어두고 여기서 채운다.
+  const t = makeT(opts.locale ?? 'ko');
+  // EN 화면에서 회사명을 공식 영문명으로 바꿔 넣기 위한 훅(대시보드가 감시대상 명단을 갖고 있다).
+  const displayName = opts.nameOf ?? ((c: string) => c);
   const minAbsolute = opts.minAbsolute ?? 3;
   const ratio = opts.ratio ?? 2;
 
@@ -210,8 +215,8 @@ export function detectSpikes(
 
     const negShare = list.filter(a => negativeInfo(a).neg).length / recentCount;
     const message = negShare >= 0.5
-      ? `${company}, 최근 부정 논조 기사가 눈에 띄게 늘었습니다.`
-      : `${company}, 최근 언론 노출이 평소보다 크게 늘었습니다.`;
+      ? t('{company}, 최근 부정 논조 기사가 눈에 띄게 늘었습니다.', { company: displayName(company) })
+      : t('{company}, 최근 언론 노출이 평소보다 크게 늘었습니다.', { company: displayName(company) });
     cards.push({ company, recentCount, baselineAvgPerWindow: baselineAvg, negativeShare: negShare, message });
   }
   return cards.sort((a, b) => b.recentCount - a.recentCount).slice(0, 4);

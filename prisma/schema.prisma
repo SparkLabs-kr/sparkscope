@@ -91,6 +91,11 @@ model Article {
   relatedCompanies  String?  // JSON 배열
   pitchScore        Int?     // 0-100, 기획기사 피칭 기회 점수
   pitchTopic        String?
+  // 영어 화면(EN)용 번역 캐시 — 화면에 뜰 때 채우고 재사용한다.
+  // 채우는 쪽은 lib/sparkscope/translate-content.ts, 전체 백필은 scripts/backfill-title-en.ts.
+  titleEn           String?
+  oneLinerEn        String?
+  pitchTopicEn      String?
   riskFlag          String?
   isNoise           Boolean  @default(false)
   noiseReason       String?
@@ -234,6 +239,7 @@ model InterNewsVerdict {
   eventType   String?  // 무슨 일이 일어났는가 — INTER_EVENT_TYPES의 key (투자·딜/규제·승인/연구성과/제품·상용화/시장·인물)
   country   String?  // 'us' | 'cn' | 'jp' | 'sa' | 'other' — 기사가 다루는 트렌드의 주요 국가(매체 소속 국가 아님). relevant=true만 채워짐
   titleKo   String?  // 제목 한국어 번역
+  reasonEn  String?  // EN 화면용 판정 사유 번역 캐시 (translate-content.ts가 채운다)
   model     String   @default("gemini-3.1-flash-lite") // 판정한 모델
   filteredAt DateTime @default(now())
   // 스크랩 (Inter 탭) — Article.isScrapped와 같은 패턴. 스크랩 단위를 InterNews가 아닌
@@ -259,6 +265,7 @@ model InterPortfolioMatch {
   verdict         InterNewsVerdict @relation(fields: [verdictId], references: [id], onDelete: Cascade)
   companyName     String   // 포트폴리오 회사명
   reason          String   // "생성형 AI 투자 발표", "CEO 인용" 등
+  reasonEn        String?  // EN 화면용 매칭 사유 번역 캐시
   model           String   @default("gpt-5.4-mini")
   matchedAt       DateTime @default(now())
   @@unique([verdictId, companyName, model])

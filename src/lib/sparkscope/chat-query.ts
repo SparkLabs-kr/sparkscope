@@ -258,7 +258,7 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
       take: 1000,
       select: {
         id: true,
-        title: true,
+        title: true, titleEn: true,
         link: true,
         source: true,
         pubDate: true,
@@ -468,6 +468,7 @@ export async function runChatQuery(input: ChatQueryInput): Promise<ChatQueryResu
     .map((a) => ({
       id: a.id,
       title: a.title,
+      titleEn: (a as any).titleEn ?? null,
       link: a.link,
       source: normalizeSource(a.source),
       pubDate: a.pubDate.toISOString(),

@@ -1,9 +1,10 @@
 'use client';
 import { useState } from 'react';
+import { useT } from '@/lib/i18n/client';
 
 const FIELD_LABEL: Record<string, string> = { excludeWords: '제외어', contextWords: '문맥어' };
 
-interface ArticleRef { id: string; title: string; link: string; source: string }
+interface ArticleRef { id: string; title: string; titleEn?: string | null; link: string; source: string }
 
 export type QueueItem =
   | {
@@ -30,6 +31,7 @@ export type QueueItem =
 // 섞어 보여준다. 둘 다 승인해야만 실제로 반영되는 건 같지만, 승인 시 호출하는 API는 다르다
 // (AI 제안 승인 → MonitoringTarget 설정 반영 / 사용자 신고 승인 → Article.isNoise 처리 + AI 제안 생성).
 export function NoiseQueueList({ items: initial }: { items: QueueItem[] }) {
+  const t = useT();
   const [items, setItems] = useState(initial);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -43,7 +45,7 @@ export function NoiseQueueList({ items: initial }: { items: QueueItem[] }) {
   }
 
   if (items.length === 0) {
-    return <p className="text-sm text-gray-400 py-12 text-center">대기 중인 제안·신고가 없습니다.</p>;
+    return <p className="text-sm text-gray-400 py-12 text-center">{t('대기 중인 제안·신고가 없습니다.')}</p>;
   }
 
   return (
@@ -56,17 +58,17 @@ export function NoiseQueueList({ items: initial }: { items: QueueItem[] }) {
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 mb-1">
                   {item.kind === 'ai' ? (
-                    <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-spark-light-purple text-spark-purple">🤖 AI 제안</span>
+                    <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-spark-light-purple text-spark-purple">🤖 {t('AI 제안')}</span>
                   ) : (
-                    <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">👤 사용자 신고</span>
+                    <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">👤 {t('사용자 신고')}</span>
                   )}
                 </div>
                 <a href={a.link} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-gray-900 hover:text-spark-purple">
-                  {a.title}
+                  {a.titleEn || a.title}
                 </a>
                 <div className="text-xs text-gray-500 mt-0.5">
-                  {a.source}
-                  {item.kind === 'ai' ? ` · 감시대상: ${item.targetName}` : ` · 신고자: ${item.reportedBy}`}
+                  {t(a.source)}
+                  {item.kind === 'ai' ? ` · ${t('감시대상')}: ${item.targetName}` : ` · ${t('신고자')}: ${item.reportedBy}`}
                 </div>
               </div>
               <div className="flex gap-2 flex-shrink-0">
@@ -75,14 +77,14 @@ export function NoiseQueueList({ items: initial }: { items: QueueItem[] }) {
                   disabled={busyId === item.id}
                   className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50 disabled:opacity-50"
                 >
-                  거절
+                  {t('거절')}
                 </button>
                 <button
                   onClick={() => resolve(item, 'approve')}
                   disabled={busyId === item.id}
                   className="rounded-lg bg-spark-purple px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
                 >
-                  승인
+                  {t('승인')}
                 </button>
               </div>
             </div>
@@ -90,9 +92,9 @@ export function NoiseQueueList({ items: initial }: { items: QueueItem[] }) {
             {item.kind === 'ai' ? (
               <div className="mt-3 rounded-lg bg-spark-light-purple/30 border border-spark-light-purple p-3 text-sm">
                 <div className="font-semibold text-spark-purple mb-1">
-                  {FIELD_LABEL[item.field] ?? item.field}에 추가 제안: <span className="font-mono">"{item.addition}"</span>
+                  {t('{field}에 추가 제안', { field: t(FIELD_LABEL[item.field] ?? item.field) })}: <span className="font-mono">"{item.addition}"</span>
                 </div>
-                <div className="text-xs text-gray-500 mb-1">현재 값: {item.currentValue || '(없음)'}</div>
+                <div className="text-xs text-gray-500 mb-1">{t('현재 값')}: {item.currentValue || t('(없음)')}</div>
                 <div className="text-xs text-gray-600">{item.reason}</div>
               </div>
             ) : (

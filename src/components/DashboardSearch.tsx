@@ -3,6 +3,7 @@
 // 검색 대상: 제목 / 매체명 / 관련 회사(matchedKeyword) / 카테고리(코드+표시명). 지우면 원상복구.
 import { createContext, useContext, useMemo, useState } from 'react';
 import { ArticlesTable } from '@/components/ArticlesTable';
+import { useT } from '@/lib/i18n/client';
 
 const SearchCtx = createContext<{ q: string; setQ: (s: string) => void }>({ q: '', setQ: () => {} });
 
@@ -25,6 +26,7 @@ interface Article {
   tone: string | null;
   pitchScore: number | null;
   isScrapped?: boolean;
+  titleEn?: string | null;
 }
 
 export function DashboardSearchProvider({ children }: { children: React.ReactNode }) {
@@ -33,6 +35,7 @@ export function DashboardSearchProvider({ children }: { children: React.ReactNod
 }
 
 export function DashboardSearchBox() {
+  const t = useT();
   const { q, setQ } = useContext(SearchCtx);
   return (
     <div className="relative">
@@ -41,16 +44,16 @@ export function DashboardSearchBox() {
         type="text"
         value={q}
         onChange={e => setQ(e.target.value)}
-        placeholder="기사 검색 — 제목·매체·회사명·분류로 실시간 필터 (아래 '최근 수집 기사'에 반영)"
+        placeholder={t("기사 검색 — 제목·매체·회사명·분류로 실시간 필터 (아래 '최근 수집 기사'에 반영)")}
         className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-9 text-sm shadow-sm focus:border-spark-purple focus:outline-none focus:ring-1 focus:ring-spark-purple"
       />
       {q && (
         <button
           onClick={() => setQ('')}
           className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-0.5 text-xs text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-          aria-label="검색어 지우기"
+          aria-label={t('검색어 지우기')}
         >
-          ✕ 지우기
+          ✕ {t('지우기')}
         </button>
       )}
     </div>
@@ -58,13 +61,14 @@ export function DashboardSearchBox() {
 }
 
 export function DashboardArticleList({ articles, canScrap = false, emptyText }: { articles: Article[]; canScrap?: boolean; emptyText?: string }) {
+  const t = useT();
   const { q } = useContext(SearchCtx);
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return articles;
     return articles.filter(a => {
       const catLabel = CATEGORY_LABELS[a.category] ?? a.category;
-      return [a.title, a.source, a.matchedKeyword, a.category, catLabel]
+      return [a.title, a.titleEn, a.source, t(a.source), a.matchedKeyword, a.category, catLabel, t(catLabel)]
         .filter(Boolean)
         .some(v => String(v).toLowerCase().includes(s));
     });
@@ -74,13 +78,13 @@ export function DashboardArticleList({ articles, canScrap = false, emptyText }: 
     <div>
       {q.trim() && (
         <div className="mb-2 text-xs text-gray-500">
-          ‘<span className="font-semibold text-gray-700">{q.trim()}</span>’ 검색 결과 {filtered.length}건
+          ‘<span className="font-semibold text-gray-700">{q.trim()}</span>’ {t('검색 결과 {n}건', { n: filtered.length })}
         </div>
       )}
       <ArticlesTable
         articles={filtered as any}
         canScrap={canScrap}
-        emptyText={q.trim() ? `‘${q.trim()}’에 맞는 기사가 없습니다.` : emptyText}
+        emptyText={q.trim() ? t('‘{q}’에 맞는 기사가 없습니다.', { q: q.trim() }) : emptyText}
       />
     </div>
   );

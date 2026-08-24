@@ -1,7 +1,9 @@
 'use client';
 import { useState } from 'react';
+import { useT } from '@/lib/i18n/client';
 
 export function BookmarkIcon({ id, initial }: { id: string; initial: boolean }) {
+  const t = useT();
   const [on, setOn] = useState(initial);
   const [busy, setBusy] = useState(false);
 
@@ -21,7 +23,7 @@ export function BookmarkIcon({ id, initial }: { id: string; initial: boolean }) 
     <button
       onClick={toggle}
       disabled={busy}
-      title={on ? '북마크 해제' : '내 북마크에 추가'}
+      title={on ? t('북마크 해제') : t('내 북마크에 추가')}
       className={`leading-none transition-colors ${on ? 'text-spark-purple' : 'text-gray-300 hover:text-spark-purple/60'}`}
     >
       <svg width="14" height="14" viewBox="0 0 14 18" fill={on ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round">

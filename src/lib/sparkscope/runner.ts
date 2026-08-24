@@ -10,6 +10,7 @@ import { normalizeSource } from './media';
 import { clusterArticles } from './cluster';
 import { analyzeArticles, pickVerifiedTop3 } from './analyzer';
 import { computeAndStoreDashboardInsights } from './dashboard-insights';
+import { ensureArticleEn } from './translate-content';
 import { backfillEmbeddings } from './embedding';
 import { checkConfigDrift, formatDriftReport } from './config-drift';
 import { buildDigestData, renderDigestHtml, buildClusteredPool, rankTop3Pool } from './digest';
@@ -284,6 +285,24 @@ export async function runDailyDigest(opts: RunOptions = {}) {
 
       // 4.55 Inter(해외 트렌드) 탭 AI 요약 사전계산 — 위와 같은 이유로 하루 1회, 여기서만.
       await computeAndStoreInterSummaries();
+
+      // 4.56 EN 화면용 제목 번역 — 오늘 새로 들어온 기사만 채운다(이미 있는 건 건너뜀).
+      // 여기서 미리 채워두면 영어 화면이 한국어 화면과 같은 속도로 뜬다. 비어 있어도
+      // 조회 때 즉석 번역으로 채워지므로, 실패해도 화면이 깨지지 않는다 — 그래서 삼킨다.
+      try {
+        const rows = await prisma.article.findMany({
+          where: { isNoise: false, titleEn: null },
+          orderBy: { pubDate: 'desc' },
+          take: 600,
+          select: { id: true, title: true, titleEn: true, oneLiner: true, oneLinerEn: true, pitchTopic: true, pitchTopicEn: true },
+        });
+        if (rows.length > 0) {
+          await ensureArticleEn(rows, { max: rows.length });
+          console.log(`[runner] 기사 제목 영어 번역 ${rows.filter(r => r.titleEn).length}/${rows.length}건`);
+        }
+      } catch (e) {
+        console.error('[runner] 제목 영어 번역 실패 (수집은 정상):', e);
+      }
 
       // 4.57 챗봇 의미 검색용 임베딩 — 오늘 새로 들어온 기사만 채운다(이미 있는 건 건너뜀).
       // 실패해도 수집·발송에는 영향이 없어야 하므로 여기서 삼킨다. 임베딩이 없는 기사는

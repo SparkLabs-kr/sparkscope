@@ -5,6 +5,7 @@ import { BookmarkIcon } from '@/components/BookmarkIcon';
 import { NoiseReportButton } from '@/components/NoiseReportButton';
 import { NoiseReportRequestButton } from '@/components/NoiseReportRequestButton';
 import { clusterArticles } from '@/lib/sparkscope/cluster';
+import { useT, type Translate } from '@/lib/i18n/client';
 
 interface Article {
   id: string;
@@ -23,6 +24,8 @@ interface Article {
   companyName?: string;
   portfolioStatus?: string | null;
   titleOnlyFallback?: boolean;
+  /** EN 화면용 번역 제목. 군집화·검색 fallback은 원문(title)을 그대로 쓴다. */
+  titleEn?: string | null;
 }
 
 const CATEGORY_BADGE: Record<string, { label: string; cls: string }> = {
@@ -63,20 +66,21 @@ function ToneDot({ tone }: { tone: string | null }) {
 }
 
 // 본문 스크래핑 실패로 title만으로 분석된 기사 표시 — 조용히 넘기지 않고 눈에 띄게 경고.
-function TitleOnlyBadge() {
+function TitleOnlyBadge({ t }: { t: Translate }) {
   return (
     <span
-      title="본문을 읽지 못해 제목만으로 분석했습니다. 요약·톤 판정 정확도가 낮을 수 있습니다."
+      title={t('본문을 읽지 못해 제목만으로 분석했습니다. 요약·톤 판정 정확도가 낮을 수 있습니다.')}
       className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap bg-amber-50 text-amber-700 border border-amber-200"
     >
-      ⚠️ 본문 미확인
+      ⚠️ {t('본문 미확인')}
     </span>
   );
 }
 
 export function ArticlesTable({ articles, canScrap = false, canBookmark = false, canReport = false, canRequestReport = false, emptyText, showCategoryColumn = true, showKeywordColumn = false }: { articles: Article[]; canScrap?: boolean; canBookmark?: boolean; canReport?: boolean; canRequestReport?: boolean; emptyText?: string; showCategoryColumn?: boolean; showKeywordColumn?: boolean }) {
+  const t = useT();
   if (articles.length === 0) {
-    return <p className="text-sm text-gray-400 py-8 text-center">{emptyText ?? '선택 기간 내 기사가 없습니다.'}</p>;
+    return <p className="text-sm text-gray-400 py-8 text-center">{emptyText ?? t('선택 기간 내 기사가 없습니다.')}</p>;
   }
 
   const hasCompanyName = articles.some(a => a.companyName);
@@ -97,9 +101,9 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
     <>
       {/* 톤 범례 */}
       <div className="flex items-center gap-3 mb-2 text-[11px] text-gray-500">
-        <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-green-500" />긍정</span>
-        <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-red-500" />부정</span>
-        <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-gray-400" />중립</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-green-500" />{t('긍정')}</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-red-500" />{t('부정')}</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-gray-400" />{t('중립')}</span>
       </div>
 
       {/* 데스크톱 테이블 (md 이상) */}
@@ -108,17 +112,17 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
           <thead>
             <tr className="bg-spark-subtle text-spark-muted text-[10px] uppercase tracking-wider border-b border-spark-border">
               {canScrap && <th className="text-center px-2 py-2 w-8">★</th>}
-              {canBookmark && <th className="text-center px-2 py-2 w-8" title="내 북마크">🔖</th>}
-              <th className="text-left px-3 py-2 w-20">날짜</th>
-              {showCategoryColumn && <th className="text-left px-3 py-2 w-24">분류</th>}
-              {showKeywordColumn && <th className="text-left px-3 py-2 w-28">키워드</th>}
-              {hasCompanyName && <th className="text-left px-3 py-2 w-28">회사명</th>}
-              {hasCompanyName && <th className="text-left px-3 py-2 w-16">상태</th>}
-              <th className="text-left px-3 py-2">제목</th>
-              <th className="text-left px-3 py-2 w-28">매체</th>
-              <th className="text-center px-3 py-2 w-16">중요도</th>
-              <th className="text-center px-3 py-2 w-16">피칭</th>
-              {(canReport || canRequestReport) && <th className="text-center px-2 py-2 w-8 border-l border-spark-border" title={canReport ? '노이즈 신고(관리자)' : '노이즈 신고 요청'}>🚫</th>}
+              {canBookmark && <th className="text-center px-2 py-2 w-8" title={t('내 북마크')}>🔖</th>}
+              <th className="text-left px-3 py-2 w-20">{t('날짜')}</th>
+              {showCategoryColumn && <th className="text-left px-3 py-2 w-24">{t('분류')}</th>}
+              {showKeywordColumn && <th className="text-left px-3 py-2 w-28">{t('키워드')}</th>}
+              {hasCompanyName && <th className="text-left px-3 py-2 w-28">{t('회사명')}</th>}
+              {hasCompanyName && <th className="text-left px-3 py-2 w-16">{t('상태')}</th>}
+              <th className="text-left px-3 py-2">{t('제목')}</th>
+              <th className="text-left px-3 py-2 w-28">{t('매체')}</th>
+              <th className="text-center px-3 py-2 w-16">{t('중요도')}</th>
+              <th className="text-center px-3 py-2 w-16">{t('피칭')}</th>
+              {(canReport || canRequestReport) && <th className="text-center px-2 py-2 w-8 border-l border-spark-border" title={canReport ? t('노이즈 신고(관리자)') : t('노이즈 신고 요청')}>🚫</th>}
             </tr>
           </thead>
           <tbody>
@@ -132,19 +136,19 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
                   {canScrap && <td className="px-2 py-3 text-center"><ScrapStar id={a.id} initial={!!a.isScrapped} /></td>}
                   {canBookmark && <td className="px-2 py-3 text-center"><BookmarkIcon id={a.id} initial={!!a.isBookmarked} /></td>}
                   <td className="px-3 py-3 text-xs text-gray-500">{date.getMonth() + 1}/{date.getDate()}</td>
-                  {showCategoryColumn && <td className="px-3 py-3"><span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${cat.cls}`}>{cat.label}</span></td>}
-                  {showKeywordColumn && <td className="px-3 py-3 text-xs text-gray-600 whitespace-nowrap">{a.matchedKeyword}</td>}
-                  {hasCompanyName && <td className="px-3 py-3 text-xs font-medium text-gray-800 whitespace-nowrap">{a.companyName ?? a.matchedKeyword}</td>}
+                  {showCategoryColumn && <td className="px-3 py-3"><span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${cat.cls}`}>{t(cat.label)}</span></td>}
+                  {showKeywordColumn && <td className="px-3 py-3 text-xs text-gray-600 whitespace-nowrap">{t(a.matchedKeyword)}</td>}
+                  {hasCompanyName && <td className="px-3 py-3 text-xs font-medium text-gray-800 whitespace-nowrap">{t(a.companyName ?? a.matchedKeyword)}</td>}
                   {hasCompanyName && <td className="px-3 py-3">{statusCls ? <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${statusCls}`}>{a.portfolioStatus}</span> : <span className="text-gray-300 text-xs">—</span>}</td>}
                   <td className="px-3 py-3">
                     <span className="flex items-center gap-2">
                       <ToneDot tone={a.tone} />
                       {hasRealLink(a.link) ? (
-                        <a href={a.link} target="_blank" rel="noopener noreferrer" className="hover:text-spark-purple">{a.title}</a>
+                        <a href={a.link} target="_blank" rel="noopener noreferrer" className="hover:text-spark-purple">{a.titleEn || a.title}</a>
                       ) : (
-                        <a href={searchFallbackUrl(a.title, a.source)} target="_blank" rel="noopener noreferrer" title="원문 링크를 찾지 못해 검색 결과로 연결합니다." className="hover:text-spark-purple">{a.title} 🔍</a>
+                        <a href={searchFallbackUrl(a.title, a.source)} target="_blank" rel="noopener noreferrer" title={t('원문 링크를 찾지 못해 검색 결과로 연결합니다.')} className="hover:text-spark-purple">{a.titleEn || a.title} 🔍</a>
                       )}
-                      {a.titleOnlyFallback && <TitleOnlyBadge />}
+                      {a.titleOnlyFallback && <TitleOnlyBadge t={t} />}
                     </span>
                     {others.length > 0 && (
                       <div className="mt-1">
@@ -153,7 +157,7 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
                           onClick={() => toggle(a.id)}
                           className="text-[11px] font-semibold text-spark-purple hover:underline"
                         >
-                          {isOpen ? '접기 ▲' : `+${others.length}개 매체 더보기 ▼`}
+                          {isOpen ? t('접기 ▲') : t('+{n}개 매체 더보기 ▼', { n: others.length })}
                         </button>
                         {isOpen && (
                           <div className="mt-1 space-y-1 border-l-2 border-spark-border pl-2">
@@ -162,7 +166,7 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
                               const href = hasRealLink(o.link) ? o.link : searchFallbackUrl(o.title, o.source);
                               return (
                                 <a key={o.id} href={href} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-gray-500 hover:text-spark-purple">
-                                  {o.source} · {od.getMonth() + 1}.{od.getDate()}
+                                  {t(o.source)} · {od.getMonth() + 1}.{od.getDate()}
                                 </a>
                               );
                             })}
@@ -171,8 +175,8 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-3 text-xs text-gray-600">{a.source}{others.length > 0 && ` 외 ${others.length}`}</td>
-                  <td className={`px-3 py-3 text-center text-xs ${IMP_STYLE[a.importance ?? 'LOW']}`}>{a.importance === 'HIGH' || a.importance === 'CRITICAL' ? '높음' : a.importance === 'MEDIUM' ? '중' : '낮음'}</td>
+                  <td className="px-3 py-3 text-xs text-gray-600">{t(a.source)}{others.length > 0 && ` ${t('외 {n}', { n: others.length })}`}</td>
+                  <td className={`px-3 py-3 text-center text-xs ${IMP_STYLE[a.importance ?? 'LOW']}`}>{a.importance === 'HIGH' || a.importance === 'CRITICAL' ? t('높음') : a.importance === 'MEDIUM' ? t('중') : t('낮음')}</td>
                   <td className="px-3 py-3 text-center text-xs font-bold text-amber-700">{a.pitchScore && a.pitchScore >= 60 ? a.pitchScore : '—'}</td>
                   {(canReport || canRequestReport) && (
                     <td className="px-2 py-3 text-center border-l border-spark-border">
@@ -198,9 +202,9 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
               {/* 상단: 분류 배지 + 날짜 + 별표 */}
               <div className="flex items-center justify-between gap-2 mb-2">
                 <div className="flex items-center gap-2">
-                  {showCategoryColumn && <span className={`px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${cat.cls}`}>{cat.label}</span>}
-                  {showKeywordColumn && <span className="text-xs text-gray-600">{a.matchedKeyword}</span>}
-                  {a.companyName && <span className="text-xs font-medium text-gray-800">{a.companyName}</span>}
+                  {showCategoryColumn && <span className={`px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${cat.cls}`}>{t(cat.label)}</span>}
+                  {showKeywordColumn && <span className="text-xs text-gray-600">{t(a.matchedKeyword)}</span>}
+                  {a.companyName && <span className="text-xs font-medium text-gray-800">{t(a.companyName)}</span>}
                   {statusCls && <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${statusCls}`}>{a.portfolioStatus}</span>}
                   <span className="text-xs text-gray-500 whitespace-nowrap">{date.getMonth() + 1}/{date.getDate()}</span>
                 </div>
@@ -216,15 +220,15 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
               {hasRealLink(a.link) ? (
                 <a href={a.link} target="_blank" rel="noopener noreferrer" className="flex items-start gap-2 text-sm font-medium text-gray-900 hover:text-spark-purple mb-2">
                   <ToneDot tone={a.tone} />
-                  <span className="line-clamp-2">{a.title}</span>
+                  <span className="line-clamp-2">{a.titleEn || a.title}</span>
                 </a>
               ) : (
-                <a href={searchFallbackUrl(a.title, a.source)} target="_blank" rel="noopener noreferrer" title="원문 링크를 찾지 못해 검색 결과로 연결합니다." className="flex items-start gap-2 text-sm font-medium text-gray-900 hover:text-spark-purple mb-2">
+                <a href={searchFallbackUrl(a.title, a.source)} target="_blank" rel="noopener noreferrer" title={t('원문 링크를 찾지 못해 검색 결과로 연결합니다.')} className="flex items-start gap-2 text-sm font-medium text-gray-900 hover:text-spark-purple mb-2">
                   <ToneDot tone={a.tone} />
-                  <span className="line-clamp-2">{a.title} 🔍</span>
+                  <span className="line-clamp-2">{a.titleEn || a.title} 🔍</span>
                 </a>
               )}
-              {a.titleOnlyFallback && <div className="mb-2"><TitleOnlyBadge /></div>}
+              {a.titleOnlyFallback && <div className="mb-2"><TitleOnlyBadge t={t} /></div>}
 
               {others.length > 0 && (
                 <div className="mb-2">
@@ -233,7 +237,7 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
                     onClick={() => toggle(a.id)}
                     className="text-[11px] font-semibold text-spark-purple hover:underline"
                   >
-                    {isOpen ? '접기 ▲' : `+${others.length}개 매체 더보기 ▼`}
+                    {isOpen ? t('접기 ▲') : t('+{n}개 매체 더보기 ▼', { n: others.length })}
                   </button>
                   {isOpen && (
                     <div className="mt-1 space-y-1 border-l-2 border-spark-border pl-2">
@@ -242,7 +246,7 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
                         const href = hasRealLink(o.link) ? o.link : searchFallbackUrl(o.title, o.source);
                         return (
                           <a key={o.id} href={href} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-gray-500 hover:text-spark-purple">
-                            {o.source} · {od.getMonth() + 1}.{od.getDate()}
+                            {t(o.source)} · {od.getMonth() + 1}.{od.getDate()}
                           </a>
                         );
                       })}
@@ -253,10 +257,10 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
 
               {/* 하단: 매체 + 중요도 + 피칭 */}
               <div className="flex items-center justify-between gap-2 text-xs text-gray-600">
-                <span className="truncate">{a.source}{others.length > 0 && ` 외 ${others.length}`}</span>
+                <span className="truncate">{t(a.source)}{others.length > 0 && ` ${t('외 {n}', { n: others.length })}`}</span>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                  {(a.importance === 'HIGH' || a.importance === 'CRITICAL') && <span className={IMP_STYLE[a.importance]}>높</span>}
-                  {a.pitchScore && a.pitchScore >= 60 && <span className="text-amber-700 font-bold">{a.pitchScore}점</span>}
+                  {(a.importance === 'HIGH' || a.importance === 'CRITICAL') && <span className={IMP_STYLE[a.importance]}>{t('높')}</span>}
+                  {a.pitchScore && a.pitchScore >= 60 && <span className="text-amber-700 font-bold">{t('{n}점', { n: a.pitchScore })}</span>}
                   {(canReport || canRequestReport) && (
                     <span className="pl-1.5 ml-0.5 border-l border-spark-border">
                       {canReport ? <NoiseReportButton id={a.id} initial={!!a.isNoise} /> : <NoiseReportRequestButton id={a.id} />}

@@ -1,8 +1,10 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useT } from '@/lib/i18n/client';
 
 export function NoiseReportButton({ id, initial }: { id: string; initial: boolean }) {
+  const tr = useT();
   const [on, setOn] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [showUndo, setShowUndo] = useState(false);
@@ -41,7 +43,7 @@ export function NoiseReportButton({ id, initial }: { id: string; initial: boolea
       <button
         onClick={toggle}
         disabled={busy}
-        title={on ? '노이즈 해제' : '노이즈로 신고'}
+        title={on ? tr('노이즈 해제') : tr('노이즈로 신고')}
         className={`leading-none transition-colors ${on ? 'text-red-600' : 'text-gray-300 hover:text-red-400'}`}
       >
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
@@ -52,18 +54,18 @@ export function NoiseReportButton({ id, initial }: { id: string; initial: boolea
       {showUndo && (
         <span className="absolute right-0 top-full mt-1 z-10 whitespace-nowrap rounded-md bg-gray-900 text-white text-[11px] px-2 py-1.5 shadow-lg flex flex-col gap-1">
           <span className="flex items-center gap-1.5">
-            노이즈로 처리했습니다
+            {tr('노이즈로 처리했습니다')}
             <button
               type="button"
               onClick={() => { setShowUndo(false); toggle(); }}
               className="underline font-semibold hover:text-spark-purple-light"
             >
-              실행취소
+              {tr('실행취소')}
             </button>
           </span>
           {suggestionCreated && (
             <Link href="/dashboard/noise-suggestions" className="underline font-semibold text-emerald-300 hover:text-emerald-200">
-              🔍 AI 재발방지 제안 생성됨 · 확인하러 가기
+              🔍 {tr('AI 재발방지 제안 생성됨 · 확인하러 가기')}
             </Link>
           )}
         </span>

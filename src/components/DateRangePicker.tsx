@@ -1,6 +1,7 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useT } from '@/lib/i18n/client';
 
 function fmt(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -47,6 +48,7 @@ export function DateRangePicker({
   /** 부모가 이미 "조회 기간" 라벨을 그리는 경우(Inter 조회 조건 카드) 중복 표시를 막는다. */
   hideLabel?: boolean;
 }) {
+  const tr = useT();
   const router = useRouter();
   const [f, setF] = useState(from);
   const [t, setT] = useState(to);
@@ -85,7 +87,7 @@ export function DateRangePicker({
     <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2">
       {/* 모바일: 세로 스택, 타블릿 이상: 가로 배치 */}
       <div className="flex w-full sm:w-auto items-center gap-1 sm:gap-2">
-        {!hideLabel && <span className="text-[13px] font-semibold text-gray-500 whitespace-nowrap">조회 기간</span>}
+        {!hideLabel && <span className="text-[13px] font-semibold text-gray-500 whitespace-nowrap">{tr('조회 기간')}</span>}
         <input
           type="date" value={f} min={min} max={max}
           onChange={e => { setF(e.target.value); go(e.target.value, t); }}
@@ -111,7 +113,7 @@ export function DateRangePicker({
               aria-pressed={active}
               className={`rounded-lg px-3 py-1 text-[13px] font-semibold border transition-colors ${active ? cls.active : cls.idle}`}
             >
-              {p.label}
+              {tr(p.label)}
             </button>
           );
         })}

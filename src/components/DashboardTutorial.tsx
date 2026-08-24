@@ -1,4 +1,5 @@
 'use client';
+import { useT } from '@/lib/i18n/client';
 
 // 대시보드 튜토리얼 — 상단 '튜토리얼 열기'를 누르면 패널을 하나씩 짚어가며 설명한다.
 //
@@ -177,6 +178,7 @@ function renderBody(text: string) {
 }
 
 function TourOverlay({ steps, onClose }: { steps: TourStep[]; onClose: () => void }) {
+  const t = useT();
   const [i, setI] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
 
@@ -284,7 +286,7 @@ function TourOverlay({ steps, onClose }: { steps: TourStep[]; onClose: () => voi
   const last = i === steps.length - 1;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100]" role="dialog" aria-modal="true" aria-label="대시보드 튜토리얼">
+    <div className="fixed inset-0 z-[100]" role="dialog" aria-modal="true" aria-label={t('대시보드 튜토리얼')}>
       {/* 클릭 차단 — 투어 중에는 화면을 건드리지 않게 */}
       <div className="absolute inset-0" onClick={onClose} />
 
@@ -317,15 +319,15 @@ function TourOverlay({ steps, onClose }: { steps: TourStep[]; onClose: () => voi
           <button
             onClick={onClose}
             className="ml-auto -mr-1 rounded-md px-1.5 py-0.5 text-[16px] leading-none text-spark-muted hover:bg-spark-subtle hover:text-spark-ink"
-            aria-label="튜토리얼 닫기"
+            aria-label={t('튜토리얼 닫기')}
           >
             ×
           </button>
         </div>
 
-        <h2 className="mb-1.5 text-[15px] font-extrabold leading-snug text-spark-ink">{step.title}</h2>
+        <h2 className="mb-1.5 text-[15px] font-extrabold leading-snug text-spark-ink">{t(step.title)}</h2>
         <div className="min-h-0 flex-1 overflow-y-auto text-[13px] leading-relaxed text-spark-ink-soft">
-          {renderBody(step.body)}
+          {renderBody(t(step.body))}
         </div>
 
         {/* 진행 점 + 버튼 */}
@@ -335,7 +337,7 @@ function TourOverlay({ steps, onClose }: { steps: TourStep[]; onClose: () => voi
               <button
                 key={s.key}
                 onClick={() => setI(si)}
-                aria-label={`${si + 1}단계로 이동`}
+                aria-label={t('{n}단계로 이동', { n: si + 1 })}
                 className={`h-1.5 rounded-full transition-all ${
                   si === i ? 'w-4 bg-spark-purple' : 'w-1.5 bg-spark-border hover:bg-spark-muted'
                 }`}
@@ -348,14 +350,14 @@ function TourOverlay({ steps, onClose }: { steps: TourStep[]; onClose: () => voi
                 onClick={prev}
                 className="rounded-lg border border-spark-border px-3 py-1.5 text-[13px] font-semibold text-spark-ink-soft hover:bg-spark-subtle"
               >
-                이전
+                {t('이전')}
               </button>
             )}
             <button
               onClick={last ? onClose : next}
               className="rounded-lg bg-spark-purple px-4 py-1.5 text-[13px] font-bold text-white hover:brightness-110"
             >
-              {last ? '끝내기' : '다음'}
+              {last ? t('끝내기') : t('다음')}
             </button>
           </div>
         </div>
@@ -368,6 +370,7 @@ function TourOverlay({ steps, onClose }: { steps: TourStep[]; onClose: () => voi
 // ── 헤더 버튼 ────────────────────────────────────────────────────────────
 
 function TutorialButtonInner() {
+  const t = useT();
   const pathname = usePathname();
   const sp = useSearchParams();
   const [steps, setSteps] = useState<TourStep[] | null>(null);
@@ -409,7 +412,7 @@ function TutorialButtonInner() {
         disabled={waiting}
         className="rounded-md border border-spark-border bg-white px-2.5 py-1 text-[11px] font-bold text-spark-ink-soft transition-colors hover:border-spark-purple/50 hover:text-spark-purple disabled:opacity-60"
       >
-        {waiting ? '🎓 준비 중…' : '🎓 튜토리얼 열기'}
+        {waiting ? `🎓 ${t('준비 중…')}` : `🎓 ${t('튜토리얼 열기')}`}
       </button>
       {steps && <TourOverlay key={runId} steps={steps} onClose={() => setSteps(null)} />}
     </>

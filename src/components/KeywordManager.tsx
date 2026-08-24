@@ -1,4 +1,5 @@
 'use client';
+import { useT, type Translate } from '@/lib/i18n/client';
 import { useEffect, useMemo, useState } from 'react';
 
 interface Target {
@@ -25,6 +26,7 @@ const CAT_LABEL: Record<string, string> = Object.fromEntries(CATS.map(c => [c.ke
 const emptyForm = { name: '', englishName: '', category: 'portfolio_company', helperKeywords: '', excludeWords: '', contextWords: '' };
 
 export function KeywordManager() {
+  const tr = useT();
   const [targets, setTargets] = useState<Target[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [filter, setFilter] = useState<string>('all');
@@ -66,14 +68,14 @@ export function KeywordManager() {
     return list;
   }, [targets, filter, search]);
 
-  const JSON_REMINDER = 'data/master-keywords.json에도 같은 내용을 반영해주세요 — 안 하면 나중에 재시딩될 때 이 변경이 조용히 되돌아갈 수 있어요.';
+  const JSON_REMINDER = tr('data/master-keywords.json에도 같은 내용을 반영해주세요 — 안 하면 나중에 재시딩될 때 이 변경이 조용히 되돌아갈 수 있어요.');
 
   async function add() {
     setErr('');
-    if (!form.name.trim()) { setErr('기업/키워드명을 입력하세요.'); return; }
+    if (!form.name.trim()) { setErr(tr('기업/키워드명을 입력하세요.')); return; }
     const res = await fetch('/api/keywords', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
-    if (!res.ok) { setErr((await res.json()).error ?? '추가 실패'); return; }
-    setNotice(`'${form.name}' 추가됨. ${JSON_REMINDER}`);
+    if (!res.ok) { setErr((await res.json()).error ?? tr('추가 실패')); return; }
+    setNotice(`'${form.name}' ${tr('추가됨.')} ${JSON_REMINDER}`);
     setForm(emptyForm);
     load();
   }
@@ -82,15 +84,15 @@ export function KeywordManager() {
     if (!editId) return;
     const name = targets.find(t => t.id === editId)?.name ?? '';
     const res = await fetch('/api/keywords', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editId, ...editForm }) });
-    if (!res.ok) { setErr((await res.json()).error ?? '수정 실패'); return; }
-    setNotice(`'${name}' 수정됨. ${JSON_REMINDER}`);
+    if (!res.ok) { setErr((await res.json()).error ?? tr('수정 실패')); return; }
+    setNotice(`'${name}' ${tr('수정됨.')} ${JSON_REMINDER}`);
     setEditId(null); setEditForm({}); load();
   }
 
   async function remove(t: Target) {
-    if (!confirm(`'${t.name}'을(를) 모니터링 대상에서 삭제할까요?\n(소프트 삭제 — 복구 가능, 수집에서 자동 제외됩니다)`)) return;
+    if (!confirm(tr("'{name}'을(를) 모니터링 대상에서 삭제할까요?\n(소프트 삭제 — 복구 가능, 수집에서 자동 제외됩니다)", { name: t.name }))) return;
     const res = await fetch(`/api/keywords?id=${t.id}`, { method: 'DELETE' });
-    if (res.ok) { setNotice(`'${t.name}' 삭제(일시중지)됨. ${JSON_REMINDER}`); load(); }
+    if (res.ok) { setNotice(`'${t.name}' ${tr('삭제(일시중지)됨.')} ${JSON_REMINDER}`); load(); }
   }
 
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
@@ -101,31 +103,31 @@ export function KeywordManager() {
       {notice && (
         <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-3 py-2 mb-4">
           <span className="flex-1">📄 {notice}</span>
-          <button onClick={() => setNotice(null)} className="text-xs font-semibold text-amber-700 border border-amber-300 rounded px-2 py-0.5 hover:bg-amber-100 whitespace-nowrap">확인</button>
+          <button onClick={() => setNotice(null)} className="text-xs font-semibold text-amber-700 border border-amber-300 rounded px-2 py-0.5 hover:bg-amber-100 whitespace-nowrap">{tr('확인')}</button>
         </div>
       )}
       {/* 추가 폼 */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 mb-4">
-        <div className="font-bold mb-3">+ 모니터링 대상 추가</div>
+        <div className="font-bold mb-3">+ {tr('모니터링 대상 추가')}</div>
         <div className="flex flex-wrap gap-2 items-center">
-          <input className={inputCls} placeholder="기업/키워드명*" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
-          <input className={inputCls} placeholder="영문명" value={form.englishName} onChange={e => setForm({ ...form, englishName: e.target.value })} />
+          <input className={inputCls} placeholder={tr('기업/키워드명*')} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+          <input className={inputCls} placeholder={tr('영문명')} value={form.englishName} onChange={e => setForm({ ...form, englishName: e.target.value })} />
           <select className={inputCls} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
-            {CATS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+            {CATS.map(c => <option key={c.key} value={c.key}>{tr(c.label)}</option>)}
           </select>
-          <input className={`${inputCls} min-w-52`} placeholder="보조키워드(쉼표구분)" value={form.helperKeywords} onChange={e => setForm({ ...form, helperKeywords: e.target.value })} />
-          <input className={`${inputCls} min-w-40`} placeholder="제외키워드(쉼표구분)" value={form.excludeWords} onChange={e => setForm({ ...form, excludeWords: e.target.value })} />
-          <input className={`${inputCls} min-w-40`} placeholder="문맥어(쉼표구분, 하나라도 포함돼야 통과)" value={form.contextWords} onChange={e => setForm({ ...form, contextWords: e.target.value })} />
-          <button onClick={add} className="rounded-lg bg-spark-purple px-4 py-1.5 text-sm font-semibold text-white hover:opacity-90">추가</button>
+          <input className={`${inputCls} min-w-52`} placeholder={tr('보조키워드(쉼표구분)')} value={form.helperKeywords} onChange={e => setForm({ ...form, helperKeywords: e.target.value })} />
+          <input className={`${inputCls} min-w-40`} placeholder={tr('제외키워드(쉼표구분)')} value={form.excludeWords} onChange={e => setForm({ ...form, excludeWords: e.target.value })} />
+          <input className={`${inputCls} min-w-40`} placeholder={tr('문맥어(쉼표구분, 하나라도 포함돼야 통과)')} value={form.contextWords} onChange={e => setForm({ ...form, contextWords: e.target.value })} />
+          <button onClick={add} className="rounded-lg bg-spark-purple px-4 py-1.5 text-sm font-semibold text-white hover:opacity-90">{tr('추가')}</button>
         </div>
         {err && <div className="text-xs text-red-600 mt-2">{err}</div>}
       </div>
 
       {/* 필터 + 검색 */}
       <div className="flex flex-wrap items-center gap-2 mb-3">
-        <button onClick={() => setFilter('all')} className={tabCls(filter === 'all')}>전체 {total}</button>
-        {CATS.map(c => <button key={c.key} onClick={() => setFilter(c.key)} className={tabCls(filter === c.key)}>{c.label} {counts[c.key] ?? 0}</button>)}
-        <input className={`${inputCls} ml-auto`} placeholder="🔍 이름·키워드 검색" value={search} onChange={e => setSearch(e.target.value)} />
+        <button onClick={() => setFilter('all')} className={tabCls(filter === 'all')}>{tr('전체')} {total}</button>
+        {CATS.map(c => <button key={c.key} onClick={() => setFilter(c.key)} className={tabCls(filter === c.key)}>{tr(c.label)} {counts[c.key] ?? 0}</button>)}
+        <input className={`${inputCls} ml-auto`} placeholder={tr('🔍 이름·키워드 검색')} value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
       {/* 목록 */}
@@ -133,35 +135,35 @@ export function KeywordManager() {
         <table className="w-full min-w-[1000px] text-sm table-fixed">
           <thead>
             <tr className="bg-gray-50 text-gray-500 text-[10px] uppercase tracking-wider">
-              <th className="text-left px-3 py-2 w-28">이름</th>
-              <th className="text-left px-3 py-2 w-28">영문명</th>
-              <th className="text-left px-3 py-2 w-24">카테고리</th>
-              <th className="text-center px-3 py-2 w-16">상태</th>
-              <th className="text-center px-3 py-2 w-20">포폴상태</th>
-              <th className="text-left px-3 py-2 w-32">보조키워드</th>
-              <th className="text-left px-3 py-2 w-32">제외키워드</th>
-              <th className="text-left px-3 py-2 w-40">문맥어</th>
-              <th className="text-right px-3 py-2 w-24">관리</th>
+              <th className="text-left px-3 py-2 w-28">{tr('이름')}</th>
+              <th className="text-left px-3 py-2 w-28">{tr('영문명')}</th>
+              <th className="text-left px-3 py-2 w-24">{tr('카테고리')}</th>
+              <th className="text-center px-3 py-2 w-16">{tr('상태')}</th>
+              <th className="text-center px-3 py-2 w-20">{tr('포폴상태')}</th>
+              <th className="text-left px-3 py-2 w-32">{tr('보조키워드')}</th>
+              <th className="text-left px-3 py-2 w-32">{tr('제외키워드')}</th>
+              <th className="text-left px-3 py-2 w-40">{tr('문맥어')}</th>
+              <th className="text-right px-3 py-2 w-24">{tr('관리')}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9} className="text-center text-gray-400 py-8">불러오는 중…</td></tr>
+              <tr><td colSpan={9} className="text-center text-gray-400 py-8">{tr('불러오는 중…')}</td></tr>
             ) : shown.length === 0 ? (
-              <tr><td colSpan={9} className="text-center text-gray-400 py-8">결과 없음</td></tr>
+              <tr><td colSpan={9} className="text-center text-gray-400 py-8">{tr('결과 없음')}</td></tr>
             ) : shown.map(t => editId === t.id ? (
               <tr key={t.id} className="border-b border-gray-100 bg-amber-50">
                 <td className="px-3 py-2"><input className={inputCls} defaultValue={t.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} /></td>
                 <td className="px-3 py-2"><input className={inputCls} defaultValue={t.englishName ?? ''} onChange={e => setEditForm(f => ({ ...f, englishName: e.target.value }))} /></td>
                 <td className="px-3 py-2">
                   <select className={inputCls} defaultValue={t.category} onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))}>
-                    {CATS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+                    {CATS.map(c => <option key={c.key} value={c.key}>{tr(c.label)}</option>)}
                   </select>
                 </td>
                 <td className="px-3 py-2 text-center">
                   <select className={inputCls} defaultValue={t.status} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}>
-                    <option value="ACTIVE">활성</option>
-                    <option value="PAUSED">일시중지</option>
+                    <option value="ACTIVE">{tr('활성')}</option>
+                    <option value="PAUSED">{tr('일시중지')}</option>
                   </select>
                 </td>
                 <td className="px-3 py-2 text-center">
@@ -176,23 +178,23 @@ export function KeywordManager() {
                 <td className="px-3 py-2"><input className={`${inputCls} w-full`} defaultValue={t.excludeWords ?? ''} onChange={e => setEditForm(f => ({ ...f, excludeWords: e.target.value }))} /></td>
                 <td className="px-3 py-2"><input className={`${inputCls} w-full`} defaultValue={t.contextWords ?? ''} onChange={e => setEditForm(f => ({ ...f, contextWords: e.target.value }))} /></td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">
-                  <button onClick={saveEdit} className="text-xs font-semibold text-spark-purple mr-2">저장</button>
-                  <button onClick={() => { setEditId(null); setEditForm({}); }} className="text-xs text-gray-400">취소</button>
+                  <button onClick={saveEdit} className="text-xs font-semibold text-spark-purple mr-2">{tr('저장')}</button>
+                  <button onClick={() => { setEditId(null); setEditForm({}); }} className="text-xs text-gray-400">{tr('취소')}</button>
                 </td>
               </tr>
             ) : (
               <tr key={t.id} className="border-b border-gray-100 hover:bg-gray-50">
                 <td className="px-3 py-2 font-medium truncate" title={t.name}>{t.name}</td>
                 <td className="px-3 py-2 text-gray-500 truncate" title={t.englishName ?? ''}>{t.englishName}</td>
-                <td className="px-3 py-2 truncate"><span className="text-xs text-gray-600">{CAT_LABEL[t.category] ?? t.category}</span></td>
-                <td className="px-3 py-2 text-center"><StatusBadge status={t.status} /></td>
+                <td className="px-3 py-2 truncate"><span className="text-xs text-gray-600">{tr(CAT_LABEL[t.category] ?? t.category)}</span></td>
+                <td className="px-3 py-2 text-center"><StatusBadge status={t.status} tr={tr} /></td>
                 <td className="px-3 py-2 text-center"><PortfolioStatusBadge status={t.portfolioStatus} /></td>
                 <td className="px-3 py-2 text-xs text-gray-500 truncate" title={t.helperKeywords ?? ''}>{t.helperKeywords}</td>
                 <td className="px-3 py-2 text-xs text-gray-500 truncate" title={t.excludeWords ?? ''}>{t.excludeWords}</td>
                 <td className="px-3 py-2 text-xs text-gray-500 truncate" title={t.contextWords ?? ''}>{t.contextWords}</td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">
-                  <button onClick={() => { setEditId(t.id); setEditForm({}); }} className="text-xs font-semibold text-gray-600 mr-2">편집</button>
-                  <button onClick={() => remove(t)} className="text-xs text-red-500">삭제</button>
+                  <button onClick={() => { setEditId(t.id); setEditForm({}); }} className="text-xs font-semibold text-gray-600 mr-2">{tr('편집')}</button>
+                  <button onClick={() => remove(t)} className="text-xs text-red-500">{tr('삭제')}</button>
                 </td>
               </tr>
             ))}
@@ -207,9 +209,9 @@ function tabCls(active: boolean) {
   return `rounded-full px-3 py-1 text-xs font-semibold border ${active ? 'bg-spark-purple text-white border-spark-purple' : 'text-gray-600 border-gray-200 hover:bg-gray-50'}`;
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, tr }: { status: string; tr: Translate }) {
   const cls = status === 'PAUSED' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700';
-  const label = status === 'PAUSED' ? '일시중지' : status === 'EXIT' ? 'EXIT' : '활성';
+  const label = status === 'PAUSED' ? tr('일시중지') : status === 'EXIT' ? 'EXIT' : tr('활성');
   return <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${cls}`}>{label}</span>;
 }
 

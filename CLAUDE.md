@@ -127,6 +127,51 @@ git commit --no-verify
 
 ---
 
+## 🌐 한국어 / 영어 (i18n)
+
+화면 우측 상단 `KO | EN` 토글로 전환한다. 쿠키(`sparkscope-lang`) 하나를 서버·클라이언트가 같이
+읽으므로, 서버 컴포넌트가 그린 문구까지 함께 바뀐다.
+
+### 두 종류를 구분해서 다룬다
+
+| 대상 | 담당 | 비고 |
+|---|---|---|
+| UI 문구(버튼·라벨·안내문) | `src/lib/i18n/en.ts` 사전 | 키가 **한국어 원문 그 자체**다 |
+| 기사 제목·AI 문장 | `Article.titleEn` 등 번역 캐시 | `translate-content.ts`가 gpt-4o-mini로 채운다 |
+
+- ✅ 새 UI 문구는 `t('한국어 원문')`으로 감싸고 `en.ts`에 영어를 추가한다. **사전에 없으면
+  한국어가 그대로 나온다** — 빠뜨려도 화면이 깨지지 않지만, EN 화면에 한국어가 섞인다.
+- ✅ 번역 대상이 아닌 것: 발송되는 다이제스트 메일 본문(수신자가 한국어 사용자다),
+  LLM에 넘기는 프롬프트·검색어(DB와 감시 키워드가 한국어라 영어로 바꾸면 결과가 0건이 된다).
+- ❌ `title`(한국어 원문)을 영어로 덮어쓰지 마라. 군집화(`cluster.ts`)와 노이즈 필터가
+  한국어 제목을 기준으로 매칭하므로, 표시만 `titleEn`으로 하고 로직은 원문을 쓴다.
+- ❌ `src/lib/inter-sample-data.ts`처럼 **클라이언트 컴포넌트도 import 하는 모듈**에서
+  `translate-content.ts`를 import 하지 마라. OpenAI SDK가 클라이언트 번들로 딸려 들어가
+  "Missing credentials"로 화면이 죽는다. 번역은 서버 라우트/페이지에서만 호출한다.
+
+### 회사명·매체명
+
+1순위는 `MonitoringTarget.englishName`이다. **이 컬럼은 수집 단계의 매칭 키로도 쓰이므로**
+표시용으로 임의로 채우지 말고, 화면 표기만 필요하면 `en.ts` 사전에 넣는다.
+반대로 영문명이 비어 EN 화면에 한국어로 뜨는 회사는 **키워드 관리 화면에서 영문명을 채우면**
+사전보다 우선해서 바로 반영된다.
+
+### 번역 캐시 채우기
+
+- 새 기사는 수집 크론(`runner.ts` 4.56단계)이 하루 1회 자동으로 채운다.
+- 수동/전체 백필: `npx tsx --env-file=.env.local scripts/backfill-title-en.ts`
+  (`--inter`는 Inter 탭 판정·매칭 사유, `--limit N`·`--days N`으로 범위 제한)
+  중간에 끊겨도 이미 채운 건 건너뛰므로 그냥 다시 실행하면 이어서 진행된다.
+- 비어 있어도 조회 때 즉석 번역으로 채워지므로 화면은 정상 작동한다(첫 조회만 느려진다).
+
+### 스키마 변경 시 주의
+
+번역 캐시 컬럼은 `prisma/migrations/20260824_add_article_en_columns/migration.sql`로 추가했다.
+**`prisma db push`를 쓰지 마라** — 프로덕션에 schema.prisma가 모르는 컬럼이 남아 있어(drift)
+db push가 그것들을 DROP 하려 든다. `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`를 직접 실행한다.
+
+---
+
 ## 📚 관련 문서
 
 - `README.md` — 배포 및 운영 가이드

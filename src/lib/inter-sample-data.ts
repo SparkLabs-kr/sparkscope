@@ -18,6 +18,7 @@ import {
   topicSectorsFor,
 } from './sparkscope/inter-taxonomy';
 import { nearestSummaryPeriodKey } from './sparkscope/inter-summary-periods';
+import { makeT } from './i18n/translate';
 
 export type InterDomain = 'bio' | 'ai';
 export type InterCountry = 'us' | 'cn' | 'jp' | 'sa' | 'other' | 'all';
@@ -64,7 +65,12 @@ const FALLBACK_SUMMARY: Record<InterDomain, Omit<DomainSummary, 'label' | 'sourc
  * 값을 찾아 반환한다. 이렇게 해야 "가장 많이 걸린 포트폴리오사" 칩(선택 기간 기준 집계)과
  * AI 문장이 같은 기간을 보고 하는 말이 된다.
  */
-export async function getDomainSummary(domain: InterDomain, since: Date, until: Date): Promise<DomainSummary> {
+export async function getDomainSummary(
+  domain: InterDomain,
+  since: Date,
+  until: Date,
+  locale: 'ko' | 'en' = 'ko',
+): Promise<DomainSummary> {
   const periodKey = nearestSummaryPeriodKey(since, until);
   const row = await prisma.dashboardInsight.findUnique({
     where: { kind_key: { kind: 'inter_summary', key: `${domain}_${periodKey}` } },
@@ -73,11 +79,19 @@ export async function getDomainSummary(domain: InterDomain, since: Date, until: 
     try {
       const parsed = JSON.parse(row.value);
       if (parsed?.trend && parsed?.position && parsed?.action) {
+        // 영어판이 이미 JSON에 캐시돼 있으면 그것을 쓴다. 없으면 호출부(api/inter/route.ts)가
+        // 번역해서 채워넣고, 다음 조회부터 여기서 잡힌다.
+        const cachedEn = Array.isArray(parsed.summaryEn) && parsed.summaryEn.length === 3
+          ? (parsed.summaryEn as string[])
+          : null;
+        const [trend, position, action] = locale === 'en' && cachedEn
+          ? cachedEn
+          : [parsed.trend, parsed.position, parsed.action];
         return {
           label: DOMAIN_LABEL[domain],
-          trend: parsed.trend,
-          position: parsed.position,
-          action: parsed.action,
+          trend,
+          position,
+          action,
           source: 'ai',
           computedAt: row.computedAt.toISOString(),
         };
@@ -111,7 +125,8 @@ type VerdictRow = {
   eventType: string | null;
   country: string | null;
   titleKo: string | null;
-  reason: string;          // 관련성 판정(Gemini) 사유 — 포트폴리오 매칭 프롬프트의 입력으로도 쓰인다
+  reason: string;
+  reasonEn?: string | null;          // 관련성 판정(Gemini) 사유 — 포트폴리오 매칭 프롬프트의 입력으로도 쓰인다
   isScrapped: boolean;
   news: { id: string; title: string; url: string; source: string; publishedAt: Date };
 };
@@ -139,7 +154,7 @@ async function getRelevantVerdicts(
     },
     select: {
       id: true, relevant: true, domain: true, sector: true, topicSector: true, eventType: true,
-      country: true, titleKo: true, reason: true, isScrapped: true,
+      country: true, titleKo: true, reason: true, reasonEn: true, isScrapped: true,
       news: { select: { id: true, title: true, url: true, source: true, publishedAt: true } },
     },
   });
@@ -154,8 +169,10 @@ async function getRelevantVerdicts(
 export interface InterData {
   verdicts: VerdictRow[];
   prevVerdicts: VerdictRow[];
-  matches: { id: string; verdictId: string; companyName: string; reason: string; model: string }[];
+  matches: { id: string; verdictId: string; companyName: string; reason: string; reasonEn?: string | null; model: string }[];
   range: { since: Date; until: Date } | null;
+  /** 이 조회가 어떤 언어 화면을 위한 것인지 — EN이면 해외 기사 제목을 영어 원문으로 보여준다. */
+  locale: 'ko' | 'en';
 }
 
 export async function loadInterData(
@@ -163,6 +180,7 @@ export async function loadInterData(
   since?: Date,
   until?: Date,
   country: InterCountry = 'all',
+  locale: 'ko' | 'en' = 'ko',
 ): Promise<InterData> {
   // 직전 동일 기간 — "지난 3개월 대비 이번 3개월" 비교용
   let prevSince: Date | undefined;
@@ -179,9 +197,30 @@ export async function loadInterData(
   ]);
   const matches = await prisma.interPortfolioMatch.findMany({
     where: { verdictId: { in: verdicts.map(v => v.id) } },
-    select: { id: true, verdictId: true, companyName: true, reason: true, model: true },
+    select: { id: true, verdictId: true, companyName: true, reason: true, reasonEn: true, model: true },
   });
-  return { verdicts, prevVerdicts, matches, range: since && until ? { since, until } : null };
+  // 사유 번역은 여기서 하지 않는다 — 이 파일은 InterPanel(클라이언트)도 import 하므로
+  // OpenAI SDK가 클라이언트 번들로 딸려 들어간다. 번역은 호출부(app/api/inter/route.ts)가 맡는다.
+
+  // 회사명만은 여기서 바꿔둔다. 매칭된 회사 이름은 섹터 카드·칩·격자 여러 곳으로 퍼지는데,
+  // 감시대상에 등록된 공식 영문명이 있으면 그것을 쓰는 게 임의 표기보다 정확하다.
+  if (locale === 'en' && matches.length > 0) {
+    const targets = await prisma.monitoringTarget.findMany({
+      where: { category: 'portfolio_company' },
+      select: { name: true, primaryKeyword: true, englishName: true },
+    });
+    const englishOf = new Map<string, string>();
+    for (const t of targets) {
+      if (!t.englishName) continue;
+      englishOf.set(t.name, t.englishName);
+      englishOf.set(t.primaryKeyword, t.englishName);
+    }
+    for (const m of matches) {
+      const en = englishOf.get(m.companyName);
+      if (en) m.companyName = en;
+    }
+  }
+  return { verdicts, prevVerdicts, matches, range: since && until ? { since, until } : null, locale };
 }
 
 export function getDomainStats({ verdicts, matches }: InterData): InterStat[] {
@@ -295,15 +334,18 @@ function truncate(s: string): string {
  *  - 그 외                    → '관측 중'
  * why에는 그 판정의 근거 숫자를 그대로 담는다(AI 요약 프롬프트·툴팁에 재사용).
  */
-export function computeBadge(m: SectorMetrics): { kind: BadgeKind; label: string; why: string } {
-  if (m.count === 0) return { kind: 'none', label: '데이터 없음', why: '이 기간 수집된 기사 0건' };
+export function computeBadge(m: SectorMetrics, locale: 'ko' | 'en' = 'ko'): { kind: BadgeKind; label: string; why: string } {
+  // why는 숫자가 박힌 문장이라 사전에 자리표시자({prev} 등)로 넣어두고 여기서 채운다.
+  const t = makeT(locale);
+  const delta = (v: number) => `${v > 0 ? '+' : ''}${v}%`;
+  if (m.count === 0) return { kind: 'none', label: '데이터 없음', why: t('이 기간 수집된 기사 0건') };
   if (m.deltaPct !== null && m.deltaPct >= 50 && m.count >= 4)
-    return { kind: 'surge', label: '급증', why: `직전 동일 기간 ${m.prevCount}건 → ${m.count}건 (${m.deltaPct > 0 ? '+' : ''}${m.deltaPct}%)` };
+    return { kind: 'surge', label: '급증', why: t('직전 동일 기간 {prev}건 → {now}건 ({delta})', { prev: m.prevCount, now: m.count, delta: delta(m.deltaPct) }) };
   if (m.matchCount >= 3)
-    return { kind: 'opportunity', label: '기회', why: `포트폴리오 매치 ${m.matchCount}건 (${m.matchedCompanies.slice(0, 3).join(', ')})` };
+    return { kind: 'opportunity', label: '기회', why: t('포트폴리오 매치 {n}건 ({companies})', { n: m.matchCount, companies: m.matchedCompanies.slice(0, 3).join(', ') }) };
   if (m.share >= 0.12)
-    return { kind: 'major', label: '주요 흐름', why: `이 도메인 기사 전체의 ${Math.round(m.share * 100)}% (${m.count}건)` };
-  return { kind: 'quiet', label: '관측 중', why: `${m.count}건, 직전 대비 ${m.deltaPct === null ? '비교 불가' : `${m.deltaPct > 0 ? '+' : ''}${m.deltaPct}%`}` };
+    return { kind: 'major', label: '주요 흐름', why: t('이 도메인 기사 전체의 {pct}% ({n}건)', { pct: Math.round(m.share * 100), n: m.count }) };
+  return { kind: 'quiet', label: '관측 중', why: t('{n}건, 직전 대비 {delta}', { n: m.count, delta: m.deltaPct === null ? t('비교 불가') : delta(m.deltaPct) }) };
 }
 
 function bucketTimeline(dates: Date[], range: { since: Date; until: Date } | null, buckets = 12): number[] {
@@ -320,7 +362,7 @@ function bucketTimeline(dates: Date[], range: { since: Date; until: Date } | nul
 }
 
 export function getSectorData(domain: InterDomain, data: InterData): SectorBlock[] {
-  const { verdicts, prevVerdicts, matches, range } = data;
+  const { verdicts, prevVerdicts, matches, range, locale } = data;
   const matchesByVerdictId = new Map<string, typeof matches>();
   matches.forEach(m => {
     const arr = matchesByVerdictId.get(m.verdictId) ?? [];
@@ -349,21 +391,21 @@ export function getSectorData(domain: InterDomain, data: InterData): SectorBlock
           matchCount += 1;
           const entry = byCompany.get(m.companyName) ?? {
             co: m.companyName,
-            desc: m.reason, // 첫 번째(=최신 기사)의 근거를 대표로
+            desc: m.reasonEn || m.reason, // 첫 번째(=최신 기사)의 근거를 대표로
             model: m.model,
             articles: [],
           };
           entry.articles.push({
             id: v.id,
-            reason: m.reason,
-            title: truncate(v.titleKo || v.news.title),
+            reason: m.reasonEn || m.reason,
+            title: truncate(locale === 'en' ? v.news.title : (v.titleKo || v.news.title)),
             titleOriginal: v.news.title,
             url: v.news.url,
             media: v.news.source,
             date: formatDate(v.news.publishedAt),
             topicKey: topicOf(v),
             eventKey: v.eventType,
-            verdictReason: v.reason,
+            verdictReason: v.reasonEn || v.reason,
             isScrapped: v.isScrapped,
           });
           byCompany.set(m.companyName, entry);
@@ -381,7 +423,7 @@ export function getSectorData(domain: InterDomain, data: InterData): SectorBlock
         items[kind].push({
           id: v.id,
           badge: kind,
-          title: truncate(v.titleKo || v.news.title),
+          title: truncate(locale === 'en' ? v.news.title : (v.titleKo || v.news.title)),
           titleOriginal: v.news.title,
           url: v.news.url,
           media: v.news.source,
@@ -413,7 +455,7 @@ export function getSectorData(domain: InterDomain, data: InterData): SectorBlock
       icon: sector.icon,
       name: sector.key,
       sub: sector.sub,
-      badge: computeBadge(metrics),
+      badge: computeBadge(metrics, locale),
       metrics,
       matches: sectorMatches,
       items,
@@ -564,22 +606,24 @@ export interface InterMatrix {
  * 셀 배지 — 셀은 건수가 작으므로 섹터(computeBadge)보다 문턱을 낮춘다.
  * why에는 판정 근거 숫자를 그대로 담아 화면에서 되짚을 수 있게 한다.
  */
-function computeCellBadge(m: { count: number; prevCount: number; deltaPct: number | null; matchCount: number; matchedCompanies: string[] }): { kind: BadgeKind; label: string; why: string } {
-  if (m.count === 0) return { kind: 'none', label: '데이터 없음', why: '이 조합에 해당하는 기사가 없습니다' };
+function computeCellBadge(m: { count: number; prevCount: number; deltaPct: number | null; matchCount: number; matchedCompanies: string[] }, locale: 'ko' | 'en' = 'ko'): { kind: BadgeKind; label: string; why: string } {
+  const t = makeT(locale);
+  const delta = (v: number) => `${v > 0 ? '+' : ''}${v}%`;
+  if (m.count === 0) return { kind: 'none', label: '데이터 없음', why: t('이 조합에 해당하는 기사가 없습니다') };
   // '급증'은 비교 기준이 실제로 있을 때만 붙인다(prevCount > 0).
   // 직전 기간이 0건인 건 "폭증"이 아니라 "비교할 게 없음"인 경우가 대부분이다 —
   // 수집 백필이 기간마다 고르지 않으면 직전이 0으로 잡혀서 거의 모든 칸이 급증으로 물든다.
   if (m.prevCount > 0 && m.deltaPct !== null && m.deltaPct >= 50 && m.count >= 3)
-    return { kind: 'surge', label: '급증', why: `직전 동일 기간 ${m.prevCount}건 → ${m.count}건 (+${m.deltaPct}%)` };
+    return { kind: 'surge', label: '급증', why: t('직전 동일 기간 {prev}건 → {now}건 ({delta})', { prev: m.prevCount, now: m.count, delta: delta(m.deltaPct!) }) };
   if (m.matchCount >= 2)
-    return { kind: 'opportunity', label: '기회', why: `포트폴리오 매치 ${m.matchCount}건 (${m.matchedCompanies.slice(0, 3).join(', ')})` };
+    return { kind: 'opportunity', label: '기회', why: t('포트폴리오 매치 {n}건 ({companies})', { n: m.matchCount, companies: m.matchedCompanies.slice(0, 3).join(', ') }) };
   if (m.count >= 4)
-    return { kind: 'major', label: '주요 흐름', why: `${m.count}건 · 직전 ${m.prevCount}건` };
-  return { kind: 'quiet', label: '관측 중', why: `${m.count}건, 직전 대비 ${m.deltaPct === null ? '비교 불가' : `${m.deltaPct > 0 ? '+' : ''}${m.deltaPct}%`}` };
+    return { kind: 'major', label: '주요 흐름', why: t('{n}건 · 직전 {prev}건', { n: m.count, prev: m.prevCount }) };
+  return { kind: 'quiet', label: '관측 중', why: t('{n}건, 직전 대비 {delta}', { n: m.count, delta: m.deltaPct === null ? t('비교 불가') : delta(m.deltaPct) }) };
 }
 
 export function buildMatrix(domain: InterDomain, data: InterData): InterMatrix {
-  const { verdicts, prevVerdicts, matches } = data;
+  const { verdicts, prevVerdicts, matches, locale } = data;
   const topics = topicSectorsFor(domain === 'ai' ? 'AI' : '바이오');
   const events = INTER_EVENT_TYPES;
 
@@ -616,7 +660,7 @@ export function buildMatrix(domain: InterDomain, data: InterData): InterMatrix {
           return {
             id: v.id,
             badge: kind,
-            title: truncate(v.titleKo || v.news.title),
+            title: truncate(locale === 'en' ? v.news.title : (v.titleKo || v.news.title)),
             titleOriginal: v.news.title,
             url: v.news.url,
             media: v.news.source,
@@ -640,7 +684,7 @@ export function buildMatrix(domain: InterDomain, data: InterData): InterMatrix {
         topicKey: topic.key,
         eventKey: ev.key,
         ...base,
-        badge: computeCellBadge(base),
+        badge: computeCellBadge(base, locale),
         topItems,
       };
     });

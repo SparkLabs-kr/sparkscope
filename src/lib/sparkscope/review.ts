@@ -23,6 +23,8 @@ const CANDIDATE_WINDOW_DAYS = 7; // 첫 발송: 최근 7일(예: 7/1~7/8). 이�
 export interface ReviewArticle extends AnalyzedArticle {
   id: string;
   isScrapped: boolean;
+  /** EN 화면용 번역 제목. 발송되는 메일 본문은 항상 원문(title)을 쓴다. */
+  titleEn?: string | null;
 }
 
 export interface ReviewOverrides {
@@ -44,6 +46,7 @@ function toReviewArticle(a: ArticleRow): ReviewArticle {
     id: a.id,
     isScrapped: a.isScrapped,
     title: a.title,
+    titleEn: a.titleEn,
     link: a.link,
     source: a.source,
     pubDate: a.pubDate,

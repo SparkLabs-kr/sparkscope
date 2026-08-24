@@ -2,6 +2,7 @@
 // 포트폴리오사 선택 필터 — 고르면 해당 회사의 선택 기간 기사 전체를 보여준다.
 // 기간(from/to)은 유지하고 company만 URL에 추가/제거한다.
 import { useRouter } from 'next/navigation';
+import { useT } from '@/lib/i18n/client';
 
 export function PortfolioFilter({ companies, selected, from, to, tab }: {
   companies: { value: string; label: string }[];
@@ -10,6 +11,7 @@ export function PortfolioFilter({ companies, selected, from, to, tab }: {
   to: string;
   tab?: string;
 }) {
+  const t = useT();
   const router = useRouter();
 
   const go = (v: string) => {
@@ -21,13 +23,13 @@ export function PortfolioFilter({ companies, selected, from, to, tab }: {
 
   return (
     <div className="flex items-center gap-2">
-      <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">🏢 포트폴리오사</label>
+      <label className="text-xs font-semibold text-gray-500 whitespace-nowrap">🏢 {t('포트폴리오사')}</label>
       <select
         value={selected ?? ''}
         onChange={e => go(e.target.value)}
         className="rounded-lg border border-spark-border px-2 py-1.5 text-sm max-w-[220px] focus:border-spark-purple focus:outline-none"
       >
-        <option value="">전체 보기</option>
+        <option value="">{t('전체 보기')}</option>
         {companies.map(c => (
           <option key={c.value} value={c.value}>{c.label}</option>
         ))}
@@ -36,9 +38,9 @@ export function PortfolioFilter({ companies, selected, from, to, tab }: {
         <button
           onClick={() => go('')}
           className="text-xs text-gray-400 hover:text-gray-700 whitespace-nowrap"
-          aria-label="필터 해제"
+          aria-label={t('필터 해제')}
         >
-          ✕ 해제
+          ✕ {t('해제')}
         </button>
       )}
     </div>
