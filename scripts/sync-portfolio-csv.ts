@@ -39,14 +39,17 @@ const PORTFOLIO_STATUS_MAP: Record<string, string> = {
   'Written-Off': 'Written-off',
 };
 
-// 한국 CSV는 "기업명(한글)", 대만 CSV는 "기업명(중문)" — 둘 다 같은 자리의 표시용 사명이다.
-const NAME_COLUMNS = ['기업명(한글)', '기업명(중문)'];
+/**
+ * MonitoringTarget.name — DB의 고유키이자 seedKeywords()의 upsert 기준이다.
+ *
+ * 한국은 "기업명(한글)"을 그대로 쓴다. 대만은 이미 시드된 69개 행이 영문명을 name으로
+ * 쓰고 있어(2026-08-26 확인) 여기서 중문명을 name으로 쓰면 upsert가 매칭되지 않고
+ * 45개 행이 통째로 새로 생겨 중복된다. 중문 상호는 primaryKeyword에 들어간다.
+ */
 function readName(r: Record<string, string>): string {
-  for (const col of NAME_COLUMNS) {
-    const v = (r[col] ?? '').trim();
-    if (v) return v;
-  }
-  return '';
+  const ko = (r['기업명(한글)'] ?? '').trim();
+  if (ko) return ko;
+  return (r['기업명(영문)'] ?? '').trim();
 }
 
 function cleanList(raw: string | undefined): string | null {
@@ -80,14 +83,13 @@ const nameless: number[] = [];
 const converted = rows.map((r, i) => {
   const name = readName(r);
   if (!name) nameless.push(i + 2); // 헤더 1줄 + 0-index 보정 → 스프레드시트 행번호
+  // 중문 상호는 표시·검색용이므로 primaryKeyword로 간다(name이 아니라).
   const statusRaw = (r['status'] ?? '').trim();
   const portfolioStatus = PORTFOLIO_STATUS_MAP[statusRaw];
   if (!portfolioStatus) skipped.push(`${name || '(이름없음)'} — 알 수 없는 status "${statusRaw}"`);
 
   const englishName = cleanText(r['기업명(영문)']);
-  // MonitoringTarget.name은 @unique — 표시용 사명이 없는 행(대만 24개사)을 빈 문자열로 두면
-  // 두 번째 행부터 unique 제약에 걸려 조용히 하나만 남는다. 영문명으로 대체한다.
-  const resolvedName = name || englishName || '';
+  const resolvedName = name;
 
   return {
     name: resolvedName,
