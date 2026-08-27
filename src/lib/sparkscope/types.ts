@@ -6,6 +6,7 @@
 export type Category =
   | 'sparklabs_self'
   | 'portfolio_company'
+  | 'portfolio_company_tw'   // 대만 포트폴리오사 — 수집 소스가 달라 별도 카테고리로 둔다
   | 'competitor'
   | 'industry_trend';
 

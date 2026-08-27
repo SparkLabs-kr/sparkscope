@@ -13,6 +13,7 @@ import type { AnalyzedArticle, Category, Importance, Tone, DigestData } from './
 const CATEGORY_PRIORITY: Record<string, number> = {
   sparklabs_self: 100,
   portfolio_company: 70,
+  portfolio_company_tw: 70,   // 한국 포트폴리오사와 같은 비중 — 빠뜨리면 50으로 강등된다
   competitor: 50,
   industry_trend: 40,
 };

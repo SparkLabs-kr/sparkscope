@@ -1,9 +1,15 @@
 {
-  "regions": ["icn1"],
+  "regions": [
+    "icn1"
+  ],
   "crons": [
     {
       "path": "/api/cron/daily-send-only",
       "schedule": "0 0 * * 1,3,5"
+    },
+    {
+      "path": "/api/cron/taiwan-collect",
+      "schedule": "0 1 * * 1"
     }
   ]
 }

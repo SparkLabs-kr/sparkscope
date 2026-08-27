@@ -21,7 +21,11 @@
  * 30일 트라이얼(2026-07-27~08-26) 실측: 후보 1,681건 → 유효 43건 / 6개사.
  * 한국(3개월 4,820건)보다 훨씬 얇다 — 매일보다 주 1회 수집이 현실적이다.
  */
+import { prisma } from '@/lib/prisma';
 import { parseFeedDate } from './inter-collect';
+import { isRelevant } from './relevance';
+import { classifyTaiwanArticle } from './taiwan-noise';
+import type { RawArticle } from './types';
 
 export const TAIWAN_NEWS_LOCALE = { hl: 'zh-TW', gl: 'TW', ceid: 'TW:zh-Hant' } as const;
 
@@ -77,4 +81,115 @@ export function stripSourceSuffix(title: string, source: string): string {
   if (!source) return title;
   const suffix = ` - ${source}`;
   return title.endsWith(suffix) ? title.slice(0, -suffix.length) : title;
+}
+
+
+export const TAIWAN_CATEGORY = 'portfolio_company_tw' as const;
+
+/** 구글 뉴스는 쿼리당 100건이 상한 — 기간을 쪼개야 과거 기사를 잃지 않는다. */
+const RESULT_CAP = 100;
+const WINDOW_DAYS = 15;
+
+function ymd(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+async function fetchXml(url: string): Promise<string> {
+  const res = await fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SparkScope/1.0)' },
+  });
+  if (!res.ok) throw new Error(`google news ${res.status}`);
+  return res.text();
+}
+
+/**
+ * 대만 포트폴리오사 기사 수집.
+ *
+ * 네이버 대신 구글 뉴스 RSS(zh-TW)를 쓰고, 매칭은 한국과 같은 relevance.isRelevant()를 그대로 탄다.
+ * 본문은 넘기지 않는다(body='') — 구글 뉴스 링크는 원문이 아니라 리다이렉트 페이지라
+ * 스크래핑이 불가능하기 때문. 따라서 제목만으로 판정되며, 그만큼 문맥어 설정이 중요하다.
+ *
+ * @param sinceDays 조회 기간(일). 주 1회 실행 기준 10일 정도면 누락 없이 겹친다.
+ */
+export async function collectTaiwanArticles(sinceDays = 10): Promise<RawArticle[]> {
+  const targets = await prisma.monitoringTarget.findMany({
+    where: { category: TAIWAN_CATEGORY, status: 'ACTIVE' },
+    orderBy: { name: 'asc' },
+  });
+
+  const until = new Date();
+  const since = new Date(until.getTime() - sinceDays * 86400_000);
+  const out: RawArticle[] = [];
+  const seenLinks = new Set<string>();
+
+  for (const t of targets) {
+    const names = [t.name, t.englishName, t.primaryKeyword].filter(
+      (v): v is string => !!v && v.trim().length > 0,
+    );
+    const uniqueNames = [...new Set(names)];
+    if (uniqueNames.length === 0) continue;
+
+    let items: TaiwanFeedItem[] = [];
+    try {
+      items = parseGoogleNewsItems(await fetchXml(buildQueryUrl(uniqueNames)));
+    } catch (e) {
+      console.error(`[taiwan-collect] ${t.name} 조회 실패:`, e);
+      continue;
+    }
+
+    // 상한에 걸린 대상만 기간 분할 재조회 — 그 외는 요청 낭비다.
+    if (items.length >= RESULT_CAP) {
+      for (let d = new Date(since); d < until; d.setDate(d.getDate() + WINDOW_DAYS)) {
+        const lo = ymd(d);
+        const hi = ymd(new Date(d.getTime() + WINDOW_DAYS * 86400_000));
+        try {
+          const extra = parseGoogleNewsItems(
+            await fetchXml(`${buildQueryUrl(uniqueNames)}+after:${lo}+before:${hi}`),
+          );
+          for (const it of extra) {
+            if (!items.some(x => x.link === it.link)) items.push(it);
+          }
+        } catch { /* 분할 조회 실패는 무시 — 기본 조회분은 이미 확보했다 */ }
+      }
+    }
+
+    for (const it of items) {
+      if (!it.pubDate || it.pubDate < since || it.pubDate > until) continue;
+      if (seenLinks.has(it.link)) continue;
+
+      // 구글 뉴스 제목의 " - 매체명" 접미사를 떼고 판정한다 — 안 떼면 매체명이
+      // 문맥어·제외어와 우연히 겹쳐 오분류된다(예: "CMoney投資網誌"의 "投資").
+      const title = stripSourceSuffix(it.title, it.source);
+
+      const relevant = isRelevant({
+        title,
+        body: '', // 구글 뉴스 링크는 스크래핑 불가 — 제목만으로 판정
+        primaryKeyword: t.primaryKeyword,
+        name: t.name,
+        englishName: t.englishName,
+        helperKeywords: t.helperKeywords,
+        excludeWords: t.excludeWords,
+        contextWords: t.contextWords,
+        category: t.category,
+        link: it.link,
+        source: it.source,
+      });
+      if (!relevant) continue;
+
+      seenLinks.add(it.link);
+      out.push({
+        title,
+        link: it.link,
+        source: it.source,
+        pubDate: it.pubDate,
+        matchedKeyword: t.name,
+        category: TAIWAN_CATEGORY,
+        // 공시·시세 자동생성물은 우선순위를 낮춰 대시보드 상단을 차지하지 않게 한다.
+        basePriority: classifyTaiwanArticle({ title, source: it.source }) === 'disclosure' ? 10 : 70,
+      });
+    }
+  }
+
+  console.log(`[taiwan-collect] ${targets.length}개사 조회 → ${out.length}건 수집`);
+  return out;
 }

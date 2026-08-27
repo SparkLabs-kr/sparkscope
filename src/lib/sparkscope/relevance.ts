@@ -168,7 +168,10 @@ export function matchesAsDirectMention(body: string, name: string, opts?: { skip
 // competitor(투자사) — 2026-08-03부터 포함. 원래는 "제목에 피투자 스타트업만 나오는 경우가
 // 많다"는 이유로 뺐었는데, 그건 본문까지 직접언급 검사(matchesAsDirectMention)로 커버되므로
 // 이름매칭 자체를 빼는 대신 26개 확정매체 제한을 풀기 위해 여기 포함시켰다.
-export const NAME_MATCH_CATEGORIES = new Set(['portfolio_company', 'sparklabs_self', 'competitor']);
+// 이 카테고리들만 "사명이 제목/본문에 실제로 등장하는가"를 강제한다.
+// 대만(portfolio_company_tw)을 빼먹으면 사명 매칭이 통째로 건너뛰어져, 문맥어 하나만
+// 걸린 무관한 기사까지 전부 통과한다 — 대만은 제목만으로 판정하므로 특히 위험하다.
+export const NAME_MATCH_CATEGORIES = new Set(['portfolio_company', 'portfolio_company_tw', 'sparklabs_self', 'competitor']);
 
 export interface RelevanceInput {
   title: string;

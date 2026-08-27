@@ -78,7 +78,10 @@ function uniqueTerms(terms: (string | null | undefined)[]): string[] {
 
 export async function collectAllArticles(opts: CollectOptions = {}): Promise<RawArticle[]> {
   const targets = await prisma.monitoringTarget.findMany({
-    where: { status: 'ACTIVE' },
+    // portfolio_company_tw(대만)는 제외한다 — 이 함수는 네이버 뉴스 API로 검색하는데
+    // 네이버는 대만 매체를 거의 색인하지 않아 69개사를 매번 조회해도 0건이다.
+    // 대만은 구글 뉴스 RSS를 쓰는 taiwan-collect.ts / api/cron/taiwan-collect가 따로 담당한다.
+    where: { status: 'ACTIVE', category: { not: 'portfolio_company_tw' } },
     orderBy: { name: 'asc' },
   });
 
