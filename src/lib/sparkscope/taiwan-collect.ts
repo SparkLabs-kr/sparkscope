@@ -25,7 +25,7 @@ import { prisma } from '@/lib/prisma';
 import { parseFeedDate } from './inter-collect';
 import { isRelevant } from './relevance';
 import { classifyTaiwanArticle } from './taiwan-noise';
-import { normalizeTaiwanSource, taiwanExclusionReason } from './taiwan-media';
+import { packFor } from './locale';
 import type { RawArticle } from './types';
 
 export const TAIWAN_NEWS_LOCALE = { hl: 'zh-TW', gl: 'TW', ceid: 'TW:zh-Hant' } as const;
@@ -113,6 +113,7 @@ async function fetchXml(url: string): Promise<string> {
  * @param sinceDays 조회 기간(일). 주 1회 실행 기준 10일 정도면 누락 없이 겹친다.
  */
 export async function collectTaiwanArticles(sinceDays = 10): Promise<RawArticle[]> {
+  const pack = packFor('zh-TW');
   const targets = await prisma.monitoringTarget.findMany({
     where: { category: TAIWAN_CATEGORY, status: 'ACTIVE' },
     orderBy: { name: 'asc' },
@@ -181,12 +182,12 @@ export async function collectTaiwanArticles(sinceDays = 10): Promise<RawArticle[
 
       // 매체명 정규화 — 같은 매체가 두 이름으로 들어오면 매체별 집계가 갈라진다.
       // 트라이얼에서 실제로 발생했다(news.cnyes.com == 鉅亨網, 三立新聞 == 三立新聞網SETN.com).
-      const source = normalizeTaiwanSource(it.source);
+      const source = pack.media.normalize(it.source);
 
       // 해외 매체·아그리게이터·증권사 재배포는 버리지 않고 우선순위만 최하로 내린다.
       // taiwan-noise.ts와 같은 원칙 — 차단하면 되돌릴 수 없지만 분류해두면 나눠 볼 수 있다.
       // 트라이얼 120건 중 39건(32%)이 여기 해당했다.
-      const excluded = taiwanExclusionReason(it.source);
+      const excluded = pack.media.exclusionReason(it.source);
       const isDisclosure = classifyTaiwanArticle({ title, source }) === 'disclosure';
 
       out.push({

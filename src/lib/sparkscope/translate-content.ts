@@ -13,6 +13,7 @@
  */
 import OpenAI from 'openai';
 import { prisma } from '@/lib/prisma';
+import { PACKS, needsTranslationAnyLocale } from './locale';
 
 // 지연 생성: 모듈을 import 하는 것만으로 키를 요구하면, 이 모듈이 딸려 들어간 곳
 // (클라이언트 번들 등)에서 "Missing credentials"로 화면이 죽는다. 실제로 번역할 때만 만든다.
@@ -35,34 +36,31 @@ const CONCURRENCY = 8;
  */
 const MAX_PER_REQUEST = 80;
 
+/**
+ * 로케일별 지침은 팩에서 모아 붙인다 — 새 오피스를 추가해도 이 파일은 그대로다.
+ * 상수로 한 번만 계산해 두어야 프롬프트 캐시 프리픽스가 매번 같은 문자열이 된다.
+ */
 const SYSTEM = [
   'You translate East Asian startup/VC news text into natural English for a media-monitoring dashboard.',
-  'The input may be Korean or Traditional Chinese (Taiwan). Detect it per string and translate either.',
+  'The input may be in any of the languages described below. Detect it per string and translate either.',
   'Rules:',
   '- Translate the meaning, not word by word. Keep it concise, like an English news headline or analyst note.',
-  '- Keep company, product, person, and fund names in their official English form when one exists',
-  '  (스파크랩 → SparkLabs, 알토스벤처스 → Altos Ventures, 永悅健康 → H2U, 稜研科技 → TMY Technology).',
-  '  Otherwise romanize — Korean by Revised Romanization, Chinese by Hanyu Pinyin.',
-  '- Keep numbers, dates, and units accurate. 억원 → the natural English form (30억원 → KRW 3B);',
-  '  Taiwanese 億元/萬元 are TWD unless the text says otherwise (1.073億元 → TWD 107.3M).',
-  '- Taiwan market terms have set English equivalents: 創新板 → Innovation Board, 興櫃 → Emerging Stock Board,',
-  '  掛牌/上市 → listing, 法說會 → earnings call, 淨損 → net loss, 年增 → YoY.',
+  '- Keep numbers, dates, and units accurate.',
   '- Do not add, omit, or explain anything.',
   '- Return ONLY a JSON array of translated strings, in the same order and with the same length as the input.',
+  ...Object.values(PACKS).flatMap(p => [`Language: ${p.locale}`, ...p.translationHints]),
 ].join('\n');
 
 /**
- * 번역할 것이 있는가 — 한글 또는 한자가 있으면 번역 대상.
+ * 번역할 것이 있는가 — 등록된 로케일 팩 중 하나라도 자기 문자를 찾으면 대상.
  *
  * 원래 /[가-힣]/ 한글만 봤다. 대만 기사가 들어오면서 중국어 제목이 전부
  * "번역할 것 없음"으로 판정돼 영문 UI에 중국어 원문이 그대로 나갔다
- * (2026-08-31 확인, 대만 120건 전량). CJK 한자 영역을 함께 본다.
- *
- * \u4e00-\u9fff  CJK 통합 한자 (번체·간체 공통)
- * \uf900-\ufaff  CJK 호환 한자 — 대만 인명·지명 표기에 쓰인다
+ * (2026-08-31 확인, 대만 120건 전량). 이제 팩이 판정하므로 새 로케일을 등록하면
+ * 이 파일은 손대지 않아도 된다.
  */
 function needsTranslation(s: string | null | undefined): boolean {
-  return !!s && /[가-힣\u4e00-\u9fff\uf900-\ufaff]/.test(s);
+  return needsTranslationAnyLocale(s);
 }
 
 /**
