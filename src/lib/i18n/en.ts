@@ -1017,4 +1017,17 @@ export const EN: Record<string, string> = {
   '이투뉴스': 'E2 News',
   '테크42': 'Tech42',
   '국제뉴스': 'Kukje News',
+  // 소셜 시그널 (Inter 탭)
+  '소셜 시그널': 'Social signals',
+  'X · Reddit · Hacker News에서 이 분야에서 가장 화제인 글':
+    'What this sector is talking about across X, Reddit and Hacker News',
+  '인기순': 'By popularity',
+  '최신순': 'By recency',
+  '연결 필요': 'Not connected',
+  '해당 기간 글이 없습니다.': 'No posts in this range.',
+  '연결되면 여기에 표시됩니다.': 'Posts appear here once connected.',
+  '연결됨 · 업보트+댓글×2 기준': 'Connected · ranked by upvotes + comments×2',
+  '연결됨 · 좋아요+답글 기준': 'Connected · ranked by likes + replies',
+  '연결됨 · 점수 없음(RSS) — 최신순': 'Connected · no scores (RSS) — by recency',
+  '연결 필요 — X_BEARER_TOKEN 미설정 (API 유료)': 'Not connected — X_BEARER_TOKEN unset (paid API)',
 };

@@ -27,6 +27,7 @@ import {
 import { InterScrapStar } from '@/components/InterScrapStar';
 import { InterBriefingModal, type BriefingPayload } from '@/components/InterBriefingModal';
 import { DateRangePicker } from '@/components/DateRangePicker';
+import { SocialSignals } from '@/components/SocialSignals';
 import { clusterArticles } from '@/lib/sparkscope/cluster';
 
 interface InterApiResponse {
@@ -201,6 +202,10 @@ export function InterPanel({
         <DomainTabBig label={t('바이오')} active={domain === 'bio'} activeCls="bg-cyan-50 border-cyan-600 text-cyan-700" onClick={() => pushParams({ domain: 'bio' })} />
         <DomainTabBig label="AI" active={domain === 'ai'} activeCls="bg-emerald-50 border-emerald-600 text-emerald-700" onClick={() => pushParams({ domain: 'ai' })} />
       </div>
+
+      {/* 소셜 시그널 — 도메인 버튼과 조회 기간 사이. 커뮤니티에서 뜨는 글은 기사보다 먼저
+          움직이므로 조회 조건보다 위에 둔다. 기간은 적용된 from을 쓴다(draft 아님). */}
+      <SocialSignals domain={domain} from={from} />
 
       {/* 조회 조건 — 기간·국가를 고른 뒤 '확인'을 눌러야 조회된다(클릭마다 화면이 새로 뜨지 않게) */}
       <div data-tour="inter-filter" className="bg-white border border-spark-border rounded-2xl p-5 mb-6">
