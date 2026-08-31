@@ -25,6 +25,7 @@ import { prisma } from '@/lib/prisma';
 import { parseFeedDate } from './inter-collect';
 import { isRelevant } from './relevance';
 import { classifyTaiwanArticle } from './taiwan-noise';
+import { normalizeTaiwanSource, taiwanExclusionReason } from './taiwan-media';
 import type { RawArticle } from './types';
 
 export const TAIWAN_NEWS_LOCALE = { hl: 'zh-TW', gl: 'TW', ceid: 'TW:zh-Hant' } as const;
@@ -177,19 +178,35 @@ export async function collectTaiwanArticles(sinceDays = 10): Promise<RawArticle[
       if (!relevant) continue;
 
       seenLinks.add(it.link);
+
+      // 매체명 정규화 — 같은 매체가 두 이름으로 들어오면 매체별 집계가 갈라진다.
+      // 트라이얼에서 실제로 발생했다(news.cnyes.com == 鉅亨網, 三立新聞 == 三立新聞網SETN.com).
+      const source = normalizeTaiwanSource(it.source);
+
+      // 해외 매체·아그리게이터·증권사 재배포는 버리지 않고 우선순위만 최하로 내린다.
+      // taiwan-noise.ts와 같은 원칙 — 차단하면 되돌릴 수 없지만 분류해두면 나눠 볼 수 있다.
+      // 트라이얼 120건 중 39건(32%)이 여기 해당했다.
+      const excluded = taiwanExclusionReason(it.source);
+      const isDisclosure = classifyTaiwanArticle({ title, source }) === 'disclosure';
+
       out.push({
         title,
         link: it.link,
-        source: it.source,
+        source,
         pubDate: it.pubDate,
         matchedKeyword: t.name,
         category: TAIWAN_CATEGORY,
         // 공시·시세 자동생성물은 우선순위를 낮춰 대시보드 상단을 차지하지 않게 한다.
-        basePriority: classifyTaiwanArticle({ title, source: it.source }) === 'disclosure' ? 10 : 70,
+        // 큐레이션 밖 매체는 공시(10)보다도 아래(5)에 둔다.
+        basePriority: excluded ? 5 : isDisclosure ? 10 : 70,
       });
     }
   }
 
-  console.log(`[taiwan-collect] ${targets.length}개사 조회 → ${out.length}건 수집`);
+  const offRoster = out.filter(a => a.basePriority === 5).length;
+  console.log(
+    `[taiwan-collect] ${targets.length}개사 조회 → ${out.length}건 수집 ` +
+    `(큐레이션 매체 ${out.length - offRoster}건 · 제외 매체 ${offRoster}건)`,
+  );
   return out;
 }
