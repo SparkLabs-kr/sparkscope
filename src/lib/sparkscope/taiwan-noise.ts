@@ -12,6 +12,15 @@
  * "9月1日召開創新板上市前業績發表會"(상장 전 실적발표회)가 공시로 잘못 분류돼 확인된 규칙이다.
  */
 
+// 종목 정보 페이지 — 기사가 아니라 시세·재무 데이터 페이지 자체다.
+// 3개월 수집 142건 중 20건이 CMoney의 "XXXX 個股 - 股市" 류 페이지였다.
+// 제목에 '投資'(EVENT 키워드)가 들어간 경우가 있어 이벤트 규칙보다 먼저 본다.
+const STOCK_PAGE_PATTERNS = [
+  '個股 - 股市', '技術分析', '資產負債表', '損益表', '現金流量表',
+  '集保分布', '河流圖', '三大法人', '融資融券', '董監持股',
+  '股利政策', '本益比', '除權息', '籌碼分析',
+];
+
 // 공시 형식이어도 VC에게는 뉴스인 이벤트 — 아래 수치 규칙보다 우선한다.
 const EVENT_PATTERNS = [
   '上市前業績發表會', '創新板', '上市櫃', '掛牌', '輔導契約',
@@ -42,6 +51,9 @@ export function classifyTaiwanArticle(a: {
 }): TaiwanArticleKind {
   const title = a.title ?? '';
   const source = a.source ?? '';
+
+  // 0) 종목 정보 페이지는 보도가 아니다 — 이벤트 규칙보다 먼저 본다
+  if (STOCK_PAGE_PATTERNS.some(p => title.includes(p))) return 'disclosure';
 
   // 1) 상장·투자 이벤트는 공시 형식이어도 보도
   if (EVENT_PATTERNS.some(p => title.includes(p))) return 'news';
