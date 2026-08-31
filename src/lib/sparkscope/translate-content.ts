@@ -36,19 +36,33 @@ const CONCURRENCY = 8;
 const MAX_PER_REQUEST = 80;
 
 const SYSTEM = [
-  'You translate Korean startup/VC news text into natural English for a media-monitoring dashboard.',
+  'You translate East Asian startup/VC news text into natural English for a media-monitoring dashboard.',
+  'The input may be Korean or Traditional Chinese (Taiwan). Detect it per string and translate either.',
   'Rules:',
   '- Translate the meaning, not word by word. Keep it concise, like an English news headline or analyst note.',
   '- Keep company, product, person, and fund names in their official English form when one exists',
-  '  (스파크랩 → SparkLabs, 알토스벤처스 → Altos Ventures). Otherwise romanize.',
-  '- Keep numbers, dates, and units accurate. 억원 → convert to the natural English form (e.g. 30억원 → KRW 3B).',
+  '  (스파크랩 → SparkLabs, 알토스벤처스 → Altos Ventures, 永悅健康 → H2U, 稜研科技 → TMY Technology).',
+  '  Otherwise romanize — Korean by Revised Romanization, Chinese by Hanyu Pinyin.',
+  '- Keep numbers, dates, and units accurate. 억원 → the natural English form (30억원 → KRW 3B);',
+  '  Taiwanese 億元/萬元 are TWD unless the text says otherwise (1.073億元 → TWD 107.3M).',
+  '- Taiwan market terms have set English equivalents: 創新板 → Innovation Board, 興櫃 → Emerging Stock Board,',
+  '  掛牌/上市 → listing, 法說會 → earnings call, 淨損 → net loss, 年增 → YoY.',
   '- Do not add, omit, or explain anything.',
   '- Return ONLY a JSON array of translated strings, in the same order and with the same length as the input.',
 ].join('\n');
 
-/** 한국어 문자가 없으면 번역할 것이 없다(영문 제목·숫자만 있는 값). */
+/**
+ * 번역할 것이 있는가 — 한글 또는 한자가 있으면 번역 대상.
+ *
+ * 원래 /[가-힣]/ 한글만 봤다. 대만 기사가 들어오면서 중국어 제목이 전부
+ * "번역할 것 없음"으로 판정돼 영문 UI에 중국어 원문이 그대로 나갔다
+ * (2026-08-31 확인, 대만 120건 전량). CJK 한자 영역을 함께 본다.
+ *
+ * \u4e00-\u9fff  CJK 통합 한자 (번체·간체 공통)
+ * \uf900-\ufaff  CJK 호환 한자 — 대만 인명·지명 표기에 쓰인다
+ */
 function needsTranslation(s: string | null | undefined): boolean {
-  return !!s && /[가-힣]/.test(s);
+  return !!s && /[가-힣\u4e00-\u9fff\uf900-\ufaff]/.test(s);
 }
 
 /**

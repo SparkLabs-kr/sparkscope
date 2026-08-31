@@ -21,6 +21,7 @@ import { scrapeArticleBody } from './scraper';
 import { groupDuplicateStories } from './story-dedupe';
 import { resolveGoogleNewsUrl } from './google-news-resolver';
 import type { RawArticle, AnalyzedArticle, Importance, Tone, Category } from './types';
+import { TAIWAN_TIER_OF, normalizeTaiwanSource } from './taiwan-media';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -467,9 +468,12 @@ function computePriorityScore(article: RawArticle, importance: Importance, tone:
   // (NaN이 DB Int 컬럼에 들어가면 upsert가 예외를 던져 그 회차 저장이 전부 실패했던 사고가 있었음)
   const base = article.basePriority || 0;
   const impBonus = { CRITICAL: 30, HIGH: 20, MEDIUM: 10, LOW: 0 }[importance] ?? 0;
-  // 메이저 매체 가중치
+  // 메이저 매체 가중치 — 한국은 고정 목록, 대만은 taiwan-media.ts의 Tier 1·2를 쓴다.
+  // 목록이 한국 매체뿐이라 대만 기사는 聯合報·工商時報가 실려도 가중치가 0이었다.
   const major = ['동아일보', '조선비즈', 'Chosunbiz', '매일경제', '한국경제', '전자신문', '디지털데일리', '디지털타임스', '아시아투데이'];
-  const mediaBonus = major.includes(article.source) ? 15 : 0;
+  const twTier = TAIWAN_TIER_OF.get(normalizeTaiwanSource(article.source));
+  const isMajor = major.includes(article.source) || (twTier !== undefined && twTier <= 2);
+  const mediaBonus = isMajor ? 15 : 0;
   // 신선도
   const ageHrs = (Date.now() - article.pubDate.getTime()) / (1000 * 60 * 60);
   const freshBonus = ageHrs < 24 ? 15 : ageHrs < 48 ? 8 : 0;
