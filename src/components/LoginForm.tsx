@@ -177,7 +177,7 @@ export function LoginForm({
         </>
       ) : (
         <>
-          <h1 className="text-2xl font-bold mb-2 text-center">{t('로그인')}</h1>
+          <h1 className="text-2xl font-bold mb-2 text-center">{t('임직원 로그인')}</h1>
           <p className="text-sm text-gray-600 mb-6 text-center leading-relaxed">
             {t('스파크랩스 이메일을 입력하면 로그인 링크를 보내드립니다')}
             <br />

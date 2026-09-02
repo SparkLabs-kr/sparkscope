@@ -24,7 +24,7 @@ import { summarizeCompetitorTrend, summarizeOverallTrend, summarizeCategoryPulse
 import { CompetitorPanel, type CompetitorStatView } from '@/components/CompetitorPanel';
 import { getCompetitorFundSummaries, getSparkLabsFundSummary } from '@/lib/sparkscope/fund-db';
 import { safeArticleHref } from '@/lib/sparkscope/article-link';
-import type { SparkLabsFundSummary } from '@/lib/sparkscope/fund-db';
+import type { SparkLabsFundSummary, CompetitorFundSummary } from '@/lib/sparkscope/fund-db';
 import { RISK_FLAGS } from '@/lib/sparkscope/risk-flags';
 import { InterPanel } from '@/components/InterPanel';
 import { CompanyNameWithPreview } from '@/components/CompanyNameWithPreview';
@@ -164,7 +164,16 @@ async function fetchRecentTabArticles(
   return [...recent, ...older];
 }
 
-async function loadDashboardData(from: string, to: string, company: string | undefined, isDefaultRange: boolean) {
+async function loadDashboardData(
+  from: string,
+  to: string,
+  company: string | undefined,
+  isDefaultRange: boolean,
+  // 펀드 정보는 내부 전용이다. 포트폴리오사 계정에는 조회조차 하지 않는다 —
+  // 화면에서 안 그리는 것만으로도 새지는 않지만, 애초에 가져오지 않으면
+  // 나중에 화면을 고치다 실수로 노출시킬 여지가 없다.
+  includeInternalFunds = true,
+) {
   // AI가 생성한 문장(위기 원인·경쟁사 트렌드)은 사전계산된 한국어를 저장해두므로,
   // EN 화면이면 그 문장의 영어판을 채워서 읽는다(DashboardInsight JSON 안에 캐시된다).
   const insightLocale = getLocale();
@@ -405,10 +414,12 @@ async function loadDashboardData(from: string, to: string, company: string | und
     if (industryPulse) categoryPulses.set('industry_trend', industryPulse);
   }
 
-  const [fundSummaries, sparkLabsFundSummary] = await Promise.all([
-    getCompetitorFundSummaries(pinnedAggs.map(c => c.name)),
-    getSparkLabsFundSummary(),
-  ]);
+  const [fundSummaries, sparkLabsFundSummary] = includeInternalFunds
+    ? await Promise.all([
+        getCompetitorFundSummaries(pinnedAggs.map(c => c.name)),
+        getSparkLabsFundSummary(),
+      ])
+    : [new Map<string, CompetitorFundSummary>(), null];
   const competitors: CompetitorStatView[] = competitorAggs.map(({ titles, ...c }, i) => ({
     ...c,
     trend: companyTrends[i],
@@ -715,7 +726,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const tab = resolveTab(searchParams.tab, admin ? undefined : PORTFOLIO_TABS);
   const visibleTabs = admin ? TABS : TABS.filter(t => (PORTFOLIO_TABS as readonly string[]).includes(t.id));
   const scope = admin ? resolveScope(searchParams.scope) : 'intra';
-  const data = await loadDashboardData(range.from, range.to, company, range.isDefaultRange);
+  const data = await loadDashboardData(range.from, range.to, company, range.isDefaultRange, admin);
   // 포트폴리오사 계정용 집계는 전사 loader를 재사용하지 않고 회사로 좁힌 질의를 따로 한다.
   // (전사 집계를 걸러서 쓰면 거르는 곳을 하나 빠뜨리는 순간 남의 회사가 드러난다.)
   const mySummary = !admin && company ? await loadPortfolioSummary(company, new Date(`${range.from}T00:00:00`), new Date(`${range.to}T23:59:59`)) : null;

@@ -1040,7 +1040,7 @@ export const EN: Record<string, string> = {
   '스파크랩스 임직원이신가요?':
     'Are you SparkLabs staff?',
   '임직원 로그인':
-    'Staff sign-in',
+    'SparkLabs employee sign-in',
   '포트폴리오사이신가요?':
     'Are you a portfolio company?',
   '계정은 스파크랩스에서 발급합니다. 직접 가입하는 절차는 없습니다.':
