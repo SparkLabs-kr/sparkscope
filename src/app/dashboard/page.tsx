@@ -845,8 +845,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       </div>
 
 
-      {/* 이슈 급증 배너 + KPI — 경쟁사 탭 제외 */}
-      {tab !== 'competitor' && (
+      {/* 이슈 급증 배너 + KPI — 경쟁사 탭 제외, 그리고 관리자만.
+          ⚠️ 이 블록은 탭 바깥이라 '최근 수집 기사' 탭에서도 그려진다. 안에 있는 값이 전부
+             전사 기준이라(급증 배너는 회사 이름을 그대로 노출하고, KPI는 전체 수집 건수·
+             스파크랩 언급·피칭 기회다) 포트폴리오사 계정에 그대로 보이면 남의 회사가 드러난다.
+             회사 단위 KPI를 따로 계산하기 전까지는 관리자에게만 보여준다. */}
+      {admin && tab !== 'competitor' && (
         <>
           {data.spikes.length > 0 && (
             <div data-tour="spike-banner" className="mb-6 space-y-2">
