@@ -1,5 +1,6 @@
 'use client';
-import { useT } from '@/lib/i18n/client';
+import { articleTitle } from '@/lib/sparkscope/article-title';
+import { useT, useLocale } from '@/lib/i18n/client';
 
 // 경쟁사 모니터링 패널 — 상단에 전체 총평 + 통합 막대 비교, 하단에 경쟁사별 카드.
 // 막대의 회사명을 누르면 아래 해당 카드가 파란색으로 하이라이트되고 화면에 잡힌다.
@@ -61,6 +62,7 @@ export function CompetitorPanel({
   sparkLabsAum?: number;
 }) {
   const tr = useT();
+  const locale = useLocale();
   const cards = cardCompetitors ?? competitors;
   const [selected, setSelected] = useState<string | null>(null);
   const max = Math.max(sparklabsMentions, ...competitors.map(c => c.count), 1);
@@ -184,6 +186,7 @@ function CompareRow({
   onSelect?: () => void;
 }) {
   const tr = useT();
+  const locale = useLocale();
   const pct = Math.round((count / max) * 100);
   const clickable = !!onSelect;
 
@@ -230,6 +233,7 @@ type TabKey = '트렌드' | '기사' | '펀드';
 
 function CompetitorCard({ c, selected }: { c: CompetitorStatView; selected: boolean }) {
   const tr = useT();
+  const locale = useLocale();
   const [tab, setTab] = useState<TabKey>('트렌드');
   // "기사" 탭에서 같은 사건·다른 매체로 묶인 클러스터의 "+N개 매체 더보기" 펼침 상태.
   const [expandedArticles, setExpandedArticles] = useState<Set<string>>(new Set());
@@ -276,7 +280,7 @@ function CompetitorCard({ c, selected }: { c: CompetitorStatView; selected: bool
               const d = new Date(a.pubDate);
               return (
                 <a key={i} href={safeArticleHref(a.link, a.title, a.source)} target="_blank" rel="noopener noreferrer" className="block hover:opacity-80">
-                  <div className="text-sm text-spark-ink leading-snug line-clamp-2">{a.titleEn || a.title}</div>
+                  <div className="text-sm text-spark-ink leading-snug line-clamp-2">{articleTitle(a, locale)}</div>
                   <div className="text-xs text-spark-muted mt-0.5">{tr(a.source)} · {d.getMonth() + 1}.{d.getDate()}</div>
                 </a>
               );
@@ -330,7 +334,7 @@ function CompetitorCard({ c, selected }: { c: CompetitorStatView; selected: bool
                 <div key={a.id}>
                   <a href={safeArticleHref(a.link, a.title, a.source)} target="_blank" rel="noopener noreferrer" className="block group">
                     <div className={`text-sm leading-snug line-clamp-2 group-hover:text-spark-purple ${a.neg ? 'text-red-700' : 'text-spark-ink-soft'}`}>
-                      {a.titleEn || a.title}
+                      {articleTitle(a, locale)}
                     </div>
                     <div className="text-xs text-spark-muted mt-0.5">{tr(a.source)} · {d.getMonth() + 1}.{d.getDate()}</div>
                   </a>

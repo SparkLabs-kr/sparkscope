@@ -1,5 +1,6 @@
 'use client';
-import { useT } from '@/lib/i18n/client';
+import { articleTitle } from '@/lib/sparkscope/article-title';
+import { useT, useLocale } from '@/lib/i18n/client';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
 // SparkScope 챗봇 첫 화면(초안). 아직 실제 응답 백엔드/DB는 붙어 있지 않고,
@@ -389,6 +390,7 @@ function migrateConvos(raw: any): Convo[] {
 
 export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   const tr = useT();
+  const locale = useLocale();
   const [input, setInput] = useState('');
   // 기본값은 아무것도 안 켠 상태. 예전 기본값 'sources'는 서버에서 읽지도 않는 값이라
   // 실제로는 지금과 똑같이 동작했다(2026-08-18에 토글 자체를 없앰).
@@ -1273,6 +1275,7 @@ function ChatAnswer({
   onSuggestedKeyword?: (keyword: string) => void;
 }) {
   const tr = useT();
+  const locale = useLocale();
   if (!res) return null;
   return (
     <div className="w-full space-y-2.5">
@@ -1375,6 +1378,7 @@ const RISK_FLAG_EXPLAIN: Record<string, string> = {
 /** 근거 기사 목록의 행 하나. showCompanyTags=true면 관련 회사를 칩(배지)으로 따로 붙인다. */
 function ArticleRow({ a, fmtDate, showCompanyTags }: { a: ChatQueryResult['articles'][number]; fmtDate: (iso: string) => string; showCompanyTags?: boolean }) {
   const tr = useT();
+  const locale = useLocale();
   // 주제 태그(tagKind==='topic')는 회사명이 아니다 — "🏢 관련 포트폴리오사: 스타트업"처럼
   // 잘못 붙는 걸 막는다. 그룹으로 안 묶여 "그 외 매칭된 기사" 목록에 떨어져도 마찬가지로 막는다
   // (2026-08-12 피드백 — 피칭 결과의 업계동향 기사에서 실제로 발생).
@@ -1387,7 +1391,7 @@ function ArticleRow({ a, fmtDate, showCompanyTags }: { a: ChatQueryResult['artic
     <li>
       <a href={a.link} target="_blank" rel="noreferrer" className={`block px-4 py-3 transition ${isLive ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-spark-subtle'}`}>
         <div className="flex items-start gap-2">
-          <span className="text-[14px] text-spark-ink leading-snug">{a.titleEn || a.title}</span>
+          <span className="text-[14px] text-spark-ink leading-snug">{articleTitle(a, locale)}</span>
           {a.tone === 'NEGATIVE' && (
             <span className="shrink-0 mt-0.5 px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px] font-bold">{tr('부정')}</span>
           )}
@@ -1444,6 +1448,7 @@ function ArticleMiniTable({
   showTag?: boolean;
 }) {
   const tr = useT();
+  const locale = useLocale();
   return (
     <div className="overflow-x-auto border-t border-spark-border">
       <table className="w-full text-[13px] border-collapse">
@@ -1466,7 +1471,7 @@ function ArticleMiniTable({
               )}
               <td className="px-3 py-2">
                 <a href={a.link} target="_blank" rel="noreferrer" className="text-spark-ink hover:underline">
-                  {a.titleEn || a.title}
+                  {articleTitle(a, locale)}
                 </a>
               </td>
               <td className="px-3 py-2 whitespace-nowrap text-spark-ink-soft">{tr(a.source)}</td>
@@ -1507,6 +1512,7 @@ function GroupArticles({
   showTag?: boolean;
 }) {
   const tr = useT();
+  const locale = useLocale();
   const [expanded, setExpanded] = useState(false);
   const rest = items.length - GROUP_PREVIEW_COUNT;
   const shown = expanded ? items : items.slice(0, GROUP_PREVIEW_COUNT);
@@ -1553,6 +1559,7 @@ function ChatResult({
   onSuggestedKeyword?: (keyword: string) => void;
 }) {
   const tr = useT();
+  const locale = useLocale();
   const fmtDate = (iso: string) => {
     const d = new Date(iso);
     return `${d.getMonth() + 1}/${d.getDate()}`;
@@ -1795,6 +1802,7 @@ function ChatResult({
  */
 function TrendChart({ items, granularity }: { items: { month: string; count: number }[]; granularity: 'day' | 'month' }) {
   const tr = useT();
+  const locale = useLocale();
   const max = Math.max(...items.map((i) => i.count), 1);
   const W = 640;
   const H = 180;
@@ -1880,6 +1888,7 @@ function TrendChart({ items, granularity }: { items: { month: string; count: num
 /** 긍정/중립/부정 톤 비율 도넛차트 — TrendChart와 같은 SVG 인라인 패턴. */
 function ToneDonutChart({ positive, neutral, negative }: { positive: number; neutral: number; negative: number }) {
   const tr = useT();
+  const locale = useLocale();
   const total = positive + neutral + negative;
   if (total === 0) return null;
   const R = 54;
@@ -1974,6 +1983,7 @@ function CompanyBarChart({ title, items }: { title: string; items: { name: strin
  *  궁금한 데이터라 절대 점수(0~100점 기준)를 막대 길이로 바로 비교되게 한다. */
 function PitchScoreBarChart({ articles }: { articles: ChatQueryResult['articles'] }) {
   const tr = useT();
+  const locale = useLocale();
   const points = articles
     .filter((a): a is ChatArticle & { pitchScore: number } => typeof a.pitchScore === 'number')
     .slice(0, 10);
@@ -1985,9 +1995,9 @@ function PitchScoreBarChart({ articles }: { articles: ChatQueryResult['articles'
       <div className="space-y-2.5">
         {points.map((p) => (
           <div key={p.id} className="flex items-center gap-2.5 text-[12px]">
-            <span className="w-40 shrink-0 truncate text-spark-ink-soft" title={p.titleEn || p.title}>
+            <span className="w-40 shrink-0 truncate text-spark-ink-soft" title={articleTitle(p, locale)}>
               {p.matchedKeyword ? `[${p.matchedKeyword}] ` : ''}
-              {p.titleEn || p.title}
+              {articleTitle(p, locale)}
             </span>
             <div className="flex-1 h-4 rounded-md bg-spark-subtle overflow-hidden">
               <div
@@ -2007,6 +2017,7 @@ function PitchScoreBarChart({ articles }: { articles: ChatQueryResult['articles'
 /** 오탐 많은 키워드 표 — HTML 저장(chat-export.ts)의 noiseTable()과 같은 정보를 채팅 화면에도 보여준다. */
 function NoiseKeywordTable({ rows }: { rows: NonNullable<ChatQueryResult['noisyKeywords']> }) {
   const tr = useT();
+  const locale = useLocale();
   return (
     <div className="bg-spark-surface border border-spark-border rounded-2xl shadow-card overflow-hidden">
       <div className="px-4 py-2.5 border-b border-spark-border text-[13px] font-semibold text-spark-ink-soft">
@@ -2100,6 +2111,7 @@ const CATEGORY_COLOR_FALLBACK = '#8B8894';
 
 function CategoryDonutChart({ items }: { items: { category: string; count: number }[] }) {
   const tr = useT();
+  const locale = useLocale();
   const total = items.reduce((sum, i) => sum + i.count, 0);
   if (total === 0) return null;
   const R = 54;
@@ -2244,6 +2256,7 @@ function IconSliders() {
  */
 function DigestPreview({ html }: { html: string }) {
   const tr = useT();
+  const locale = useLocale();
   const ref = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(600);
 

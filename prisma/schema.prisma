@@ -96,6 +96,11 @@ model Article {
   titleEn           String?
   oneLinerEn        String?
   pitchTopicEn      String?
+  // 한국어 화면(KO)용 번역 캐시 — 원문이 한국어가 아닐 때만 채운다.
+  // title은 "원문 그대로"라서 대만 기사는 중문이 들어 있다. 한국어 화면에 중문이 그대로
+  // 나가지 않도록 여기에 한국어 제목을 캐시한다. 원문이 이미 한국어면 null로 두고
+  // 화면은 title로 떨어진다 — 국내 4만여 건을 헛번역하지 않기 위한 것이다.
+  titleKo           String?
   riskFlag          String?
   isNoise           Boolean  @default(false)
   noiseReason       String?

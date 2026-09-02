@@ -1,7 +1,8 @@
 'use client';
+import { articleTitle } from '@/lib/sparkscope/article-title';
 // 회사명에 마우스를 올리면(모바일은 탭) 최근 기사 미리보기가 뜨는 컴포넌트.
 import { useEffect, useRef, useState } from 'react';
-import { useT } from '@/lib/i18n/client';
+import { useT, useLocale } from '@/lib/i18n/client';
 
 interface RecentArticle {
   title: string;
@@ -13,6 +14,7 @@ interface RecentArticle {
 
 export function CompanyNameWithPreview({ name, articles }: { name: string; articles: RecentArticle[] }) {
   const t = useT();
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLSpanElement>(null);
 
@@ -61,7 +63,7 @@ export function CompanyNameWithPreview({ name, articles }: { name: string; artic
                 rel="noopener noreferrer"
                 className="block rounded px-2 py-1.5 hover:bg-spark-subtle"
               >
-                <div className="text-xs text-gray-800 leading-snug line-clamp-2">{a.titleEn || a.title}</div>
+                <div className="text-xs text-gray-800 leading-snug line-clamp-2">{articleTitle(a, locale)}</div>
                 <div className="text-[10px] text-gray-400 mt-0.5">{t(a.source)} · {d.getMonth() + 1}.{d.getDate()}</div>
               </a>
             );

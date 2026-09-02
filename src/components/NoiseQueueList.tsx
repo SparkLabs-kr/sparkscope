@@ -1,6 +1,7 @@
 'use client';
+import { articleTitle } from '@/lib/sparkscope/article-title';
 import { useState } from 'react';
-import { useT } from '@/lib/i18n/client';
+import { useT, useLocale } from '@/lib/i18n/client';
 
 const FIELD_LABEL: Record<string, string> = { excludeWords: '제외어', contextWords: '문맥어' };
 
@@ -32,6 +33,7 @@ export type QueueItem =
 // (AI 제안 승인 → MonitoringTarget 설정 반영 / 사용자 신고 승인 → Article.isNoise 처리 + AI 제안 생성).
 export function NoiseQueueList({ items: initial }: { items: QueueItem[] }) {
   const t = useT();
+  const locale = useLocale();
   const [items, setItems] = useState(initial);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -64,7 +66,7 @@ export function NoiseQueueList({ items: initial }: { items: QueueItem[] }) {
                   )}
                 </div>
                 <a href={a.link} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-gray-900 hover:text-spark-purple">
-                  {a.titleEn || a.title}
+                  {articleTitle(a, locale)}
                 </a>
                 <div className="text-xs text-gray-500 mt-0.5">
                   {t(a.source)}

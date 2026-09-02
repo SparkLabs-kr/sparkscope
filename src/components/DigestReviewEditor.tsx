@@ -1,5 +1,6 @@
 'use client';
-import { useT } from '@/lib/i18n/client';
+import { articleTitle } from '@/lib/sparkscope/article-title';
+import { useT, useLocale } from '@/lib/i18n/client';
 // 다이제스트 검수 에디터 — TOP3 순서·포함 조정, 카테고리 요약, 편집자 한 줄, 실시간 미리보기, 발송.
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -39,6 +40,7 @@ export function DigestReviewEditor({
   recipient: string;
 }) {
   const tr = useT();
+  const locale = useLocale();
   const [editorIntro, setEditorIntro] = useState(initialEditorIntro);
   const [top3Ids, setTop3Ids] = useState<string[]>(initialTop3Ids.slice(0, 3));
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
@@ -114,7 +116,7 @@ export function DigestReviewEditor({
   }
 
   async function onSend() {
-    const chosen = top3Ids.map(id => { const a = byId.get(id); return a && (a.titleEn || a.title); }).filter(Boolean);
+    const chosen = top3Ids.map(id => { const a = byId.get(id); return a && articleTitle(a, locale); }).filter(Boolean);
     const actualRecipient = testEmail.trim() || recipient || tr('(환경변수 수신자)');
     const msg = `${tr('실제로 다이제스트를 발송합니다.')}\n\n${tr('수신')}: ${actualRecipient}${testEmail.trim() ? ` (${tr('테스트')})` : ''}\nTOP 3:\n${chosen.map((t, i) => `  ${i + 1}. ${t}`).join('\n') || `  (${tr('자동 선정')})`}\n\n${tr('발송하시겠습니까?')}`;
     if (!window.confirm(msg)) return;
@@ -164,7 +166,7 @@ export function DigestReviewEditor({
                 <div key={id} className="flex items-start gap-2 rounded-lg border border-spark-light-purple bg-spark-light-purple/20 p-2.5">
                   <div className="text-sm font-bold text-spark-purple w-6 text-center">#{idx + 1}</div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-gray-800 truncate">{a.isScrapped ? '⭐ ' : ''}{a.titleEn || a.title}</div>
+                    <div className="text-sm font-semibold text-gray-800 truncate">{a.isScrapped ? '⭐ ' : ''}{articleTitle(a, locale)}</div>
                     <div className="text-xs text-gray-500">{tr(CAT_LABEL[a.category] ?? a.category)} · {tr(a.source)}</div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
@@ -201,7 +203,7 @@ export function DigestReviewEditor({
                     return (
                       <div key={a.id} className={`flex items-center gap-2 rounded-lg border p-2 text-sm ${isExcluded ? 'border-gray-100 bg-gray-50 opacity-50' : 'border-gray-100'}`}>
                         <div className="flex-1 min-w-0">
-                          <div className={`truncate ${isExcluded ? 'line-through text-gray-400' : 'text-gray-800'}`}>{a.isScrapped ? '⭐ ' : ''}{a.titleEn || a.title}</div>
+                          <div className={`truncate ${isExcluded ? 'line-through text-gray-400' : 'text-gray-800'}`}>{a.isScrapped ? '⭐ ' : ''}{articleTitle(a, locale)}</div>
                           <div className="text-[11px] text-gray-400">{tr(a.source)} · {tr(a.matchedKeyword)}{a.pitchScore >= 60 ? ` · ${tr('피칭')} ${a.pitchScore}` : ''}</div>
                         </div>
                         {!inTop3 && !isExcluded && (

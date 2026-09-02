@@ -1,7 +1,8 @@
 'use client';
+import { articleTitle } from '@/lib/sparkscope/article-title';
 // 톤 분석 — 클릭 없이 세 논조(긍정/중립/부정)의 비율과 기사 목록이 한 화면에 바로 보인다.
 import { useState } from 'react';
-import { useT } from '@/lib/i18n/client';
+import { useT, useLocale } from '@/lib/i18n/client';
 import { RISK_FLAGS } from '@/lib/sparkscope/risk-flags';
 import { clusterArticles } from '@/lib/sparkscope/cluster';
 import { safeArticleHref } from '@/lib/sparkscope/article-link';
@@ -25,6 +26,7 @@ const TONES = [
 
 export function ToneBreakdown({ articles }: { articles: ToneArticle[] }) {
   const tr = useT();
+  const locale = useLocale();
   // 펼쳐진 클러스터(대표 기사 id) 집합 — "+N개 매체 더보기" 토글 상태.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggle = (id: string) => setExpanded(prev => {
@@ -89,7 +91,7 @@ export function ToneBreakdown({ articles }: { articles: ToneArticle[] }) {
                           {tr(RISK_FLAGS[c.rep.riskFlag].label)}
                         </span>
                       )}
-                      <div className="text-xs text-spark-ink leading-snug line-clamp-2">{c.rep.titleEn || c.rep.title}</div>
+                      <div className="text-xs text-spark-ink leading-snug line-clamp-2">{articleTitle(c.rep, locale)}</div>
                       <div className="text-[10px] text-spark-muted mt-0.5">{tr(c.rep.source)} · {d.getMonth() + 1}.{d.getDate()}</div>
                     </a>
                     {c.others.length > 0 && (

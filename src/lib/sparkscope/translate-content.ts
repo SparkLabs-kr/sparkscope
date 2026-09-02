@@ -13,7 +13,7 @@
  */
 import OpenAI from 'openai';
 import { prisma } from '@/lib/prisma';
-import { PACKS, needsTranslationAnyLocale } from './locale';
+import { PACKS, needsTranslationAnyLocale, detectLocale } from './locale';
 
 // 지연 생성: 모듈을 import 하는 것만으로 키를 요구하면, 이 모듈이 딸려 들어간 곳
 // (클라이언트 번들 등)에서 "Missing credentials"로 화면이 죽는다. 실제로 번역할 때만 만든다.
@@ -40,7 +40,7 @@ const MAX_PER_REQUEST = 80;
  * 로케일별 지침은 팩에서 모아 붙인다 — 새 오피스를 추가해도 이 파일은 그대로다.
  * 상수로 한 번만 계산해 두어야 프롬프트 캐시 프리픽스가 매번 같은 문자열이 된다.
  */
-const SYSTEM = [
+const SYSTEM_EN = [
   'You translate East Asian startup/VC news text into natural English for a media-monitoring dashboard.',
   'The input may be in any of the languages described below. Detect it per string and translate either.',
   'Rules:',
@@ -49,6 +49,31 @@ const SYSTEM = [
   '- Do not add, omit, or explain anything.',
   '- Return ONLY a JSON array of translated strings, in the same order and with the same length as the input.',
   ...Object.values(PACKS).flatMap(p => [`Language: ${p.locale}`, ...p.translationHints]),
+].join('\n');
+
+/**
+ * 한국어 번역용 지침. 대만(번체 중문) 기사 제목을 한국어 화면에 쓰기 위한 것이라
+ * 입력은 사실상 중문만 들어온다(원문이 한국어면 애초에 번역 대상이 아니다).
+ *
+ * 회사명 규칙이 프롬프트에 들어가 있는 이유 — 대만 기사 제목은 중문 사명(稜研科技)을 쓰는데
+ * 대시보드는 정식 표기(TMY Technology)로 기사를 묶는다. 제목만 중문 사명으로 남으면
+ * 같은 회사가 목록에서 두 이름으로 보인다. prompts.ts의 심층분석 규칙과 같은 취지다.
+ */
+const SYSTEM_KO = [
+  '당신은 동아시아 스타트업·VC 뉴스 제목을 한국어로 옮기는 번역가입니다.',
+  '입력은 번체 중문(대만) 또는 영어입니다. 문자열마다 언어를 판별해 번역하세요.',
+  '규칙:',
+  '- 뜻을 옮기되 축자역하지 말고, 한국 언론의 기사 제목처럼 간결하게 씁니다.',
+  '- 숫자·날짜·단위는 정확히 유지합니다. 대만 통화 元은 "대만달러"로 씁니다.',
+  '- 회사명은 널리 쓰이는 영문 정식 표기를 그대로 둡니다(예: 稜研科技 → TMY Technology, 永悅健康 → H2U).',
+  '  중문 사명을 한자 그대로 남기거나 음차하지 마세요.',
+  '- 결과에 한자를 남기지 마세요. 인물·기업·기관·시장 이름도 모두 옮깁니다:',
+  '  인물은 한국어 음역(郭台銘 → 궈타이밍), 기업은 통용 영문명(精誠資訊 → Systex, 是方電訊 → Chief Telecom,',
+  '  圖睿科技/图睿科技 → GRAID Technology, 稜研科技 → TMY Technology, 永悅健康 → H2U),',
+  '  시장·제도명은 한국어(興櫃 → 흥커시장, 創新板 → 혁신판)로 씁니다.',
+  '  통용 표기를 모르겠으면 음역하세요 — 한자를 그대로 두는 것보다 낫습니다.',
+  '- 내용을 더하거나 빼거나 설명하지 않습니다.',
+  '- 번역된 문자열만 담은 JSON 배열만 반환하며, 순서와 개수는 입력과 같아야 합니다.',
 ].join('\n');
 
 /**
@@ -67,7 +92,7 @@ function needsTranslation(s: string | null | undefined): boolean {
  * 문자열 배열을 한 번에 번역한다. 실패하면 입력을 그대로 돌려준다(호출부에서 원문 노출).
  * 반환 배열의 길이·순서는 입력과 항상 같다.
  */
-export async function translateBatch(texts: string[]): Promise<string[]> {
+export async function translateBatch(texts: string[], target: 'en' | 'ko' = 'en'): Promise<string[]> {
   if (texts.length === 0) return [];
   const out = [...texts];
 
@@ -81,7 +106,7 @@ export async function translateBatch(texts: string[]): Promise<string[]> {
         model: TRANSLATE_MODEL,
         max_tokens: 2000,
         messages: [
-          { role: 'system', content: SYSTEM },
+          { role: 'system', content: target === 'ko' ? SYSTEM_KO : SYSTEM_EN },
           { role: 'user', content: JSON.stringify(chunk) },
         ],
       });
@@ -107,7 +132,7 @@ export async function translateBatch(texts: string[]): Promise<string[]> {
         // 응답 개수가 어긋나면 어느 항목이 어긋났는지 알 수 없어 묶음 전체를 버려야 한다.
         // 통째로 포기하지 않고 한 건씩 다시 시도한다(드물게만 일어나므로 비용 영향이 없다).
         console.error(`[translate-content] 길이 불일치(입력 ${chunk.length} / 응답 ${Array.isArray(parsed) ? parsed.length : 'not-array'}) — 한 건씩 재시도`);
-        const retried = await Promise.all(chunk.map(one => translateBatch([one]).then(r => r[0])));
+        const retried = await Promise.all(chunk.map(one => translateBatch([one], target).then(r => r[0])));
         retried.forEach((v, k) => { if (v && v !== chunk[k]) out[i + k] = v; });
       } else {
         console.error('[translate-content] 단건 번역 응답이 배열이 아님 — 원문 유지');
@@ -219,6 +244,62 @@ export async function ensureArticleEn<T extends TranslatableArticle>(
 }
 
 /**
+ * 한국어 화면에 뜰 기사들의 titleKo를 채운다 — ensureArticleEn의 거울상.
+ *
+ * 원문이 한국어인 기사는 건드리지 않는다(titleKo는 null로 남고 화면은 title로 떨어진다).
+ * 그래서 국내 4만여 건에는 LLM 호출이 한 번도 일어나지 않고, 실제 대상은 대만 기사뿐이다.
+ *
+ * oneLiner·pitchTopic은 여기서 다루지 않는다 — 분석기가 원문 언어와 무관하게 한국어로
+ * 쓰기 때문에(prompts.ts의 SONNET_DEEP_ROLE) 이미 한국어다. 제목만 원문이 남는다.
+ */
+export async function ensureArticleKo<T extends { id: string; title: string; titleKo?: string | null }>(
+  articles: T[],
+  opts: { max?: number } = {},
+): Promise<T[]> {
+  const max = opts.max ?? MAX_PER_REQUEST;
+
+  // 원문이 한국어가 아닌 것만 대상. detectLocale은 한자를 먼저 보므로 중문 제목이 여기 걸린다.
+  const pending = articles.filter(a => a.title && !a.titleKo && detectLocale(a.title) !== 'ko-KR' && needsTranslation(a.title));
+
+  // 원문이 이미 한국어라 번역할 것이 없는 행은 titleKo를 채우지 않는다.
+  // titleEn 쪽과 달리 "처리 완료" 표시를 위해 원문을 복사할 필요가 없다 —
+  // 백필이 detectLocale로 대상을 좁히므로 같은 행을 다시 집어오지 않는다.
+  if (pending.length === 0) return articles;
+
+  const uniq = new Map<string, T>();
+  for (const a of pending) if (!uniq.has(a.id)) uniq.set(a.id, a);
+  const rows = [...uniq.values()].slice(0, max);
+  if (uniq.size > rows.length) {
+    console.log(`[translate-content] 한국어 미번역 ${uniq.size - rows.length}건은 이번 요청에서 건너뜀(상한 ${max}) — 백필/크론이 채운다`);
+  }
+
+  const translated = await translateBatch(rows.map(a => a.title), 'ko');
+
+  const patch = new Map<string, string>();
+  rows.forEach((a, i) => {
+    const v = translated[i];
+    if (!v || v === a.title) return; // 실패분은 저장하지 않는다 — 다음에 다시 시도한다.
+    patch.set(a.id, v);
+  });
+
+  // 화면용 객체를 먼저 채운다(DB 쓰기가 실패해도 이번 화면은 한국어로 보인다).
+  for (const a of articles) {
+    const v = patch.get(a.id);
+    if (v) a.titleKo = v;
+  }
+
+  await Promise.all(
+    [...patch.entries()].map(([id, titleKo]) =>
+      prisma.article.update({ where: { id }, data: { titleKo } }).catch((e: any) => {
+        console.error(`[translate-content] titleKo 저장 실패 (${id}):`, e?.message ?? e);
+      }),
+    ),
+  );
+
+  return articles;
+}
+
+/**
  * 대시보드가 그릴 기사 묶음을 한 번에 번역한다.
  *
  * 화면 하나에 목록이 열 개 가까이 있고 같은 기사가 여러 목록에 겹쳐 들어오므로,
@@ -311,4 +392,23 @@ export async function ensureInterReasonEn(
     );
   }
   await Promise.all(writes);
+}
+
+/**
+ * ensureArticleEnDeep의 한국어판 — 화면에 뜰 묶음을 모아 titleKo를 채운다.
+ *
+ * 원문이 한국어인 기사는 ensureArticleKo가 걸러내므로, 국내만 보는 화면에서는
+ * LLM 호출이 0건이고 실질적으로 대만 기사가 섞인 화면에서만 동작한다.
+ */
+export async function ensureArticleKoDeep(groups: (unknown[] | undefined | null)[]): Promise<void> {
+  const flat: { id: string; title: string; titleKo?: string | null }[] = [];
+  for (const g of groups) {
+    if (!Array.isArray(g)) continue;
+    for (const item of g) {
+      if (item && typeof item === 'object' && 'title' in item && 'id' in item) {
+        flat.push(item as { id: string; title: string; titleKo?: string | null });
+      }
+    }
+  }
+  if (flat.length > 0) await ensureArticleKo(flat);
 }

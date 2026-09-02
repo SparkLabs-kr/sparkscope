@@ -1,8 +1,9 @@
 'use client';
+import { articleTitle } from '@/lib/sparkscope/article-title';
 // 기사 목록 뷰 — 검색(옵션) + 정렬(최신순/오래된순/매체 티어순) + CSV 내보내기.
 // CSV: 날짜, 매체, 기사제목, URL (엑셀 한글 대응 BOM 포함).
 import { useMemo, useState } from 'react';
-import { useT } from '@/lib/i18n/client';
+import { useT, useLocale } from '@/lib/i18n/client';
 import { ArticlesTable } from '@/components/ArticlesTable';
 import { normalizeSource, TIER_OF } from '@/lib/sparkscope/media';
 
@@ -66,6 +67,7 @@ export function ArticleListView({ articles, canScrap = false, canBookmark = fals
   csvName?: string;
 }) {
   const t = useT();
+  const locale = useLocale();
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<SortKey>('recent');
   const [cat, setCat] = useState('');
@@ -106,7 +108,7 @@ export function ArticleListView({ articles, canScrap = false, canBookmark = fals
 
   const downloadCsv = () => {
     const header = [t('날짜'), t('매체'), t('기사제목'), 'URL'];
-    const body = view.map(a => [ymd(a.pubDate), normalizeSource(a.source), a.titleEn || a.title, a.link]);
+    const body = view.map(a => [ymd(a.pubDate), normalizeSource(a.source), articleTitle(a, locale), a.link]);
     const csv = [header, ...body].map(r => r.map(csvCell).join(',')).join('\r\n');
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);

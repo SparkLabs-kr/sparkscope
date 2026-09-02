@@ -1,7 +1,8 @@
 // 메인 대시보드 — 기간 선택(달력) 기반. KPI/차트/위기감지/급증/스크랩 지표.
 import Link from 'next/link';
 import { getLocale, getT } from '@/lib/i18n/server';
-import { ensureArticleEnDeep } from '@/lib/sparkscope/translate-content';
+import { ensureArticleEnDeep, ensureArticleKoDeep } from '@/lib/sparkscope/translate-content';
+import { articleTitle } from '@/lib/sparkscope/article-title';
 import { prisma } from '@/lib/prisma';
 import { ArticleListView } from '@/components/ArticleListView';
 import { PortfolioFilter } from '@/components/PortfolioFilter';
@@ -48,6 +49,21 @@ export type TabId = (typeof TABS)[number]['id'];
 
 function resolveTab(v?: string): TabId {
   return TABS.some(t => t.id === v) ? (v as TabId) : 'sparklabs';
+}
+
+// 지역(한국/대만) — 지금은 나라가 분류명 안에 들어 있다.
+// 2.3의 국가 필드 분리가 끝나면 REGION_CATEGORY 대신 country 조건으로 바뀐다.
+export type PortfolioCategory = 'portfolio_company' | 'portfolio_company_tw';
+const REGIONS = [
+  { id: 'kr', label: '한국', category: 'portfolio_company' },
+  { id: 'tw', label: '대만', category: 'portfolio_company_tw' },
+] as const;
+type RegionId = (typeof REGIONS)[number]['id'];
+function resolveRegion(v?: string): RegionId {
+  return REGIONS.some(r => r.id === v) ? (v as RegionId) : 'kr';
+}
+function categoryOfRegion(r: RegionId): PortfolioCategory {
+  return (REGIONS.find(x => x.id === r)?.category ?? 'portfolio_company') as PortfolioCategory;
 }
 
 // Intra(내부 생태계) / Inter(해외 트렌드) 스코프 전환 — URL(?scope=)로 화면을 나눈다.
@@ -148,7 +164,16 @@ async function fetchRecentTabArticles(
   return [...recent, ...older];
 }
 
-async function loadDashboardData(from: string, to: string, company: string | undefined, isDefaultRange: boolean) {
+async function loadDashboardData(
+  from: string,
+  to: string,
+  company: string | undefined,
+  isDefaultRange: boolean,
+  // 어느 나라 포트폴리오를 볼 것인가. 지금은 나라가 분류명 안에 들어 있다
+  // (portfolio_company / portfolio_company_tw) — 2.3의 "국가를 별도 필드로" 작업이
+  // 끝나면 이 인자가 country 필드 조건으로 바뀐다.
+  pfCategory: PortfolioCategory = 'portfolio_company',
+) {
   // AI가 생성한 문장(위기 원인·경쟁사 트렌드)은 사전계산된 한국어를 저장해두므로,
   // EN 화면이면 그 문장의 영어판을 채워서 읽는다(DashboardInsight JSON 안에 캐시된다).
   const insightLocale = getLocale();
@@ -156,7 +181,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
   const since = new Date(`${from}T00:00:00`);
   const until = new Date(`${to}T23:59:59`);
   const where = { pubDate: { gte: since, lte: until }, isNoise: false };
-  const portfolioWhere = { ...where, category: 'portfolio_company' };
+  const portfolioWhere = { ...where, category: pfCategory };
   // 스파크랩 기사: 자체 카테고리 + 제목에 '스파크랩' 언급 (매체·톤 분석용)
   const sparklabsWhere = { ...where, OR: [{ category: 'sparklabs_self' as string }, { title: { contains: '스파크랩' } }] };
   const negOr = [{ tone: 'NEGATIVE' as string | null }, ...NEGATIVE_KEYWORDS.map(k => ({ title: { contains: k } }))];
@@ -168,14 +193,14 @@ async function loadDashboardData(from: string, to: string, company: string | und
   const spanMs = until.getTime() - since.getTime();
   const prevUntil = new Date(since.getTime() - 1);
   const prevSince = new Date(prevUntil.getTime() - spanMs);
-  const prevPortfolioWhere = { pubDate: { gte: prevSince, lte: prevUntil }, isNoise: false, category: 'portfolio_company' };
+  const prevPortfolioWhere = { pubDate: { gte: prevSince, lte: prevUntil }, isNoise: false, category: pfCategory };
 
   // "3년" 등 긴 기간을 고르면 직전 기간이 실제 데이터 시작일(2023.1.19) 이전까지 걸쳐서,
   // "직전 3년"이라고 표시해도 사실은 그중 데이터 있는 마지막 몇 개월만 비교하는 셈이라 오해하기
   // 쉬웠음(2026-08-06 확인). 직전 기간의 시작을 실제 데이터가 있는 시점으로 당겨서 라벨에 쓰고,
   // 그 결과 직전 기간이 원래 길이의 절반도 안 남으면 증감%는 아예 표시하지 않는다.
   const earliestPortfolio = await prisma.article.aggregate({
-    where: { category: 'portfolio_company', isNoise: false },
+    where: { category: pfCategory, isNoise: false },
     _min: { pubDate: true },
   });
   const earliestPortfolioDate = earliestPortfolio._min.pubDate;
@@ -222,38 +247,38 @@ async function loadDashboardData(from: string, to: string, company: string | und
     prisma.article.groupBy({ by: ['tone'], where: sparklabsWhere, _count: { _all: true } }),
     prisma.article.findMany({ where: { ...where, pitchScore: { gte: 60 } }, orderBy: { pitchScore: 'desc' }, take: 20 }),
     prisma.article.findMany({ where: portfolioWhere, select: { matchedKeyword: true, pubDate: true }, take: 20000 }),
-    prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'portfolio_company' }, select: { id: true, title: true, titleEn: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true } }),
-    prisma.article.findMany({ where: { pubDate: { gte: bl, lt: rc }, isNoise: false, category: 'portfolio_company' }, select: { matchedKeyword: true } }),
+    prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: pfCategory }, select: { id: true, title: true, titleEn: true, titleKo: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true } }),
+    prisma.article.findMany({ where: { pubDate: { gte: bl, lt: rc }, isNoise: false, category: pfCategory }, select: { matchedKeyword: true } }),
     // 실시간 위기 감지용: 기간 선택과 무관하게 "최근 3일" 포트폴리오 부정 기사
-    prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'portfolio_company', OR: negOr }, select: { id: true, title: true, titleEn: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true }, take: 800 }),
+    prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: pfCategory, OR: negOr }, select: { id: true, title: true, titleEn: true, titleKo: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true }, take: 800 }),
     // 표시 단계 관련성 가드용: 포트폴리오 감시대상 키워드맵 (primaryKeyword → [이름·영문·보조])
-    prisma.monitoringTarget.findMany({ where: { category: 'portfolio_company', status: 'ACTIVE' }, select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true, portfolioStatus: true } }),
+    prisma.monitoringTarget.findMany({ where: { category: pfCategory, status: 'ACTIVE' }, select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true, portfolioStatus: true } }),
     // 포트폴리오 vs 타 하우스 비교용: competitor(타 AC·VC 하우스) 노출 상위 3개 (실제 이름) — 업계 키워드 제외
     prisma.article.groupBy({ by: ['matchedKeyword'], where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor', matchedKeyword: { notIn: INDUSTRY_TREND_KEYWORDS } }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 3 }),
     // 경쟁사 모니터링 섹션용: 기간 내 competitor 기사 전체(matchedKeyword=실제 경쟁사명별 집계)
-    prisma.article.findMany({ where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor' }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, titleEn: true, source: true, pubDate: true, link: true, tone: true, matchedKeyword: true }, take: 3000 }),
+    prisma.article.findMany({ where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor' }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, titleEn: true, titleKo: true, source: true, pubDate: true, link: true, tone: true, matchedKeyword: true }, take: 3000 }),
     // 경쟁사 비교 기준선: 기간 내 '스파크랩' 언급 기사 수 (엔티티 자체 + 제목 언급)
     prisma.article.count({ where: { pubDate: { gte: since, lte: until }, isNoise: false, OR: [{ category: 'sparklabs_self' }, { title: { contains: '스파크랩' } }] } }),
     // 가장 많이 언급된 포트폴리오사 TOP 15 (기간 내 노출 건수) — 업계 키워드 제외
     prisma.article.groupBy({ by: ['matchedKeyword'], where: { ...portfolioWhere, matchedKeyword: { notIn: INDUSTRY_TREND_KEYWORDS } }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 15 }),
     // 포트폴리오 부정 기사 (기간 내 부정 논조 — 회사·제목 확인용)
-    prisma.article.findMany({ where: { ...portfolioWhere, OR: negOr }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, titleEn: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true, riskFlag: true }, take: 80 }),
+    prisma.article.findMany({ where: { ...portfolioWhere, OR: negOr }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, titleEn: true, titleKo: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true, riskFlag: true }, take: 80 }),
     // 스파크랩 자사 기사 (톤 분석 클릭 시 펼쳐볼 목록)
-    prisma.article.findMany({ where: sparklabsWhere, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, titleEn: true, link: true, source: true, pubDate: true, tone: true, matchedKeyword: true, category: true, riskFlag: true }, take: 300 }),
+    prisma.article.findMany({ where: sparklabsWhere, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, titleEn: true, titleKo: true, link: true, source: true, pubDate: true, tone: true, matchedKeyword: true, category: true, riskFlag: true }, take: 300 }),
     // 포트폴리오 긍정 하이라이트 (호재 기사)
-    prisma.article.findMany({ where: { ...portfolioWhere, OR: posOr }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], select: { id: true, title: true, titleEn: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true }, take: 120 }),
+    prisma.article.findMany({ where: { ...portfolioWhere, OR: posOr }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], select: { id: true, title: true, titleEn: true, titleKo: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true }, take: 120 }),
   ]);
 
   // TOP15 증감%(같은 길이 직전 기간 대비) — TOP15 회사로만 범위 좁혀 추가 조회
   const top15Keywords = portfolioTop15.map(g => g.matchedKeyword);
   const [prevTop15Counts, top15RecentByCompany] = top15Keywords.length > 0 ? await Promise.all([
-    prisma.article.groupBy({ by: ['matchedKeyword'], where: { pubDate: { gte: prevSince, lte: prevUntil }, isNoise: false, category: 'portfolio_company', matchedKeyword: { in: top15Keywords } }, _count: { _all: true } }),
+    prisma.article.groupBy({ by: ['matchedKeyword'], where: { pubDate: { gte: prevSince, lte: prevUntil }, isNoise: false, category: pfCategory, matchedKeyword: { in: top15Keywords } }, _count: { _all: true } }),
     // 회사 이름에 마우스를 올리면(모바일은 탭) 뜨는 미리보기용 — 회사별로 개별 조회해야
     // 언급량이 큰 회사가 "최근" 슬롯을 다 차지하는 걸 막고 회사마다 최근 기사를 보장받는다.
     // 같은 사건이 여러 매체에 다른 문구로 실려 3칸이 전부 같은 내용으로 채워지는 걸 막기 위해
     // 넉넉히(15건) 가져온 뒤 clusterArticles로 같은 사건을 묶어 대표 1건씩만 남긴다.
     Promise.all(top15Keywords.map(k =>
-      prisma.article.findMany({ where: { ...portfolioWhere, matchedKeyword: k }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, titleEn: true, link: true, source: true, pubDate: true }, take: 15 }),
+      prisma.article.findMany({ where: { ...portfolioWhere, matchedKeyword: k }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, titleEn: true, titleKo: true, link: true, source: true, pubDate: true }, take: 15 }),
     )),
   ]) : [[], []];
   const prevCountOf = new Map(prevTop15Counts.map(g => [g.matchedKeyword, g._count._all]));
@@ -305,7 +330,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
     const neg = a.tone === 'NEGATIVE' || hasNegativeKeyword(a.title) || !!hasCrisisKeyword(a.title);
     if (neg) s.negCount++;
     // titleEn을 빼먹으면 EN 화면에서 경쟁사 카드 제목만 한국어로 남는다(번역 캐시를 못 찾음).
-    const art = { id: a.id, title: a.title, titleEn: a.titleEn ?? null, source: normalizeSource(a.source), pubDate: a.pubDate, link: a.link, neg }; // 입력이 최신순
+    const art = { id: a.id, title: a.title, titleEn: a.titleEn ?? null, titleKo: a.titleKo ?? null, source: normalizeSource(a.source), pubDate: a.pubDate, link: a.link, neg }; // 입력이 최신순
     if (s.articles.length < ARTICLES_PER_CARD) s.articles.push(art);
     if (neg) s.negatives.push(art);
     if (s.titles.length < 40) s.titles.push(a.title); // AI 트렌드 요약 입력용(최신순)
@@ -377,8 +402,8 @@ async function loadDashboardData(from: string, to: string, company: string | und
   } else {
     const pulseCacheKey = `pulse_${fmt(getKstNow())}`;
     const [competitorRecent, industryRecent] = await Promise.all([
-      prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'competitor' }, select: { title: true, titleEn: true, link: true, source: true }, take: 300 }),
-      prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'industry_trend' }, select: { title: true, titleEn: true, link: true, source: true }, take: 300 }),
+      prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'competitor' }, select: { title: true, titleEn: true, titleKo: true, link: true, source: true }, take: 300 }),
+      prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: 'industry_trend' }, select: { title: true, titleEn: true, titleKo: true, link: true, source: true }, take: 300 }),
     ]);
     const [competitorPulse, industryPulse] = await Promise.all([
       summarizeCategoryPulse('AC·VC(경쟁사)', competitorRecent.filter(a => !isBlockedNoise(a)).map(a => a.title), pulseCacheKey, '최근 3일간'),
@@ -495,7 +520,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
   let companyArticles: typeof cleanedArticles = [];
   if (company) {
     const rows = await prisma.article.findMany({
-      where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'portfolio_company', matchedKeyword: company },
+      where: { pubDate: { gte: since, lte: until }, isNoise: false, category: pfCategory, matchedKeyword: company },
       orderBy: [{ pubDate: 'desc' }],
       take: 300,
     });
@@ -537,7 +562,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
   const portfolioTopPrevRangeLabel = `${prettyUtc(effectivePrevSince)} ~ ${prettyUtc(prevUntil)}`;
   // 긍정/부정 하이라이트: 회사(matchedKeyword)별로 묶어 "언급 매체 수" 많은 순 → 동률이면 최신순, TOP 3만.
   // (Article에 검색노출도 필드가 없어 매체 다양성을 대리 지표로 사용)
-  const top3ByMedia = (rows: { id?: string; matchedKeyword: string; title: string; titleEn?: string | null; source: string; pubDate: Date; link: string; riskFlag?: string | null }[]) => {
+  const top3ByMedia = (rows: { id?: string; matchedKeyword: string; title: string; titleEn?: string | null; titleKo?: string | null; source: string; pubDate: Date; link: string; riskFlag?: string | null }[]) => {
     const g = new Map<string, { company: string; sources: Set<string>; rep: (typeof rows)[number] }>();
     for (const a of rows) {
       if (!notNoise(a)) continue;
@@ -552,7 +577,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
       .sort((x, y) => y.sources.size - x.sources.size || new Date(y.rep.pubDate).getTime() - new Date(x.rep.pubDate).getTime())
       .slice(0, 3)
       // id·titleEn을 함께 넘긴다 — 없으면 EN 화면에서 제목이 한국어로 남는다(번역 캐시를 못 찾음).
-      .map(e => ({ id: (e.rep as { id?: string }).id ?? '', company: e.company, title: e.rep.title, titleEn: e.rep.titleEn ?? null, source: normalizeSource(e.rep.source), pubDate: e.rep.pubDate, link: e.rep.link, mediaCount: e.sources.size, riskFlag: e.rep.riskFlag ?? null }));
+      .map(e => ({ id: (e.rep as { id?: string }).id ?? '', company: e.company, title: e.rep.title, titleEn: e.rep.titleEn ?? null, titleKo: e.rep.titleKo ?? null, source: normalizeSource(e.rep.source), pubDate: e.rep.pubDate, link: e.rep.link, mediaCount: e.sources.size, riskFlag: e.rep.riskFlag ?? null }));
   };
   const portfolioNegatives = top3ByMedia(portfolioNeg);
   const portfolioPositives = top3ByMedia(portfolioPos);
@@ -617,7 +642,7 @@ async function loadDashboardData(from: string, to: string, company: string | und
     toneArticles: sparklabsArticles.map(a => ({
       id: a.id,
       title: a.title,
-      titleEn: a.titleEn,
+      titleEn: a.titleEn, titleKo: a.titleKo,
       link: a.link,
       source: normalizeSource(a.source),
       pubDate: a.pubDate,
@@ -685,12 +710,15 @@ function buildTrendData(records: { matchedKeyword: string; pubDate: Date }[], si
 export default async function DashboardPage({ searchParams }: { searchParams: { from?: string; to?: string; company?: string; tab?: string; scope?: string; domain?: string; country?: string } }) {
   const tr = getT();
   const isEn = getLocale() === 'en';
+  const locale: 'ko' | 'en' = isEn ? 'en' : 'ko';
   const intlLocale = isEn ? 'en-US' : 'ko-KR';
   const range = resolveRange(searchParams);
   const company = typeof searchParams.company === 'string' && searchParams.company ? searchParams.company : undefined;
   const tab = resolveTab(searchParams.tab);
   const scope = resolveScope(searchParams.scope);
-  const data = await loadDashboardData(range.from, range.to, company, range.isDefaultRange);
+  // 어느 나라 포트폴리오를 볼 것인가 (?country=tw). 기본은 한국.
+  const region: RegionId = resolveRegion(searchParams.country);
+  const data = await loadDashboardData(range.from, range.to, company, range.isDefaultRange, categoryOfRegion(region));
   const session = await getServerSession(authOptions);
   const canScrap = canScrapEmail(session?.user?.email ?? null);
   const pendingSuggestionCount = canScrap ? await prisma.noiseSuggestion.count({ where: { status: 'PENDING' } }) : 0;
@@ -711,19 +739,24 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
   // EN 화면이면 이 화면에 뜰 기사 제목을 영어로 채운다(Article.titleEn 캐시 — 두 번째부터는 LLM 호출 없음).
   // 군집화·검색 fallback은 계속 한국어 원문(title)을 쓰므로 묶음 결과가 달라지지 않는다.
+  // KO 화면에서도 같은 일이 필요하다 — title은 "원문 그대로"라서 대만 기사는 중문이다.
+  // ensureArticleKo가 원문이 한국어인 기사를 걸러내므로, 국내만 보는 화면에서는 호출이 0건이다.
+  const translatableGroups = () => [
+    articlesWithBookmark,
+    companyArticlesWithBookmark,
+    data.pitches,
+    data.toneArticles,
+    data.portfolioNegatives,
+    data.portfolioPositives,
+    data.crises.map(c => c.article),
+    ...data.portfolioTop.map(t => t.recentArticles),
+    ...data.competitors.map(c => c.articles),
+    ...data.competitors.map(c => c.negatives),
+  ];
   if (isEn) {
-    await ensureArticleEnDeep([
-      articlesWithBookmark,
-      companyArticlesWithBookmark,
-      data.pitches,
-      data.toneArticles,
-      data.portfolioNegatives,
-      data.portfolioPositives,
-      data.crises.map(c => c.article),
-      ...data.portfolioTop.map(t => t.recentArticles),
-      ...data.competitors.map(c => c.articles),
-      ...data.competitors.map(c => c.negatives),
-    ]);
+    await ensureArticleEnDeep(translatableGroups());
+  } else {
+    await ensureArticleKoDeep(translatableGroups());
   }
   // getKstNow()의 KST 값은 UTC 필드에 들어있으므로, toLocaleDateString도 timeZone: 'UTC'로
   // 읽어야 한다 — 안 그러면 실행 환경 시스템 시간대에 따라 다시 밀린다.
@@ -733,15 +766,23 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const tabHref = (t: TabId) => {
     const params = new URLSearchParams({ from: range.from, to: range.to, tab: t, scope });
     if (data.selectedCompany) params.set('company', data.selectedCompany);
+    if (region !== 'kr') params.set('country', region);
     return `/dashboard?${params.toString()}`;
   };
   // 스코프 링크: Intra ↔ Inter 전환, 기간·탭 필터는 유지.
   const scopeHref = (s: ScopeId) => {
     const params = new URLSearchParams({ from: range.from, to: range.to, tab, scope: s });
     if (data.selectedCompany) params.set('company', data.selectedCompany);
+    if (region !== 'kr') params.set('country', region);
     return `/dashboard?${params.toString()}`;
   };
   const activeScope = SCOPES.find(s => s.id === scope)!;
+  // 지역 링크: 기간·탭·스코프는 유지하고 회사 필터만 버린다(지역이 다르면 그 회사가 없다).
+  const regionHref = (r: RegionId) => {
+    const params = new URLSearchParams({ from: range.from, to: range.to, tab, scope });
+    if (r !== 'kr') params.set('country', r);
+    return `/dashboard?${params.toString()}`;
+  };
 
   return (
     <>
@@ -762,6 +803,21 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             );
           })}
         </div>
+        {/* 지역 전환 — 한국 / 대만. Inter(해외 트렌드)에는 지역 개념이 없어 Intra에서만 보인다. */}
+        {scope === 'intra' && <div className="flex gap-0.5 rounded-lg bg-spark-cream p-0.5">
+          {REGIONS.map(r => {
+            const active = r.id === region;
+            return (
+              <Link
+                key={r.id}
+                href={regionHref(r.id)}
+                className={`rounded-md px-3.5 py-1.5 text-xs font-bold transition-colors whitespace-nowrap ${active ? 'bg-spark-purple text-white' : 'text-spark-muted hover:text-spark-ink-soft'}`}
+              >
+                {tr(r.label)}
+              </Link>
+            );
+          })}
+        </div>}
         <span className="text-[11px] text-spark-muted">{tr(activeScope.desc)}</span>
       </div>
 
@@ -934,14 +990,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
       {/* 긍정·부정 나란히 (대비가 한눈에) */}
       <div data-tour="pos-neg" className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-        <PortfolioPositives items={data.portfolioPositives} rangeLabel={range.label} />
-        <PortfolioNegatives items={data.portfolioNegatives} rangeLabel={range.label} />
+        <PortfolioPositives items={data.portfolioPositives} rangeLabel={range.label} locale={locale} />
+        <PortfolioNegatives items={data.portfolioNegatives} rangeLabel={range.label} locale={locale} />
       </div>
 
       {/* 포트폴리오 TOP15 → 기획기사 피칭 (위아래 배치) */}
       <div className="grid grid-cols-1 gap-4 mb-8">
         <div data-tour="top15">
-          <PortfolioTopList items={data.portfolioTop} rangeLabel={range.label} prevRangeLabel={data.portfolioTopPrevRangeLabel} showChange={data.portfolioTopHasEnoughPrevData} />
+          <PortfolioTopList items={data.portfolioTop} rangeLabel={range.label} prevRangeLabel={data.portfolioTopPrevRangeLabel} showChange={data.portfolioTopHasEnoughPrevData} locale={locale} />
         </div>
         <div data-tour="pitch" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
           <div className="font-bold mb-3">🎯 {tr('기획기사 피칭')} <InfoTip text={tr("AI가 각 기사를 0~100점으로 평가한 '기획기사 피칭 점수'입니다.\n이 주제로 우리 포트폴리오사를 엮어 기획기사를 제안하면 성사 가능성이 높은 기사를 뜻합니다.\n· 60점 이상: 아래 목록에 표시\n· 75점 이상: 상단 '피칭 기회' 지표에 집계")} /></div>
@@ -950,10 +1006,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
               {data.pitches.slice(0, 5).map(p => (
                 <div key={p.id} className="p-3 bg-gradient-to-br from-amber-50 to-amber-100 border-l-4 border-amber-500 rounded-r-lg">
                   <div className="flex items-center gap-2 mb-1 min-w-0">
-                    <div className="text-sm font-bold text-amber-900 flex-1 min-w-0 truncate">{p.pitchTopicEn || p.pitchTopic || p.matchedKeyword}</div>
+                    <div className="text-sm font-bold text-amber-900 flex-1 min-w-0 truncate">{(isEn ? p.pitchTopicEn : null) || p.pitchTopic || p.matchedKeyword}</div>
                     <div className="text-xs px-2 py-0.5 bg-amber-500 text-white rounded-full font-bold flex-shrink-0 whitespace-nowrap">{tr('{n}점', { n: p.pitchScore ?? 0 })}</div>
                   </div>
-                  <div className="text-xs text-amber-800 truncate">{p.titleEn || p.title}</div>
+                  <div className="text-xs text-amber-800 truncate">{articleTitle(p, locale)}</div>
                 </div>
               ))}
             </div>
@@ -1085,7 +1141,7 @@ function PortfolioStatusBadge({ status }: { status: string | null }) {
   return <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold border ${cls}`}>{status}</span>;
 }
 
-function PortfolioTopList({ items, rangeLabel, prevRangeLabel, showChange }: { items: { name: string; count: number; portfolioStatus?: string | null; changePct: number | null; recentArticles: { title: string; titleEn?: string | null; link: string; source: string; pubDate: Date }[] }[]; rangeLabel: string; prevRangeLabel: string; showChange: boolean }) {
+function PortfolioTopList({ items, rangeLabel, prevRangeLabel, showChange, locale }: { items: { name: string; count: number; portfolioStatus?: string | null; changePct: number | null; recentArticles: { title: string; titleEn?: string | null; titleKo?: string | null; link: string; source: string; pubDate: Date }[] }[]; rangeLabel: string; prevRangeLabel: string; showChange: boolean; locale: 'ko' | 'en' }) {
   const tr = getT();
   const max = Math.max(...items.map(i => i.count), 1);
   return (
@@ -1123,7 +1179,7 @@ function PortfolioTopList({ items, rangeLabel, prevRangeLabel, showChange }: { i
   );
 }
 
-function PortfolioPositives({ items, rangeLabel }: { items: { id?: string; company: string; title: string; titleEn?: string | null; source: string; pubDate: Date; link: string; mediaCount?: number }[]; rangeLabel: string }) {
+function PortfolioPositives({ items, rangeLabel, locale }: { items: { id?: string; company: string; title: string; titleEn?: string | null; titleKo?: string | null; source: string; pubDate: Date; link: string; mediaCount?: number }[]; rangeLabel: string; locale: 'ko' | 'en' }) {
   const tr = getT();
   return (
     <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
@@ -1140,7 +1196,7 @@ function PortfolioPositives({ items, rangeLabel }: { items: { id?: string; compa
                   {a.mediaCount && a.mediaCount > 1 ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-600/10 text-emerald-700 font-semibold whitespace-nowrap">{tr('{n}개 매체', { n: a.mediaCount ?? 0 })}</span> : null}
                   <span className="text-[10px] text-spark-muted">{tr(a.source)} · {d.getMonth() + 1}.{d.getDate()}</span>
                 </div>
-                <div className="text-xs text-spark-ink leading-snug line-clamp-2">{a.titleEn || a.title}</div>
+                <div className="text-xs text-spark-ink leading-snug line-clamp-2">{articleTitle(a, locale)}</div>
               </a>
             );
           })}
@@ -1152,7 +1208,7 @@ function PortfolioPositives({ items, rangeLabel }: { items: { id?: string; compa
   );
 }
 
-function PortfolioNegatives({ items, rangeLabel }: { items: { id?: string; company: string; title: string; titleEn?: string | null; source: string; pubDate: Date; link: string; mediaCount?: number; riskFlag?: string | null }[]; rangeLabel: string }) {
+function PortfolioNegatives({ items, rangeLabel, locale }: { items: { id?: string; company: string; title: string; titleEn?: string | null; titleKo?: string | null; source: string; pubDate: Date; link: string; mediaCount?: number; riskFlag?: string | null }[]; rangeLabel: string; locale: 'ko' | 'en' }) {
   const tr = getT();
   return (
     <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
@@ -1174,7 +1230,7 @@ function PortfolioNegatives({ items, rangeLabel }: { items: { id?: string; compa
                   {a.mediaCount && a.mediaCount > 1 ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-600/10 text-red-700 font-semibold whitespace-nowrap">{tr('{n}개 매체', { n: a.mediaCount ?? 0 })}</span> : null}
                   <span className="text-[10px] text-gray-400">{tr(a.source)} · {d.getMonth() + 1}.{d.getDate()}</span>
                 </div>
-                <div className="text-xs text-gray-800 leading-snug line-clamp-2">{a.titleEn || a.title}</div>
+                <div className="text-xs text-gray-800 leading-snug line-clamp-2">{articleTitle(a, locale)}</div>
               </a>
             );
           })}

@@ -1,8 +1,9 @@
 'use client';
+import { articleTitle } from '@/lib/sparkscope/article-title';
 // 실시간 위기 감지 카드 목록 — 위기 카드가 많으면 개별 카드 대신 AI 종합요약을 먼저 보여주고
 // "더보기"로 접어서 화면 공간을 아낀다 (카드 수가 적으면 그냥 다 펼쳐서 보여준다).
 import { useState } from 'react';
-import { useT, type Translate } from '@/lib/i18n/client';
+import { useT, type Translate, useLocale } from '@/lib/i18n/client';
 import { safeArticleHref } from '@/lib/sparkscope/article-link';
 
 interface CrisisArticle { title: string; titleEn?: string | null; source: string; pubDate: Date | string; link: string }
@@ -28,6 +29,7 @@ export function CrisisPanel({ crises, overview, windowDays, summaryThreshold }: 
   summaryThreshold: number;
 }) {
   const t = useT();
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
 
   if (crises.length === 0) {
@@ -42,7 +44,7 @@ export function CrisisPanel({ crises, overview, windowDays, summaryThreshold }: 
   if (crises.length <= summaryThreshold) {
     return (
       <div className="space-y-3">
-        {crises.map(c => <CrisisCardView key={c.company} c={c} windowDays={windowDays} t={t} />)}
+        {crises.map(c => <CrisisCardView key={c.company} c={c} windowDays={windowDays} t={t} locale={locale} />)}
       </div>
     );
   }
@@ -60,14 +62,14 @@ export function CrisisPanel({ crises, overview, windowDays, summaryThreshold }: 
       </div>
       {open && (
         <div className="space-y-3">
-          {crises.map(c => <CrisisCardView key={c.company} c={c} windowDays={windowDays} t={t} />)}
+          {crises.map(c => <CrisisCardView key={c.company} c={c} windowDays={windowDays} t={t} locale={locale} />)}
         </div>
       )}
     </div>
   );
 }
 
-function CrisisCardView({ c, windowDays, t }: { c: Crisis; windowDays: number; t: Translate }) {
+function CrisisCardView({ c, windowDays, t, locale }: { c: Crisis; windowDays: number; t: Translate; locale: 'ko' | 'en' }) {
   const d = new Date(c.article.pubDate);
   return (
     <div className="rounded-xl border-l-4 border-red-500 bg-gradient-to-r from-red-50 to-white p-4">
@@ -89,7 +91,7 @@ function CrisisCardView({ c, windowDays, t }: { c: Crisis; windowDays: number; t
       <div className="mt-3 rounded-lg bg-white/70 border border-red-100 p-2.5">
         <div className="text-[10px] font-semibold text-red-400 mb-1">{t('대표 부정기사')}</div>
         <a href={safeArticleHref(c.article.link, c.article.title, c.article.source)} target="_blank" rel="noopener noreferrer" className="block text-sm text-gray-800 hover:text-spark-purple font-medium">
-          {c.article.titleEn || c.article.title}
+          {articleTitle(c.article, locale)}
         </a>
         <div className="text-xs text-gray-500 mt-1">{t(c.article.source)} · {d.getFullYear()}.{d.getMonth() + 1}.{d.getDate()}</div>
       </div>

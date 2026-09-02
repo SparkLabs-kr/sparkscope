@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { collectTaiwanArticles } from '@/lib/sparkscope/taiwan-collect';
 import { analyzeArticles } from '@/lib/sparkscope/analyzer';
+import { ensureArticleKo, ensureArticleEn } from '@/lib/sparkscope/translate-content';
 import { prisma } from '@/lib/prisma';
 import { normalizeSource } from '@/lib/sparkscope/media';
 
@@ -60,6 +61,13 @@ export async function GET(request: NextRequest) {
             oneLiner: a.oneLiner,
             ourTake: a.ourTake,
             priorityScore: a.basePriority,
+            // 아래 네 개가 빠져 있어서 트라이얼 120건이 "분석 안 된 기사"로 남았다.
+            // analyzedAt이 없으면 백필 스크립트가 매번 같은 행을 다시 집어온다.
+            pitchScore: a.pitchScore,
+            pitchTopic: a.pitchTopic ?? null,
+            relatedCompanies: a.relatedCompanies?.length ? JSON.stringify(a.relatedCompanies) : null,
+            riskFlag: a.riskFlag ?? null,
+            analyzedAt: new Date(),
           },
           // 이미 있는 기사는 건드리지 않는다 — 사람이 스크랩·노이즈 표시한 걸 덮어쓰면 안 된다.
           update: {},
@@ -70,8 +78,26 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log(`[cron:taiwan-collect] 수집 ${raw.length}건 → 저장 ${saved}건`);
-    return NextResponse.json({ ok: true, collected: raw.length, saved });
+    // 제목 번역 캐시 — title은 원문(번체 중문)이라 이걸 안 채우면 한국어 화면에
+    // 중문 제목이 그대로 나간다. oneLiner는 분석기가 이미 한국어로 쓴다.
+    // 실패해도 수집 자체는 성공으로 둔다 — 다음 실행이나 백필이 이어서 채운다.
+    let translated = 0;
+    try {
+      const fresh = await prisma.article.findMany({
+        where: { link: { in: analyzed.map(a => a.link) }, OR: [{ titleKo: null }, { titleEn: null }] },
+        select: { id: true, title: true, titleKo: true, titleEn: true, oneLiner: true, oneLinerEn: true, pitchTopic: true, pitchTopicEn: true },
+      });
+      if (fresh.length > 0) {
+        await ensureArticleKo(fresh);
+        await ensureArticleEn(fresh);
+        translated = fresh.filter(f => f.titleKo || f.titleEn).length;
+      }
+    } catch (e) {
+      console.error('[cron:taiwan-collect] 제목 번역 실패(수집은 성공):', e);
+    }
+
+    console.log(`[cron:taiwan-collect] 수집 ${raw.length}건 → 저장 ${saved}건 · 제목 번역 ${translated}건`);
+    return NextResponse.json({ ok: true, collected: raw.length, saved, translated });
   } catch (e: any) {
     console.error('[cron:taiwan-collect] 실패:', e);
     return NextResponse.json({ ok: false, error: String(e?.message ?? e) }, { status: 500 });

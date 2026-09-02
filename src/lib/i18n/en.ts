@@ -1029,4 +1029,7 @@ export const EN: Record<string, string> = {
   '연결됨 · 좋아요+답글 기준': 'Connected · ranked by likes + replies',
   '연결됨 · 점수 없음(RSS) — 최신순': 'Connected · no scores (RSS) — by recency',
   '연결 필요 — X_BEARER_TOKEN 미설정 (API 유료)': 'Not connected — X_BEARER_TOKEN unset (paid API)',
+  // 지역 전환 (대시보드 상단)
+  '한국': 'Korea',
+  '대만': 'Taiwan',
 };

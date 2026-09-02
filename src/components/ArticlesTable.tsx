@@ -1,11 +1,12 @@
 'use client';
+import { articleTitle } from '@/lib/sparkscope/article-title';
 import { useState } from 'react';
 import { ScrapStar } from '@/components/ScrapStar';
 import { BookmarkIcon } from '@/components/BookmarkIcon';
 import { NoiseReportButton } from '@/components/NoiseReportButton';
 import { NoiseReportRequestButton } from '@/components/NoiseReportRequestButton';
 import { clusterArticles } from '@/lib/sparkscope/cluster';
-import { useT, type Translate } from '@/lib/i18n/client';
+import { useT, type Translate, useLocale } from '@/lib/i18n/client';
 
 interface Article {
   id: string;
@@ -79,6 +80,7 @@ function TitleOnlyBadge({ t }: { t: Translate }) {
 
 export function ArticlesTable({ articles, canScrap = false, canBookmark = false, canReport = false, canRequestReport = false, emptyText, showCategoryColumn = true, showKeywordColumn = false }: { articles: Article[]; canScrap?: boolean; canBookmark?: boolean; canReport?: boolean; canRequestReport?: boolean; emptyText?: string; showCategoryColumn?: boolean; showKeywordColumn?: boolean }) {
   const t = useT();
+  const locale = useLocale();
   if (articles.length === 0) {
     return <p className="text-sm text-gray-400 py-8 text-center">{emptyText ?? t('선택 기간 내 기사가 없습니다.')}</p>;
   }
@@ -144,9 +146,9 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
                     <span className="flex items-center gap-2">
                       <ToneDot tone={a.tone} />
                       {hasRealLink(a.link) ? (
-                        <a href={a.link} target="_blank" rel="noopener noreferrer" className="hover:text-spark-purple">{a.titleEn || a.title}</a>
+                        <a href={a.link} target="_blank" rel="noopener noreferrer" className="hover:text-spark-purple">{articleTitle(a, locale)}</a>
                       ) : (
-                        <a href={searchFallbackUrl(a.title, a.source)} target="_blank" rel="noopener noreferrer" title={t('원문 링크를 찾지 못해 검색 결과로 연결합니다.')} className="hover:text-spark-purple">{a.titleEn || a.title} 🔍</a>
+                        <a href={searchFallbackUrl(a.title, a.source)} target="_blank" rel="noopener noreferrer" title={t('원문 링크를 찾지 못해 검색 결과로 연결합니다.')} className="hover:text-spark-purple">{articleTitle(a, locale)} 🔍</a>
                       )}
                       {a.titleOnlyFallback && <TitleOnlyBadge t={t} />}
                     </span>
@@ -220,12 +222,12 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
               {hasRealLink(a.link) ? (
                 <a href={a.link} target="_blank" rel="noopener noreferrer" className="flex items-start gap-2 text-sm font-medium text-gray-900 hover:text-spark-purple mb-2">
                   <ToneDot tone={a.tone} />
-                  <span className="line-clamp-2">{a.titleEn || a.title}</span>
+                  <span className="line-clamp-2">{articleTitle(a, locale)}</span>
                 </a>
               ) : (
                 <a href={searchFallbackUrl(a.title, a.source)} target="_blank" rel="noopener noreferrer" title={t('원문 링크를 찾지 못해 검색 결과로 연결합니다.')} className="flex items-start gap-2 text-sm font-medium text-gray-900 hover:text-spark-purple mb-2">
                   <ToneDot tone={a.tone} />
-                  <span className="line-clamp-2">{a.titleEn || a.title} 🔍</span>
+                  <span className="line-clamp-2">{articleTitle(a, locale)} 🔍</span>
                 </a>
               )}
               {a.titleOnlyFallback && <div className="mb-2"><TitleOnlyBadge t={t} /></div>}
