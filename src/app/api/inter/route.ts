@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { adminOrNull } from '@/lib/authz';
 import {
   buildMatrix,
   buildOverview,
@@ -29,6 +30,13 @@ function isValidYmd(s: string | null): s is string {
 const PERIOD_DAYS: Record<string, number> = { '7d': 7, '1m': 30, '3m': 90, '1y': 365 };
 
 export async function GET(req: NextRequest) {
+  // ⚠️ 이 응답에는 InterPortfolioMatch(어느 포트폴리오사가 어떤 트렌드에 연결됐는지)가
+  //    들어 있다. 가드가 없던 동안 로그인하지 않은 누구나 1MB짜리 포트폴리오 구성을
+  //    받아갈 수 있었다. Inter 화면 자체가 관리자 전용이므로 API도 같은 기준으로 막는다.
+  if (!(await adminOrNull())) {
+    return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
+  }
+
   const locale = getLocale();
   const sp = req.nextUrl.searchParams;
   const domain: InterDomain = sp.get('domain') === 'ai' ? 'ai' : 'bio';
