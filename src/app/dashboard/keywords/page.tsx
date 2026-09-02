@@ -1,18 +1,14 @@
-// 키워드 셀프 관리 — 감시대상(MonitoringTarget) 추가/편집/삭제. ★ 스크랩과 동일한 관리자 계정만.
+// 키워드 셀프 관리 — 감시대상(MonitoringTarget) 추가/편집/삭제. 내부 계정(role=ADMIN)만.
 import Link from 'next/link';
 import { getT } from '@/lib/i18n/server';
-import { redirect } from 'next/navigation';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { canScrap } from '@/lib/scrap';
+import { requireAdmin } from '@/lib/authz';
 import { KeywordManager } from '@/components/KeywordManager';
 
 export const dynamic = 'force-dynamic';
 
 export default async function KeywordsPage() {
   const t = getT();
-  const session = await getServerSession(authOptions);
-  if (!canScrap(session?.user?.email ?? null)) redirect('/dashboard');
+  await requireAdmin('keywords');
 
   return (
     <>

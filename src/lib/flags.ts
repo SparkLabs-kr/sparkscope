@@ -1,19 +1,18 @@
 // ────────────────────────────────────────────────────────────────
-// 협업 개발 단계 스위치
+// 개발용 로그인 우회 스위치
 //
-// OPEN_ACCESS = true  →  매직 링크 로그인 없이 /dashboard 바로 공개.
-//   (코워커와 함께 개발/고도화하는 동안 사용)
+// 2.1 로그인·계정 체계 작업으로 기본값이 false가 되었다.
+// 이제 모든 진입은 /login을 거치고, 권한 판단은 src/lib/authz.ts가 한다.
 //
-// 🔒 사내 실제 발표 전에는 아래 COLLAB_OPEN_ACCESS 를 false 로 바꾸고
-//    git commit + push 하면 로그인 보호가 복구됩니다.
+// 로컬에서 메일 없이 화면을 보고 싶을 때만 .env.local에
+//   DEV_AUTH_BYPASS=true
+// 를 넣는다. 이 값은 Vercel 환경변수로 설정하지 않는다 —
+// 배포 환경에서 켜지면 대시보드가 그대로 공개된다.
 //
-// 코드에 하드코딩된 상수라 빌드 시 그대로 인라인되어
-// Edge 미들웨어·서버 컴포넌트 모두에서 확실히 동작합니다.
-// (Vercel 은 일반 환경변수를 Edge 미들웨어에 주입하지 않으므로
-//  .env 방식이 아닌 이 상수를 사용합니다.)
+// 우회 모드에서도 "관리자로 로그인한 것처럼" 동작하게 하려면
+// DEV_AUTH_EMAIL 로 사내 도메인 메일을 지정한다(기본값은 사내 도메인).
 // ────────────────────────────────────────────────────────────────
-const COLLAB_OPEN_ACCESS = true;
+export const OPEN_ACCESS = process.env.DEV_AUTH_BYPASS === 'true';
 
-// 로컬 개발 시 .env.local 의 DEV_AUTH_BYPASS 로도 켤 수 있게 fallback 유지
-export const OPEN_ACCESS =
-  COLLAB_OPEN_ACCESS || process.env.DEV_AUTH_BYPASS === 'true';
+/** 우회 모드에서 사용할 가짜 관리자 메일. 사내 도메인이어야 ADMIN으로 취급된다. */
+export const DEV_AUTH_EMAIL = process.env.DEV_AUTH_EMAIL ?? 'dev@sparklabs.co.kr';

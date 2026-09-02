@@ -8,9 +8,7 @@
 //     받아서 확인하고 직접 포워딩하는 흐름. 나중에 PortfolioCompany.contactEmail이
 //     생기면 여기 to만 그 값으로 바꾸면 된다.
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { canScrap } from '@/lib/scrap';
+import { scrapperOrNull } from '@/lib/authz';
 import {
   briefingSubject,
   renderBriefingHtml,
@@ -67,10 +65,9 @@ function parseInput(b: any): BriefingInput | null {
 export async function POST(req: Request) {
   // 권한은 스크랩(별표)과 같은 기준 — SCRAP_ALLOWED_EMAILS에 있는 사람만.
   // 포폴사 대표에게 나갈 문서를 만드는 기능이라 대시보드 열람 권한보다 좁게 잡는다.
-  // (canScrap은 OPEN_ACCESS 협업 모드에선 항상 true라, 발표·개발 중에는 그대로 열린다.)
-  const session = await getServerSession(authOptions);
-  const email = session?.user?.email ?? null;
-  if (!canScrap(email)) {
+  const actor = await scrapperOrNull();
+  const email = actor?.email ?? null;
+  if (!actor) {
     return NextResponse.json({ error: '브리핑 생성 권한이 없습니다.' }, { status: 403 });
   }
 

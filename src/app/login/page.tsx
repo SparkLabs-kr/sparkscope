@@ -1,73 +1,26 @@
-'use client';
-import { signIn } from 'next-auth/react';
-import { Suspense, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { useT } from '@/lib/i18n/client';
+// 사내 임직원 입구. 포트폴리오사 입구는 /login/portfolio.
+// NextAuth의 pages.signIn이 여기를 가리키므로, 인증이 필요한 화면은 모두 이 문으로 온다.
+//
+// 서버 컴포넌트인 이유는 사내 도메인 목록(ALLOWED_EMAIL_DOMAINS)을 폼에 내려주기 위해서다.
+// 목록을 클라이언트에 또 적어두면 오피스를 추가했을 때 한쪽만 고쳐진다.
+import { LoginForm } from '@/components/LoginForm';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import { STAFF_EMAIL_DOMAINS } from '@/lib/auth';
 
-function LoginForm() {
-  const t = useT();
-  const params = useSearchParams();
-  const [email, setEmail] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const checkEmail = params.get('check') === 'email';
+export const dynamic = 'force-dynamic';
 
-  if (checkEmail) {
-    return (
-      <div className="max-w-md text-center">
-        <div className="text-5xl mb-4">📬</div>
-        <h1 className="text-2xl font-bold mb-3">{t('메일을 확인하세요')}</h1>
-        <p className="text-gray-600 leading-relaxed">
-          {t('로그인 링크를 보냈습니다. 받은편지함에서 SparkScope 메일을 열어 링크를 클릭하세요.')}
-          <br />
-          <span className="text-xs text-gray-400 mt-4 block">{t('(스팸함도 확인해주세요)')}</span>
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <form
-      onSubmit={async e => {
-        e.preventDefault();
-        setSubmitting(true);
-        await signIn('email', { email, callbackUrl: '/dashboard' });
-      }}
-      className="max-w-md w-full"
-    >
-      <div className="text-xs font-bold tracking-wider text-spark-purple mb-2 text-center">SPARKSCOPE</div>
-      <h1 className="text-2xl font-bold mb-2 text-center">{t('로그인')}</h1>
-      <p className="text-sm text-gray-600 mb-6 text-center">
-        {t('@sparklabs.co.kr 이메일을 입력하면 로그인 링크를 보내드립니다')}
-      </p>
-      <input
-        type="email"
-        required
-        placeholder="name@sparklabs.co.kr"
-        value={email}
-        onChange={e => setEmail(e.target.value)}
-        className="w-full px-4 py-3 border border-gray-200 rounded-lg mb-3 focus:outline-none focus:border-spark-purple"
-      />
-      <button
-        type="submit"
-        disabled={submitting}
-        className="w-full py-3 bg-spark-purple text-white font-semibold rounded-lg hover:opacity-90 disabled:opacity-50"
-      >
-        {submitting ? t('전송 중...') : t('로그인 링크 받기')}
-      </button>
-    </form>
-  );
-}
-
-export default function LoginPage() {
+export default function LoginPage({ searchParams }: { searchParams: { check?: string } }) {
   return (
     <main className="min-h-screen flex items-center justify-center px-6">
       <div className="absolute top-5 right-6">
         <LanguageSwitcher />
       </div>
-      <Suspense fallback={<div className="text-gray-400">···</div>}>
-        <LoginForm />
-      </Suspense>
+      <LoginForm
+        variant="staff"
+        staffDomains={STAFF_EMAIL_DOMAINS}
+        // NextAuth가 verifyRequest로 여기 보낼 때가 있어(설정상 /login?check=email) 그 경우도 받아준다.
+        initialSent={searchParams.check === 'email'}
+      />
     </main>
   );
 }

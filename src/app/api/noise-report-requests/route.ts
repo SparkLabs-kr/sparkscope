@@ -3,14 +3,15 @@
 // 누구나 요청할 수 있다. 승인/거절은 /api/noise-report-requests/[id]/approve|reject(관리자 전용).
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getSessionUser } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  const email = session?.user?.email ?? null;
+  // 신고 "요청"은 로그인만 하면 누구나 — 포트폴리오사 계정도 자기 기사에서 신고할 수 있다.
+  // 실제 반영은 관리자 승인(/approve)을 거친다.
+  const user = await getSessionUser();
+  const email = user?.email ?? null;
   if (!email) return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
 
   const b = await req.json().catch(() => null);

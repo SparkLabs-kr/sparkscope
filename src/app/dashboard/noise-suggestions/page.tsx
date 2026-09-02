@@ -1,11 +1,8 @@
-// 노이즈 신고 → AI 제안 승인 대기 목록. ★ 스크랩과 동일한 관리자 계정만.
+// 노이즈 신고 → AI 제안 승인 대기 목록. 내부 계정(role=ADMIN)만.
 import Link from 'next/link';
 import { getLocale, getT } from '@/lib/i18n/server';
 import { ensureArticleEnDeep } from '@/lib/sparkscope/translate-content';
-import { redirect } from 'next/navigation';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { canScrap } from '@/lib/scrap';
+import { requireAdmin } from '@/lib/authz';
 import { prisma } from '@/lib/prisma';
 import { NoiseQueueList, type QueueItem } from '@/components/NoiseQueueList';
 
@@ -14,8 +11,7 @@ export const dynamic = 'force-dynamic';
 export default async function NoiseSuggestionsPage() {
   const t = getT();
   const isEn = getLocale() === 'en';
-  const session = await getServerSession(authOptions);
-  if (!canScrap(session?.user?.email ?? null)) redirect('/dashboard');
+  await requireAdmin('noise-suggestions');
 
   const [pendingSuggestions, pendingRequests] = await Promise.all([
     prisma.noiseSuggestion.findMany({ where: { status: 'PENDING' }, orderBy: { createdAt: 'desc' } }),

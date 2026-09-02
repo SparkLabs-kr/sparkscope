@@ -3,9 +3,7 @@
 //
 // OPENAI_API_KEY가 없으면 규칙 기반 단일 조회로 조용히 내려간다(집계만 나오고 요약은 없다).
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { OPEN_ACCESS } from '@/lib/flags';
+import { adminOrNull } from '@/lib/authz';
 import { runChatQuery, type ChatPeriod, type ChatScope } from '@/lib/sparkscope/chat-query';
 import { runChatAgent, type AgentTurn } from '@/lib/sparkscope/chat-agent';
 import { runLiveSearch, summarizeLiveSearch } from '@/lib/sparkscope/chat-live';
@@ -23,10 +21,10 @@ const PERIODS: ChatPeriod[] = ['today', 'week', 'month', 'quarter', 'all'];
 const SCOPES: ChatScope[] = ['portfolio', 'competitor', 'sparklabs', 'industry', 'inter'];
 
 export async function POST(req: Request) {
-  const session = OPEN_ACCESS
-    ? ({ user: { email: 'dev@localhost' } } as any)
-    : await getServerSession(authOptions);
-  if (!session?.user?.email) {
+  // 챗봇은 스코프를 가리지 않고 전체 데이터를 조회하는 내부 도구다.
+  // 포트폴리오사 계정에 열어주면 자기 회사 범위 제한이 이 경로로 우회된다.
+  const admin = await adminOrNull();
+  if (!admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -142,7 +140,7 @@ export async function POST(req: Request) {
           scopes,
           deep,
           asTable,
-          userEmail: session.user.email,
+          userEmail: admin.email,
           locale,
           onProgress: (e) => send({ type: 'progress', ...e }),
         });

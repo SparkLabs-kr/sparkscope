@@ -1,17 +1,15 @@
 // 기사 노이즈 신고 토글 API — 스크랩과 동일하게 지정 계정만.
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { canScrap } from '@/lib/scrap';
+import { scrapperOrNull } from '@/lib/authz';
 import { suggestNoiseFilterFix } from '@/lib/sparkscope/noise-suggestion';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  const email = session?.user?.email ?? null;
-  if (!canScrap(email)) return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
+  const actor = await scrapperOrNull();
+  const email = actor?.email ?? null;
+  if (!actor) return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
 
   const b = await req.json().catch(() => null);
   if (!b?.articleId) return NextResponse.json({ error: 'articleId는 필수입니다.' }, { status: 400 });

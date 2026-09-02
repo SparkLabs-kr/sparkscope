@@ -1,20 +1,14 @@
-import { getServerSession } from 'next-auth';
-import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { authOptions } from '@/lib/auth';
-import { OPEN_ACCESS } from '@/lib/flags';
+import { requireAdmin } from '@/lib/authz';
 import { SignOutButton } from '@/components/SignOutButton';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { getT } from '@/lib/i18n/server';
 
 // /digest/* 레이아웃 — 대시보드와 동일한 상단 바·인증.
 export default async function DigestLayout({ children }: { children: React.ReactNode }) {
-  const session = OPEN_ACCESS
-    ? ({ user: { email: 'dev@localhost', id: 'dev' } } as any)
-    : await getServerSession(authOptions);
-  if (!session?.user?.email) redirect('/login');
-
-  const initial = session.user.email[0].toUpperCase();
+  // 다이제스트 검수·발송은 내부 도구 — 포트폴리오사 계정은 들어올 수 없다.
+  const user = await requireAdmin('digest');
+  const initial = user.email[0].toUpperCase();
   const t = getT();
 
   return (
@@ -27,7 +21,7 @@ export default async function DigestLayout({ children }: { children: React.React
         </div>
         <div className="flex items-center gap-3 text-sm text-gray-500">
           <LanguageSwitcher />
-          <span className="hidden md:inline">{session.user.email}</span>
+          <span className="hidden md:inline">{user.email}</span>
           <div className="w-7 h-7 rounded-full bg-spark-purple text-white flex items-center justify-center text-xs font-bold">{initial}</div>
           <SignOutButton />
         </div>

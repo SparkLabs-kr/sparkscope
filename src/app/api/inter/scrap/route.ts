@@ -3,16 +3,14 @@
 // 스크랩함에서도 그 정보를 그대로 보여줘야 하기 때문.
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { canScrap } from '@/lib/scrap';
+import { scrapperOrNull } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  const email = session?.user?.email ?? null;
-  if (!canScrap(email)) return NextResponse.json({ error: '스크랩 권한이 없습니다.' }, { status: 403 });
+  const actor = await scrapperOrNull();
+  const email = actor?.email ?? null;
+  if (!actor) return NextResponse.json({ error: '스크랩 권한이 없습니다.' }, { status: 403 });
 
   const b = await req.json().catch(() => null);
   if (!b?.verdictId) return NextResponse.json({ error: 'verdictId는 필수입니다.' }, { status: 400 });

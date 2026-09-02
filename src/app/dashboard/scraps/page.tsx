@@ -6,8 +6,7 @@ import Link from 'next/link';
 import { getLocale, getT } from '@/lib/i18n/server';
 import { ensureArticleEnDeep } from '@/lib/sparkscope/translate-content';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireAdmin } from '@/lib/authz';
 import { ArticlesTable } from '@/components/ArticlesTable';
 import { InterScrapStar } from '@/components/InterScrapStar';
 import { canScrap as canScrapEmail } from '@/lib/scrap';
@@ -24,8 +23,9 @@ function fmtDate(d: Date) {
 export default async function ScrapsPage() {
   const t = getT();
   const isEn = getLocale() === 'en';
-  const session = await getServerSession(authOptions);
-  const canScrap = canScrapEmail(session?.user?.email ?? null);
+  // 스크랩함은 본부 큐레이션 결과 — 내부 계정만 들어올 수 있다.
+  const admin = await requireAdmin('scraps');
+  const canScrap = canScrapEmail(admin.email);
 
   const [articles, interScraps] = await Promise.all([
     prisma.article.findMany({

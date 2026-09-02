@@ -1030,4 +1030,141 @@ export const EN: Record<string, string> = {
   '연결됨 · 좋아요+답글 기준': 'Connected · ranked by likes + replies',
   '연결됨 · 점수 없음(RSS) — 최신순': 'Connected · no scores (RSS) — by recency',
   '연결 필요 — X_BEARER_TOKEN 미설정 (API 유료)': 'Not connected — X_BEARER_TOKEN unset (paid API)',
+  // ===== 2.1 로그인·계정 체계 =====
+  '스파크랩스 이메일을 입력하면 로그인 링크를 보내드립니다':
+    'Enter your SparkLabs email and we\'ll send you a sign-in link',
+  '포트폴리오사 로그인':
+    'Portfolio company sign-in',
+  '스파크랩스가 제공하는 우리 회사 언론 보도 현황입니다. 발급받은 이메일을 입력하면 로그인 링크를 보내드립니다.':
+    'Your company\'s press coverage, provided by SparkLabs. Enter the email you were issued and we\'ll send a sign-in link.',
+  '스파크랩스 임직원이신가요?':
+    'Are you SparkLabs staff?',
+  '임직원 로그인':
+    'Staff sign-in',
+  '포트폴리오사이신가요?':
+    'Are you a portfolio company?',
+  '계정은 스파크랩스에서 발급합니다. 직접 가입하는 절차는 없습니다.':
+    'Accounts are issued by SparkLabs. There is no self sign-up.',
+  '이 입구로는 들어올 수 없습니다':
+    'You can\'t enter through this door',
+  '입력하신 주소는 스파크랩스 임직원 메일입니다. 여기는 포트폴리오사 전용 입구라, 임직원 로그인으로 가셔야 합니다.':
+    'The address you entered is a SparkLabs staff email. This entrance is for portfolio companies, so please use the staff sign-in.',
+  '임직원 로그인으로 이동':
+    'Go to staff sign-in',
+  '여기는 스파크랩스 임직원 전용 입구입니다. 포트폴리오사 계정은 포트폴리오사 로그인으로 들어오셔야 합니다.':
+    'This is the SparkLabs staff entrance. A portfolio company account needs to come in through the portfolio sign-in.',
+  '포트폴리오사 로그인으로 이동':
+    'Go to portfolio sign-in',
+  '다른 주소로 다시 입력':
+    'Try a different address',
+  '{email} 주소로 로그인 링크를 보냈습니다. 받은편지함에서 SparkScope 메일을 열어 링크를 클릭하세요.':
+    'We\'ve sent a sign-in link to {email}. Open the SparkScope email in your inbox and click the link.',
+  '몇 분 안에 메일이 오지 않으면':
+    'If the email doesn\'t arrive within a few minutes',
+  '발급받은 주소와 정확히 같은지 확인해주세요. 회사 도메인이라도 다른 주소로는 로그인되지 않습니다.':
+    'Check that it exactly matches the address you were issued. Another address at the same company domain will not work.',
+  '어느 주소로 발급됐는지 모르면 담당 스파크랩스 매니저에게 확인해주세요.':
+    'If you\'re not sure which address was issued, check with your SparkLabs manager.',
+  '사내 메일 주소를 정확히 입력했는지 확인해주세요.':
+    'Check that you typed your work email correctly.',
+  '그래도 오지 않으면 커뮤니케이션 본부에 알려주세요.':
+    'If it still doesn\'t arrive, let the comms team know.',
+  '다른 주소로 다시 시도':
+    'Try another address',
+  '메일이 오지 않으면 담당 스파크랩스 매니저에게 계정 발급을 확인해주세요.':
+    'If no email arrives, check with your SparkLabs manager that an account was issued.',
+  '링크가 만료되었습니다':
+    'This link has expired',
+  '로그인 링크는 한 번만 쓸 수 있고, 시간이 지나면 만료됩니다. 새 링크를 받아 다시 시도해주세요.':
+    'A sign-in link works once and expires after a while. Request a new one and try again.',
+  '새 링크 받기':
+    'Get a new link',
+  '접근 권한이 없습니다':
+    'You don\'t have access',
+  '이 이메일에는 SparkScope 접근 권한이 없습니다. 계정이 발급되지 않았거나, 발급된 계정이 해지된 상태입니다.':
+    'This email doesn\'t have access to SparkScope. Either no account was issued, or the account has been closed.',
+  '어떻게 하면 되나요?':
+    'What should I do?',
+  'SparkScope 계정은 스파크랩스에서 발급합니다. 담당 매니저에게 계정 발급을 요청해주세요. 직접 가입하는 절차는 없습니다.':
+    'SparkScope accounts are issued by SparkLabs. Ask your manager there to issue one. There is no self sign-up.',
+  '로그인 화면으로 돌아가기':
+    'Back to sign-in',
+  '이 화면에 접근 권한이 없습니다':
+    'You don\'t have access to this screen',
+  '{section}에 접근 권한이 없습니다':
+    'You don\'t have access to {section}',
+  '이 화면은 스파크랩스 내부 계정만 사용할 수 있습니다.':
+    'This screen is for SparkLabs internal accounts only.',
+  '{email} 계정은 포트폴리오사 계정으로, 우리 회사 언론 보도 현황만 볼 수 있습니다.':
+    '{email} is a portfolio company account and can see only its own company\'s coverage.',
+  '내 회사 보도 현황으로':
+    'Go to my company\'s coverage',
+  '권한이 잘못 설정된 것 같다면 담당 스파크랩스 매니저에게 알려주세요.':
+    'If this looks like a permissions mistake, let your SparkLabs manager know.',
+  '계정 관리':
+    'Account management',
+  '포트폴리오사 계정 발급':
+    'Issue a portfolio company account',
+  '비밀번호는 쓰지 않습니다. 여기서 발급해두면 그 메일로 로그인 링크를 요청할 수 있게 됩니다. 발급하지 않은 외부 메일은 링크를 받아도 들어올 수 없습니다.':
+    'No passwords. Issuing here is what lets that email request a sign-in link. An external email that hasn\'t been issued cannot get in, even with a link.',
+  '소속 회사 선택':
+    'Select company',
+  '계정 발급':
+    'Issue account',
+  '발급 중...':
+    'Issuing...',
+  '발급된 계정':
+    'Issued accounts',
+  '활성 {active} / 전체 {total}':
+    '{active} active / {total} total',
+  '메일·회사 검색':
+    'Search email or company',
+  '아직 발급된 포트폴리오사 계정이 없습니다.':
+    'No portfolio company accounts have been issued yet.',
+  '검색 결과가 없습니다.':
+    'No matches.',
+  '메일':
+    'Email',
+  '소속 회사':
+    'Company',
+  '발급':
+    'Issued',
+  '마지막 로그인':
+    'Last sign-in',
+  '미연결':
+    'Not linked',
+  '비활성':
+    'Inactive',
+  '비활성화':
+    'Deactivate',
+  '다시 활성화':
+    'Reactivate',
+  '{email} 계정을 발급했습니다. 아래 주소를 담당자에게 전달하세요.':
+    'Issued the account for {email}. Send the address below to your contact.',
+  '{email} 계정을 다시 활성화했습니다.':
+    'Reactivated the account for {email}.',
+  '{email} 계정을 비활성화합니다. 열려 있는 세션도 함께 끊깁니다.':
+    'Deactivate the account for {email}? Any open session will be cut as well.',
+  '로그인 주소를 복사했습니다.':
+    'Copied the sign-in address.',
+  '주소 복사':
+    'Copy address',
+  '다시 활성화했습니다.':
+    'Reactivated.',
+  '비활성화했습니다.':
+    'Deactivated.',
+  '소속 회사를 변경했습니다.':
+    'Company changed.',
+  '목록을 불러오지 못했습니다.':
+    'Couldn\'t load the list.',
+  '발급에 실패했습니다.':
+    'Couldn\'t issue the account.',
+  '변경에 실패했습니다.':
+    'Couldn\'t apply the change.',
+  '포트폴리오사에 SparkScope를 열어줄 계정을 발급합니다. 발급된 계정은 자기 회사 뉴스와 공개 업계 동향만 볼 수 있고, 키워드 관리·수집 로그·발송 설정은 보이지 않습니다.':
+    'Issue accounts that open SparkScope to portfolio companies. An issued account sees only its own company\'s news and public industry trends; keyword management, collection logs and send settings stay hidden.',
+  '포트폴리오사 계정':
+    'Portfolio account',
+  '포트폴리오사 대시보드':
+    'Portfolio dashboard',
 };

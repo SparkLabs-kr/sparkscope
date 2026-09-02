@@ -1,8 +1,5 @@
-import { getServerSession } from 'next-auth';
-import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { authOptions } from '@/lib/auth';
-import { OPEN_ACCESS } from '@/lib/flags';
+import { requireUser } from '@/lib/authz';
 import { SignOutButton } from '@/components/SignOutButton';
 import { ScrollTopButton } from '@/components/ScrollTopButton';
 import { DashboardTutorial } from '@/components/DashboardTutorial';
@@ -10,13 +7,9 @@ import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { getT } from '@/lib/i18n/server';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  // 협업 개발 단계(OPEN_ACCESS)면 로그인 없이 임시 세션 사용
-  const session = OPEN_ACCESS
-    ? ({ user: { email: 'dev@localhost', id: 'dev' } } as any)
-    : await getServerSession(authOptions);
-  if (!session?.user?.email) redirect('/login');
-
-  const initial = session.user.email[0].toUpperCase();
+  const user = await requireUser();
+  const initial = user.email[0].toUpperCase();
+  const admin = user.role === 'ADMIN';
   const t = getT();
 
   return (
@@ -28,14 +21,23 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <span className="text-spark-ink font-extrabold tracking-tight text-[15px]">SparkScope</span>
           </Link>
           <span className="hidden sm:inline h-3.5 w-px bg-spark-border" />
-          <span className="hidden sm:inline text-xs font-medium text-spark-muted">{t('본부 인사이트 대시보드')}</span>
-          <Link href="/chat" className="hidden sm:inline text-xs font-semibold text-spark-muted hover:text-spark-purple transition">💬 {t('챗봇')}</Link>
-          <DashboardTutorial />
+          <span className="hidden sm:inline text-xs font-medium text-spark-muted">
+            {admin ? t('본부 인사이트 대시보드') : (user.companyName ?? t('포트폴리오사 대시보드'))}
+          </span>
+          {/* 챗봇은 전체 데이터를 자연어로 질의하는 내부 도구 — 관리자만. */}
+          {admin && <Link href="/chat" className="hidden sm:inline text-xs font-semibold text-spark-muted hover:text-spark-purple transition">💬 {t('챗봇')}</Link>}
+          {admin && <Link href="/dashboard/accounts" className="hidden sm:inline text-xs font-semibold text-spark-muted hover:text-spark-purple transition">👥 {t('계정 관리')}</Link>}
+          {admin && <DashboardTutorial />}
         </div>
         <div className="flex items-center gap-3 text-sm text-spark-muted">
           <LanguageSwitcher />
-          <span className="hidden md:inline px-2 py-0.5 rounded-md bg-spark-subtle border border-spark-border text-[11px] font-semibold tracking-wide text-spark-ink-soft">🔒 INTERNAL</span>
-          <span className="hidden md:inline text-[13px]">{session.user.email}</span>
+          {/* 내부 전용 표식은 내부 계정에만 — 포트폴리오사에게는 자기 계정 범위를 알려준다. */}
+          {admin ? (
+            <span className="hidden md:inline px-2 py-0.5 rounded-md bg-spark-subtle border border-spark-border text-[11px] font-semibold tracking-wide text-spark-ink-soft">🔒 INTERNAL</span>
+          ) : (
+            <span className="hidden md:inline px-2 py-0.5 rounded-md bg-spark-light-purple border border-spark-border text-[11px] font-semibold tracking-wide text-spark-purple">{t('포트폴리오사 계정')}</span>
+          )}
+          <span className="hidden md:inline text-[13px]">{user.email}</span>
           <div className="w-7 h-7 rounded-full bg-spark-purple text-white grid place-items-center text-xs font-bold">{initial}</div>
           <SignOutButton />
         </div>

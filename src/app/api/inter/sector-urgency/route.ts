@@ -10,9 +10,7 @@
 // 오래된 행은 dashboard-insights.ts의 pruneSectorUrgencyCache()가 일일 크론에서 정리한다.
 import { NextResponse } from 'next/server';
 import { createHash } from 'crypto';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { OPEN_ACCESS } from '@/lib/flags';
+import { getSessionUser } from '@/lib/authz';
 import { prisma } from '@/lib/prisma';
 import { summarizeSectorBadgeReason } from '@/lib/sparkscope/inter-insight';
 
@@ -38,10 +36,9 @@ function cacheKey(s: SectorInput): string {
 }
 
 export async function POST(req: Request) {
-  const session = OPEN_ACCESS
-    ? ({ user: { email: 'dev@localhost' } } as any)
-    : await getServerSession(authOptions);
-  if (!session?.user?.email) return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
+  // Inter 섹터 요약은 공개 업계 동향 — 포트폴리오사 계정도 볼 수 있다(로그인만 요구).
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
 
   const b = await req.json().catch(() => null);
   const sectors: SectorInput[] = Array.isArray(b?.sectors) ? b.sectors : [];

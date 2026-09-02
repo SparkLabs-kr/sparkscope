@@ -10,9 +10,7 @@ import { CrisisPanel } from '@/components/CrisisPanel';
 import { TrendChart } from '@/components/TrendChart';
 import { MediaPanel } from '@/components/MediaPanel';
 import { DateRangePicker } from '@/components/DateRangePicker';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { OPEN_ACCESS } from '@/lib/flags';
+import { requireUser, effectiveCompany } from '@/lib/authz';
 import { canScrap as canScrapEmail } from '@/lib/scrap';
 import { normalizeSource } from '@/lib/sparkscope/media';
 import { matchesAsToken, isBlockedNoise, normalizeTitleKey } from '@/lib/sparkscope/relevance';
@@ -46,9 +44,22 @@ const TABS = [
 ] as const;
 export type TabId = (typeof TABS)[number]['id'];
 
-function resolveTab(v?: string): TabId {
-  return TABS.some(t => t.id === v) ? (v as TabId) : 'sparklabs';
+function resolveTab(v?: string, allowed?: readonly TabId[]): TabId {
+  const pool = allowed ?? TABS.map(t => t.id);
+  return pool.includes(v as TabId) ? (v as TabId) : pool[0];
 }
+
+// 포트폴리오사 계정이 볼 수 있는 탭 — 지금은 '최근 수집 기사'뿐이다.
+//
+// 이 탭만 회사 단위로 실제로 좁혀진다(loadDashboardData가 company로 companyArticles를 따로 조회).
+// 반면 '포트폴리오사' 탭은 회사 필터와 무관하게 전체 포트폴리오 집계를 그린다 —
+// 노출 순위 TOP 15, 위기 감지, 긍정·부정 하이라이트, 매체 분포, 톤 분석이 모두
+// 전사 기준이라, 그대로 열어주면 다른 포트폴리오사의 부정 기사까지 보인다.
+// '스파크랩' 탭은 본사 노출이고, '업계 모니터링'은 경쟁사 분석이라 공개 범위가 아니다.
+//
+// 그래서 집계를 회사 단위로 좁히는 작업이 끝날 때까지는 이 목록을 늘리지 않는다.
+// (공개 업계 동향은 Inter 스코프에서 본다 — 그쪽은 외부 시장 데이터라 회사 구분이 없다.)
+const PORTFOLIO_TABS = ['articles'] as const satisfies readonly TabId[];
 
 // Intra(내부 생태계) / Inter(해외 트렌드) 스코프 전환 — URL(?scope=)로 화면을 나눈다.
 const SCOPES = [
@@ -59,6 +70,10 @@ type ScopeId = (typeof SCOPES)[number]['id'];
 function resolveScope(v?: string): ScopeId {
   return SCOPES.some(s => s.id === v) ? (v as ScopeId) : 'intra';
 }
+
+// Inter 스코프는 아직 포트폴리오사 계정에 열 수 없다 — 섹터 카드가 "연결된 포트폴리오사"를
+// 이름으로 나열해서(InterPanel), 외부 계정에 포트폴리오 구성이 그대로 드러난다.
+// 그 섹션을 계정 범위로 좁히면 공개 업계 동향으로 열 수 있다.
 
 const MIN_DATE = '2023-11-01';
 // 추이 차트 상위 N개사 — 색상으로 구분 가능한 최대치(가독성) 기준 6개.
@@ -687,20 +702,29 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const isEn = getLocale() === 'en';
   const intlLocale = isEn ? 'en-US' : 'ko-KR';
   const range = resolveRange(searchParams);
-  const company = typeof searchParams.company === 'string' && searchParams.company ? searchParams.company : undefined;
-  const tab = resolveTab(searchParams.tab);
-  const scope = resolveScope(searchParams.scope);
+  const user = await requireUser();
+  const admin = user.role === 'ADMIN';
+
+  // 포트폴리오사 계정은 회사 필터를 자기 회사로 고정한다. 화면에서 필터를 숨기는 것만으로는
+  // ?company= 를 직접 고쳐 남의 회사를 열 수 있으므로, 조회 자체를 여기서 가둔다.
+  const requestedCompany =
+    typeof searchParams.company === 'string' && searchParams.company ? searchParams.company : undefined;
+  const { company, locked: companyLocked } = effectiveCompany(user, requestedCompany);
+
+  const tab = resolveTab(searchParams.tab, admin ? undefined : PORTFOLIO_TABS);
+  const visibleTabs = admin ? TABS : TABS.filter(t => (PORTFOLIO_TABS as readonly string[]).includes(t.id));
+  const scope = admin ? resolveScope(searchParams.scope) : 'intra';
   const data = await loadDashboardData(range.from, range.to, company, range.isDefaultRange);
-  const session = await getServerSession(authOptions);
-  const canScrap = canScrapEmail(session?.user?.email ?? null);
+  // 스크랩(별표)은 관리자 중에서도 커뮤니케이션 본부 지정 계정만.
+  const canScrap = admin && canScrapEmail(user.email);
   const pendingSuggestionCount = canScrap ? await prisma.noiseSuggestion.count({ where: { status: 'PENDING' } }) : 0;
   // .catch(() => 0): NoiseReportRequest 테이블이 아직 DB에 반영 안 됐어도(prisma db push 전) 대시보드가
   // 죽지 않도록 방어 — 반영 전엔 그냥 0건으로 표시된다.
   const pendingReportCount = canScrap
     ? await prisma.noiseReportRequest.count({ where: { status: 'PENDING' } }).catch(() => 0)
     : 0;
-  const userId = (session?.user as any)?.id as string | undefined;
-  const canBookmark = !!userId;
+  const userId = user.id;
+  const canBookmark = true;
   // 관리자는 즉시 처리(NoiseReportButton)가 있으니, 신고 "요청" 버튼은 로그인한 비관리자에게만.
   const canRequestReport = canBookmark && !canScrap;
   const bookmarkedIds = userId
@@ -747,7 +771,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     <>
       {/* 스코프 전환 — Intra(내부 생태계) / Inter(해외 트렌드) */}
       <div className="flex flex-wrap items-center gap-3 mb-5">
-        <div data-tour="scope-switch" className="flex gap-0.5 rounded-lg bg-spark-cream p-0.5">
+        {admin && <div data-tour="scope-switch" className="flex gap-0.5 rounded-lg bg-spark-cream p-0.5">
           {SCOPES.map(s => {
             const active = s.id === scope;
             const activeCls = s.id === 'inter' ? 'bg-emerald-600 text-white' : 'bg-spark-purple text-white';
@@ -761,8 +785,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
               </Link>
             );
           })}
-        </div>
-        <span className="text-[11px] text-spark-muted">{tr(activeScope.desc)}</span>
+        </div>}
+        {admin && <span className="text-[11px] text-spark-muted">{tr(activeScope.desc)}</span>}
       </div>
 
       {/* 헤더(오늘 날짜 · 제목 · 스크랩함) — Intra/Inter 두 스코프에서 동일하게 보인다.
@@ -783,8 +807,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         <div data-tour="header-actions" className="flex items-center gap-2">
           {canScrap && <Link href="/dashboard/scraps" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⭐ {tr('스크랩함')}</Link>}
           {canBookmark && <Link href="/dashboard/bookmarks" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔖 {tr('내 북마크')}</Link>}
-          {canScrap && <Link href="/dashboard/keywords" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⚙️ {tr('키워드 관리')}</Link>}
-          {canScrap && <Link href="/dashboard/noise-suggestions" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔍 {tr('노이즈 제안')}{(pendingSuggestionCount + pendingReportCount) > 0 ? ` (${pendingSuggestionCount + pendingReportCount})` : ''}</Link>}
+          {admin && <Link href="/dashboard/keywords" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⚙️ {tr('키워드 관리')}</Link>}
+          {admin && <Link href="/dashboard/noise-suggestions" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔍 {tr('노이즈 제안')}{(pendingSuggestionCount + pendingReportCount) > 0 ? ` (${pendingSuggestionCount + pendingReportCount})` : ''}</Link>}
         </div>
       </div>
 
@@ -796,7 +820,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       <>
       {/* 섹션 탭 — 스크롤 대신 화면 전환. 선택된 탭만 보라색으로 강조. */}
       <nav data-tour="intra-tabs" className="flex flex-wrap gap-2 mb-3" aria-label={tr('대시보드 섹션')}>
-        {TABS.map(t => {
+        {visibleTabs.map(t => {
           const active = t.id === tab;
           return (
             <Link
@@ -990,7 +1014,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                   : tr('{range} · 최신 상위 {n}건 · 분류·검색·정렬로 탐색', { range: range.label, n: data.articles.length })}
               </div>
             </div>
-            <PortfolioFilter companies={data.portfolioNames} selected={data.selectedCompany} from={range.from} to={range.to} tab={tab} />
+            {!companyLocked && (
+              <PortfolioFilter companies={data.portfolioNames} selected={data.selectedCompany} from={range.from} to={range.to} tab={tab} />
+            )}
           </div>
           {/* 이 자리에서 바로 기간을 바꿀 수 있게 (맨 위로 안 올라가도 됨) */}
           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-spark-border/60 pt-3">

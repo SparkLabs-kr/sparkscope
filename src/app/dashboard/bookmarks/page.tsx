@@ -3,18 +3,15 @@ import Link from 'next/link';
 import { getLocale, getT } from '@/lib/i18n/server';
 import { ensureArticleEnDeep } from '@/lib/sparkscope/translate-content';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireUser } from '@/lib/authz';
 import { ArticlesTable } from '@/components/ArticlesTable';
-import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
 export default async function BookmarksPage() {
   const t = getT();
-  const session = await getServerSession(authOptions);
-  const userId = (session?.user as any)?.id as string | undefined;
-  if (!userId) redirect('/login');
+  // 북마크는 계정별 개인 목록이라 포트폴리오사 계정도 쓸 수 있다.
+  const { id: userId } = await requireUser();
 
   const bookmarks = await prisma.bookmark.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 200 });
   const articles = await prisma.article.findMany({ where: { id: { in: bookmarks.map(b => b.articleId) } } });

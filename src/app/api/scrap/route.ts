@@ -1,20 +1,14 @@
 // 기사 스크랩 토글 API — 커뮤니케이션 본부 지정 계정만.
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { canScrap } from '@/lib/scrap';
+import { scrapperOrNull } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 
-async function currentEmail(): Promise<string | null> {
-  const session = await getServerSession(authOptions);
-  return session?.user?.email ?? null;
-}
-
 export async function POST(req: Request) {
-  const email = await currentEmail();
-  if (!canScrap(email)) return NextResponse.json({ error: '스크랩 권한이 없습니다.' }, { status: 403 });
+  const actor = await scrapperOrNull();
+  if (!actor) return NextResponse.json({ error: '스크랩 권한이 없습니다.' }, { status: 403 });
+  const email = actor.email;
 
   const b = await req.json().catch(() => null);
   if (!b?.articleId) return NextResponse.json({ error: 'articleId는 필수입니다.' }, { status: 400 });

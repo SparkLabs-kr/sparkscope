@@ -2,9 +2,7 @@
 import Link from 'next/link';
 import { getLocale, getT } from '@/lib/i18n/server';
 import { ensureArticleEnDeep } from '@/lib/sparkscope/translate-content';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { OPEN_ACCESS } from '@/lib/flags';
+import { requireAdmin } from '@/lib/authz';
 import { canScrap } from '@/lib/scrap';
 import { loadDigestCandidates, buildReviewDigest } from '@/lib/sparkscope/review';
 import { DigestReviewEditor } from '@/components/DigestReviewEditor';
@@ -13,8 +11,9 @@ export const dynamic = 'force-dynamic';
 
 export default async function DigestReviewPage() {
   const t = getT();
-  const session = OPEN_ACCESS ? { user: { email: 'dev@localhost' } } as any : await getServerSession(authOptions);
-  const canSend = canScrap(session?.user?.email ?? null);
+  const admin = await requireAdmin('digest');
+  // 발송 권한은 관리자 중에서도 커뮤니케이션 본부 지정 계정만(SCRAP_ALLOWED_EMAILS).
+  const canSend = canScrap(admin.email);
 
   const candidates = await loadDigestCandidates();
   // 검수 화면의 후보 제목도 EN이면 영어로 — 메일 본문(미리보기)은 실제 발송본이라 한국어 그대로다.

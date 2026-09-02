@@ -22,6 +22,24 @@ model User {
   accounts      Account[]
   sessions      Session[]
   createdAt     DateTime  @default(now())
+
+  // ===== 계정 종류 (2.1 로그인·계정 체계) =====
+  // role: ADMIN(스파크랩 내부 — 전체 열람) / PORTFOLIO(포트폴리오사 — 공개 범위만)
+  // 스파크랩 도메인 메일로 처음 로그인하면 events.createUser가 ADMIN을 넣는다(src/lib/auth.ts).
+  role          String    @default("PORTFOLIO")
+  // PORTFOLIO 계정이 소속된 회사. MonitoringTarget(category=portfolio_company*)을 그대로 가리킨다 —
+  // 회사 테이블을 새로 만들지 않는 이유는 포트폴리오사가 이미 감시대상으로 등록돼 있기 때문.
+  companyId     String?
+  company       MonitoringTarget? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  // 관리자가 계정을 비활성화하면 false — 매직 링크가 와도 로그인이 막힌다(삭제하지 않아 이력이 남는다).
+  active        Boolean   @default(true)
+  invitedBy     String?   // 계정을 발급한 관리자 이메일
+  invitedAt     DateTime?
+  deactivatedAt DateTime?
+  lastLoginAt   DateTime?
+
+  @@index([role, active])
+  @@index([companyId])
 }
 
 model Account {
@@ -72,6 +90,7 @@ model MonitoringTarget {
   notes           String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  users           User[]   // 이 회사에 연결된 포트폴리오사 계정
   @@index([category, status])
 }
 

@@ -2,18 +2,16 @@
 // 삭제는 소프트 삭제(status='DELETED')로 처리해 자동 백업(복구 가능).
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { canScrap } from '@/lib/scrap';
+import { adminOrNull } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 
 const CATEGORIES = ['sparklabs_self', 'portfolio_company', 'competitor', 'industry_trend'];
 
-// 키워드 관리는 ★ 스크랩과 동일하게 지정된 관리자 계정만 (OPEN_ACCESS 협업모드에선 canScrap이 알아서 허용).
+// 키워드 관리는 내부 도구 — role=ADMIN 계정만. (예전에는 스크랩 권한(canScrap)을 재사용했는데,
+// 그 목록이 비어 있으면 아무도 키워드를 못 고치고, OPEN_ACCESS가 켜져 있으면 누구나 고칠 수 있었다.)
 async function authorized(): Promise<boolean> {
-  const session = await getServerSession(authOptions);
-  return canScrap(session?.user?.email ?? null);
+  return (await adminOrNull()) !== null;
 }
 
 function bad(msg: string, status = 400) {
