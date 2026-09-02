@@ -127,7 +127,6 @@ export const EN: Record<string, string> = {
   "기사 검색 — 제목·매체·회사명·분류로 실시간 필터 (아래 '최근 수집 기사'에 반영)":
     "Search articles — live filter by title, outlet, company, or category (applies to 'Recently collected' below)",
   '날짜순 전체보기': 'All, by date',
-  '최신순': 'Newest first',
   '오래된순': 'Oldest first',
   '매체 티어순 (높은 티어 먼저)': 'By outlet tier (highest first)',
   'CSV 내보내기': 'Export CSV',
