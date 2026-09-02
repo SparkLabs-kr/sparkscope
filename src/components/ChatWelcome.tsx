@@ -790,9 +790,9 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
                   <button
                     type="button"
                     onClick={() => setAskOpen(true)}
-                    className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-spark-border bg-spark-surface text-[12px] font-semibold text-spark-ink-soft hover:border-spark-border-strong hover:text-spark-ink transition"
+                    className="shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-full bg-spark-purple text-[14px] font-semibold text-white shadow-card-hover hover:opacity-90 transition"
                   >
-                    <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5">
+                    <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
                       <rect x="2" y="2" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.4" />
                       <rect x="9" y="2" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.4" />
                       <rect x="2" y="9" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.4" />
