@@ -11,6 +11,7 @@ import { TrendChart } from '@/components/TrendChart';
 import { MediaPanel } from '@/components/MediaPanel';
 import { DateRangePicker } from '@/components/DateRangePicker';
 import { requireUser, effectiveCompany } from '@/lib/authz';
+import { loadPortfolioSummary } from '@/lib/sparkscope/portfolio-summary';
 import { canScrap as canScrapEmail } from '@/lib/scrap';
 import { normalizeSource } from '@/lib/sparkscope/media';
 import { matchesAsToken, isBlockedNoise, normalizeTitleKey } from '@/lib/sparkscope/relevance';
@@ -715,6 +716,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const visibleTabs = admin ? TABS : TABS.filter(t => (PORTFOLIO_TABS as readonly string[]).includes(t.id));
   const scope = admin ? resolveScope(searchParams.scope) : 'intra';
   const data = await loadDashboardData(range.from, range.to, company, range.isDefaultRange);
+  // 포트폴리오사 계정용 집계는 전사 loader를 재사용하지 않고 회사로 좁힌 질의를 따로 한다.
+  // (전사 집계를 걸러서 쓰면 거르는 곳을 하나 빠뜨리는 순간 남의 회사가 드러난다.)
+  const mySummary = !admin && company ? await loadPortfolioSummary(company, new Date(`${range.from}T00:00:00`), new Date(`${range.to}T23:59:59`)) : null;
   // 스크랩(별표)은 관리자 중에서도 커뮤니케이션 본부 지정 계정만.
   const canScrap = admin && canScrapEmail(user.email);
   const pendingSuggestionCount = canScrap ? await prisma.noiseSuggestion.count({ where: { status: 'PENDING' } }) : 0;
@@ -844,6 +848,72 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         <DateRangePicker key={`${range.from}_${range.to}`} from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())} company={data.selectedCompany} tab={tab} />
       </div>
 
+
+      {/* 포트폴리오사 계정용 요약 — 전부 자기 회사 기준이다. */}
+      {mySummary && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <KpiCard
+              label={tr('우리 회사 기사')}
+              value={mySummary.total}
+              hint={tr('선택한 기간에 수집된 우리 회사 기사 수 (노이즈 제외)')}
+              highlight
+            />
+            <KpiCard
+              label={tr('보도 매체')}
+              value={mySummary.outletCount}
+              hint={tr('우리 회사를 다룬 서로 다른 매체 수')}
+            />
+            <KpiCard
+              label={tr('긍정 논조')}
+              value={mySummary.tone.positive}
+              hint={tr('투자유치·출시·수상 등 긍정으로 분류된 기사 수')}
+            />
+            <KpiCard
+              label={tr('직전 기간 대비')}
+              value={mySummary.total - mySummary.prevTotal}
+              hint={tr('같은 길이의 직전 기간({n}건)과 비교한 증감', { n: mySummary.prevTotal })}
+            />
+          </div>
+
+          {mySummary.total > 0 && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+              {/* 톤 분포 */}
+              <div className="rounded-2xl border border-spark-border bg-white p-5 shadow-card">
+                <div className="font-bold mb-1">💬 {tr('톤 분석')}</div>
+                <div className="text-xs text-spark-muted mb-4">{tr('우리 회사 기사의 긍정·중립·부정 비율입니다.')}</div>
+                <div className="flex h-2.5 overflow-hidden rounded-full bg-spark-cream mb-3">
+                  <span className="block bg-emerald-600" style={{ width: `${(mySummary.tone.positive / mySummary.total) * 100}%` }} />
+                  <span className="block bg-gray-300" style={{ width: `${(mySummary.tone.neutral / mySummary.total) * 100}%` }} />
+                  <span className="block bg-red-500" style={{ width: `${(mySummary.tone.negative / mySummary.total) * 100}%` }} />
+                </div>
+                <div className="flex flex-wrap gap-4 text-[13px] tabular-nums">
+                  <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-emerald-600" />{tr('긍정')} {mySummary.tone.positive}</span>
+                  <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-gray-300" />{tr('중립')} {mySummary.tone.neutral}</span>
+                  <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-red-500" />{tr('부정')} {mySummary.tone.negative}</span>
+                </div>
+              </div>
+
+              {/* 매체별 분포 */}
+              <div className="rounded-2xl border border-spark-border bg-white p-5 shadow-card">
+                <div className="font-bold mb-1">📰 {tr('매체별 보도')}</div>
+                <div className="text-xs text-spark-muted mb-4">{tr('우리 회사를 가장 많이 다룬 매체입니다.')}</div>
+                <div className="flex flex-col gap-1.5">
+                  {mySummary.outlets.slice(0, 8).map(o => (
+                    <div key={o.source} className="grid grid-cols-[minmax(80px,120px)_1fr_auto] items-center gap-3 text-[13px]">
+                      <span className="truncate text-right text-spark-ink-soft">{o.source}</span>
+                      <span className="h-1.5 rounded-full bg-spark-light-purple">
+                        <i className="block h-full rounded-full bg-spark-purple" style={{ width: `${(o.count / mySummary.outlets[0].count) * 100}%` }} />
+                      </span>
+                      <span className="font-bold tabular-nums">{o.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {/* 이슈 급증 배너 + KPI — 경쟁사 탭 제외, 그리고 관리자만.
           ⚠️ 이 블록은 탭 바깥이라 '최근 수집 기사' 탭에서도 그려진다. 안에 있는 값이 전부
