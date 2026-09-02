@@ -127,7 +127,6 @@ export const EN: Record<string, string> = {
   "기사 검색 — 제목·매체·회사명·분류로 실시간 필터 (아래 '최근 수집 기사'에 반영)":
     "Search articles — live filter by title, outlet, company, or category (applies to 'Recently collected' below)",
   '날짜순 전체보기': 'All, by date',
-  '최신순': 'Newest first',
   '오래된순': 'Oldest first',
   '매체 티어순 (높은 티어 먼저)': 'By outlet tier (highest first)',
   'CSV 내보내기': 'Export CSV',
@@ -1167,4 +1166,20 @@ export const EN: Record<string, string> = {
     'Portfolio account',
   '포트폴리오사 대시보드':
     'Portfolio dashboard',
+  '안내 메일 보내기':
+    'Send an invitation email',
+  '로그인 주소와 "이 주소로만 로그인됩니다"를 담은 메일이 담당자에게 발송됩니다. 끄면 주소만 화면에 표시됩니다.':
+    'Sends the contact an email with the sign-in address and a note that only this address works. Turn it off to just show the address here.',
+  '{email} 계정을 발급했습니다.':
+    'Issued the account for {email}.',
+  '안내 메일도 보냈습니다.':
+    'The invitation email was sent too.',
+  '안내 메일 발송은 실패했습니다 — 아래 주소를 직접 전달해주세요.':
+    'The invitation email failed — please pass the address below along yourself.',
+  '아래 주소를 담당자에게 전달하세요.':
+    'Send the address below to your contact.',
+  '업계 동향':
+    'Industry trends',
+  '스타트업·벤처 업계 전반의 소식입니다. 특정 회사가 아닌 업계 키워드로 수집됩니다.':
+    'News from across the startup and venture industry, collected by industry keyword rather than by company.',
 };

@@ -139,5 +139,18 @@ export const authOptions: NextAuthOptions = {
     // 것이 이미 증명된 사람만 이 화면에 도달하기 때문이다.
     error: '/login/error',
   },
-  session: { strategy: 'database' },
+  session: {
+    strategy: 'database',
+    // 90일. NextAuth의 maxAge는 역할별로 나눌 수 없어서 전체에 적용한다.
+    //
+    // 기본값 30일은 포트폴리오사 대표에게 짧다 — 분기에 한 번 보는 사람은 올 때마다
+    // 새 링크를 받아야 한다. 반대로 임직원은 매일 쓰니 30일이든 90일이든 체감이 없다.
+    //
+    // 길게 잡아도 안전한 이유: 계정을 해지하면 Session 행을 지우고(api/accounts),
+    // authz.getSessionUser()가 요청마다 active를 다시 확인한다. 즉 만료를 기다리지 않고
+    // 즉시 끊을 수 있다.
+    maxAge: 90 * 24 * 60 * 60,
+    // 방문할 때마다(하루 한 번까지) 만료를 밀어준다 — 꾸준히 쓰면 재로그인이 없다.
+    updateAge: 24 * 60 * 60,
+  },
 };

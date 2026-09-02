@@ -11,7 +11,7 @@ import { TrendChart } from '@/components/TrendChart';
 import { MediaPanel } from '@/components/MediaPanel';
 import { DateRangePicker } from '@/components/DateRangePicker';
 import { requireUser, effectiveCompany } from '@/lib/authz';
-import { loadPortfolioSummary } from '@/lib/sparkscope/portfolio-summary';
+import { loadPortfolioSummary, loadIndustryTrends } from '@/lib/sparkscope/portfolio-summary';
 import { canScrap as canScrapEmail } from '@/lib/scrap';
 import { normalizeSource } from '@/lib/sparkscope/media';
 import { matchesAsToken, isBlockedNoise, normalizeTitleKey } from '@/lib/sparkscope/relevance';
@@ -709,6 +709,38 @@ function buildTrendData(records: { matchedKeyword: string; pubDate: Date }[], si
   return { labels, datasets };
 }
 
+
+/**
+ * 포트폴리오사 계정에 내려보내기 전에 내부 전용 필드를 지운다.
+ *
+ * 왜 필요한가: 기사 조회가 select 없이 행 전체를 가져오기 때문에, 클라이언트 컴포넌트에
+ * 그대로 넘기면 RSC 페이로드에 내부 필드가 함께 실린다. 화면에 안 그려도 페이지 소스에는
+ * 남는다 — 실제로 확인한 값들이 이렇다.
+ *
+ *   ourTake  "포트폴리오사 블로코가 개인정보 유출 사고의 당사자로 지목된 만큼,
+ *             커뮤니케이션 리스크 대응 시나리오를 선제적으로 검토해야…"   ← 본부 관점
+ *   riskFlag "crisis" / "litigation"                                  ← 내부 리스크 라벨
+ *   relatedCompanies ["스카이랩스","쿼드메디슨"]                         ← 다른 포트폴리오사
+ *   pitchScore / pitchTopic                                           ← 내부 기획 지표
+ *
+ * oneLiner는 남긴다 — 기사 내용을 그대로 요약한 문장이라 내부 관점이 섞이지 않는다.
+ */
+function stripInternalFields<T extends Record<string, unknown>>(rows: T[]): T[] {
+  return rows.map(r => ({
+    ...r,
+    ourTake: null,
+    relatedCompanies: null,
+    pitchScore: null,
+    pitchTopic: null,
+    pitchTopicEn: null,
+    riskFlag: null,
+    isScrapped: false,
+    scrappedAt: null,
+    scrappedBy: null,
+    noiseReason: null,
+  }));
+}
+
 export default async function DashboardPage({ searchParams }: { searchParams: { from?: string; to?: string; company?: string; tab?: string; scope?: string; domain?: string; country?: string } }) {
   const tr = getT();
   const isEn = getLocale() === 'en';
@@ -729,7 +761,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const data = await loadDashboardData(range.from, range.to, company, range.isDefaultRange, admin);
   // 포트폴리오사 계정용 집계는 전사 loader를 재사용하지 않고 회사로 좁힌 질의를 따로 한다.
   // (전사 집계를 걸러서 쓰면 거르는 곳을 하나 빠뜨리는 순간 남의 회사가 드러난다.)
-  const mySummary = !admin && company ? await loadPortfolioSummary(company, new Date(`${range.from}T00:00:00`), new Date(`${range.to}T23:59:59`)) : null;
+  const [mySummary, myIndustry] = !admin && company
+    ? await Promise.all([
+        loadPortfolioSummary(company, new Date(`${range.from}T00:00:00`), new Date(`${range.to}T23:59:59`)),
+        // 계획서가 약속한 "공개 업계 동향". 회사와 무관한 업계 기사만 담긴 분류라
+        // 회사 범위로 좁히지 않는다 — 좁히면 업계 동향이 아니게 된다.
+        loadIndustryTrends(new Date(`${range.from}T00:00:00`), new Date(`${range.to}T23:59:59`)),
+      ])
+    : [null, null];
   // 스크랩(별표)은 관리자 중에서도 커뮤니케이션 본부 지정 계정만.
   const canScrap = admin && canScrapEmail(user.email);
   const pendingSuggestionCount = canScrap ? await prisma.noiseSuggestion.count({ where: { status: 'PENDING' } }) : 0;
@@ -745,8 +784,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const bookmarkedIds = userId
     ? new Set((await prisma.bookmark.findMany({ where: { userId }, select: { articleId: true } })).map(b => b.articleId))
     : new Set<string>();
-  const articlesWithBookmark = data.articles.map(a => ({ ...a, isBookmarked: bookmarkedIds.has(a.id) }));
-  const companyArticlesWithBookmark = data.companyArticles.map(a => ({ ...a, isBookmarked: bookmarkedIds.has(a.id) }));
+  const articlesRaw = data.articles.map(a => ({ ...a, isBookmarked: bookmarkedIds.has(a.id) }));
+  const companyArticlesRaw = data.companyArticles.map(a => ({ ...a, isBookmarked: bookmarkedIds.has(a.id) }));
+  // 포트폴리오사 계정에는 내부 필드를 지운 사본을 넘긴다 — 화면에 안 그려도
+  // 클라이언트 페이로드에는 실리기 때문이다.
+  const articlesWithBookmark = admin ? articlesRaw : stripInternalFields(articlesRaw);
+  const companyArticlesWithBookmark = admin ? companyArticlesRaw : stripInternalFields(companyArticlesRaw);
 
   // EN 화면이면 이 화면에 뜰 기사 제목을 영어로 채운다(Article.titleEn 캐시 — 두 번째부터는 LLM 호출 없음).
   // 군집화·검색 fallback은 계속 한국어 원문(title)을 쓰므로 묶음 결과가 달라지지 않는다.
@@ -920,6 +963,34 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* 공개 업계 동향 — 포트폴리오사 계정에 열어주는 유일한 회사 외부 정보.
+              경쟁사(AC·VC) 분류는 하우스 이름·AUM·펀드가 붙어 있어 쓰지 않는다. */}
+          {myIndustry && myIndustry.length > 0 && (
+            <div className="rounded-2xl border border-spark-border bg-white p-5 shadow-card mb-6">
+              <div className="font-bold mb-1">🏁 {tr('업계 동향')}</div>
+              <div className="text-xs text-spark-muted mb-4">
+                {tr('스타트업·벤처 업계 전반의 소식입니다. 특정 회사가 아닌 업계 키워드로 수집됩니다.')}
+              </div>
+              <div className="flex flex-col">
+                {myIndustry.map(a => (
+                  <a
+                    key={a.id}
+                    href={safeArticleHref(a.link, a.title, a.source)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="border-b border-spark-border/60 py-2.5 last:border-0 hover:bg-spark-subtle/60 transition-colors"
+                  >
+                    <div className="text-[13.5px] leading-snug">{isEn ? (a.titleEn ?? a.title) : a.title}</div>
+                    <div className="mt-1 text-[11px] text-spark-muted tabular-nums">
+                      {a.source} · {a.pubDate.toLocaleDateString(intlLocale, { month: 'numeric', day: 'numeric', timeZone: 'Asia/Seoul' })}
+                      <span className="ml-2 rounded bg-spark-cream px-1.5 py-0.5 font-semibold">{a.topic}</span>
+                    </div>
+                  </a>
+                ))}
               </div>
             </div>
           )}

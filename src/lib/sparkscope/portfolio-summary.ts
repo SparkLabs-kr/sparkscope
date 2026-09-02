@@ -75,3 +75,52 @@ export async function loadPortfolioSummary(
     outlets: sourceGroups.map(s => ({ source: s.source, count: s._count._all })),
   };
 }
+
+export type IndustryItem = {
+  id: string;
+  title: string;
+  titleEn: string | null;
+  source: string;
+  link: string;
+  pubDate: Date;
+  topic: string;
+};
+
+/**
+ * 포트폴리오사 계정에 열어주는 "공개 업계 동향".
+ *
+ * category='industry_trend' 만 본다. 이 분류의 감시대상은 업계 키워드다 —
+ * 스타트업 · 벤처캐피탈 · 딥테크 · 부처명 같은 것들이고, 회사 이름이 아니다.
+ * 확인한 것: 이 분류의 기사에 포트폴리오사 이름이 matchedKeyword로 들어간 경우가 없다.
+ *
+ * 왜 competitor 분류는 쓰지 않는가: 그쪽은 다른 AC·VC 하우스 이름과 AUM·펀드가 붙어
+ * 있어서 내부 정보다. "업계 동향"과 "경쟁사 분석"을 같은 것으로 취급하면 안 된다.
+ */
+export async function loadIndustryTrends(
+  since: Date,
+  until: Date,
+  take = 8,
+): Promise<IndustryItem[]> {
+  const rows = await prisma.article.findMany({
+    where: {
+      category: 'industry_trend',
+      isNoise: false,
+      pubDate: { gte: since, lte: until },
+    },
+    orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }],
+    take,
+    select: {
+      id: true, title: true, titleEn: true, source: true,
+      link: true, pubDate: true, matchedKeyword: true,
+    },
+  });
+  return rows.map(r => ({
+    id: r.id,
+    title: r.title,
+    titleEn: r.titleEn,
+    source: r.source,
+    link: r.link,
+    pubDate: r.pubDate,
+    topic: r.matchedKeyword,
+  }));
+}

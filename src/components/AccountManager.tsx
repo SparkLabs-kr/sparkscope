@@ -49,6 +49,9 @@ export function AccountManager() {
 
   const [email, setEmail] = useState('');
   const [companyId, setCompanyId] = useState('');
+  // 안내 메일은 기본으로 보내되, 보내기 전에 체크박스로 보이게 둔다 —
+  // 우리 도메인에서 외부로 나가는 메일이라 관리자가 알고 누르게 해야 한다.
+  const [sendInvite, setSendInvite] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -90,16 +93,26 @@ export function AccountManager() {
       const res = await fetch('/api/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), companyId }),
+        body: JSON.stringify({ email: email.trim(), companyId, sendInvite }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error ?? tr('발급에 실패했습니다.'));
-      setNotice(
-        json.revived
-          ? tr('{email} 계정을 다시 활성화했습니다.', { email: email.trim() })
-          : tr('{email} 계정을 발급했습니다. 아래 주소를 담당자에게 전달하세요.', { email: email.trim() }),
-      );
-      setShareUrl(`${window.location.origin}/login/portfolio`);
+      const who = email.trim();
+      const base = json.revived
+        ? tr('{email} 계정을 다시 활성화했습니다.', { email: who })
+        : tr('{email} 계정을 발급했습니다.', { email: who });
+      // 메일이 나갔으면 주소를 따로 전달할 필요가 없다. 실패했거나 안 보냈으면
+      // 관리자가 직접 전달해야 하므로 주소를 띄운다.
+      if (json.invited === 'sent') {
+        setNotice(`${base} ${tr('안내 메일도 보냈습니다.')}`);
+        setShareUrl(null);
+      } else if (json.invited === 'failed') {
+        setNotice(`${base} ${tr('안내 메일 발송은 실패했습니다 — 아래 주소를 직접 전달해주세요.')}`);
+        setShareUrl(`${window.location.origin}/login/portfolio`);
+      } else {
+        setNotice(`${base} ${tr('아래 주소를 담당자에게 전달하세요.')}`);
+        setShareUrl(`${window.location.origin}/login/portfolio`);
+      }
       setEmail('');
       setCompanyId('');
       await load();
@@ -227,6 +240,21 @@ export function AccountManager() {
             {submitting ? tr('발급 중...') : tr('계정 발급')}
           </button>
         </div>
+
+        <label className="mt-3 flex items-start gap-2 text-xs text-spark-ink-soft">
+          <input
+            type="checkbox"
+            checked={sendInvite}
+            onChange={e => setSendInvite(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            {tr('안내 메일 보내기')}
+            <span className="block text-spark-muted">
+              {tr('로그인 주소와 "이 주소로만 로그인됩니다"를 담은 메일이 담당자에게 발송됩니다. 끄면 주소만 화면에 표시됩니다.')}
+            </span>
+          </span>
+        </label>
       </form>
 
       {/* 발급된 계정 */}

@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { adminOrNull } from '@/lib/authz';
 import { isStaffEmail } from '@/lib/auth';
+import { sendPortfolioInvite } from '@/lib/sparkscope/mailer';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -54,6 +55,9 @@ export async function GET() {
 const createSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
   companyId: z.string().trim().min(1),
+  // 안내 메일을 보낼지 — 관리자가 화면에서 명시적으로 고른다. 우리 도메인에서 외부로
+  // 나가는 메일이라 기본값으로 조용히 보내지 않는다.
+  sendInvite: z.boolean().optional(),
 });
 
 export async function POST(req: Request) {
@@ -72,7 +76,7 @@ export async function POST(req: Request) {
 
   const company = await prisma.monitoringTarget.findUnique({
     where: { id: companyId },
-    select: { id: true, category: true, status: true },
+    select: { id: true, name: true, englishName: true, category: true, status: true },
   });
   if (!company || !company.category.startsWith(PORTFOLIO_CATEGORY_PREFIX)) {
     return bad('포트폴리오사가 아닌 감시대상에는 계정을 연결할 수 없습니다.');
@@ -97,7 +101,8 @@ export async function POST(req: Request) {
       },
       select: { id: true, email: true, active: true, company: { select: { name: true } } },
     });
-    return NextResponse.json({ account: revived, revived: true });
+    const invited = await maybeInvite(req, parsed.data.sendInvite, email, company.name, admin.email);
+    return NextResponse.json({ account: revived, revived: true, invited });
   }
 
   const account = await prisma.user.create({
@@ -112,7 +117,37 @@ export async function POST(req: Request) {
     select: { id: true, email: true, active: true, company: { select: { name: true } } },
   });
 
-  return NextResponse.json({ account, revived: false });
+  const invited = await maybeInvite(req, parsed.data.sendInvite, email, company.name, admin.email);
+  return NextResponse.json({ account, revived: false, invited });
+}
+
+/**
+ * 안내 메일 발송. 관리자가 요청했을 때만 보낸다.
+ *
+ * 메일 실패가 계정 발급을 되돌리지는 않는다 — 계정은 이미 만들어졌고, 관리자는
+ * 화면에 뜬 주소를 직접 전달할 수 있다. 대신 결과를 응답에 담아 화면에서 알려준다.
+ */
+async function maybeInvite(
+  req: Request,
+  requested: boolean | undefined,
+  to: string,
+  companyName: string,
+  invitedBy: string,
+): Promise<'sent' | 'failed' | 'skipped'> {
+  if (!requested) return 'skipped';
+  const origin = process.env.NEXTAUTH_URL ?? new URL(req.url).origin;
+  try {
+    const ok = await sendPortfolioInvite({
+      to,
+      companyName,
+      loginUrl: `${origin}/login/portfolio`,
+      invitedBy,
+    });
+    return ok ? 'sent' : 'failed';
+  } catch (e) {
+    console.error('[accounts] 안내 메일 실패:', e);
+    return 'failed';
+  }
 }
 
 const updateSchema = z.object({
