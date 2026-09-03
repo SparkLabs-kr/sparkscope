@@ -856,9 +856,38 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         })}
       </nav>
 
-      {/* 기간 선택 — 탭 바로 아래에 두어 어느 탭에서도 같은 자리에서 기간을 바꿀 수 있게 한다. */}
+      {/* 기간 선택 — 탭 바로 아래에 두어 어느 탭에서도 같은 자리에서 기간을 바꿀 수 있게 한다.
+          지역 전환(한국/대만)은 프리셋 오른쪽에 붙여 같은 줄에서 조건을 다 고르게 한다.
+          단 포트폴리오사 탭에서만 그린다 — 지역은 포트폴리오 분류만 바꾸므로 다른 탭에서는
+          눌러도 화면이 그대로여서 오해를 준다.
+          country를 extraParams로 넘기는 것이 중요하다. 안 넘기면 기간을 바꾸는 순간
+          country가 빠져 대만을 보다가 한국으로 튕긴다. */}
       <div data-tour="date-range" className="mb-6">
-        <DateRangePicker key={`${range.from}_${range.to}`} from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())} company={data.selectedCompany} tab={tab} />
+        <DateRangePicker
+          key={`${range.from}_${range.to}`}
+          from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())}
+          company={data.selectedCompany} tab={tab}
+          extraParams={region !== 'kr' ? { country: region } : undefined}
+          trailing={tab === 'portfolio' ? (
+            <div className="flex items-center gap-2">
+              <div className="flex gap-0.5 rounded-lg bg-spark-cream p-0.5">
+                {REGIONS.map(r => {
+                  const active = r.id === region;
+                  return (
+                    <Link
+                      key={r.id}
+                      href={regionHref(r.id)}
+                      className={`rounded-md px-3 py-1 text-[13px] font-semibold transition-colors whitespace-nowrap ${active ? 'bg-spark-purple text-white' : 'text-spark-muted hover:text-spark-ink-soft'}`}
+                    >
+                      {tr(r.label)}
+                    </Link>
+                  );
+                })}
+              </div>
+              <span className="text-[11px] text-spark-muted hidden lg:inline">{tr('선택한 지역의 포트폴리오사만 집계합니다.')}</span>
+            </div>
+          ) : undefined}
+        />
       </div>
 
 
@@ -963,27 +992,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       {/* ── 포트폴리오사 ── */}
       {tab === 'portfolio' && <>
       <SectionTitle title={`📊 ${tr('포트폴리오사')}`} sub={tr('어느 포트폴리오사가 활발히 노출되고, 부정 이슈는 없는가')} />
-
-      {/* 지역 전환 — 한국 / 대만.
-          이 탭 안에만 둔다. 지역은 포트폴리오 분류(portfolio_company / portfolio_company_tw)만
-          바꾸므로, 스파크랩·업계 모니터링 탭에 두면 눌러도 화면이 그대로여서 오해를 준다. */}
-      <div className="flex items-center gap-2 mb-5">
-        <div className="flex gap-0.5 rounded-lg bg-spark-cream p-0.5">
-          {REGIONS.map(r => {
-            const active = r.id === region;
-            return (
-              <Link
-                key={r.id}
-                href={regionHref(r.id)}
-                className={`rounded-md px-3.5 py-1.5 text-xs font-bold transition-colors whitespace-nowrap ${active ? 'bg-spark-purple text-white' : 'text-spark-muted hover:text-spark-ink-soft'}`}
-              >
-                {tr(r.label)}
-              </Link>
-            );
-          })}
-        </div>
-        <span className="text-[11px] text-spark-muted">{tr('선택한 지역의 포트폴리오사만 집계합니다.')}</span>
-      </div>
 
       {/* 실시간 위기 감지 — 위기 없을 땐 '정상' 상태를 명시해 기능이 살아있음을 표시 */}
       <div data-tour="crisis-panel" className="mb-6">

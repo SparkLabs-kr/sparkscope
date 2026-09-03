@@ -39,7 +39,7 @@ const ACCENT = {
 // 고른 기간만 위로 올려보낸다(Inter 탭은 기간·국가를 다 고른 뒤 '확인'을 눌러야 조회된다).
 // 이때 하이라이트는 부모가 넘겨주는 from/to(=선택 중인 값) 기준으로 그려지므로 즉시 반응한다.
 export function DateRangePicker({
-  from, to, min, max, company, tab, scope, extraParams, accent = 'purple', onStage, hideLabel,
+  from, to, min, max, company, tab, scope, extraParams, accent = 'purple', onStage, hideLabel, trailing,
 }: {
   from: string; to: string; min: string; max: string;
   company?: string; tab?: string; scope?: string; extraParams?: Record<string, string>;
@@ -47,6 +47,8 @@ export function DateRangePicker({
   onStage?: (from: string, to: string) => void;
   /** 부모가 이미 "조회 기간" 라벨을 그리는 경우(Inter 조회 조건 카드) 중복 표시를 막는다. */
   hideLabel?: boolean;
+  /** 프리셋 버튼 오른쪽에 덧붙일 것(예: 포트폴리오사 탭의 한국/대만 전환). */
+  trailing?: React.ReactNode;
 }) {
   const tr = useT();
   const router = useRouter();
@@ -118,6 +120,7 @@ export function DateRangePicker({
           );
         })}
       </div>
+      {trailing}
     </div>
   );
 }
