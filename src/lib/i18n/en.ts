@@ -1034,4 +1034,35 @@ export const EN: Record<string, string> = {
   '선택한 지역의 포트폴리오사만 집계합니다.':
     'Only portfolio companies in the selected region are counted.',
   '대만': 'Taiwan',
+  // 지금 주목받는 뉴스 (Inter 탭)
+  '지금 주목받는 뉴스':
+    'In the news right now',
+  '여러 매체가 함께 다룬 순서로. 각 기사는 쉬운 말 요약과 원문 링크를 함께 보여줍니다.':
+    'Ranked by how many outlets covered it. Each story has a plain-language summary and a link to the source.',
+  '이번 달':
+    'This month',
+  '매체 {n}곳에서 수집':
+    'From {n} outlets',
+  '{n}곳 응답 없음':
+    '{n} not responding',
+  '이 기간에 표시할 기사가 없습니다.':
+    'No stories to show for this period.',
+  '개인·뉴스레터':
+    'Blog / newsletter',
+  '+{n}개 매체':
+    '+{n} outlets',
+  '요약 준비 중 — 다음 조회에서 채워집니다.':
+    'Summary pending — it will fill in on the next load.',
+  '원문 보기':
+    'Read the original',
+  '매체 요약':
+    'Outlet summary',
+  '원문이 아니라 이해를 돕는 설명입니다. 전문은 원문에서 확인하세요.':
+    'This is an explainer, not the article itself. Read the full piece at the source.',
+  '이 매체는 제목과 짧은 소개만 공개해, 아래 설명은 일반적인 배경 위주입니다.':
+    'This outlet publishes only a headline and short teaser, so the explainer above leans on general background.',
+  '영향 가능':
+    'May affect',
+  '{n}건 더 보기':
+    'Show {n} more',
 };

@@ -28,6 +28,7 @@ import { InterScrapStar } from '@/components/InterScrapStar';
 import { InterBriefingModal, type BriefingPayload } from '@/components/InterBriefingModal';
 import { DateRangePicker } from '@/components/DateRangePicker';
 import { SocialSignals } from '@/components/SocialSignals';
+import { NewsDigest } from '@/components/NewsDigest';
 import { clusterArticles } from '@/lib/sparkscope/cluster';
 
 interface InterApiResponse {
@@ -205,6 +206,10 @@ export function InterPanel({
 
       {/* 소셜 시그널 — 도메인 버튼과 조회 기간 사이. 커뮤니티에서 뜨는 글은 기사보다 먼저
           움직이므로 조회 조건보다 위에 둔다. 기간은 적용된 from을 쓴다(draft 아님). */}
+      {/* 지금 주목받는 뉴스 — 신뢰 매체 전반에서 모아 쉬운 말 요약·영향 포트폴리오사와 함께.
+          도메인 버튼 바로 아래, 조회 조건 위. 기본 5건만 보여 배너가 화면을 다 먹지 않게 한다. */}
+      <NewsDigest domain={domain} />
+
       <SocialSignals domain={domain} from={from} />
 
       {/* 조회 조건 — 기간·국가를 고른 뒤 '확인'을 눌러야 조회된다(클릭마다 화면이 새로 뜨지 않게) */}
