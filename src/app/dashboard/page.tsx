@@ -1014,11 +1014,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         <PortfolioNegatives items={data.portfolioNegatives} rangeLabel={range.label} locale={locale} />
       </div>
 
-      {/* 포트폴리오 TOP15 → 기획기사 피칭 (위아래 배치) */}
+      {/* 포트폴리오 TOP15 → 기획기사 피칭 (위아래 배치)
+          기획기사 피칭은 대만에서는 안 보여준다 — pitchScore는 국내 기사 분석 파이프라인
+          기준이라 대만 포트폴리오사에는 사실상 안 붙는 값이고, 화면에 카드만 비어 있는
+          채로 남아 혼란을 준다(2026-09-07). */}
       <div className="grid grid-cols-1 gap-4 mb-8">
         <div data-tour="top15">
           <PortfolioTopList items={data.portfolioTop} rangeLabel={range.label} prevRangeLabel={data.portfolioTopPrevRangeLabel} showChange={data.portfolioTopHasEnoughPrevData} locale={locale} />
         </div>
+        {region !== 'tw' && (
         <div data-tour="pitch" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
           <div className="font-bold mb-3">🎯 {tr('기획기사 피칭')} <InfoTip text={tr("AI가 각 기사를 0~100점으로 평가한 '기획기사 피칭 점수'입니다.\n이 주제로 우리 포트폴리오사를 엮어 기획기사를 제안하면 성사 가능성이 높은 기사를 뜻합니다.\n· 60점 이상: 아래 목록에 표시\n· 75점 이상: 상단 '피칭 기회' 지표에 집계")} /></div>
           {data.pitches.length > 0 ? (
@@ -1037,6 +1041,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             <p className="text-sm text-gray-400">{tr('{range} 내 피칭 기회 (60점 이상) 없음', { range: range.label })}</p>
           )}
         </div>
+        )}
       </div>
       </>}
 
