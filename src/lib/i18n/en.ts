@@ -1018,17 +1018,20 @@ export const EN: Record<string, string> = {
   '국제뉴스': 'Kukje News',
   // 소셜 시그널 (Inter 탭)
   '소셜 시그널': 'Social signals',
-  'X · Reddit · Hacker News에서 이 분야에서 가장 화제인 글':
-    'What this sector is talking about across X, Reddit and Hacker News',
+  '지금 소셜 미디어에서 가장 주목해야 할 뉴스':
+    'What to watch on social right now',
+  // 커뮤니티 선정 이유 — social-collect.ts의 WHY와 문구가 정확히 일치해야 한다.
+  '실리콘밸리 엔지니어·창업자가 모이는 곳. 논문·오픈소스·기술 발표가 언론 보도보다 며칠 먼저 올라오고, 댓글에 현업자 검증이 붙는다.':
+    'Where Silicon Valley engineers and founders gather. Papers, open-source releases and technical announcements land here days before the press covers them, and the comments carry practitioner scrutiny.',
+  '분야별 종사자 커뮤니티. 업계 내부 분위기(채용·실험 실패·규제 체감)가 기사로 나오기 전에 먼저 드러난다.':
+    'Practitioner communities by field. The mood inside the industry — hiring, failed experiments, how regulation actually feels — surfaces here before it reaches the news.',
   '인기순': 'By popularity',
   '최신순': 'By recency',
   '연결 필요': 'Not connected',
   '해당 기간 글이 없습니다.': 'No posts in this range.',
   '연결되면 여기에 표시됩니다.': 'Posts appear here once connected.',
   '연결됨 · 업보트+댓글×2 기준': 'Connected · ranked by upvotes + comments×2',
-  '연결됨 · 좋아요+답글 기준': 'Connected · ranked by likes + replies',
   '연결됨 · 점수 없음(RSS) — 최신순': 'Connected · no scores (RSS) — by recency',
-  '연결 필요 — X_BEARER_TOKEN 미설정 (API 유료)': 'Not connected — X_BEARER_TOKEN unset (paid API)',
   // 지역 전환 (대시보드 상단)
   '한국': 'Korea',
   '선택한 지역의 포트폴리오사만 집계합니다.':
@@ -1065,4 +1068,6 @@ export const EN: Record<string, string> = {
     'May affect',
   '{n}건 더 보기':
     'Show {n} more',
+  '외 {n}곳':
+    'and {n} more',
 };

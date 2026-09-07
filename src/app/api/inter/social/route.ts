@@ -6,6 +6,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { collectSocialSignals, type SocialDomain } from '@/lib/sparkscope/social-collect';
+import { translateBatch } from '@/lib/sparkscope/translate-content';
 
 export const runtime = 'nodejs';
 export const preferredRegion = 'icn1';
@@ -22,6 +23,23 @@ export async function GET(req: NextRequest) {
 
   try {
     const sources = await collectSocialSignals(domain, sinceMs);
+
+    // 한국어 화면이면 글 제목을 번역해서 함께 내려준다. 커뮤니티 글은 전부 영어라
+    // KO 탭에서 이 섹션만 영어로 남아 있었다(2026-09-04).
+    // 번역이 실패해도 원문 제목으로 그냥 보여준다 — 이 패널 때문에 화면이 비면 안 된다.
+    if (sp.get('lang') === 'ko') {
+      const titles = sources.flatMap(s => s.posts.map(p => p.title));
+      if (titles.length > 0) {
+        try {
+          const ko = await translateBatch(titles, 'ko');
+          let i = 0;
+          for (const s of sources) for (const p of s.posts) p.titleKo = ko[i++] ?? undefined;
+        } catch (e) {
+          console.error('[api/inter/social] 제목 번역 실패 — 원문으로 표시:', e);
+        }
+      }
+    }
+
     return NextResponse.json({ domain, sources });
   } catch (e: any) {
     console.error('[api/inter/social] 실패:', e);

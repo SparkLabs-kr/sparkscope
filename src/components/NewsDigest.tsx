@@ -20,6 +20,9 @@ type Resp = {
   feeds: { name: string; ok: boolean; count: number }[];
 };
 
+/** 처음에 보여줄 기사 수. 나머지는 '더 보기'로 접어 둔다. */
+const PREVIEW = 3;
+
 const RANGES = [
   { days: 1, label: '오늘' },
   { days: 7, label: '이번 주' },
@@ -31,8 +34,9 @@ export function NewsDigest({ domain }: { domain: 'bio' | 'ai' }) {
   const locale = useLocale();
   const [data, setData] = useState<Resp | null>(null);
   const [open, setOpen] = useState<string | null>(null);
-  // 기본 5건만 보여준다. 이 섹션은 Inter 탭 맨 위의 요약 배너라서
+  // 기본 3건만 보여준다. 이 섹션은 Inter 탭 맨 위의 요약 배너라서
   // 12건을 다 펼치면 아래 조회 조건·본문이 한 화면에서 밀려난다.
+  // (2026-09-04: 소셜 시그널과 2분할로 나란히 놓이면서 5건 → 3건)
   const [showAll, setShowAll] = useState(false);
   const [days, setDays] = useState<number>(7);
 
@@ -50,7 +54,7 @@ export function NewsDigest({ domain }: { domain: 'bio' | 'ai' }) {
   const down = (data?.feeds ?? []).filter(f => !f.ok);
 
   return (
-    <div className="bg-white border border-spark-border rounded-2xl p-5 mb-6">
+    <div className="bg-white border border-spark-border rounded-2xl p-5 h-full">
       <div className="flex flex-wrap items-baseline gap-2.5">
         <h2 className="text-[19px] font-extrabold tracking-tight">📰 {t('지금 주목받는 뉴스')}</h2>
         <span className="text-[13px] text-spark-muted">
@@ -91,7 +95,7 @@ export function NewsDigest({ domain }: { domain: 'bio' | 'ai' }) {
         <p className="mt-4 text-[13px] text-spark-muted">{t('이 기간에 표시할 기사가 없습니다.')}</p>
       ) : (
         <ol className="mt-3 border border-spark-border rounded-xl overflow-hidden">
-          {(showAll ? data.items : data.items.slice(0, 5)).map((it, i) => (
+          {(showAll ? data.items : data.items.slice(0, PREVIEW)).map((it, i) => (
             <li key={it.url} className="border-b border-spark-border last:border-b-0 bg-white px-4 py-2.5">
               <div className="flex items-center gap-2 text-[11.5px] text-spark-muted mb-1">
                 <span className="font-extrabold text-orange-600 tabular-nums">{i + 1}</span>
@@ -117,7 +121,7 @@ export function NewsDigest({ domain }: { domain: 'bio' | 'ai' }) {
                 type="button"
                 onClick={() => setOpen(open === it.url ? null : it.url)}
                 aria-expanded={open === it.url}
-                className="block w-full text-left text-[14px] font-semibold leading-snug hover:text-spark-purple"
+                className="block w-full text-left text-[15.5px] font-semibold leading-snug hover:text-spark-purple"
               >
                 {/* 제목은 오른쪽 위 KO/EN 토글을 따라간다. 원문 제목은 원문 링크를 열면 보인다. */}
                 {locale === 'ko' && it.summary?.titleKo ? it.summary.titleKo : it.title}
@@ -170,13 +174,23 @@ export function NewsDigest({ domain }: { domain: 'bio' | 'ai' }) {
                     ))}
                   </div>
                 ) : (
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                    <span className="text-[11px] text-spark-muted mr-0.5">{t('영향 가능')}</span>
-                    {it.portfolio.map(h => (
-                      <span key={h.company} className="text-[11px] font-bold rounded bg-spark-light-purple text-spark-purple px-1.5 py-0.5">
-                        {h.company}
-                      </span>
+                  /* 접힌 상태 — 회사명 옆에 왜 걸리는지 한 줄을 같이 둔다.
+                     칩만 있으면 "큐리오칩스가 왜?"를 알려면 매번 펼쳐야 했다(2026-09-04). */
+                  <div className="mt-1.5 space-y-1">
+                    {it.portfolio.slice(0, 2).map(h => (
+                      <div key={h.company} className="flex items-baseline gap-1.5 text-[11.5px]">
+                        <span className="shrink-0 text-[11px] text-spark-muted">{t('영향 가능')}</span>
+                        <span className="shrink-0 font-bold rounded bg-spark-light-purple text-spark-purple px-1.5 py-0.5">
+                          {h.company}
+                        </span>
+                        <span className="text-spark-ink-soft line-clamp-1">{h.reason}</span>
+                      </div>
                     ))}
+                    {it.portfolio.length > 2 && (
+                      <div className="text-[11px] text-spark-muted pl-[52px]">
+                        {t('외 {n}곳', { n: it.portfolio.length - 2 })}
+                      </div>
+                    )}
                   </div>
                 )
               )}
@@ -197,13 +211,13 @@ export function NewsDigest({ domain }: { domain: 'bio' | 'ai' }) {
         </ol>
       )}
 
-      {data && data.items.length > 5 && (
+      {data && data.items.length > PREVIEW && (
         <button
           type="button"
           onClick={() => setShowAll(v => !v)}
           className="mt-2.5 w-full rounded-lg border border-spark-border py-2 text-[12.5px] font-semibold text-spark-muted hover:text-spark-ink-soft hover:bg-spark-subtle"
         >
-          {showAll ? t('접기') : t('{n}건 더 보기', { n: data.items.length - 5 })}
+          {showAll ? t('접기') : t('{n}건 더 보기', { n: data.items.length - PREVIEW })}
         </button>
       )}
     </div>

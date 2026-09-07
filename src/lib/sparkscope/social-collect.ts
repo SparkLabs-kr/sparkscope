@@ -15,10 +15,12 @@
  */
 
 export type SocialDomain = 'ai' | 'bio';
-export type SocialSourceId = 'hn' | 'reddit' | 'x';
+export type SocialSourceId = 'hn' | 'reddit';
 
 export interface SocialPost {
   title: string;
+  /** 한국어 제목 — KO 화면일 때만 라우트가 채운다. 없으면 원문(title)을 쓴다. */
+  titleKo?: string;
   url: string;
   date: string;          // YYYY-MM-DD
   points?: number;       // 없으면 점수 미제공 소스
@@ -32,8 +34,19 @@ export interface SocialSource {
   connected: boolean;
   ranked: boolean;       // true면 인기순, false면 최신순
   note: string;          // 화면에 그대로 노출되는 상태 설명
+  /** 왜 이 커뮤니티를 골랐는지 — 어떤 사람들이 모이고 무슨 뉴스가 먼저 뜨는지. */
+  why: string;
   posts: SocialPost[];
 }
+
+/**
+ * 매체 선정 이유 — 화면에 그대로 나간다.
+ * "왜 하필 여기냐"는 질문에 매번 말로 답하지 않으려고 코드에 적어 둔다.
+ */
+const WHY: Record<SocialSourceId, string> = {
+  hn: '실리콘밸리 엔지니어·창업자가 모이는 곳. 논문·오픈소스·기술 발표가 언론 보도보다 며칠 먼저 올라오고, 댓글에 현업자 검증이 붙는다.',
+  reddit: '분야별 종사자 커뮤니티. 업계 내부 분위기(채용·실험 실패·규제 체감)가 기사로 나오기 전에 먼저 드러난다.',
+};
 
 const HN_QUERIES: Record<SocialDomain, string[]> = {
   ai: ['AI agent', 'LLM', 'machine learning', 'OpenAI', 'Anthropic', 'GPU inference', 'foundation model'],
@@ -159,59 +172,27 @@ function decodeXml(s: string): string {
           .replace(/&#39;/g, "'").replace(/&amp;/g, '&');
 }
 
-/** X — 유료 토큰이 있을 때만. 없으면 빈 상태로 두고 이유를 화면에 남긴다. */
-async function fetchX(domain: SocialDomain): Promise<{ posts: SocialPost[]; connected: boolean }> {
-  const token = process.env.X_BEARER_TOKEN;
-  if (!token) return { posts: [], connected: false };
-
-  const q = domain === 'ai'
-    ? '(AI OR LLM OR "machine learning") -is:retweet lang:en'
-    : '(biotech OR CRISPR OR "drug discovery") -is:retweet lang:en';
-  try {
-    const url = 'https://api.x.com/2/tweets/search/recent?' + new URLSearchParams({
-      query: q, max_results: '25', 'tweet.fields': 'public_metrics,created_at',
-    });
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, next: { revalidate: 1800 } });
-    if (!res.ok) throw new Error(`x api ${res.status}`);
-    const j = await res.json() as any;
-    const posts: SocialPost[] = (j.data ?? []).map((t: any) => ({
-      title: t.text,
-      url: `https://x.com/i/web/status/${t.id}`,
-      date: (t.created_at ?? '').slice(0, 10),
-      points: t.public_metrics?.like_count ?? 0,
-      comments: t.public_metrics?.reply_count ?? 0,
-    }));
-    return {
-      posts: posts.sort((a, b) => ((b.points ?? 0) + (b.comments ?? 0) * 2) - ((a.points ?? 0) + (a.comments ?? 0) * 2)).slice(0, 10),
-      connected: true,
-    };
-  } catch (e) {
-    console.error('[social] X 조회 실패:', e);
-    return { posts: [], connected: false };
-  }
-}
+// X는 2026-09-04에 뺐다. 무료 경로가 없어 토큰 없이는 항상 빈 칸이었고, 대시보드에
+// "연결 필요"만 띄우는 칸은 자리만 차지했다. 토큰을 사면 fetchX를 되살리면 된다
+// (git 이력에 남아 있다).
 
 export async function collectSocialSignals(domain: SocialDomain, sinceMs: number): Promise<SocialSource[]> {
-  const [hn, reddit, x] = await Promise.all([
+  const [hn, reddit] = await Promise.all([
     fetchHackerNews(domain, sinceMs).catch(() => [] as SocialPost[]),
     fetchReddit(domain).catch(() => ({ posts: [] as SocialPost[], ranked: false })),
-    fetchX(domain).catch(() => ({ posts: [] as SocialPost[], connected: false })),
   ]);
 
   return [
     {
-      id: 'x', label: 'X', connected: x.connected, ranked: x.connected,
-      note: x.connected ? '연결됨 · 좋아요+답글 기준' : '연결 필요 — X_BEARER_TOKEN 미설정 (API 유료)',
-      posts: x.posts,
-    },
-    {
       id: 'hn', label: 'Hacker News', connected: hn.length > 0, ranked: true,
       note: '연결됨 · 업보트+댓글×2 기준',
+      why: WHY.hn,
       posts: hn,
     },
     {
       id: 'reddit', label: 'Reddit', connected: reddit.posts.length > 0, ranked: reddit.ranked,
       note: reddit.ranked ? '연결됨 · 업보트+댓글×2 기준' : '연결됨 · 점수 없음(RSS) — 최신순',
+      why: WHY.reddit,
       posts: reddit.posts,
     },
   ];

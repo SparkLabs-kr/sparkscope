@@ -204,13 +204,14 @@ export function InterPanel({
         <DomainTabBig label="AI" active={domain === 'ai'} activeCls="bg-emerald-50 border-emerald-600 text-emerald-700" onClick={() => pushParams({ domain: 'ai' })} />
       </div>
 
-      {/* 소셜 시그널 — 도메인 버튼과 조회 기간 사이. 커뮤니티에서 뜨는 글은 기사보다 먼저
-          움직이므로 조회 조건보다 위에 둔다. 기간은 적용된 from을 쓴다(draft 아님). */}
-      {/* 지금 주목받는 뉴스 — 신뢰 매체 전반에서 모아 쉬운 말 요약·영향 포트폴리오사와 함께.
-          도메인 버튼 바로 아래, 조회 조건 위. 기본 5건만 보여 배너가 화면을 다 먹지 않게 한다. */}
-      <NewsDigest domain={domain} />
-
-      <SocialSignals domain={domain} from={from} />
+      {/* 지금 주목받는 뉴스 · 소셜 시그널 — 2분할로 나란히.
+          둘 다 "지금 뭐가 뜨나"를 보는 섹션이라, 세로로 쌓으면 같은 걸 보려고 스크롤을
+          두 번 해야 했다. 좁은 화면(lg 미만)에서는 자연히 위아래로 떨어진다.
+          기간은 적용된 from을 쓴다(draft 아님). */}
+      <div data-tour="inter-now" className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 items-start">
+        <NewsDigest domain={domain} />
+        <SocialSignals domain={domain} from={from} />
+      </div>
 
       {/* 조회 조건 — 기간·국가를 고른 뒤 '확인'을 눌러야 조회된다(클릭마다 화면이 새로 뜨지 않게) */}
       <div data-tour="inter-filter" className="bg-white border border-spark-border rounded-2xl p-5 mb-6">
