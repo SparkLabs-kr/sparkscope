@@ -223,8 +223,8 @@ export const EN: Record<string, string> = {
   '🤖 AI 요약 · {time} 기준': '🤖 AI summary · as of {time}',
   '🤖 AI 요약 · 실시간': '🤖 AI summary · live',
   '가장 많이 언급된 포트폴리오사 TOP 15': 'Top 15 most-covered portfolio companies',
-  '{range} 동안 언론 노출(기사 수)이 많은 포트폴리오사 순위입니다.\n최근 홍보 활동이 활발하거나 이슈가 되고 있는 회사를 보여줍니다.\n증감은 선택한 기간과 같은 길이의 직전 기간 대비입니다 (예: 최근 7일 선택 시 직전 7일과 비교).\n회사명에 마우스를 올리면(모바일은 탭) 최근 기사를 바로 볼 수 있습니다.':
-    'Portfolio companies ranked by press coverage (article count) over {range}.\nShows which companies are currently active in PR or in the news.\nChange is measured against the immediately preceding period of the same length (e.g. last 7 days vs the 7 days before).\nHover a company name (tap on mobile) to see its recent articles.',
+  '{range} 동안 언론 노출(기사 수)이 많은 포트폴리오사 순위입니다.\n최근 홍보 활동이 활발하거나 이슈가 되고 있는 회사를 보여줍니다.\n증감은 선택한 기간과 같은 길이의 직전 기간 대비입니다 (예: 최근 7일 선택 시 직전 7일과 비교).\n회사명을 누르면 아래에 최근 기사가 펼쳐집니다.':
+    'Portfolio companies ranked by press coverage (article count) over {range}.\nShows which companies are currently active in PR or in the news.\nChange is measured against the immediately preceding period of the same length (e.g. last 7 days vs the 7 days before).\nClick a company name to expand its recent articles below.',
   '{range} · 언론 노출 건수 기준': '{range} · by press coverage count',
   '증감은 직전 기간({prev}) 대비': 'change vs the previous period ({prev})',
   '선택 기간이 길어 직전 기간 데이터가 부족해 증감은 표시하지 않음':
@@ -1089,4 +1089,9 @@ export const EN: Record<string, string> = {
     'Suspected issue',
   '확정 → 값 수정':
     'Confirm → edit values',
+  // 포트폴리오 TOP15 — 클릭해서 최근 기사 펼치기
+  '최근 기사':
+    'Recent articles',
+  '최근 기사가 없습니다.':
+    'No recent articles.',
 };

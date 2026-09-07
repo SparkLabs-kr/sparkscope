@@ -29,7 +29,7 @@ import { safeArticleHref } from '@/lib/sparkscope/article-link';
 import type { SparkLabsFundSummary } from '@/lib/sparkscope/fund-db';
 import { RISK_FLAGS } from '@/lib/sparkscope/risk-flags';
 import { InterPanel } from '@/components/InterPanel';
-import { CompanyNameWithPreview } from '@/components/CompanyNameWithPreview';
+import { PortfolioTopList } from '@/components/PortfolioTopList';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -1020,7 +1020,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           채로 남아 혼란을 준다(2026-09-07). */}
       <div className="grid grid-cols-1 gap-4 mb-8">
         <div data-tour="top15">
-          <PortfolioTopList items={data.portfolioTop} rangeLabel={range.label} prevRangeLabel={data.portfolioTopPrevRangeLabel} showChange={data.portfolioTopHasEnoughPrevData} locale={locale} />
+          <PortfolioTopList items={data.portfolioTop} rangeLabel={range.label} prevRangeLabel={data.portfolioTopPrevRangeLabel} showChange={data.portfolioTopHasEnoughPrevData} />
         </div>
         {region !== 'tw' && (
         <div data-tour="pitch" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
@@ -1153,53 +1153,6 @@ function SectionTitle({ title, sub }: { title: string; sub?: string }) {
         <h2 className="text-[17px] font-extrabold tracking-tight text-spark-ink">{title}</h2>
       </div>
       {sub && <span className="text-xs text-spark-muted">{sub}</span>}
-    </div>
-  );
-}
-
-// portfolioStatus(Live/Exit/Written-off) 라벨 — Live는 기본 상태라 배지 없이 생략, 그 외만 표시.
-function PortfolioStatusBadge({ status }: { status: string | null }) {
-  if (!status || status === 'Live') return null;
-  const cls = status === 'Exit'
-    ? 'bg-blue-50 text-blue-600 border-blue-200'
-    : 'bg-gray-100 text-gray-500 border-gray-200';
-  return <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold border ${cls}`}>{status}</span>;
-}
-
-function PortfolioTopList({ items, rangeLabel, prevRangeLabel, showChange, locale }: { items: { name: string; count: number; portfolioStatus?: string | null; changePct: number | null; recentArticles: { title: string; titleEn?: string | null; titleKo?: string | null; link: string; source: string; pubDate: Date }[] }[]; rangeLabel: string; prevRangeLabel: string; showChange: boolean; locale: 'ko' | 'en' }) {
-  const tr = getT();
-  const max = Math.max(...items.map(i => i.count), 1);
-  return (
-    <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
-      <div className="font-bold mb-1">🔥 {tr('가장 많이 언급된 포트폴리오사 TOP 15')} <InfoTip text={tr('{range} 동안 언론 노출(기사 수)이 많은 포트폴리오사 순위입니다.\n최근 홍보 활동이 활발하거나 이슈가 되고 있는 회사를 보여줍니다.\n증감은 선택한 기간과 같은 길이의 직전 기간 대비입니다 (예: 최근 7일 선택 시 직전 7일과 비교).\n회사명에 마우스를 올리면(모바일은 탭) 최근 기사를 바로 볼 수 있습니다.', { range: rangeLabel })} /></div>
-      <div className="text-xs text-gray-500 mb-4">
-        {tr('{range} · 언론 노출 건수 기준', { range: rangeLabel })}
-        {showChange ? ` · ${tr('증감은 직전 기간({prev}) 대비', { prev: prevRangeLabel })}` : ` · ${tr('선택 기간이 길어 직전 기간 데이터가 부족해 증감은 표시하지 않음')}`}
-      </div>
-      {items.length > 0 ? (
-        <div className="space-y-2">
-          {items.map((it, i) => (
-            <div key={it.name} className="flex items-center gap-2 text-sm">
-              <span className="w-5 text-right text-xs font-bold text-gray-400 tabular-nums">{i + 1}</span>
-              <CompanyNameWithPreview name={it.name} articles={it.recentArticles} />
-              <PortfolioStatusBadge status={it.portfolioStatus ?? null} />
-              <div className="flex-1 h-4 bg-gray-100 rounded overflow-hidden">
-                <div className="h-full rounded bg-spark-purple/80" style={{ width: `${Math.round((it.count / max) * 100)}%` }} />
-              </div>
-              <span className="w-10 text-right font-bold tabular-nums">{it.count}</span>
-              {showChange && (
-                <span className={`w-14 text-right text-xs font-semibold tabular-nums whitespace-nowrap ${
-                  it.changePct === null ? 'text-blue-500' : it.changePct > 0 ? 'text-emerald-600' : it.changePct < 0 ? 'text-red-500' : 'text-gray-400'
-                }`}>
-                  {it.changePct === null ? tr('신규') : it.changePct === 0 ? '0%' : `${it.changePct > 0 ? '+' : ''}${it.changePct}%`}
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="text-sm text-gray-400 py-8 text-center">{tr('{range} 내 포트폴리오사 노출이 없습니다.', { range: rangeLabel })}</p>
-      )}
     </div>
   );
 }
