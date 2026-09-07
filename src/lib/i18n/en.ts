@@ -1090,6 +1090,8 @@ export const EN: Record<string, string> = {
   '확정 → 값 수정':
     'Confirm → edit values',
   // 포트폴리오 TOP15 — 클릭해서 최근 기사 펼치기
+  '회사명을 누르면 아래에 최근 기사가 펼쳐집니다':
+    'Click a company name to expand its recent articles below',
   '최근 기사':
     'Recent articles',
   '최근 기사가 없습니다.':

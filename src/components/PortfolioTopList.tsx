@@ -55,9 +55,14 @@ export function PortfolioTopList({ items, rangeLabel, prevRangeLabel, showChange
         🔥 {t('가장 많이 언급된 포트폴리오사 TOP 15')}{' '}
         <InfoTip text={t('{range} 동안 언론 노출(기사 수)이 많은 포트폴리오사 순위입니다.\n최근 홍보 활동이 활발하거나 이슈가 되고 있는 회사를 보여줍니다.\n증감은 선택한 기간과 같은 길이의 직전 기간 대비입니다 (예: 최근 7일 선택 시 직전 7일과 비교).\n회사명을 누르면 아래에 최근 기사가 펼쳐집니다.', { range: rangeLabel })} />
       </div>
-      <div className="text-xs text-gray-500 mb-4">
+      <div className="text-xs text-gray-500 mb-1">
         {t('{range} · 언론 노출 건수 기준', { range: rangeLabel })}
         {showChange ? ` · ${t('증감은 직전 기간({prev}) 대비', { prev: prevRangeLabel })}` : ` · ${t('선택 기간이 길어 직전 기간 데이터가 부족해 증감은 표시하지 않음')}`}
+      </div>
+      {/* 클릭하면 기사가 펼쳐진다는 걸 호버 툴팁 안에만 숨겨두지 않고 항상 보이게 —
+          hover 팝오버를 없앤 지금, 클릭이 된다는 것 자체를 안내할 자리가 필요하다(2026-09-07). */}
+      <div className="text-xs text-spark-purple font-medium mb-4">
+        👆 {t('회사명을 누르면 아래에 최근 기사가 펼쳐집니다')}
       </div>
       {items.length > 0 ? (
         <div className="space-y-2">
