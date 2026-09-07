@@ -164,6 +164,21 @@ async function getRelevantVerdicts(
   return filtered;
 }
 
+/**
+ * Inter 수집을 실제로 시작한 날. 이보다 앞선 기간의 건수는 "그때 뉴스가 적었다"가 아니라
+ * "그때는 수집을 안 했다"라서, 증감률의 분모로 쓰면 안 된다.
+ *
+ * 실측(2026-09-07): 가장 오래된 collectedAt이 2026-07-31이고, 7월 이전 publishedAt 기사는
+ * 월 77~449건인데 8월은 2,542건이다. 이 차이를 그대로 나누면 +1536%, +2333% 같은
+ * 숫자가 나오는데 전부 수집 이력의 착시다.
+ */
+export const INTER_COLLECTION_START = new Date('2026-07-31T00:00:00Z');
+
+/** 직전 기간이 수집 시작 이전까지 걸쳐 있으면 증감률을 믿을 수 없다. */
+function isDeltaTrustworthy(prevSince?: Date): boolean {
+  return !!prevSince && prevSince.getTime() >= INTER_COLLECTION_START.getTime();
+}
+
 // 도메인+기간에 대한 verdict/match를 한 번만 조회해서 stats·sectors 양쪽에 재사용.
 // prevVerdicts(직전 동일 기간)는 섹터별 증감률(momentum) 계산용.
 export interface InterData {
@@ -173,6 +188,11 @@ export interface InterData {
   range: { since: Date; until: Date } | null;
   /** 이 조회가 어떤 언어 화면을 위한 것인지 — EN이면 해외 기사 제목을 영어 원문으로 보여준다. */
   locale: 'ko' | 'en';
+  /**
+   * 증감률을 믿을 수 있는지. 직전 기간이 수집 시작(2026-07-31) 이전으로 걸치면 false다.
+   * false면 화면은 퍼센트를 숨기고 "비교 기간에 수집 이력이 없다"고 밝힌다.
+   */
+  deltaTrustworthy: boolean;
 }
 
 export async function loadInterData(
@@ -220,7 +240,12 @@ export async function loadInterData(
       if (en) m.companyName = en;
     }
   }
-  return { verdicts, prevVerdicts, matches, range: since && until ? { since, until } : null, locale };
+  return {
+    verdicts, prevVerdicts, matches,
+    range: since && until ? { since, until } : null,
+    locale,
+    deltaTrustworthy: isDeltaTrustworthy(prevSince),
+  };
 }
 
 export function getDomainStats({ verdicts, matches }: InterData): InterStat[] {
@@ -280,6 +305,8 @@ export interface SectorMetrics {
   count: number;
   prevCount: number;
   deltaPct: number | null;      // 직전 동일 기간 대비 증감률. 직전 0건이면 비교 불가(null)
+  /** false면 직전 기간이 수집 시작 이전이라 증감률 자체가 무의미하다(deltaPct도 null). */
+  deltaComparable: boolean;
   share: number;                // 도메인 전체 중 이 섹터 비중 (0~1)
   matchCount: number;
   matchedCompanies: string[];
@@ -362,7 +389,7 @@ function bucketTimeline(dates: Date[], range: { since: Date; until: Date } | nul
 }
 
 export function getSectorData(domain: InterDomain, data: InterData): SectorBlock[] {
-  const { verdicts, prevVerdicts, matches, range, locale } = data;
+  const { verdicts, prevVerdicts, matches, range, locale, deltaTrustworthy } = data;
   const matchesByVerdictId = new Map<string, typeof matches>();
   matches.forEach(m => {
     const arr = matchesByVerdictId.get(m.verdictId) ?? [];
@@ -374,6 +401,12 @@ export function getSectorData(domain: InterDomain, data: InterData): SectorBlock
   // 예전엔 레거시 sector로 묶어서 '투자·산업동향'(사건유형)이 한 줄을 차지하고 남의 기사를 빨아들였다.
   const sectors = topicSectorsFor(domain === 'ai' ? 'AI' : '바이오');
   const total = verdicts.length;
+
+  // 근거 문장은 화면 언어를 따라간다. 예전엔 reasonEn을 무조건 먼저 써서
+  // 한국어 화면에도 영어 문장이 그대로 나갔다(2026-09-07 발견).
+  // reasonEn은 EN 화면용 번역 캐시일 뿐, 원문(reason)이 한국어다.
+  const pickReason = (r: { reason: string; reasonEn?: string | null }) =>
+    locale === 'en' ? (r.reasonEn || r.reason) : r.reason;
 
   const sectorData: SectorBlock[] = sectors.map(sector => {
     const sectorVerdicts = verdicts.filter(v => topicOf(v) === sector.key);
@@ -391,13 +424,13 @@ export function getSectorData(domain: InterDomain, data: InterData): SectorBlock
           matchCount += 1;
           const entry = byCompany.get(m.companyName) ?? {
             co: m.companyName,
-            desc: m.reasonEn || m.reason, // 첫 번째(=최신 기사)의 근거를 대표로
+            desc: pickReason(m), // 첫 번째(=최신 기사)의 근거를 대표로
             model: m.model,
             articles: [],
           };
           entry.articles.push({
             id: v.id,
-            reason: m.reasonEn || m.reason,
+            reason: pickReason(m),
             title: truncate(locale === 'en' ? v.news.title : (v.titleKo || v.news.title)),
             titleOriginal: v.news.title,
             url: v.news.url,
@@ -405,7 +438,7 @@ export function getSectorData(domain: InterDomain, data: InterData): SectorBlock
             date: formatDate(v.news.publishedAt),
             topicKey: topicOf(v),
             eventKey: v.eventType,
-            verdictReason: v.reasonEn || v.reason,
+            verdictReason: pickReason(v),
             isScrapped: v.isScrapped,
           });
           byCompany.set(m.companyName, entry);
@@ -439,7 +472,11 @@ export function getSectorData(domain: InterDomain, data: InterData): SectorBlock
     const metrics: SectorMetrics = {
       count: sectorVerdicts.length,
       prevCount,
-      deltaPct: prevCount > 0 ? Math.round(((sectorVerdicts.length - prevCount) / prevCount) * 100) : null,
+      // 수집 시작 이전이 분모로 걸리면 비교 자체를 하지 않는다(null = '비교 불가').
+      deltaPct: deltaTrustworthy && prevCount > 0
+        ? Math.round(((sectorVerdicts.length - prevCount) / prevCount) * 100)
+        : null,
+      deltaComparable: deltaTrustworthy,
       share: total > 0 ? sectorVerdicts.length / total : 0,
       matchCount,
       matchedCompanies: Array.from(new Set(sectorMatches.map(m => m.co))),
@@ -471,6 +508,8 @@ export interface InterOverview {
   total: number;
   prevTotal: number;
   deltaPct: number | null;
+  /** false면 직전 기간이 수집 시작 이전이라 증감률을 내지 않았다. */
+  deltaComparable: boolean;
   sourceCount: number;
   paperCount: number;
   matchCount: number;
@@ -483,7 +522,7 @@ export interface InterOverview {
 }
 
 export function buildOverview(domain: InterDomain, data: InterData, sectors: SectorBlock[]): InterOverview {
-  const { verdicts, prevVerdicts, matches, range } = data;
+  const { verdicts, prevVerdicts, matches, range, deltaTrustworthy } = data;
   const total = verdicts.length;
 
   const byCompany = new Map<string, { count: number; sectors: Set<string> }>();
@@ -535,7 +574,10 @@ export function buildOverview(domain: InterDomain, data: InterData, sectors: Sec
     domainLabel: DOMAIN_LABEL[domain],
     total,
     prevTotal: prevVerdicts.length,
-    deltaPct: prevVerdicts.length > 0 ? Math.round(((total - prevVerdicts.length) / prevVerdicts.length) * 100) : null,
+    deltaPct: deltaTrustworthy && prevVerdicts.length > 0
+      ? Math.round(((total - prevVerdicts.length) / prevVerdicts.length) * 100)
+      : null,
+    deltaComparable: deltaTrustworthy,
     sourceCount: new Set(verdicts.map(v => v.news.source)).size,
     paperCount: sectors.reduce((s, x) => s + x.metrics.paperCount, 0),
     matchCount: matches.length,
@@ -592,6 +634,8 @@ export interface InterMatrix {
     total: number;
     prevTotal: number;
     deltaPct: number | null;
+    /** false면 직전 기간이 수집 시작 이전이라 증감률을 내지 않았다. */
+    deltaComparable: boolean;
     hottest: { label: string; count: number; prevCount: number; deltaPct: number | null }[];
     matchCount: number;
     matchedCompanyCount: number;
@@ -623,7 +667,7 @@ function computeCellBadge(m: { count: number; prevCount: number; deltaPct: numbe
 }
 
 export function buildMatrix(domain: InterDomain, data: InterData): InterMatrix {
-  const { verdicts, prevVerdicts, matches, locale } = data;
+  const { verdicts, prevVerdicts, matches, locale, deltaTrustworthy } = data;
   const topics = topicSectorsFor(domain === 'ai' ? 'AI' : '바이오');
   const events = INTER_EVENT_TYPES;
 
@@ -740,6 +784,7 @@ export function buildMatrix(domain: InterDomain, data: InterData): InterMatrix {
       matchedCompanyCount: new Set(matches.map(m => m.companyName)).size,
       // "칸" 단위(주제×사건유형, 25개)는 매트릭스 구조를 몰라야 이해가 안 되는 숫자라
       // 화면에는 사람이 바로 아는 단위인 "주제"(항암, 신약발굴 등, topics.length개) 기준으로 노출한다.
+      deltaComparable: deltaTrustworthy,
       overlapTopicCount: overlapTopicSet.size,
       totalTopicCount: rows.length,
       overlapTopics: Array.from(overlapTopicSet).slice(0, 3),

@@ -89,6 +89,49 @@ function needsTranslation(s: string | null | undefined): boolean {
 }
 
 /**
+ * 번역 결과 메모리 캐시 — DB 컬럼이 없는 화면(소셜 시그널 등)용.
+ *
+ * 소셜 글 제목은 DB에 안 쌓아서 titleEn/titleKo 같은 캐시 컬럼이 없다. 그래서 매 조회마다
+ * 같은 제목을 다시 번역했고, 그것만으로 응답이 2.5초씩 늘었다(2026-09-07 실측:
+ * 번역 없음 0.2~0.5초 / 번역 있음 2.7~2.9초).
+ *
+ * 프로세스 메모리라 서버가 재시작되면 비지만, 그래도 30분 캐시 창 안의 반복 조회는 전부 걷어낸다.
+ */
+const memo = new Map<string, { v: string; at: number }>();
+const MEMO_TTL = 6 * 60 * 60 * 1000; // 6시간
+const MEMO_MAX = 4000;
+
+/**
+ * translateBatch와 같지만, 이미 번역해 본 문장은 다시 번역하지 않는다.
+ * DB 캐시 컬럼이 있는 대상(Article 등)은 그쪽을 쓰고, 이건 저장할 곳이 없는 텍스트용이다.
+ */
+export async function translateBatchMemo(texts: string[], target: 'en' | 'ko' = 'en'): Promise<string[]> {
+  if (texts.length === 0) return [];
+  const now = Date.now();
+  const out = [...texts];
+  const missIdx: number[] = [];
+
+  texts.forEach((t, i) => {
+    const hit = memo.get(`${target}\u0000${t}`);
+    if (hit && now - hit.at < MEMO_TTL) out[i] = hit.v;
+    else missIdx.push(i);
+  });
+  if (missIdx.length === 0) return out;
+
+  const fresh = await translateBatch(missIdx.map(i => texts[i]), target);
+  missIdx.forEach((i, k) => {
+    out[i] = fresh[k] ?? texts[i];
+    memo.set(`${target}\u0000${texts[i]}`, { v: out[i], at: now });
+  });
+
+  // 오래된 것부터 버린다 — Map은 삽입 순서를 지키므로 앞에서 자르면 된다.
+  if (memo.size > MEMO_MAX) {
+    for (const k of [...memo.keys()].slice(0, memo.size - MEMO_MAX)) memo.delete(k);
+  }
+  return out;
+}
+
+/**
  * 문자열 배열을 한 번에 번역한다. 실패하면 입력을 그대로 돌려준다(호출부에서 원문 노출).
  * 반환 배열의 길이·순서는 입력과 항상 같다.
  */

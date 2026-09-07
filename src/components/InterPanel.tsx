@@ -354,9 +354,19 @@ function DomainTabBig({ label, active, activeCls, onClick }: { label: string; ac
   );
 }
 
-function DeltaChip({ deltaPct, count }: { deltaPct: number | null; count?: number }) {
+function DeltaChip({ deltaPct, count, comparable = true }: { deltaPct: number | null; count?: number; comparable?: boolean }) {
   const t = useT();
   if (count === 0) return <span className="text-[11px] text-spark-muted">—</span>;
+  // 직전 기간이 수집 시작(2026-07-31) 이전이면 비교 자체가 성립하지 않는다.
+  // 이걸 '신규'로 표시하면 "이번에 처음 뜬 흐름"으로 읽혀서 정반대 뜻이 된다(2026-09-07).
+  if (!comparable) {
+    return (
+      <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-spark-muted">
+        {t('비교 불가')}
+        <InfoTip text={t('직전 기간이 해외 뉴스 수집을 시작한 2026-07-31 이전이라, 그때 건수가 적은 것은 "기사가 없었다"가 아니라 "수집하지 않았다"는 뜻입니다. 그 값을 분모로 쓰면 증감률이 실제보다 훨씬 크게 나와서 표시하지 않습니다.')} />
+      </span>
+    );
+  }
   // 직전 동일 기간이 0건이면 증감률을 낼 수 없다 — 이 기간에 처음 잡힌 흐름.
   if (deltaPct === null) return <span className="text-[11px] font-bold text-emerald-600">{t('신규')}</span>;
   const up = deltaPct > 0;
@@ -404,7 +414,7 @@ function SectorCard({
             <span className="text-[15px] font-bold tabular-nums text-spark-ink">
               {sector.metrics.count}<span className="text-[12px] font-normal text-spark-muted">{t('건')}</span>
             </span>
-            <DeltaChip deltaPct={sector.metrics.deltaPct} count={sector.metrics.count} />
+            <DeltaChip deltaPct={sector.metrics.deltaPct} count={sector.metrics.count} comparable={sector.metrics.deltaComparable} />
           </div>
           <span className={`rounded px-2 py-0.5 text-[11px] font-bold ${BADGE_CLS[sector.badge.kind]}`} title={sector.badge.why}>
             {t(sector.badge.label)}
@@ -785,9 +795,13 @@ function HeadlineStats({ headline: h }: { headline: InterMatrix['headline'] }) {
         </div>
         <div className="flex items-baseline gap-1.5">
           <span className="text-2xl font-extrabold tabular-nums text-spark-ink">{h.total}</span>
-          <DeltaChip deltaPct={h.deltaPct} count={h.total} />
+          <DeltaChip deltaPct={h.deltaPct} count={h.total} comparable={h.deltaComparable} />
         </div>
-        <div className="text-[11px] text-spark-muted mt-0.5">{t('직전 동일 기간 {n}건', { n: h.prevTotal })}</div>
+        <div className="text-[11px] text-spark-muted mt-0.5">
+          {h.deltaComparable
+            ? t('직전 동일 기간 {n}건', { n: h.prevTotal })
+            : t('직전 기간은 수집 시작 전이라 비교하지 않습니다')}
+        </div>
       </div>
 
       <div className="relative group bg-white border border-spark-border rounded-xl px-4 py-3.5">

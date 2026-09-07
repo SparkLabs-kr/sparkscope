@@ -178,12 +178,14 @@ export function NewsDigest({ domain }: { domain: 'bio' | 'ai' }) {
                      칩만 있으면 "큐리오칩스가 왜?"를 알려면 매번 펼쳐야 했다(2026-09-04). */
                   <div className="mt-1.5 space-y-1">
                     {it.portfolio.slice(0, 2).map(h => (
-                      <div key={h.company} className="flex items-baseline gap-1.5 text-[11.5px]">
+                      <div key={h.company} className="flex items-baseline flex-wrap gap-x-1.5 gap-y-1 text-[11.5px]">
                         <span className="shrink-0 text-[11px] text-spark-muted">{t('영향 가능')}</span>
                         <span className="shrink-0 font-bold rounded bg-spark-light-purple text-spark-purple px-1.5 py-0.5">
                           {h.company}
                         </span>
-                        <span className="text-spark-ink-soft line-clamp-1">{h.reason}</span>
+                        {/* 자르지 않는다 — "왜 걸렸는지"가 잘려 나가면 칩만 있는 것과 다를 게 없다.
+                            줄바꿈해서라도 끝까지 보여준다(2026-09-07). */}
+                        <span className="text-spark-ink-soft leading-relaxed">{h.reason}</span>
                       </div>
                     ))}
                     {it.portfolio.length > 2 && (

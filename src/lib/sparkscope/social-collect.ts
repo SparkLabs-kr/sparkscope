@@ -7,8 +7,8 @@
  *  - Reddit: JSON API(/hot.json)는 인증 없이 403. RSS(/hot/.rss)만 200이지만
  *    제목·링크뿐이라 점수가 없다 → 최신순으로만 보여준다.
  *    REDDIT_CLIENT_ID/SECRET을 넣으면 OAuth로 승격돼 점수가 붙는다(등록은 무료).
- *  - X: 공개 스크래핑 경로가 없고 API는 유료(Basic $200/월). X_BEARER_TOKEN이
- *    있을 때만 활성화되고, 없으면 빈 상태로 둔다 — 지어낸 글을 섞지 않는다.
+ *  - X: 무료 경로가 없고 API가 유료(Basic $200/월)라 2026-09-04에 제외했다.
+ *    토큰을 사면 git 이력의 fetchX를 되살리면 된다.
  *
  * DB에 쌓지 않는다. "지금 뜨는 글" 패널이라 이력이 필요 없고, 스키마 변경 없이
  * 라우트 캐시(revalidate)만으로 충분하다.
@@ -53,9 +53,20 @@ const HN_QUERIES: Record<SocialDomain, string[]> = {
   bio: ['biotech', 'CRISPR', 'drug discovery', 'FDA approval', 'clinical trial', 'gene therapy', 'protein folding'],
 };
 
+/**
+ * 서브레딧 — 2026-09-07에 도메인당 3개 → 7개로 확장.
+ *
+ * 고를 때 기준: (1) 실무자가 모이는 곳, (2) 뉴스가 실제로 먼저 도는 곳.
+ * 밈·잡담 위주(r/singularity의 상당수)는 유지하되 실무 커뮤니티를 더 얹어 희석한다.
+ *  - LocalLLaMA: 오픈소스 모델 공개가 사실상 여기서 가장 먼저 돈다(AI 최대 실무 커뮤니티).
+ *  - deeplearning: 기술 논의 중심.
+ *  - OpenAI·LLMDevs: 제품·API 변경이 공지보다 빨리 공유된다.
+ *  - pharma·clinicalresearch: 산업·임상·규제 쪽 종사자.
+ *  - bioinformatics·CRISPR: 연구 현장.
+ */
 const SUBREDDITS: Record<SocialDomain, string[]> = {
-  ai: ['MachineLearning', 'artificial', 'singularity'],
-  bio: ['biotech', 'labrats', 'bioengineering'],
+  ai: ['MachineLearning', 'LocalLLaMA', 'artificial', 'OpenAI', 'LLMDevs', 'deeplearning', 'singularity'],
+  bio: ['biotech', 'labrats', 'bioengineering', 'pharma', 'bioinformatics', 'clinicalresearch', 'CRISPR'],
 };
 
 // 주간 공지·채용 스레드는 트렌드가 아니다.
@@ -75,28 +86,31 @@ async function fetchHackerNews(domain: SocialDomain, sinceMs: number): Promise<S
   const since = Math.floor(sinceMs / 1000);
   const seen = new Map<string, SocialPost>();
 
-  for (const q of HN_QUERIES[domain]) {
+  // 검색어 7개를 순차로 돌면 왕복이 7번이다 — 서로 독립이라 한꺼번에 던진다.
+  // 중복 제거는 아래에서 objectID로 하므로 순서에 의존하지 않는다.
+  const pages = await Promise.all(HN_QUERIES[domain].map(async q => {
     const url = 'https://hn.algolia.com/api/v1/search?' + new URLSearchParams({
       query: q, tags: 'story',
       numericFilters: `created_at_i>${since},points>20`,
       hitsPerPage: '20',
     });
     try {
-      const json = JSON.parse(await getText(url)) as { hits?: any[] };
-      for (const h of json.hits ?? []) {
-        if (!h?.title || seen.has(h.objectID)) continue;
-        if (isChrome(h.title)) continue;
-        seen.set(h.objectID, {
-          title: h.title,
-          url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`,
-          date: ymd(h.created_at_i * 1000),
-          points: h.points ?? 0,
-          comments: h.num_comments ?? 0,
-        });
-      }
+      return (JSON.parse(await getText(url)) as { hits?: any[] }).hits ?? [];
     } catch (e) {
       console.error('[social] HN 조회 실패:', q, e);
+      return [];
     }
+  }));
+  for (const h of pages.flat()) {
+    if (!h?.title || seen.has(h.objectID)) continue;
+    if (isChrome(h.title)) continue;
+    seen.set(h.objectID, {
+      title: h.title,
+      url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`,
+      date: ymd(h.created_at_i * 1000),
+      points: h.points ?? 0,
+      comments: h.num_comments ?? 0,
+    });
   }
   return [...seen.values()]
     .sort((a, b) => ((b.points ?? 0) + (b.comments ?? 0) * 2) - ((a.points ?? 0) + (a.comments ?? 0) * 2))
@@ -121,24 +135,28 @@ async function fetchReddit(domain: SocialDomain): Promise<{ posts: SocialPost[];
       });
       const { access_token } = await tokenRes.json() as { access_token?: string };
       if (access_token) {
-        const out: SocialPost[] = [];
-        for (const sub of SUBREDDITS[domain]) {
-          const res = await fetch(`https://oauth.reddit.com/r/${sub}/top?t=month&limit=10`, {
-            headers: { Authorization: `Bearer ${access_token}`, 'User-Agent': 'SparkScope/1.0' },
-            next: { revalidate: 1800 },
-          });
-          if (!res.ok) continue;
-          const j = await res.json() as any;
-          for (const c of j?.data?.children ?? []) {
-            const d = c.data;
-            if (!d?.title || isChrome(d.title)) continue;
-            out.push({
-              title: d.title, url: `https://www.reddit.com${d.permalink}`,
-              date: ymd(d.created_utc * 1000), points: d.ups, comments: d.num_comments,
-              origin: `r/${sub}`,
+        // 서브레딧을 순차로 돌면 개수에 비례해 느려진다(7개 = 왕복 7번).
+        // 서로 독립이라 한꺼번에 던진다 — 실패한 것만 조용히 빠진다.
+        const perSub = await Promise.all(SUBREDDITS[domain].map(async sub => {
+          try {
+            const res = await fetch(`https://oauth.reddit.com/r/${sub}/top?t=month&limit=10`, {
+              headers: { Authorization: `Bearer ${access_token}`, 'User-Agent': 'SparkScope/1.0' },
+              next: { revalidate: 1800 },
             });
-          }
-        }
+            if (!res.ok) return [];
+            const j = await res.json() as any;
+            return (j?.data?.children ?? []).flatMap((c: any) => {
+              const d = c.data;
+              if (!d?.title || isChrome(d.title)) return [];
+              return [{
+                title: d.title, url: `https://www.reddit.com${d.permalink}`,
+                date: ymd(d.created_utc * 1000), points: d.ups, comments: d.num_comments,
+                origin: `r/${sub}`,
+              } as SocialPost];
+            });
+          } catch { return []; }
+        }));
+        const out: SocialPost[] = perSub.flat();
         return {
           posts: out.sort((a, b) => ((b.points ?? 0) + (b.comments ?? 0) * 2) - ((a.points ?? 0) + (a.comments ?? 0) * 2)).slice(0, 10),
           ranked: true,
@@ -149,8 +167,9 @@ async function fetchReddit(domain: SocialDomain): Promise<{ posts: SocialPost[];
     }
   }
 
-  const out: SocialPost[] = [];
-  for (const sub of SUBREDDITS[domain]) {
+  // RSS도 마찬가지로 병렬. 429가 잦은 경로라 실패는 그 서브레딧만 버린다.
+  const perSub = await Promise.all(SUBREDDITS[domain].map(async sub => {
+    const acc: SocialPost[] = [];
     try {
       const xml = await getText(`https://www.reddit.com/r/${sub}/hot/.rss?limit=12`);
       for (const entry of xml.match(/<entry>[\s\S]*?<\/entry>/g) ?? []) {
@@ -158,13 +177,22 @@ async function fetchReddit(domain: SocialDomain): Promise<{ posts: SocialPost[];
         const url = entry.match(/<link href="(.*?)"/)?.[1];
         const upd = entry.match(/<updated>(.*?)<\/updated>/)?.[1];
         if (!title || !url || isChrome(title)) continue;
-        out.push({ title: decodeXml(title.trim()), url, date: (upd ?? '').slice(0, 10), origin: `r/${sub}` });
+        acc.push({ title: decodeXml(title.trim()), url, date: (upd ?? '').slice(0, 10), origin: `r/${sub}` });
       }
     } catch (e) {
       console.error('[social] Reddit RSS 실패:', sub, e);
     }
+    return acc;
+  }));
+  // 서브레딧별로 고르게 섞는다 — 그냥 이어붙이면 앞 서브레딧이 10칸을 다 먹는다.
+  const out: SocialPost[] = [];
+  for (let i = 0; out.length < 10 && i < 12; i++) {
+    for (const acc of perSub) {
+      if (acc[i]) out.push(acc[i]);
+      if (out.length >= 10) break;
+    }
   }
-  return { posts: out.slice(0, 10), ranked: false };
+  return { posts: out, ranked: false };
 }
 
 function decodeXml(s: string): string {
