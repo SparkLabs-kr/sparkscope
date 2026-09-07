@@ -153,7 +153,7 @@ export function NewsDigest({ domain }: { domain: 'bio' | 'ai' }) {
                   </p>
                 </div>
               ) : (
-                <p className="mt-1.5 text-[13px] leading-relaxed text-spark-ink-soft">
+                <p className="mt-1 text-[12.5px] leading-relaxed text-spark-ink-soft line-clamp-2">
                   {locale === 'en' ? it.summary.en : it.summary.ko}
                 </p>
               )}
