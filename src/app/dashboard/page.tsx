@@ -245,7 +245,13 @@ async function loadDashboardData(
     )).then(arr => arr.flat()),
     // 톤 분석 — 스파크랩 기준
     prisma.article.groupBy({ by: ['tone'], where: sparklabsWhere, _count: { _all: true } }),
-    prisma.article.findMany({ where: { ...where, pitchScore: { gte: 60 } }, orderBy: { pitchScore: 'desc' }, take: 20 }),
+    // take:20이면 회사 하나가 같은 사건을 거의 동일한 제목으로 여러 매체에 실어(예: IPO
+    // 뉴스가 11건 전부 pitchScore 100) 상위 20건을 독점할 수 있다. 그러면 바로 아래
+    // 회사·주제별 다양성 필터(dedupedPitches)를 통과할 후보가 그 회사 1건만 남는다
+    // (2026-09-07 실사용: 스카이랩스 IPO 기사 11건이 20건을 다 채워 다른 회사 20여 건이
+    // 다양성 필터 이전에 잘려나갔고, 화면엔 카드 1개만 남았다). 200으로 넉넉히 가져와
+    // 다양성 필터가 실제로 고를 재료를 준다 — 화면 표시는 어차피 상위 5개로 자른다.
+    prisma.article.findMany({ where: { ...where, pitchScore: { gte: 60 } }, orderBy: { pitchScore: 'desc' }, take: 200 }),
     prisma.article.findMany({ where: portfolioWhere, select: { matchedKeyword: true, pubDate: true }, take: 20000 }),
     prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: pfCategory }, select: { id: true, title: true, titleEn: true, titleKo: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true } }),
     prisma.article.findMany({ where: { pubDate: { gte: bl, lt: rc }, isNoise: false, category: pfCategory }, select: { matchedKeyword: true } }),
