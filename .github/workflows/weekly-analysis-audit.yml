@@ -1,0 +1,53 @@
+name: Weekly Analysis Audit (Schedule)
+
+# 매주 월요일 07:00 KST (UTC 22:00 일요일) 실행
+# 최근 7일 부정톤/리스크플래그 포폴사·스파크랩 기사 원문을 재수집해, AI 분석 결과가
+# 실제 본문과 맞는지 재검증한다. 자동으로 값을 고치지 않고 AnalysisAuditFlag 큐에 쌓아
+# 관리자가 /dashboard/noise-suggestions 에서 직접 확인한다.
+#
+# 시각을 06:13(수집)과 09:00(월수금 발송) 사이로 잡은 이유: 그 주 첫 발송 전에 사람이
+# 검수 큐를 볼 시간을 준다. daily-collect.yml과 같은 이유로 GitHub Actions를 쓴다
+# (Vercel 함수 시간제한 없이 스크래핑+LLM 호출을 여유 있게 돌릴 수 있음).
+#
+# CLAUDE.md 규칙: 같은 작업을 Vercel과 GitHub Actions 양쪽에 만들지 않는다 — 이 작업은
+# vercel.json에는 없고 여기 하나뿐이다.
+on:
+  schedule:
+    - cron: '0 22 * * 0'  # UTC 22:00 일요일 = KST 07:00 월요일
+  workflow_dispatch:  # 수동 트리거
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Run weekly analysis audit
+        env:
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          echo "🔍 Starting weekly analysis audit at $(date '+%Y-%m-%d %H:%M:%S')"
+          npm run audit:analysis
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "⚠️ Weekly analysis audit failed at $(date '+%Y-%m-%d %H:%M:%S')"
+          echo "Check the logs above for details"

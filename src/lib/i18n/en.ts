@@ -1070,4 +1070,23 @@ export const EN: Record<string, string> = {
     'Show {n} more',
   '외 {n}곳':
     'and {n} more',
+  // 분석 오류 감사 큐 (노이즈 제안 화면 하단)
+  '분석 오류 의심':
+    'Suspected analysis errors',
+  '매주 월요일 자동 감사가 원문과 대조해 의심되는 분석 결과입니다({n}건 대기 중). 확정해도 자동으로 값이 바뀌지 않습니다 — 원문을 확인하고 직접 값을 입력해야 반영됩니다.':
+    "The weekly Monday audit compared these against the original article and flagged them ({n} pending). Confirming does not change values automatically — you must check the source and enter the correct value yourself.",
+  '의심되는 분석 오류가 없습니다.':
+    'No suspected analysis errors.',
+  '확실':
+    'High confidence',
+  '원문 확인 필요':
+    'Needs manual check',
+  '저장된 값':
+    'Stored values',
+  '저장된 요약':
+    'Stored summary',
+  '의심 사유':
+    'Suspected issue',
+  '확정 → 값 수정':
+    'Confirm → edit values',
 };

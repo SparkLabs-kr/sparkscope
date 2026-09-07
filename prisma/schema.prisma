@@ -180,6 +180,38 @@ model NoiseReportRequest {
   @@index([articleId])
 }
 
+// 분석 오류 감사(analysis-audit.ts) 결과 — 매주 월요일 07:00 KST에 최근 7일
+// 부정톤/리스크플래그 포폴사·스파크랩 기사 원문을 재수집해 AI 분석 결과(tone·riskFlag·
+// oneLiner)가 실제 본문과 맞는지 재검증한다.
+//
+// 2026-09-07 실사용에서 확인된 두 가지 실제 사례가 이 테이블의 존재 이유다:
+//   ① 스카이랩스 "160% 급등" 기사에 AI가 본문에 없는 "15% 하락"을 지어내 tone=NEGATIVE로
+//      잘못 판정. ② H2U(대만) 1분기 재무공시 기사에 다른(상반기) 공시 기사의 숫자가
+//      잘못 붙음. 둘 다 사람이 원문과 대조해서만 잡을 수 있었다.
+//
+// ★ 자동으로 tone·riskFlag를 고치지 않는다. 1차 자동 검사(30건 오탐/45건) 자체가
+//   신뢰도가 낮았다 — "본문과 얼마나 부정적으로 맞는지"까지 트집 잡아 정당하게 부정적인
+//   뉴스(IPO 경쟁률 저조 등)를 오탐으로 쏟아냈다. 그래서 여기 쌓인 건 전부 "의심 목록"이고,
+//   최종 값 수정은 사람이 검수 화면에서 직접 한다(노이즈 제안과 같은 승인 구조).
+model AnalysisAuditFlag {
+  id               String    @id @default(cuid())
+  articleId        String
+  // 감사 당시 저장돼 있던 값의 스냅샷 — 나중에 Article이 바뀌어도 "무엇을 의심했는지"가 남는다.
+  snapshotTone     String?
+  snapshotRiskFlag String?
+  snapshotOneLiner String?
+  issue            String    // AI가 짚은 불일치 내용 한 줄
+  // 'high' = 본문을 정상적으로 다시 가져온 상태에서 나온 판정. 'low' = 재수집 자체가
+  // 의심스러움(본문이 너무 짧거나 무관한 내용) — 사람이 원문 링크를 직접 열어봐야 한다.
+  confidence       String    @default("high")
+  status           String    @default("PENDING") // PENDING / CONFIRMED / DISMISSED
+  createdAt        DateTime  @default(now())
+  resolvedAt       DateTime?
+  resolvedBy       String?
+  @@index([status])
+  @@index([articleId])
+}
+
 model Digest {
   id          String   @id @default(cuid())
   date        DateTime @unique
