@@ -66,6 +66,42 @@ function categoryOfRegion(r: RegionId): PortfolioCategory {
   return (REGIONS.find(x => x.id === r)?.category ?? 'portfolio_company') as PortfolioCategory;
 }
 
+// ── 탭 계층: 국가(1단) × 관점(2단) ──────────────────────────────────────────
+// 예전엔 네 탭이 한 줄에 평평하게 놓이고 한국/대만은 포트폴리오사 탭 안쪽 토글로만 있어서,
+// 대만이 "국가"가 아니라 "포트폴리오 분류의 하위 옵션"처럼 읽혔다. 국가를 1단으로 올린다.
+//
+// 대만에 업계 모니터링 탭을 만들지 않는 이유: competitor(AC·VC)·industry_trend 감시대상이
+// 아직 전부 한국 기준이라, 탭을 만들면 영구 0건 탭이 된다. 대만 AC·VC·매체를 등록한 뒤
+// 여기에 'competitor'를 한 줄 추가하면 된다.
+const REGION_LABEL: Record<RegionId, string> = {
+  kr: '🇰🇷 스파크랩 한국',
+  tw: '🇹🇼 스파크랩 대만',
+};
+const REGION_VIEWS: Record<RegionId, readonly TabId[]> = {
+  kr: ['sparklabs', 'portfolio', 'competitor'],
+  tw: ['portfolio'],
+};
+// 2단 탭 문구 — 같은 tab이라도 국가에 따라 라벨이 달라진다(예: '한국 업계 모니터링').
+const VIEW_LABEL: Record<RegionId, Partial<Record<TabId, string>>> = {
+  kr: {
+    sparklabs: '🏢 스파크랩 직접 언급',
+    portfolio: '📊 포트폴리오사',
+    competitor: '🏁 한국 업계 모니터링',
+  },
+  tw: {
+    portfolio: '📊 포트폴리오사',
+  },
+};
+// 국가 계층 밖에 있는 탭 — 한국·대만·포폴사·AC·VC·업계동향이 전부 한 통에 들어간 원본
+// 데이터 뷰라 "어느 나라의 어느 관점"이라는 좌표계에 속하지 않는다. 그래서 1단 탭과
+// 나란히 두지 않고 오른쪽에 떼어 놓는다.
+const DB_TAB: TabId = 'articles';
+const DB_LABEL = '🗄️ 수집 기사 DB';
+/** 그 국가에서 볼 수 있는 관점인지 — 대만에서 업계 모니터링 등으로 튀는 것을 막는다. */
+function clampView(r: RegionId, t: TabId): TabId {
+  return REGION_VIEWS[r].includes(t) ? t : REGION_VIEWS[r][0];
+}
+
 // Intra(내부 생태계) / Inter(해외 트렌드) 스코프 전환 — URL(?scope=)로 화면을 나눈다.
 const SCOPES = [
   { id: 'intra', label: '🏠 Intra', desc: '내부 생태계 — 스파크랩 · 포트폴리오사 · 경쟁사' },
@@ -783,9 +819,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     return `/dashboard?${params.toString()}`;
   };
   const activeScope = SCOPES.find(s => s.id === scope)!;
-  // 지역 링크: 기간·탭·스코프는 유지하고 회사 필터만 버린다(지역이 다르면 그 회사가 없다).
+  // 지역 링크: 기간·스코프는 유지하고 회사 필터만 버린다(지역이 다르면 그 회사가 없다).
+  // 관점(2단)은 그 국가에 있는 것만 유지한다 — 대만엔 업계 모니터링 탭이 없어서
+  // 그대로 넘기면 빈 화면이 되고, DB 탭에서 국가를 누른 경우엔 그 국가의 첫 관점으로 들어간다.
   const regionHref = (r: RegionId) => {
-    const params = new URLSearchParams({ from: range.from, to: range.to, tab, scope });
+    const params = new URLSearchParams({
+      from: range.from, to: range.to, tab: clampView(r, tab), scope,
+    });
     if (r !== 'kr') params.set('country', r);
     return `/dashboard?${params.toString()}`;
   };
@@ -841,31 +881,80 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         <InterPanel from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())} canScrap={canScrap} />
       ) : (
       <>
-      {/* 섹션 탭 — 스크롤 대신 화면 전환. 선택된 탭만 보라색으로 강조. */}
-      <nav data-tour="intra-tabs" className="flex flex-wrap gap-2 mb-3" aria-label={tr('대시보드 섹션')}>
-        {TABS.map(t => {
-          const active = t.id === tab;
-          return (
-            <Link
-              key={t.id}
-              href={tabHref(t.id)}
-              aria-current={active ? 'page' : undefined}
-              className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors whitespace-nowrap border ${
-                active
-                  ? 'bg-spark-purple border-spark-purple text-white shadow-sm'
-                  : 'bg-white border-spark-border text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple'
-              }`}
-            >
-              {tr(t.label)}
-            </Link>
-          );
-        })}
+      {/* 섹션 탭 — 국가(1단) × 관점(2단) 2단 계층.
+          1단 탭은 아래 2단 줄과 테두리로 이어 붙여(아래쪽 border 제거 + 카드 상단 모서리만
+          둥글게) 소속이 눈에 보이게 한다. 수집 기사 DB는 이 계층 밖이므로 오른쪽에 점선으로
+          떼어 놓는다. */}
+      <nav data-tour="intra-tabs" className="mb-6" aria-label={tr('대시보드 섹션')}>
+        <div className="flex flex-wrap items-stretch gap-2 sm:flex-nowrap">
+          {/* 1단 — 국가 */}
+          {REGIONS.map(r => {
+            const active = tab !== DB_TAB && r.id === region;
+            return (
+              <Link
+                key={r.id}
+                href={regionHref(r.id)}
+                aria-current={active ? 'page' : undefined}
+                className={`relative -mb-px rounded-t-xl border border-b-0 px-4 pt-2.5 pb-3 text-sm font-extrabold whitespace-nowrap transition-colors ${
+                  active
+                    ? `bg-white text-spark-ink shadow-[inset_0_3px_0_0] ${r.id === 'kr' ? 'shadow-rose-600' : 'shadow-emerald-700'} border-spark-border`
+                    : 'bg-white/60 border-spark-border text-spark-muted hover:text-spark-ink-soft'
+                }`}
+              >
+                {tr(REGION_LABEL[r.id])}
+              </Link>
+            );
+          })}
+          <span className="hidden flex-1 border-b border-spark-border sm:block" aria-hidden="true" />
+          {/* 계층 밖 — 수집 기사 DB */}
+          <Link
+            href={tabHref(DB_TAB)}
+            aria-current={tab === DB_TAB ? 'page' : undefined}
+            className={`self-center rounded-xl border px-4 py-2 text-[13px] font-bold whitespace-nowrap transition-colors ${
+              tab === DB_TAB
+                ? 'bg-amber-50 border-amber-600 text-amber-800'
+                : 'border-dashed border-spark-border-strong bg-spark-subtle text-spark-muted hover:text-spark-ink-soft'
+            }`}
+          >
+            {tr(DB_LABEL)}
+          </Link>
+        </div>
+
+        {/* 2단 — 관점. DB 탭은 국가 계층 밖이라 2단이 없다. */}
+        {tab !== DB_TAB && (
+          <div className="rounded-b-xl rounded-tr-xl border border-spark-border bg-white px-4 py-3">
+            <div className="flex flex-wrap gap-2">
+              {REGION_VIEWS[region].map(v => {
+                const active = v === tab;
+                return (
+                  <Link
+                    key={v}
+                    href={tabHref(v)}
+                    aria-current={active ? 'page' : undefined}
+                    className={`rounded-xl border px-3.5 py-1.5 text-[13px] font-bold whitespace-nowrap transition-colors ${
+                      active
+                        ? 'bg-spark-purple border-spark-purple text-white shadow-sm'
+                        : 'bg-spark-subtle border-spark-border text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple'
+                    }`}
+                  >
+                    {tr(VIEW_LABEL[region][v] ?? v)}
+                  </Link>
+                );
+              })}
+            </div>
+            {region === 'tw' && (
+              <p className="mt-2 text-[11px] text-spark-muted">
+                {tr('대만 업계 모니터링은 감시 대상(AC·VC·업계 키워드)이 아직 전부 한국 기준이라 준비 중입니다.')}
+              </p>
+            )}
+          </div>
+        )}
       </nav>
 
       {/* 기간 선택 — 탭 바로 아래에 두어 어느 탭에서도 같은 자리에서 기간을 바꿀 수 있게 한다.
-          지역 전환(한국/대만)은 프리셋 오른쪽에 붙여 같은 줄에서 조건을 다 고르게 한다.
-          단 포트폴리오사 탭에서만 그린다 — 지역은 포트폴리오 분류만 바꾸므로 다른 탭에서는
-          눌러도 화면이 그대로여서 오해를 준다.
+          지역 전환(한국/대만)은 예전엔 이 줄 오른쪽에 토글로 붙어 있었는데, 국가가 위의
+          1단 탭으로 올라갔으므로 여기서는 뺀다(같은 축을 고르는 컨트롤이 두 군데 있으면
+          어느 쪽이 이기는지 알 수 없다).
           country를 extraParams로 넘기는 것이 중요하다. 안 넘기면 기간을 바꾸는 순간
           country가 빠져 대만을 보다가 한국으로 튕긴다. */}
       <div data-tour="date-range" className="mb-6">
@@ -874,25 +963,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())}
           company={data.selectedCompany} tab={tab}
           extraParams={region !== 'kr' ? { country: region } : undefined}
-          trailing={tab === 'portfolio' ? (
-            <div className="flex items-center gap-2">
-              <div className="flex gap-0.5 rounded-lg bg-spark-cream p-0.5">
-                {REGIONS.map(r => {
-                  const active = r.id === region;
-                  return (
-                    <Link
-                      key={r.id}
-                      href={regionHref(r.id)}
-                      className={`rounded-md px-3 py-1 text-[13px] font-semibold transition-colors whitespace-nowrap ${active ? 'bg-spark-purple text-white' : 'text-spark-muted hover:text-spark-ink-soft'}`}
-                    >
-                      {tr(r.label)}
-                    </Link>
-                  );
-                })}
-              </div>
-              <span className="text-[11px] text-spark-muted hidden lg:inline">{tr('선택한 지역의 포트폴리오사만 집계합니다.')}</span>
-            </div>
-          ) : undefined}
         />
       </div>
 

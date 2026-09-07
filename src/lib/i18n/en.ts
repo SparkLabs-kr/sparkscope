@@ -171,6 +171,14 @@ export const EN: Record<string, string> = {
   '📊 포트폴리오사': '📊 Portfolio companies',
   '🏁 업계 모니터링': '🏁 Industry monitoring',
   '📋 최근 수집 기사': '📋 Recently collected',
+  // 국가(1단) × 관점(2단) 탭
+  '🇰🇷 스파크랩 한국': '🇰🇷 SparkLabs Korea',
+  '🇹🇼 스파크랩 대만': '🇹🇼 SparkLabs Taiwan',
+  '🏢 스파크랩 직접 언급': '🏢 SparkLabs mentions',
+  '🏁 한국 업계 모니터링': '🏁 Korea industry monitoring',
+  '🗄️ 수집 기사 DB': '🗄️ Article database',
+  '대만 업계 모니터링은 감시 대상(AC·VC·업계 키워드)이 아직 전부 한국 기준이라 준비 중입니다.':
+    'Taiwan industry monitoring is not available yet — the monitored AC/VC and industry keywords are all Korea-based.',
   '대시보드 섹션': 'Dashboard sections',
   '{range} 데이터 기준': 'Based on {range} data',
   '{range} 해외 매체·논문 데이터 기준': 'Based on {range} global media and paper data',

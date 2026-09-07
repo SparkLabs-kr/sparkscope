@@ -56,9 +56,10 @@
     "category": "sparklabs_self",
     "status": "ACTIVE",
     "primaryKeyword": "스파크랩 타이완",
-    "helperKeywords": "Edgar Chiu, 스파크랩대만, 스파크랩타이완",
+    "helperKeywords": "Edgar Chiu, 邱彥錡, 스파크랩대만, 스파크랩타이완, SparkLabs, SparkLabs Taipei, SparkLabs Taiwan, 스파크랩 타이베이",
     "excludeWords": "스파크, Spark, 랩, Labs",
-    "notes": "대만 액셀러레이터"
+    "notes": "대만 액셀러레이터",
+    "contextWords": "Taipei, Taiwan, 台灣, 臺灣, 台北, 加速器, 創投, 타이완, 대만, 타이베이"
   },
   {
     "name": "스파크랩 컬티베이트",
