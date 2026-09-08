@@ -11,6 +11,8 @@ import { isPolitical, normalizeTitleKey } from './relevance';
 import { safeArticleHref } from './article-link';
 import { clusterArticles } from './cluster';
 import { INTER_EMAIL_CSS, renderInterSection, renderInterStat, renderInterStrip } from './inter-digest';
+import { renderSignalSection, SIGNAL_EMAIL_CSS } from './signal-digest';
+import type { SignalFeed } from './signal-feed';
 
 const TOP_3_LIMIT = 3;
 const PORTFOLIO_LIMIT = 8;
@@ -190,6 +192,7 @@ export function renderDigestHtml(data: DigestData, baseUrl?: string): string {
 <style>
 ${EMAIL_CSS}
 ${INTER_EMAIL_CSS}
+${SIGNAL_EMAIL_CSS}
 </style>
 </head>
 <body>
@@ -232,6 +235,8 @@ ${INTER_EMAIL_CSS}
   ${data.inter ? renderInterStrip(data.inter) : ''}
 
   ${data.inter ? renderInterSection(data.inter, baseUrl ?? DEFAULT_BASE_URL) : ''}
+
+  ${renderSignalSection(data.aiSignals ?? null)}
 
   ${data.competitorArticles.length > 0 ? `
   <div class="section">
