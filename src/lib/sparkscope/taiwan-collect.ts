@@ -48,11 +48,30 @@ export type TaiwanFeedItem = {
 };
 
 /** 회사 하나를 찾기 위한 구글 뉴스 검색 URL. 중문명과 영문명을 OR로 묶는다. */
-export function buildQueryUrl(names: string[]): string {
+export function buildQueryUrl(
+  names: string[],
+  locale: Record<string, string> = TAIWAN_NEWS_LOCALE,
+): string {
   const q = names.filter(Boolean).map(n => `"${n}"`).join(' OR ');
-  const params = new URLSearchParams({ q, ...TAIWAN_NEWS_LOCALE });
+  const params = new URLSearchParams({ q, ...locale });
   return `https://news.google.com/rss/search?${params.toString()}`;
 }
+
+/**
+ * 자사 대상만 추가로 훑는 로케일.
+ *
+ * 2026-09-08 실측(스파크랩 타이완): zh-TW 단독 41건 → 아래를 다 합쳐 47건.
+ * zh-CN(중국)·ko(한국)는 통과 0건이라 넣지 않았다. 늘어난 6건은 전부 2018~2022년
+ * 기사이고 최근 180일에는 한 건도 없다 — 즉 대만 자사 기사가 적은 건 매체를 좁게 봐서가
+ * 아니라 실제로 보도가 뜸해서다. 그래도 과거 기록(2022년 SparkLabs Taipei→Taiwan 개칭 등)은
+ * 남길 값이 있어 자사 대상에 한해서만 추가로 조회한다.
+ * 포트폴리오사 69곳에는 적용하지 않는다 — 요청이 3배가 되는데 그만한 이득이 확인되지 않았다.
+ */
+const SELF_EXTRA_LOCALES: Record<string, string>[] = [
+  { hl: 'zh-HK', gl: 'HK', ceid: 'HK:zh-Hant' },
+  { hl: 'en-SG', gl: 'SG', ceid: 'SG:en' },
+  { hl: 'ja', gl: 'JP', ceid: 'JP:ja' },
+];
 
 /**
  * 구글 뉴스 RSS 파싱. inter-collect의 parseFeedItems는 <source>를 읽지 않아 따로 둔다 —
@@ -170,6 +189,17 @@ export async function collectTaiwanArticles(
     } catch (e) {
       console.error(`[taiwan-collect] ${t.name} 조회 실패:`, e);
       continue;
+    }
+
+    // 자사 대상은 대만 밖 매체(홍콩·싱가포르·일본)도 훑는다 — 위 SELF_EXTRA_LOCALES 주석 참고.
+    if (isSelf) {
+      for (const loc of SELF_EXTRA_LOCALES) {
+        try {
+          for (const it of parseGoogleNewsItems(await fetchXml(buildQueryUrl(uniqueNames, loc)))) {
+            if (!items.some(x => x.link === it.link)) items.push(it);
+          }
+        } catch { /* 보조 로케일 실패는 무시 — 기본 zh-TW 조회분은 이미 확보했다 */ }
+      }
     }
 
     // 상한에 걸린 대상만 기간 분할 재조회 — 그 외는 요청 낭비다.

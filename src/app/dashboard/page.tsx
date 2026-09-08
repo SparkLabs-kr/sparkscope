@@ -783,11 +783,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   // 그대로 그리면 "대만" 탭 아래에 한국 업계 데이터가 뜬다. 수집 기사 DB는 국가 계층 밖이라 예외.
   const rawTab = resolveTab(searchParams.tab);
   const tab: TabId = rawTab === DB_TAB ? DB_TAB : clampView(region, rawTab);
-  // 대만 자사 언급은 기사 백필을 1개월치만 했다(2026-09-07). 그래서 이 화면에서는
-  // 긴 기간 프리셋을 감추고, 기본 기간도 3개월 대신 1개월로 잡는다 — 안 그러면
-  // 3개월로 조회되면서 앞 2개월이 통째로 빈 구간인 채로 보인다.
+  // 대만 자사 언급은 기사가 얇다 — 1개월 창에는 0건이고 3개월에 4건, 전체 14건이다
+  // (2026-09-08 실측. 기사가 6월 證交所·Google 협업 발표에 몰려 있다). 1개월만 두면
+  // 탭이 항상 비어 보이므로 3개월까지는 고를 수 있게 남긴다. 1년은 여전히 감춘다 —
+  // 그 위 구간은 수집 자체가 안 돼 있어 눌러도 늘어나지 않는다.
   const isTwSelf = region === 'tw' && tab === 'sparklabs';
-  const range = resolveRange(searchParams, isTwSelf ? 1 : 3);
+  const range = resolveRange(searchParams);
   const data = await loadDashboardData(range.from, range.to, company, range.isDefaultRange, categoryOfRegion(region), region);
   const session = await getServerSession(authOptions);
   const canScrap = canScrapEmail(session?.user?.email ?? null);
@@ -1020,7 +1021,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())}
           company={data.selectedCompany} tab={tab}
           extraParams={region !== 'kr' ? { country: region } : undefined}
-          presetLabels={isTwSelf ? ['7일', '1개월'] : undefined}
+          presetLabels={isTwSelf ? ['7일', '1개월', '3개월'] : undefined}
         />
       </div>
 
