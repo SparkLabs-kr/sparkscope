@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { createRequest, markNotified } from '@/lib/sparkscope/access-request';
+import { createRequest, markNotified, accessApprovers } from '@/lib/sparkscope/access-request';
 import { sendNotice, sendOwnerAlert } from '@/lib/sparkscope/mailer';
 import { isStaffEmail } from '@/lib/auth';
 
@@ -25,11 +25,6 @@ const Body = z.object({
   referrer: z.string().trim().max(120).default(''),
 });
 
-/** 승인 요청을 받을 사람. 없으면 사내 도메인 대표 주소로 보낸다. */
-function reviewers(): string[] {
-  const raw = process.env.ACCESS_REQUEST_REVIEWERS ?? 'marketing@sparklabs.co.kr';
-  return raw.split(',').map(s => s.trim()).filter(Boolean);
-}
 
 export async function POST(req: NextRequest) {
   let body: unknown;
@@ -97,12 +92,12 @@ export async function POST(req: NextRequest) {
     let notifyError: string | undefined;
     const subject = `[SparkScope] 접근 요청 — ${company.name}`;
     try {
-      const sent = await sendNotice(reviewers(), subject, lines);
+      const sent = await sendNotice(accessApprovers(), subject, lines);
       notified = sent.ok;
       notifyError = sent.error;
       if (!notified) {
         // 정식 발신이 막히면 onboarding 발신으로 한 번 더 — 최선노력.
-        notified = await sendOwnerAlert(reviewers(), subject, lines);
+        notified = await sendOwnerAlert(accessApprovers(), subject, lines);
         if (notified) notifyError = undefined;
       }
     } catch (e) {

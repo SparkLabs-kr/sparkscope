@@ -153,7 +153,7 @@ export function accessApprovers(): string[] {
   const raw =
     process.env.ACCESS_REQUEST_APPROVERS ??
     process.env.ACCESS_REQUEST_REVIEWERS ??
-    'marketing@sparklabs.co.kr';
+    'marketing@sparklabs.co.kr,sparkai@sparklabs.co.kr';
   return raw
     .split(',')
     .map(s => s.trim().toLowerCase())
