@@ -42,6 +42,9 @@ export interface SocialPost {
   author?: string;
   /** 점수의 단위. 소스마다 다르다(업보트/좋아요/다운로드) — 화면에 그대로 쓴다. */
   pointsLabel?: string;
+  /** 한 줄 설명 — "이게 뭐고 왜 볼 만한가". 제목만으로는 판단할 수 없는 항목에 붙는다
+   *  (signal-blurb.ts가 만들어 DB에 저장한다). 근거를 못 구한 항목은 비어 있다. */
+  blurb?: string;
 }
 
 export interface SocialSource {

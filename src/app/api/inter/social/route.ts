@@ -58,6 +58,7 @@ async function buildSources(domain: SocialDomain, sinceMs: number): Promise<Soci
         // "왜 이게 위에 있지?"를 설명할 수 없다.
         points: r.peakPoints > 0 ? r.peakPoints : undefined,
         pointsLabel: r.pointsLabel ?? undefined,
+        blurb: r.blurb ?? undefined,
         comments: r.comments || undefined,
         origin: r.origin ?? undefined,
         author: r.author ?? undefined,

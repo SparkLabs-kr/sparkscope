@@ -433,7 +433,12 @@ function PostRow({ post, rank, locale }: { post: SocialPost; rank: number; local
         <div className="text-[12.5px] font-semibold leading-snug line-clamp-2">
           {locale === 'ko' && post.titleKo ? post.titleKo : post.title}
         </div>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[10.5px] text-spark-muted">
+        {/* 한 줄 설명 — 제목이 모델 id거나 맥락을 전제한 글은 이게 없으면 판단이 안 된다.
+            근거를 못 구한 항목은 비어 있고, 그때는 아무것도 그리지 않는다. */}
+        {post.blurb && (
+          <p className="mt-1 text-[11px] leading-relaxed text-spark-ink-soft line-clamp-2">{post.blurb}</p>
+        )}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[10.5px] text-spark-muted">
           {/* 만든 곳 — AI 모델은 누가 냈는지가 제목만큼 중요하다. */}
           {post.author && <span className="font-semibold text-spark-ink-soft">{post.author}</span>}
           {post.origin && <span>{post.origin}</span>}
