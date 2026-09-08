@@ -34,11 +34,17 @@ export interface Feed {
 export const FEEDS: Feed[] = [
   // ── 금융·종합 ──
   { name: 'Financial Times', url: 'https://www.ft.com/technology?format=rss', domain: 'general', tier: 1 },
-  { name: 'WSJ Tech', url: 'https://feeds.a.dj.com/rss/RSSWSJD.xml', domain: 'general', tier: 1 },
-  { name: 'WSJ Markets', url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml', domain: 'general', tier: 2 },
+  // WSJ 두 피드(RSSWSJD·RSSMarketsMain)는 2026-09-08 확인 시 최신 항목이
+  // 2025-01-27에 멈춰 있었다 — 1년 반 넘게 갱신되지 않는 죽은 주소다.
+  // 매번 20개를 받아 전부 날짜 필터에서 버려지고 있었으므로 제거했다.
+  // WSJ를 다시 넣으려면 살아 있는 주소를 먼저 확인할 것.
   { name: 'Reuters', url: 'https://news.google.com/rss/search?q=when:7d+site:reuters.com+(AI+OR+biotech+OR+pharma)&hl=en-US&gl=US&ceid=US:en', domain: 'general', tier: 1 },
   { name: 'CNBC Tech', url: 'https://www.cnbc.com/id/19854910/device/rss/rss.html', domain: 'general', tier: 2 },
-  { name: 'Yahoo Finance', url: 'https://finance.yahoo.com/news/rssindex', domain: 'general', tier: 2 },
+  // Yahoo Finance(finance.yahoo.com/news/rssindex)는 2026-09-08에 제거했다.
+  // 개인투자자용 종목 분석이 대부분이라 — "Snowflake와 C3.ai 중 살 만한 AI 주식은",
+  // "GoPro가 카메라를 버리고 AI 데이터센터로", "(NVDA) 목표주가" 류 — 산업에서
+  // 일어난 사건이 아니라 투자 조언이다. 중요도 상한을 걸어도 유입량이 많아
+  // 상위 12칸 중 4칸을 그런 글이 차지했다.
   { name: 'The Economist', url: 'https://www.economist.com/science-and-technology/rss.xml', domain: 'general', tier: 1 },
 
   // ── 기술 매체 ──
@@ -48,6 +54,23 @@ export const FEEDS: Feed[] = [
   { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index', domain: 'general', tier: 2 },
   { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml', domain: 'general', tier: 2 },
   { name: 'MIT Technology Review', url: 'https://www.technologyreview.com/feed/', domain: 'general', tier: 1 },
+
+  // ── 한국 AI 전문지 ──
+  //
+  // ⚠️ domain을 'general'로 두면 안 된다. 종합지는 글마다 DOMAIN_KEYWORDS로 분야를
+  //    가르는데 그 정규식이 영어라, 한국어 제목은 전부 걸러진다.
+  //    이 두 곳은 AI 전문 매체이므로 'ai' 전용 피드로 둬서 키워드 판정을 건너뛴다.
+  //
+  // 왜 넣나: 국내 독자가 실제로 보는 AI 뉴스가 여기 먼저 뜬다. 2026-09-08 확인 시
+  // 영어 피드 21곳에 없던 "GPT-6 아스트라" 관련 기사가 aitimes에 5건 있었다.
+  // 한국어 제목이라 단어 겹침으로는 영어 기사와 안 묶이지만, 사건 병합은 LLM이
+  // 하므로(news-cluster.ts) 같은 사건이면 언어가 달라도 붙는다.
+  { name: 'AI타임스', url: 'https://www.aitimes.com/rss/allArticle.xml', domain: 'ai', tier: 2 },
+  { name: 'AI타임스코리아', url: 'https://www.aitimes.kr/rss/allArticle.xml', domain: 'ai', tier: 3 },
+
+  // 더밀크(themiilk.com)는 RSS가 없다 — /rss·/feed·/atom.xml은 500,
+  // /topics/ai/rss는 200이지만 RSS가 아니라 HTML을 돌려준다(2026-09-08 확인).
+  // 넣으려면 HTML 파싱이 필요해 별도 작업으로 남긴다.
 
   // ── 바이오 전문지 ──
   { name: 'STAT News', url: 'https://www.statnews.com/feed/', domain: 'bio', tier: 1 },

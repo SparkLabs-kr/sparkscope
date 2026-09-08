@@ -319,13 +319,38 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
   });
 
   // 병합으로 자리가 비면 뒤쪽 후보가 올라온다.
-  const ranked = [...merged, ...rest]
+  const ordered = [...merged, ...rest]
     .sort((a, b) =>
       (b.importance ?? 3) - (a.importance ?? 3) ||
       b.alsoIn.length - a.alsoIn.length ||
       a.tier - b.tier ||
-      b.publishedAt.localeCompare(a.publishedAt))
-    .slice(0, limit);
+      b.publishedAt.localeCompare(a.publishedAt));
+
+  // 한 매체가 목록을 독점하지 못하게 상한을 둔다.
+  //
+  // Reuters 피드는 공식 RSS가 아니라 구글 뉴스 검색(site:reuters.com …)이라 유입량이
+  // 압도적이다 — 2026-09-08 실측으로 전체 후보 149건 중 59건(40%)이 Reuters였고,
+  // 상위 12칸을 Reuters·FT가 전부 채운 적이 있다. 그러면 "여러 곳을 훑는다"는 취지가
+  // 무의미해지고, 그날 Reuters가 무엇을 많이 냈는지에 목록이 좌우된다.
+  //
+  // 정렬을 건드리지 않고 순서대로 담으면서 매체별 개수만 제한한다 — 상한에 걸린
+  // 매체의 다음 기사는 밀리고, 그 자리에 다른 매체의 다음 순위가 들어온다.
+  const perOutlet = Math.max(2, Math.ceil(limit / 3));
+  const used = new Map<string, number>();
+  const ranked: DigestItem[] = [];
+  const overflow: DigestItem[] = [];
+  for (const it of ordered) {
+    const n = used.get(it.source) ?? 0;
+    if (n < perOutlet) { used.set(it.source, n + 1); ranked.push(it); }
+    else overflow.push(it);
+    if (ranked.length >= limit) break;
+  }
+  // 상한 때문에 자리를 못 채웠으면(매체가 적은 날) 밀어둔 것으로 메운다 —
+  // 다양성 때문에 목록이 비는 것은 본말이 전도된 것이다.
+  for (const it of overflow) {
+    if (ranked.length >= limit) break;
+    ranked.push(it);
+  }
 
   return {
     items: ranked,
