@@ -1252,4 +1252,30 @@ export const EN: Record<string, string> = {
     'Enter your email and we will send you a sign-in link',
   '이 메일 주소로는 접근할 수 없습니다. 사내 계정이거나 승인된 포트폴리오사 계정이어야 합니다.':
     'This address cannot sign in. It must be a SparkLabs account or an approved portfolio company account.',
+
+  // 로그인 세 갈래 (2026-09-08)
+  '어느 쪽에 해당하시나요?':
+    'Which applies to you?',
+  '스파크랩 임직원':
+    'SparkLabs employee',
+  '@sparklabs.co.kr 계정으로 로그인합니다':
+    'Sign in with your @sparklabs.co.kr account',
+  '포트폴리오사 로그인':
+    'Portfolio company sign-in',
+  '승인받은 회사 계정으로 자기 회사 보도를 봅니다':
+    'Approved company accounts see their own coverage',
+  '아직 계정이 없는 포트폴리오사 — 마케팅팀 승인 후 로그인할 수 있습니다':
+    'No account yet — once marketing approves, you can sign in',
+  '다른 방법으로 로그인':
+    'Use a different sign-in',
+  '아직 승인받지 못하셨나요?':
+    'Not approved yet?',
+  '가장 최근에 온 메일의 링크를 눌러 주세요. 이전에 받은 링크는 더 이상 쓸 수 없습니다.':
+    'Use the link in the most recent email. Earlier links no longer work.',
+  '이 로그인 링크는 이미 사용했거나 만료됐습니다. 링크는 한 번만 쓸 수 있어요 — 새로 받아 주세요.':
+    'That sign-in link was already used or has expired. Each link works once — please request a new one.',
+  '이 메일 주소로는 아직 로그인할 수 없습니다. 포트폴리오사라면 먼저 접근 요청이 승인되어야 합니다.':
+    'This address cannot sign in yet. If you are a portfolio company, your access request must be approved first.',
+  '로그인에 실패했습니다. 링크를 새로 받아 주세요.':
+    'Sign-in failed. Please request a new link.',
 };
