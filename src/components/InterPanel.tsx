@@ -27,8 +27,7 @@ import {
 import { InterScrapStar } from '@/components/InterScrapStar';
 import { InterBriefingModal, type BriefingPayload } from '@/components/InterBriefingModal';
 import { DateRangePicker } from '@/components/DateRangePicker';
-import { SocialSignals } from '@/components/SocialSignals';
-import { NewsDigest } from '@/components/NewsDigest';
+import { SignalBanner } from '@/components/SignalBanner';
 import { clusterArticles } from '@/lib/sparkscope/cluster';
 
 interface InterApiResponse {
@@ -215,13 +214,11 @@ export function InterPanel({
         </div>
       </div>
 
-      {/* 지금 주목받는 뉴스 · 소셜 시그널 — 위아래로 쌓되 각자 화면 폭을 다 쓴다.
-          2분할일 때는 칸이 좁아 기사 한 줄이 두세 줄로 접히고 오른쪽이 비었다.
-          이제 각 섹션이 전체 폭을 쓰고, 안에서 기사를 여러 열로 늘어놓아 빈 자리를 채운다
-          (2026-09-08). 기간은 적용된 from을 쓴다(draft 아님). */}
-      <div data-tour="inter-now" className="flex flex-col gap-4 mb-6">
-        <NewsDigest domain={domain} />
-        <SocialSignals domain={domain} from={from} />
+      {/* 오늘의 시그널 — 뉴스와 커뮤니티를 한 배너로 합쳤다(2026-09-08).
+          따로 있을 땐 둘 다 같은 무게로 나열돼 "그래서 오늘 뭘 봐야 하나"에 답을 못 했다.
+          지금은 가장 중요한 한 건을 크게 두고, 커뮤니티 랭킹을 옆에 세운다. */}
+      <div data-tour="inter-now" className="mb-6">
+        <SignalBanner domain={domain} />
       </div>
 
       {/* 조회 조건 — 기간·국가를 고른 뒤 '확인'을 눌러야 조회된다(클릭마다 화면이 새로 뜨지 않게) */}

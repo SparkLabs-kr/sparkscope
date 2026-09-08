@@ -291,6 +291,39 @@ export const EN: Record<string, string> = {
   '내부 생태계': 'Internal',
   '제약 · 진단 · 유전체': 'Pharma · Dx · Genomics',
   '모델 · 반도체 · 에이전트': 'Models · Chips · Agents',
+  // 오늘의 시그널 배너(2026-09-08)
+  '오늘의 시그널': "Today's signals",
+  '여러 매체가 함께 다룬 뉴스와, 커뮤니티에서 가장 화제인 글을 함께 봅니다.':
+    'Stories covered by multiple outlets, alongside what communities are talking about.',
+  '{n}개 매체가 함께 보도': 'Covered by {n} outlets',
+  '커뮤니티 {n}곳': '{n} communities',
+  '나머지 시그널 {n}곳 보기': 'Show {n} more sources',
+  // 매체 특징 한 줄
+  'AI 모델이 공개되는 바로 그 자리. 논문·기사보다 가중치가 먼저 올라와서, 새 모델은 여기서 가장 빨리 확인된다.':
+    'Where AI models actually ship. Weights land here before the papers or the press, so new releases show up first.',
+  '실제로 쓰이기 시작한 모델만 골라 공개일 순으로. 이번 주에 어떤 모델이 새로 나왔는지 한 번에 확인한다.':
+    'Models that people actually started using, newest first — what shipped this week, at a glance.',
+  'HN보다 조용하지만 인프라·개발도구 쪽이 강하다. 사람이 적어 홍보성 글이 거의 없고 기술 논의 밀도가 높다.':
+    'Quieter than HN but stronger on infrastructure and tooling. Small enough that promo posts are rare and discussion stays dense.',
+  '논문 원본이 심사 전에 공개되는 곳. 기사로 옮겨지기 며칠~몇 주 전의 원 자료를 그대로 본다.':
+    'Papers posted before peer review — the raw source, days to weeks before the press picks it up.',
+  '바이오 프리프린트 원본. 학술지 심사를 기다리지 않고 올라와서, 연구 결과를 가장 이른 시점에 확인할 수 있다.':
+    'Bio preprints, posted without waiting on journal review — the earliest look at new results.',
+  '정식 게재된 논문 색인. 프리프린트와 달리 심사를 통과한 것만 들어와, 근거의 무게가 다르다.':
+    'Index of published papers. Unlike preprints, everything here cleared peer review.',
+  '임상시험 단계 변경과 FDA 리콜·회수. 회사가 발표하기 전에 등록 정보가 먼저 바뀌는 경우가 많아 기사보다 앞선다.':
+    'Trial phase changes and FDA recalls. Registry entries often change before the company announces, putting this ahead of the news.',
+  // 갱신 주기 안내
+  '6시간마다 갱신 · HF 트렌딩 점수 순': 'Refreshed every 6h · by HF trending score',
+  '6시간마다 갱신 · 이번 주 주목받은 모델 중 공개순': 'Refreshed every 6h · this week\'s notable models, newest first',
+  '2시간마다 갱신 · 업보트+댓글×2 기준': 'Refreshed every 2h · upvotes + comments×2',
+  '2시간마다 갱신 · 주간 업보트 순': 'Refreshed every 2h · by weekly upvotes',
+  '2시간마다 갱신 · 점수 없음(RSS) — 최신순': 'Refreshed every 2h · no scores (RSS) — newest first',
+  '6시간마다 갱신 · 업보트+댓글×2 기준': 'Refreshed every 6h · upvotes + comments×2',
+  '하루 1회 갱신 · 등록순': 'Refreshed daily · by submission',
+  '하루 1회 갱신 · 공개순': 'Refreshed daily · by posting date',
+  '하루 1회 갱신 · 갱신순': 'Refreshed daily · by last update',
+  '하루 1회 갱신 · 게재순': 'Refreshed daily · by publication date',
   '국가별 트렌드': 'By country',
   '미국': 'US',
   '중국': 'China',
