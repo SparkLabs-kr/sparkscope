@@ -12,7 +12,7 @@
 // (Vercel 은 일반 환경변수를 Edge 미들웨어에 주입하지 않으므로
 //  .env 방식이 아닌 이 상수를 사용합니다.)
 // ────────────────────────────────────────────────────────────────
-const COLLAB_OPEN_ACCESS = true;
+const COLLAB_OPEN_ACCESS = false;
 
 // 로컬 개발 시 .env.local 의 DEV_AUTH_BYPASS 로도 켤 수 있게 fallback 유지
 export const OPEN_ACCESS =
