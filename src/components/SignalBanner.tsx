@@ -262,8 +262,15 @@ function Hero({ item, locale }: { item: DigestItem; locale: string }) {
             {t('개인·뉴스레터')}
           </span>
         )}
+        {/* 경쟁 매체 여럿이 같은 사안을 1면에 걸었다 — 함께 보도한 것보다 강한 근거라
+            먼저 보여준다(news-digest.ts의 headlineOutlets). */}
+        {item.headlineOutlets >= 2 && (
+          <span className="text-[11.5px] font-bold text-rose-600">
+            📰 {t('{n}개 매체가 1면 헤드라인', { n: item.headlineOutlets })}
+          </span>
+        )}
         {/* 여러 매체가 동시에 다뤘다는 것 자체가 이 기사를 1위로 만든 근거다. */}
-        {item.alsoIn.length > 0 && (
+        {item.headlineOutlets < 2 && item.alsoIn.length > 0 && (
           <span className="text-[11.5px] font-bold text-rose-600">
             🔥 {t('{n}개 매체가 함께 보도', { n: item.alsoIn.length + 1 })}
           </span>
@@ -475,9 +482,11 @@ function StripCard({ item, locale, open, onToggle }: {
           <span className="text-[10px] px-1 py-0.5 rounded border border-spark-border">{t('개인·뉴스레터')}</span>
         )}
         <span className="tabular-nums">{item.publishedAt}</span>
-        {item.alsoIn.length > 0 && (
+        {item.headlineOutlets >= 2 ? (
+          <span className="font-semibold text-rose-600">{t('{n}개 1면', { n: item.headlineOutlets })}</span>
+        ) : item.alsoIn.length > 0 ? (
           <span className="font-semibold text-emerald-700">{t('+{n}개 매체', { n: item.alsoIn.length })}</span>
-        )}
+        ) : null}
       </div>
 
       <button

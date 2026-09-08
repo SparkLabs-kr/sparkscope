@@ -66,6 +66,9 @@ export interface FeedItem {
   comments: number | null;
   /** 같은 사안을 다룬 다른 매체 수. 커뮤니티 글은 null. */
   alsoInCount: number | null;
+  /** 이 사안을 1면 헤드라인으로 건 매체 수. 함께 보도한 것보다 강한 신호다
+   *  (news-digest.ts 참고). 커뮤니티 글은 null. */
+  headlineOutlets: number | null;
   /** 쉬운 말 요약. 뉴스에만 있다. */
   summaryKo: string | null;
   summaryEn: string | null;
@@ -102,12 +105,14 @@ async function newsCandidates(): Promise<Candidate[]> {
     pointsLabel: null,
     comments: null,
     alsoInCount: it.alsoIn.length,
+    headlineOutlets: it.headlineOutlets || null,
     summaryKo: it.summary?.ko ?? null,
     summaryEn: it.summary?.en ?? null,
     blurb: null,
-    // 등수 점수 × 가중치. 여러 매체가 함께 다뤘으면 그만큼 올려 준다 —
-    // 이 섹션에서 "중요하다"의 가장 단단한 근거가 그것이다.
-    score: (1 / (i + 1)) * SOURCE_WEIGHT.news * (1 + 0.3 * it.alsoIn.length),
+    // 등수 점수 × 가중치. 여러 매체가 함께 다뤘으면 그만큼 올려 주고, 1면 헤드라인으로
+    // 건 매체가 여럿이면 더 올려 준다 — 이 섹션에서 "중요하다"의 가장 단단한 근거다.
+    score: (1 / (i + 1)) * SOURCE_WEIGHT.news
+      * (1 + 0.3 * it.alsoIn.length + 0.5 * Math.max(0, it.headlineOutlets - 1)),
   }));
 }
 
@@ -131,6 +136,7 @@ async function signalCandidates(): Promise<Candidate[]> {
         pointsLabel: row.pointsLabel ?? null,
         comments: row.comments || null,
         alsoInCount: null,
+        headlineOutlets: null,
         summaryKo: null,
         summaryEn: null,
         blurb: row.blurb ?? null,

@@ -14,6 +14,15 @@
  *    그런데 매체 스스로 "최근 인기기사"·"Most Popular"를 집계해 사이드바에 노출한다.
  *    그게 우리가 갖지 못한 유일한 실측 참여도 신호다.
  *
+ * ③ 편집자가 무엇을 1면에 걸었나.
+ *    조회수와 별개인 신호다. 조회수는 "많이 클릭됐다"이고, 헤드라인 배치는 "이 매체
+ *    편집국이 오늘 가장 중요하다고 판단했다"다. 그리고 결정적으로 — 서로 경쟁하는
+ *    매체 여럿이 같은 사안을 동시에 1면에 걸면, 그건 업계가 그 사안을 큰일로 본다는
+ *    독립적인 합의다(2026-09-08 실측: FierceBiotech·Endpoints·STAT 세 곳이 같은 날
+ *    노바티스 Phase 3 실패를 나란히 헤드라인으로 걸었다).
+ *    그래서 headlineRank를 따로 담고, 다이제스트에서 "몇 개 매체가 헤드라인으로
+ *    걸었나"를 순위 기준으로 쓴다(news-digest.ts).
+ *
  * 두 매체가 같은 CMS를 쓰므로(`<div id="skin-N" class="auto-article">` 안에 `.item`)
  * 파서 하나로 처리된다. 구조가 바뀌면 0건이 되고, 그때는 조용히 건너뛴다 —
  * 인기기사를 못 읽었다고 다이제스트 전체가 멈추면 안 된다.
@@ -30,6 +39,11 @@ export interface PopularItem {
   rank: number;
   /** 실제 조회수. 집계판이 공개하는 경우만 채워진다(bioin) — 등수보다 강한 신호다. */
   views?: number;
+  /**
+   * 그 매체 헤드라인 영역에서의 자리(1 = 최상단 히어로). 없으면 헤드라인이 아니다.
+   * popularRank(조회수 순위)와는 다른 신호다 — 위 주석 ③ 참고.
+   */
+  headlineRank?: number;
   /** 국내 매체 기사인가. 국내 뉴스는 "엄청 큰 이슈만" 다루기로 해서 별도 기준을 적용한다. */
   domestic?: boolean;
 }
@@ -40,9 +54,38 @@ interface PopularSource {
   url: string;
   origin: string;
   domain: 'ai' | 'bio';
-  /** 'cms' 언론사 CMS의 인기기사 박스 · 'bioin' 정부 집계판(표 형식, 조회수 있음) */
-  kind: 'cms' | 'bioin';
+  /**
+   * 'cms'      언론사 CMS의 인기기사 박스
+   * 'bioin'    정부 집계판(표 형식, 조회수 있음)
+   * 'headline' 매체 첫 화면의 헤드라인 영역(편집자 판단) — headline 스펙을 함께 준다
+   */
+  kind: 'cms' | 'bioin' | 'headline';
+  headline?: HeadlineSpec;
   domestic?: boolean;
+}
+
+/**
+ * 헤드라인 영역을 어디서부터 어디까지로 볼지.
+ *
+ * 세 매체가 CMS도 마크업도 전부 다르지만 하는 일은 같다 — "첫 화면 특정 구역 안의
+ * 기사 링크를 위에서부터 읽는다". 그래서 파서를 하나로 두고 구역 경계와 링크 판별만
+ * 매체별로 준다. 마커를 못 찾으면 0건이 되고 조용히 건너뛴다.
+ */
+interface HeadlineSpec {
+  /** 헤드라인 구역이 시작되는 마크업 조각. */
+  start: string;
+  /** 구역의 끝. 없으면 window 바이트까지 본다. */
+  end?: string;
+  window?: number;
+  /** 기사 링크로 인정할 URL 패턴. 태그·섹션·저자 링크를 걸러낸다. */
+  article: RegExp;
+  /** 제외할 URL 패턴 — 협찬 기사 등. */
+  skip?: RegExp;
+  /** 제목에서 떼어낼 접두어(유료 표시 등). 매체 간 제목 대조를 방해한다. */
+  stripTitle?: RegExp;
+  /** 같은 화면의 "많이 본" 구역. 있으면 popularRank로 따로 담는다. */
+  popularStart?: string;
+  popularWindow?: number;
 }
 
 const SOURCES: PopularSource[] = [
@@ -74,6 +117,54 @@ const SOURCES: PopularSource[] = [
     kind: 'bioin',
     domestic: true,
   },
+  {
+    // 임상·거래 속보를 가장 빠르고 촘촘하게 다루는 곳. 히어로 1건 + 우측 리스트 5건이
+    // 그날의 편집 판단이다. /sponsored/ 는 광고라 제외한다.
+    name: 'FierceBiotech',
+    url: 'https://www.fiercebiotech.com/biotech',
+    origin: 'https://www.fiercebiotech.com',
+    domain: 'bio',
+    kind: 'headline',
+    headline: {
+      start: 'featured-hero',
+      window: 30_000,
+      article: /^(https:\/\/www\.fiercebiotech\.com)?\/(biotech|pharma|medtech|cro|research|life-sciences)\/[a-z0-9-]{12,}/,
+      skip: /\/sponsored\//,
+    },
+  },
+  {
+    // 바이오파마 업계지. 첫 화면 epn_home_featured 구역이 헤드라인이고, 그 안에서
+    // epn_big 카드가 최상단이다. 제목에 소프트하이픈(&shy;)이 박혀 있어 decode에서 뗀다.
+    name: 'Endpoints News',
+    url: 'https://endpoints.news/',
+    origin: 'https://endpoints.news',
+    domain: 'bio',
+    kind: 'headline',
+    headline: {
+      start: 'epn_regular_section epn_home_featured',
+      window: 30_000,
+      article: /^https:\/\/endpoints\.news\/[a-z0-9-]{12,}/,
+    },
+  },
+  {
+    // 보건·바이오 전반. 헤드라인(TOP STORIES)과 많이 본(Most Read)을 한 화면에서
+    // 같이 주므로 두 신호를 동시에 얻는다. 'STAT Plus:' 접두어는 유료 표시일 뿐이라
+    // 떼어낸다 — 붙여두면 다른 매체 제목과 대조가 안 된다.
+    name: 'STAT News',
+    url: 'https://www.statnews.com/',
+    origin: 'https://www.statnews.com',
+    domain: 'bio',
+    kind: 'headline',
+    headline: {
+      start: 'wp-block-stat-home-top-stories',
+      end: 'Most Read',
+      article: /^https:\/\/www\.statnews\.com\/\d{4}\/\d{2}\/\d{2}\//,
+      skip: /\/sponsor/,
+      stripTitle: /^STAT Plus:\s*/,
+      popularStart: 'card-item slider most-read',
+      popularWindow: 9_000,
+    },
+  },
 ];
 
 /** bioin은 조회 기간을 URL로 받는다 — 호출 시점 기준 최근 N일. */
@@ -84,6 +175,9 @@ const ymdSlash = (d: Date) =>
 const decode = (s: string) =>
   s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
    .replace(/&apos;/g, "'").replace(/&nbsp;/g, ' ')
+   // 소프트하이픈은 떼어낸다 — Endpoints 제목에 단어마다 박혀 있어(No&shy;var&shy;tis)
+   // 그대로 두면 눈에는 안 보이지만 매체 간 제목 대조와 검색이 전부 실패한다.
+   .replace(/&shy;/g, '').replace(/\u00ad/g, '')
    // 숫자 엔티티(&#34; &#39;)도 푼다 — bioin 제목에 그대로 남아 화면에 노출됐다.
    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
@@ -123,6 +217,70 @@ function parseBioin(html: string, src: PopularSource): PopularItem[] {
   return out;
 }
 
+/**
+ * 헤드라인 영역 — 구역을 잘라내고 그 안의 기사 링크를 위에서부터 읽는다.
+ *
+ * 순서가 곧 등수다. HTML 상의 순서는 화면의 시각적 순서와 대체로 일치하고(히어로가
+ * 먼저 나온다), 어차피 우리가 쓰는 건 "1면에 걸렸나"와 "그중 위쪽인가" 정도의 해상도다.
+ */
+function parseHeadline(html: string, src: PopularSource): PopularItem[] {
+  const spec = src.headline!;
+  const cut = (start: string, end?: string, window = 30_000) => {
+    const i = html.indexOf(start);
+    if (i < 0) return '';
+    let seg = html.slice(i, i + window);
+    if (end) {
+      // 마커 직후부터 찾는다 — 구역 시작 태그 자체에 끝 문자열이 들어 있을 수 있다.
+      const j = seg.indexOf(end, start.length);
+      if (j > 0) seg = seg.slice(0, j);
+    }
+    return seg;
+  };
+
+  const read = (seg: string, kind: 'headline' | 'popular'): PopularItem[] => {
+    const out: PopularItem[] = [];
+    const seen = new Set<string>();
+    const re = /<a[^>]+href="([^"]+)"[^>]*>([\s\S]{0,400}?)<\/a>/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(seg)) && out.length < MAX_RANK) {
+      const href = m[1];
+      if (!spec.article.test(href)) continue;
+      if (spec.skip?.test(href)) continue;
+      let title = decode(m[2]);
+      if (spec.stripTitle) title = title.replace(spec.stripTitle, '').trim();
+      // 썸네일만 감싼 링크는 텍스트가 비거나 아주 짧다 — 같은 기사를 두 번 잡지 않게.
+      if (title.length < 15) continue;
+      const url = href.startsWith('http') ? href : src.origin + href;
+      if (seen.has(url)) continue;
+      seen.add(url);
+      const rank = out.length + 1;
+      out.push({
+        title,
+        url,
+        source: src.name,
+        rank,
+        domestic: src.domestic,
+        ...(kind === 'headline' ? { headlineRank: rank } : {}),
+      });
+    }
+    return out;
+  };
+
+  const head = read(cut(spec.start, spec.end, spec.window), 'headline');
+  const pop = spec.popularStart
+    ? read(cut(spec.popularStart, undefined, spec.popularWindow), 'popular')
+    : [];
+
+  // 헤드라인이면서 많이 본 기사이기도 한 경우 — 헤드라인 쪽을 남긴다(더 강한 신호다).
+  const urls = new Set(head.map(h => h.url));
+  const merged = [...head, ...pop.filter(p => !urls.has(p.url))];
+
+  if (merged.length === 0) {
+    console.error(`[news-popular] ${src.name} 헤드라인 0건 — 마크업이 바뀐 것 같습니다`);
+  }
+  return merged;
+}
+
 async function fetchOne(src: PopularSource): Promise<PopularItem[]> {
   try {
     let url = src.url;
@@ -136,6 +294,7 @@ async function fetchOne(src: PopularSource): Promise<PopularItem[]> {
     const html = await res.text();
 
     if (src.kind === 'bioin') return parseBioin(html, src);
+    if (src.kind === 'headline') return parseHeadline(html, src);
 
     // 목록 페이지는 기사 링크가 순위 순으로 나열된다. 제목은 링크 안쪽 텍스트다.
     const seen = new Set<string>();

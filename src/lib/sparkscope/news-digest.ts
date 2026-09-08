@@ -8,7 +8,12 @@
  *   CNBC·Reuters가 팔로알토 실적을 나란히 다뤘다.
  *   (커뮤니티 소스에서는 이 중복이 0건이라 쓸 수 없었다. 매체는 다르다.)
  *
- * 순위 = 다룬 매체 수 → 매체 등급 → 최신순.
+ * 그리고 "몇 개 매체가 1면에 걸었나"는 그보다 더 강한 신호다. 단순히 기사를 냈다가
+ * 아니라 편집국이 그날의 머리기사로 골랐다는 뜻이고, 경쟁 매체 여럿이 동시에 그렇게
+ * 했다면 업계가 그 사안을 큰일로 본다는 독립적인 합의다. 그 값(headlineOutlets)을
+ * 중요도 바로 다음 기준으로 쓰고, 둘 이상이면 중요도에 바닥을 깔아준다.
+ *
+ * 순위 = 중요도 → 헤드라인 매체 수 → 헤드라인 자리 → 인기 등수 → 다룬 매체 수 → 등급 → 최신순.
  */
 import { FEEDS, DOMAIN_KEYWORDS, type Feed } from './news-feeds';
 import { scoreImportance, type Importance, type Verdict } from './news-importance';
@@ -33,6 +38,16 @@ export interface DigestItem {
   /** 매체가 집계한 인기기사 등수(1부터). RSS에 없는 실측 참여도 신호다.
    *  없으면 null — 인기 목록에 오르지 않았다는 뜻이고 감점 사유는 아니다. */
   popularRank: number | null;
+  /**
+   * 이 사안을 헤드라인(1면)으로 걸어 둔 매체 수. 0이면 아무도 안 걸었다는 뜻.
+   *
+   * 조회수와 다른 신호다 — 조회수는 "많이 클릭됐다"이고 이건 "편집국이 오늘 가장
+   * 중요하다고 판단했다"다. 서로 경쟁하는 매체 둘 이상이 같은 사안을 동시에 1면에
+   * 걸면 업계 합의로 본다(아래 HEADLINE_CONSENSUS).
+   */
+  headlineOutlets: number;
+  /** 그중 가장 위쪽 자리(1 = 히어로). 없으면 null. */
+  headlineRank: number | null;
   /** 국내(한국) 업계·정책 소식인가. 한국 매체가 보도한 해외 소식은 false다. */
   domestic: boolean;
   /**
@@ -187,6 +202,12 @@ function tokens(title: string): Set<string> {
   );
 }
 
+/**
+ * 몇 개 매체가 1면에 걸어야 "업계 합의"로 볼지. 둘이면 충분하다 —
+ * 서로 경쟁하는 매체가 같은 날 같은 사안을 머리기사로 고르는 것은 우연이 아니다.
+ */
+const HEADLINE_CONSENSUS = 2;
+
 /** 같은 사안인가 — 제목의 특징 단어가 충분히 겹치는가. */
 function sameStory(a: Set<string>, b: Set<string>): boolean {
   if (a.size < 3 || b.size < 3) return false;
@@ -267,6 +288,8 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
         summary: null,
         importance: null,
         popularRank: null,
+        headlineOutlets: 0,
+        headlineRank: null,
         domestic: false,
       };
     })
@@ -295,8 +318,16 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
     for (const p of popular) {
       const hit = byUrl.get(p.url) ?? byTitle.get(p.title.trim());
       if (hit) {
-        // 여러 매체 인기 목록에 오르면 더 높은 등수를 남긴다.
-        hit.popularRank = Math.min(hit.popularRank ?? 99, p.rank);
+        if (p.headlineRank != null) {
+          // 같은 기사가 여러 곳 헤드라인에 걸릴 수는 없다(URL이 매체마다 다르다).
+          // 여기서 세는 것은 "이 URL이 헤드라인이었나"까지고, 매체 수를 합치는 것은
+          // 사건 병합 뒤에 한다 — 그때가 되어야 서로 다른 매체의 같은 사안이 한 줄이 된다.
+          hit.headlineRank = Math.min(hit.headlineRank ?? 99, p.headlineRank);
+          hit.headlineOutlets = Math.max(hit.headlineOutlets, 1);
+        } else {
+          // 여러 매체 인기 목록에 오르면 더 높은 등수를 남긴다.
+          hit.popularRank = Math.min(hit.popularRank ?? 99, p.rank);
+        }
         continue;
       }
       items.push({
@@ -315,7 +346,9 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
         portfolio: null,
         summary: null,
         importance: null,
-        popularRank: p.rank,
+        popularRank: p.headlineRank != null ? null : p.rank,
+        headlineRank: p.headlineRank ?? null,
+        headlineOutlets: p.headlineRank != null ? 1 : 0,
         domestic: !!p.domestic,
       });
     }
@@ -336,9 +369,11 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
   // 기본값 3으로 가라앉는다 — 실제로 그렇게 됐다(2026-09-08: AI타임스코리아
   // 인기 1~4위인 GPT-6 아스트라·제미나이 3.8·페이블 5.1이 전부 목록에 안 떴다).
   // 가장 확실한 신호를 가진 것부터 채점한다.
+  // 헤드라인 > 인기 목록 > 나머지. 헤드라인이 가장 강한 신호이므로 상한에 잘리면 안 된다.
   const forScoring = [
-    ...items.filter(i => i.popularRank != null),
-    ...items.filter(i => i.popularRank == null),
+    ...items.filter(i => i.headlineRank != null),
+    ...items.filter(i => i.headlineRank == null && i.popularRank != null),
+    ...items.filter(i => i.headlineRank == null && i.popularRank == null),
   ];
 
   const verdicts = await scoreImportance(forScoring).catch(e => {
@@ -350,6 +385,24 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
   // "여러 매체가 다뤘나"보다 신뢰도가 높다 — 후자는 우리 병합 정확도에 의존한다.
   // 목록에 없는 기사는 큰 값으로 둬서 뒤로 가되, 중요도가 높으면 여전히 위에 온다.
   const rank = (it: { popularRank: number | null }) => it.popularRank ?? 99;
+  const hrank = (it: { headlineRank: number | null }) => it.headlineRank ?? 99;
+
+  /**
+   * 최종 순위 기준. 두 군데(병합 전·후)에서 같은 순서를 써야 하므로 한 곳에 둔다 —
+   * 예전에 두 정렬식이 따로 있어 한쪽만 고쳐지는 일이 있었다.
+   *
+   * 헤드라인 매체 수를 중요도 바로 다음에 둔다. 인기 등수(조회수)보다 앞이다 —
+   * 조회수는 한 매체 독자들의 클릭이고, 헤드라인 합의는 서로 경쟁하는 편집국들의
+   * 독립적인 판단이라 업계 중요도에 더 가깝다.
+   */
+  const byRank = (a: DigestItem, b: DigestItem) =>
+    (b.importance ?? 3) - (a.importance ?? 3) ||
+    b.headlineOutlets - a.headlineOutlets ||
+    hrank(a) - hrank(b) ||
+    rank(a) - rank(b) ||
+    b.alsoIn.length - a.alsoIn.length ||
+    a.tier - b.tier ||
+    b.publishedAt.localeCompare(a.publishedAt);
 
   const scored = items
     .map(it => {
@@ -358,12 +411,7 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
       // 한국 매체가 보도한 오픈AI 소식은 국내 소식이 아니다.
       return { ...it, importance: v?.score ?? null, domestic: v ? v.domestic : it.domestic };
     })
-    .sort((a, b) =>
-      (b.importance ?? 3) - (a.importance ?? 3) ||
-      rank(a) - rank(b) ||
-      b.alsoIn.length - a.alsoIn.length ||
-      a.tier - b.tier ||
-      b.publishedAt.localeCompare(a.publishedAt));
+    .sort(byRank);
 
   // 국내 소식은 문턱을 높인다.
   //
@@ -374,7 +422,10 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
   //
   // 해외 소식은 그대로 3점까지 통과한다 — 국내만 기준이 다르다.
   const DOMESTIC_MIN: Importance = 4;
-  const passable = scored.filter(it => !it.domestic || (it.importance ?? 0) >= DOMESTIC_MIN);
+  // 헤드라인에 걸린 것은 문턱을 면제한다 — 어느 매체 편집국이 1면에 걸었다면
+  // 이미 "큰 이슈"라는 판단이 들어간 것이고, 우리 채점이 그것보다 정확하지 않다.
+  const passable = scored.filter(
+    it => !it.domestic || it.headlineRank != null || (it.importance ?? 0) >= DOMESTIC_MIN);
 
   // 병합 대상 — 최종 노출 수의 세 배 정도만. 같은 사건이 셋으로 쪼개져도 이 안에 든다.
   const shortlist = passable.slice(0, Math.max(limit * 3, 20));
@@ -396,9 +447,31 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
       if (g.source !== rep.source) outlets.set(g.source, g.url);
       for (const a of g.alsoIn) if (a.source !== rep.source) outlets.set(a.source, a.url);
     }
+    // 서로 다른 매체가 같은 사안을 1면에 걸었는지는 여기서만 알 수 있다 —
+    // 병합 전에는 URL이 매체마다 달라 각각 별개 항목이었다.
+    const headlineOutlets = new Set(
+      group.filter(g => g.headlineRank != null).map(g => g.source)).size;
+    const headlineRank = group.reduce<number | null>(
+      (m, g) => (g.headlineRank == null ? m : m == null ? g.headlineRank : Math.min(m, g.headlineRank)), null);
+
     return {
       ...rep,
-      importance: groupImportance(group),
+      headlineOutlets,
+      headlineRank,
+      // 경쟁 매체 둘 이상이 동시에 1면에 걸었으면 최소 4점을 보장한다.
+      //
+      // 우리 채점은 제목만 보고 하는 판단이라 업계 맥락을 놓친다 — "Novartis' Phase 3
+      // cardiovascular study miss"는 제목만으로는 흔한 임상 실패로 보이지만, 실제로는
+      // 120억 달러 인수의 핵심 자산이 무너진 사건이어서 세 매체가 나란히 헤드라인으로
+      // 걸었다. 편집국 여럿의 독립적인 합의를 우리 점수보다 신뢰한다.
+      //
+      // 바닥을 최고점(5)으로 잡는 이유: 4로 두면 5점을 받은 다른 기사들 아래로 밀려
+      // 기준을 넣은 의미가 없어진다(실측: 세 매체가 나란히 건 노바티스 건이 국내
+      // R&D 예산 기사 아래 4위에 있었다). 5로 올려 동점으로 만들면 그다음 기준인
+      // headlineOutlets가 갈라준다 — 합의가 있는 쪽이 위로 온다.
+      importance: headlineOutlets >= HEADLINE_CONSENSUS
+        ? (Math.max(groupImportance(group) ?? 0, 5) as Importance)
+        : groupImportance(group),
       // 그룹 안에서 가장 높은 등수를 쓴다 — 같은 사건인데 한 매체에서만 인기 목록에
       // 올랐다면 그 사건이 인기라는 뜻이다.
       popularRank: group.reduce<number | null>(
@@ -412,12 +485,7 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
 
   // 병합으로 자리가 비면 뒤쪽 후보가 올라온다.
   const ordered = [...merged, ...rest]
-    .sort((a, b) =>
-      (b.importance ?? 3) - (a.importance ?? 3) ||
-      rank(a) - rank(b) ||
-      b.alsoIn.length - a.alsoIn.length ||
-      a.tier - b.tier ||
-      b.publishedAt.localeCompare(a.publishedAt));
+    .sort(byRank);
 
   // 한 매체가 목록을 독점하지 못하게 상한을 둔다.
   //

@@ -28,7 +28,12 @@ function renderRow(it: FeedItem): string {
   // 카드 위쪽 라벨 — 어디서 온 신호이고 얼마나 반응이 있었는지.
   const meta: string[] = [];
   if (it.kind === 'news') {
-    if (it.alsoInCount) meta.push(`<span class="s-also">+${it.alsoInCount}개 매체가 함께 보도</span>`);
+    // 헤드라인 합의가 있으면 그것을 먼저 말한다 — "함께 보도"보다 강한 근거다.
+    if (it.headlineOutlets && it.headlineOutlets >= 2) {
+      meta.push(`<span class="s-also">${it.headlineOutlets}개 매체가 1면 헤드라인</span>`);
+    } else if (it.alsoInCount) {
+      meta.push(`<span class="s-also">+${it.alsoInCount}개 매체가 함께 보도</span>`);
+    }
   } else {
     if (it.author) meta.push(`<span class="s-auth">${esc(it.author)}</span>`);
     if (it.points) meta.push(`<span class="s-pt">▲ ${num(it.points)} ${esc(it.pointsLabel ?? '')}</span>`);

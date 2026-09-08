@@ -330,6 +330,8 @@ export const EN: Record<string, string> = {
   '오늘의 시그널': "Today's signals",
   '여러 매체가 함께 다룬 뉴스와, 커뮤니티에서 가장 화제인 글을 함께 봅니다.':
     'Stories covered by multiple outlets, alongside what communities are talking about.',
+  '{n}개 매체가 1면 헤드라인': '{n} outlets ran it as a headline',
+  '{n}개 1면': '{n} front pages',
   '{n}개 매체가 함께 보도': 'Covered by {n} outlets',
   '커뮤니티 {n}곳': '{n} communities',
   '나머지 시그널 {n}곳 보기': 'Show {n} more sources',
