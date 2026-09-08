@@ -11,6 +11,8 @@
  * 순위 = 다룬 매체 수 → 매체 등급 → 최신순.
  */
 import { FEEDS, DOMAIN_KEYWORDS, type Feed } from './news-feeds';
+import { scoreImportance, type Importance } from './news-importance';
+import { groupSameStory } from './news-cluster';
 
 export type NewsDomain = 'ai' | 'bio';
 
@@ -25,6 +27,8 @@ export interface DigestItem {
   alsoIn: { source: string; url: string }[];
   /** 화면에 보여줄 짧은 매체 설명. */
   blurb: string | null;
+  /** 업계에 얼마나 큰 일인가 1~5 (news-importance.ts). 순위의 1순위 기준. */
+  importance: Importance | null;
   /**
    * 요약을 만들 때만 쓰는 원문 발췌. 화면에는 내보내지 않는다(라우트에서 지운다) —
    * 매체 본문을 그대로 싣는 것은 이용약관 문제이고, 클라이언트 페이로드도 커진다.
@@ -185,6 +189,14 @@ function sameStory(a: Set<string>, b: Set<string>): boolean {
   return ov >= 3 && ov / Math.min(a.size, b.size) >= 0.45;
 }
 
+/** 그룹의 중요도 — 최고값. 같은 사건인데 한 매체 제목이 모호해 낮게 채점된 것
+ *  때문에 사건 전체가 강등되면 안 된다. */
+function groupImportance(group: { importance: Importance | null }[]): Importance | null {
+  let best = 0;
+  for (const g of group) if ((g.importance ?? 0) > best) best = g.importance ?? 0;
+  return best > 0 ? (best as Importance) : null;
+}
+
 export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): Promise<{
   items: DigestItem[];
   feeds: { name: string; ok: boolean; count: number }[];
@@ -247,16 +259,76 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
         )(c.members.map(m => m.sourceText).filter(Boolean).join('').length),
         portfolio: null,
         summary: null,
+        importance: null,
       };
     })
     .sort((a, b) =>
+      b.alsoIn.length - a.alsoIn.length ||
+      a.tier - b.tier ||
+      b.publishedAt.localeCompare(a.publishedAt));
+
+  // 순서: ① 중요도 채점 → ② 상위 후보만 사건 단위로 병합 → ③ 최종 정렬.
+  //
+  // 왜 채점을 먼저 하나: 병합 판정은 LLM 호출이라 후보 전체(100건 이상)에 쓰면 비싸고
+  // 부정확하다. 화면·메일에 실제로 들어갈 것들만 병합하면 되므로, 먼저 점수로 줄을
+  // 세워 상위만 넘긴다.
+  //
+  // 점수를 못 받은 항목(호출 실패·상한 초과)은 3점으로 둔다 — 0으로 두면 채점 실패가
+  // 곧 강등이 되어, 오류가 조용히 순위를 망친다.
+  const scores = await scoreImportance(items).catch(e => {
+    console.error('[news-digest] 중요도 산정 실패 — 예전 기준으로 정렬합니다:', e);
+    return new Map<string, Importance>();
+  });
+
+  const scored = items
+    .map(it => ({ ...it, importance: scores.get(it.url) ?? null }))
+    .sort((a, b) =>
+      (b.importance ?? 3) - (a.importance ?? 3) ||
+      b.alsoIn.length - a.alsoIn.length ||
+      a.tier - b.tier ||
+      b.publishedAt.localeCompare(a.publishedAt));
+
+  // 병합 대상 — 최종 노출 수의 세 배 정도만. 같은 사건이 셋으로 쪼개져도 이 안에 든다.
+  const shortlist = scored.slice(0, Math.max(limit * 3, 20));
+  const rest = scored.slice(shortlist.length);
+
+  const buckets = await groupSameStory(shortlist).catch(e => {
+    console.error('[news-digest] 사건 병합 실패 — 병합 없이 진행합니다:', e);
+    return shortlist.map((_, i) => [i]);
+  });
+
+  const merged: DigestItem[] = buckets.map(idx => {
+    const group = idx.map(i => shortlist[i]);
+    // 대표는 등급이 높은 쪽, 같으면 최신. 중요도는 그룹 최고값을 쓴다 —
+    // 같은 사건인데 한 매체 제목이 모호해 낮게 채점된 것 때문에 강등되면 안 된다.
+    const rep = group.reduce((best, cur) =>
+      cur.tier < best.tier || (cur.tier === best.tier && cur.publishedAt > best.publishedAt) ? cur : best);
+    const outlets = new Map<string, string>();
+    for (const g of group) {
+      if (g.source !== rep.source) outlets.set(g.source, g.url);
+      for (const a of g.alsoIn) if (a.source !== rep.source) outlets.set(a.source, a.url);
+    }
+    return {
+      ...rep,
+      importance: groupImportance(group),
+      alsoIn: [...outlets.entries()].map(([source, url]) => ({ source, url })),
+      // 요약 근거도 합친다 — 매체마다 강조점이 달라 한 곳만 볼 때보다 두터워진다.
+      sourceText: group.map(g => g.sourceText).filter(Boolean).slice(0, 3).join('\n\n---\n\n') || null,
+      blurb: rep.blurb ?? group.find(g => g.blurb)?.blurb ?? null,
+    };
+  });
+
+  // 병합으로 자리가 비면 뒤쪽 후보가 올라온다.
+  const ranked = [...merged, ...rest]
+    .sort((a, b) =>
+      (b.importance ?? 3) - (a.importance ?? 3) ||
       b.alsoIn.length - a.alsoIn.length ||
       a.tier - b.tier ||
       b.publishedAt.localeCompare(a.publishedAt))
     .slice(0, limit);
 
   return {
-    items,
+    items: ranked,
     feeds: results.map(r => ({ name: r.feed.name, ok: r.ok, count: r.entries.length })),
   };
 }
