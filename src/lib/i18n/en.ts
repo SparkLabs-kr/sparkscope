@@ -1206,4 +1206,44 @@ export const EN: Record<string, string> = {
     'This email address does not have access. Please use your @sparklabs.co.kr address.',
   '로그인에 실패했습니다. 아래에서 링크를 새로 받아 주세요.':
     'Sign-in failed. Request a new link below.',
+
+  // 포트폴리오사 접근 요청 (2026-09-08)
+  '포트폴리오사 접근 요청':
+    'Portfolio company access request',
+  '스파크랩 포트폴리오사 대표·담당자용입니다. 마케팅팀 승인 후 로그인 링크를 받으실 수 있습니다.':
+    'For founders and staff at SparkLabs portfolio companies. Once marketing approves, you can request a sign-in link.',
+  '회사':
+    'Company',
+  '회사명으로 검색':
+    'Search by company name',
+  '목록에서 선택':
+    'Select from the list',
+  '회사 메일 주소':
+    'Work email',
+  '직함':
+    'Title',
+  '스파크랩 담당자 (선택)':
+    'SparkLabs contact (optional)',
+  '접근 요청 보내기':
+    'Send access request',
+  '보내는 중...':
+    'Sending...',
+  '요청을 접수했습니다':
+    'Request received',
+  '이미 로그인할 수 있습니다':
+    'You can already sign in',
+  '마케팅팀이 확인한 뒤 승인하면, 입력하신 주소로 안내 메일을 보내드립니다. 승인 전에는 로그인 링크를 받을 수 없습니다.':
+    'Once marketing reviews and approves it, we will email the address you gave. Sign-in links do not work before approval.',
+  '로그인 화면에서 이 주소를 입력하면 링크를 받을 수 있습니다.':
+    'Enter this address on the sign-in screen to get a link.',
+  '로그인 화면으로':
+    'Go to sign-in',
+  '회사를 목록에서 골라 주세요.':
+    'Please choose your company from the list.',
+  '요청을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.':
+    'Could not send the request. Please try again shortly.',
+  '스파크랩 포트폴리오사이신가요?':
+    'From a SparkLabs portfolio company?',
+  '접근 요청하기':
+    'Request access',
 };

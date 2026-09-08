@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { canScrap } from '@/lib/scrap';
+import { requireAdmin, requireUser } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 
@@ -21,6 +22,9 @@ function bad(msg: string, status = 400) {
 }
 
 export async function GET(req: Request) {
+  // 실제 경계는 여기다. 미들웨어는 쿠키 유무만 보므로 보안 경계가 아니다.
+  const gate = await requireUser();
+  if (!gate.ok) return gate.response;
   if (!(await authorized())) return bad('Unauthorized', 401);
   const category = new URL(req.url).searchParams.get('category');
   const where: any = { status: { not: 'DELETED' } };
@@ -39,6 +43,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  // 실제 경계는 여기다. 미들웨어는 쿠키 유무만 보므로 보안 경계가 아니다.
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.response;
   if (!(await authorized())) return bad('Unauthorized', 401);
   const b = await req.json().catch(() => null);
   if (!b) return bad('Invalid body');
@@ -68,6 +75,9 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
+  // 실제 경계는 여기다. 미들웨어는 쿠키 유무만 보므로 보안 경계가 아니다.
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.response;
   if (!(await authorized())) return bad('Unauthorized', 401);
   const b = await req.json().catch(() => null);
   if (!b?.id) return bad('id는 필수입니다.');
@@ -87,6 +97,9 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  // 실제 경계는 여기다. 미들웨어는 쿠키 유무만 보므로 보안 경계가 아니다.
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.response;
   if (!(await authorized())) return bad('Unauthorized', 401);
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return bad('id는 필수입니다.');

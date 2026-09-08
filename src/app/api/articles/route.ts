@@ -3,10 +3,14 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { requireUser } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 
 export async function GET(req: Request) {
+  // 실제 경계는 여기다. 미들웨어는 쿠키 유무만 보므로 보안 경계가 아니다.
+  const gate = await requireUser();
+  if (!gate.ok) return gate.response;
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

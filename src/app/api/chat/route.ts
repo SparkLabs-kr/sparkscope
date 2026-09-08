@@ -11,6 +11,7 @@ import { runChatAgent, type AgentTurn } from '@/lib/sparkscope/chat-agent';
 import { runLiveSearch, summarizeLiveSearch } from '@/lib/sparkscope/chat-live';
 import { getLocale } from '@/lib/i18n/server';
 import { ensureArticleEnDeep } from '@/lib/sparkscope/translate-content';
+import { requireUser } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,6 +24,9 @@ const PERIODS: ChatPeriod[] = ['today', 'week', 'month', 'quarter', 'all'];
 const SCOPES: ChatScope[] = ['portfolio', 'competitor', 'sparklabs', 'industry', 'inter'];
 
 export async function POST(req: Request) {
+  // 실제 경계는 여기다. 미들웨어는 쿠키 유무만 보므로 보안 경계가 아니다.
+  const gate = await requireUser();
+  if (!gate.ok) return gate.response;
   const session = OPEN_ACCESS
     ? ({ user: { email: 'dev@localhost' } } as any)
     : await getServerSession(authOptions);

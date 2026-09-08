@@ -72,6 +72,15 @@ function LoginForm() {
       >
         {submitting ? t('전송 중...') : t('로그인 링크 받기')}
       </button>
+
+      {/* 포트폴리오사 대표는 계정이 없으므로 여기서 요청 화면으로 보낸다.
+          이 링크가 없으면 /request-access 에 도달할 방법이 없다. */}
+      <p className="mt-5 text-center text-[12.5px] text-gray-500">
+        {t('스파크랩 포트폴리오사이신가요?')}{' '}
+        <a href="/request-access" className="text-spark-purple font-semibold hover:underline">
+          {t('접근 요청하기')}
+        </a>
+      </p>
     </form>
   );
 }

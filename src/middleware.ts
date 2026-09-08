@@ -30,6 +30,13 @@ import { OPEN_ACCESS } from '@/lib/flags';
  */
 const PUBLIC_API = ['/api/auth', '/api/cron', '/api/partner'];
 
+/**
+ * 로그인 없이 부를 수 있는 정확한 경로. 접두사가 아니라 완전 일치다 —
+ * '/api/access-request' 를 PUBLIC_API 에 넣으면 하위의
+ * '/api/access-request/decide'(승인 API)까지 같이 열려 버린다.
+ */
+const PUBLIC_API_EXACT = ['/api/access-request'];
+
 const SESSION_COOKIES = ['next-auth.session-token', '__Secure-next-auth.session-token'];
 
 export default function middleware(req: NextRequest) {
@@ -39,6 +46,7 @@ export default function middleware(req: NextRequest) {
   if (PUBLIC_API.some(p => pathname === p || pathname.startsWith(`${p}/`))) {
     return NextResponse.next();
   }
+  if (PUBLIC_API_EXACT.includes(pathname)) return NextResponse.next();
 
   if (SESSION_COOKIES.some(name => req.cookies.has(name))) return NextResponse.next();
 
