@@ -51,6 +51,9 @@ function LoginForm() {
         : error === 'AccessDenied'
           ? t('이 메일 주소로는 아직 로그인할 수 없습니다. 포트폴리오사라면 먼저 접근 요청이 승인되어야 합니다.')
           : t('로그인에 실패했습니다. 링크를 새로 받아 주세요.')}
+      {/* 원인 코드를 숨기면 지원할 때 추측밖에 할 수 없다. 실제로 오늘
+          "sign in failed"만 보고 원인을 찾느라 오래 헤맸다. */}
+      <div className="mt-1.5 text-[11px] font-mono text-amber-700/70">code: {error}</div>
     </div>
   ) : null;
 
