@@ -15,6 +15,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { OPEN_ACCESS } from '@/lib/flags';
 import { canScrap as canScrapEmail } from '@/lib/scrap';
+import { getSessionUser } from '@/lib/authz';
 import { normalizeSource } from '@/lib/sparkscope/media';
 import { matchesAsToken, isBlockedNoise, normalizeTitleKey } from '@/lib/sparkscope/relevance';
 import { clusterArticles } from '@/lib/sparkscope/cluster';
@@ -855,7 +856,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     ? await prisma.noiseReportRequest.count({ where: { status: 'PENDING' } }).catch(() => 0)
     : 0;
   const userId = (session?.user as any)?.id as string | undefined;
-  const canBookmark = !!userId;
+  // 포트폴리오사 계정은 열람 전용 — 북마크·노이즈 신고 요청 모두 쓰기다.
+  // (해당 API 도 requireAdmin 으로 막혀 있어, 버튼만 보이면 눌러도 실패한다.)
+  const isStaffAccount = (await getSessionUser())?.role === 'ADMIN';
+  const canBookmark = !!userId && isStaffAccount;
   // 관리자는 즉시 처리(NoiseReportButton)가 있으니, 신고 "요청" 버튼은 로그인한 비관리자에게만.
   const canRequestReport = canBookmark && !canScrap;
   const bookmarkedIds = userId

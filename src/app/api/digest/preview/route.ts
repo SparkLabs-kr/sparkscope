@@ -5,10 +5,14 @@ import { renderDigestHtml } from '@/lib/sparkscope/digest';
 import { attachInterDigest } from '@/lib/sparkscope/inter-digest';
 import { attachAiSignals } from '@/lib/sparkscope/signal-digest';
 import { buildSubject } from '@/lib/sparkscope/mailer';
+import { requireAdmin } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
+  // 포트폴리오사 계정은 열람 전용이다 — 쓰기는 사내 계정만.
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.response;
   const body = (await req.json().catch(() => ({}))) as ReviewOverrides;
   const candidates = await loadDigestCandidates();
   const data = await attachAiSignals(await attachInterDigest(buildReviewDigest(candidates, body)));

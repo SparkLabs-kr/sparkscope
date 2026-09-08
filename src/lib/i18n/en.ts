@@ -1262,8 +1262,8 @@ export const EN: Record<string, string> = {
     'Sign in with your @sparklabs.co.kr account',
   '포트폴리오사 로그인':
     'Portfolio company sign-in',
-  '승인받은 회사 계정으로 자기 회사 보도를 봅니다':
-    'Approved company accounts see their own coverage',
+  '승인받은 회사 계정으로 로그인합니다':
+    'Sign in with your approved company account',
   '아직 계정이 없는 포트폴리오사 — 마케팅팀 승인 후 로그인할 수 있습니다':
     'No account yet — once marketing approves, you can sign in',
   '다른 방법으로 로그인':
@@ -1281,4 +1281,5 @@ export const EN: Record<string, string> = {
   '로그인이 계속 안 되면': 'Still cannot sign in?',
   '로그인 상태 초기화': 'Reset sign-in state',
   '로그인 상태를 초기화했습니다. 다시 로그인해 주세요.': 'Sign-in state cleared. Please sign in again.',
+  '열람 전용': 'Read only',
 };

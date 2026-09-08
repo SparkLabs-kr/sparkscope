@@ -9,10 +9,14 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { OPEN_ACCESS } from '@/lib/flags';
 import { prisma } from '@/lib/prisma';
+import { requireAdmin } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  // 포트폴리오사 계정은 열람 전용이다 — 쓰기는 사내 계정만.
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate.response;
   // 누가 눌렀는지 남긴다 — 익명 피드백은 나중에 되짚을 수 없다.
   // OPEN_ACCESS(협업 개발 단계)에서는 세션이 없어도 통과시킨다. 대시보드 자체가 이미
   // 로그인 없이 열리는 상태인데 이 API만 401을 주면 버튼이 조용히 안 먹는다.

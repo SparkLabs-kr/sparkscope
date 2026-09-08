@@ -2,7 +2,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireUser } from '@/lib/authz';
-import { getCompanyScope } from '@/lib/sparkscope/company-scope';
 
 export const runtime = 'nodejs';
 
@@ -20,23 +19,13 @@ export async function GET(req: Request) {
   const since = new Date();
   since.setDate(since.getDate() - days);
 
-  // 포트폴리오사 계정은 자기 회사 보도만. 기준 조건(base)을 한 번 만들고
-  // 이 파일의 모든 조회가 이것을 펼쳐 쓴다 — 조회마다 조건을 따로 쓰면
-  // 한 곳을 놓쳤을 때 그대로 남의 회사 자료가 나간다.
-  let scoped: Record<string, unknown> = {};
-  if (gate.user.role !== 'ADMIN') {
-    if (!gate.user.companyId) {
-      return NextResponse.json({ error: 'no_company' }, { status: 403 });
-    }
-    const scope = await getCompanyScope(gate.user.companyId);
-    if (!scope) return NextResponse.json({ error: 'no_company' }, { status: 403 });
-    scoped = scope.where as Record<string, unknown>;
-  }
-  const base = { pubDate: { gte: since }, isNoise: false, ...scoped };
+  // 포트폴리오사 계정도 사내와 같은 자료를 본다(열람 전용). 쓰기는 각 엔드포인트가
+  // requireAdmin 으로 막는다.
+  const base = { pubDate: { gte: since }, isNoise: false };
 
   const where: any = { ...base };
   // 포트폴리오사 계정에는 category 를 덮어쓰지 못하게 한다.
-  if (category && gate.user.role === 'ADMIN') where.category = category;
+  if (category) where.category = category;
   if (search) {
     where.OR = [
       { title: { contains: search } },
@@ -54,10 +43,10 @@ export async function GET(req: Request) {
   // KPI 계산
   const total = await prisma.article.count({ where: base });
   const sparklabsCount = await prisma.article.count({
-    where: { ...base, ...(scoped.category ? {} : { category: 'sparklabs_self' }) },
+    where: { ...base, category: 'sparklabs_self' },
   });
   const portfolioCount = await prisma.article.count({
-    where: { ...base, ...(scoped.category ? {} : { category: 'portfolio_company' }) },
+    where: { ...base, category: 'portfolio_company' },
   });
   const pitchCount = await prisma.article.count({
     where: { ...base, pitchScore: { gte: 75 } },
@@ -75,7 +64,7 @@ export async function GET(req: Request) {
   // 톤 분포
   const toneGroups = await prisma.article.groupBy({
     by: ['tone'],
-    where: { ...base, ...(scoped.category ? {} : { category: 'portfolio_company' }) },
+    where: { ...base, category: 'portfolio_company' },
     _count: { _all: true },
   });
 

@@ -17,10 +17,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // 그대로라 다시 여기로 와서 같은 일이 반복된다. 서버가 쿠키를 지우는
   // 경로로 보내 상태를 끊는다.
   if (!user) redirect(hasStaleSession() ? '/api/session-reset' : '/login');
-  // 사내 대시보드는 경쟁사·시너지·다른 포트폴리오사 자료를 함께 보여준다.
-  // 포트폴리오사 계정은 자기 회사 화면으로 보낸다 — 여기서 막지 않으면
-  // page.tsx 40여 군데 조회를 하나하나 막아야 한다.
-  if (user.role !== 'ADMIN') redirect('/portfolio');
+  // 포트폴리오사 계정도 사내와 같은 화면을 본다 — 다만 열람 전용이다.
+  // 쓰기는 각 API 가 requireAdmin 으로 막고, 화면의 편집 컨트롤은
+  // canScrap(지정 계정) 으로 이미 감춰진다.
+  //
+  // 예외는 /dashboard/accounts 다. 그 화면에는 다른 회사 신청자의 이름·메일이
+  // 들어 있어서, 회사 계정에 보이면 남의 개인정보가 새는 것이다.
+  // (그 화면 자체가 requireAdmin + canApproveAccess 로 막고 있다.)
 
   const initial = user.email[0].toUpperCase();
   // 접근 요청은 메일로 알리지만, 메일은 실패할 수 있다. 본부가 매일 보는
@@ -61,7 +64,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
         <div className="flex items-center gap-3 text-sm text-spark-muted">
           <LanguageSwitcher />
-          <span className="hidden md:inline px-2 py-0.5 rounded-md bg-spark-subtle border border-spark-border text-[11px] font-semibold tracking-wide text-spark-ink-soft">🔒 INTERNAL</span>
+          <span className="hidden md:inline px-2 py-0.5 rounded-md bg-spark-subtle border border-spark-border text-[11px] font-semibold tracking-wide text-spark-ink-soft">{user.role === 'ADMIN' ? '🔒 INTERNAL' : `👁 ${t('열람 전용')}`}</span>
           <span className="hidden md:inline text-[13px]">{user.email}</span>
           <div className="w-7 h-7 rounded-full bg-spark-purple text-white grid place-items-center text-xs font-bold">{initial}</div>
           <SignOutButton />

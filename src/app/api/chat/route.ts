@@ -27,11 +27,6 @@ export async function POST(req: Request) {
   // 실제 경계는 여기다. 미들웨어는 쿠키 유무만 보므로 보안 경계가 아니다.
   const gate = await requireUser();
   if (!gate.ok) return gate.response;
-  // 챗봇은 전체 기사·회사를 넘나들며 답한다. 회사별로 좁힐 수단이 없으므로
-  // 포트폴리오사 계정에는 닫아 둔다(/portfolio 에 노출하지도 않는다).
-  if (gate.user.role !== 'ADMIN') {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-  }
   const session = OPEN_ACCESS
     ? ({ user: { email: 'dev@localhost' } } as any)
     : await getServerSession(authOptions);

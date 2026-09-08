@@ -97,7 +97,7 @@ function LoginForm() {
               {t('포트폴리오사 로그인')}
             </div>
             <div className="text-[12.5px] text-gray-500 mt-0.5">
-              {t('승인받은 회사 계정으로 자기 회사 보도를 봅니다')}
+              {t('승인받은 회사 계정으로 로그인합니다')}
             </div>
           </button>
 
@@ -134,7 +134,8 @@ function LoginForm() {
         e.preventDefault();
         setSubmitting(true);
         // 사내는 대시보드, 포트폴리오사는 자기 회사 화면으로.
-        await signIn('email', { email, callbackUrl: staff ? '/dashboard' : '/portfolio' });
+        // 두 계정 모두 대시보드로 — 포트폴리오사도 같은 화면을 본다(열람 전용).
+        await signIn('email', { email, callbackUrl: '/dashboard' });
       }}
       className="max-w-md w-full"
     >
