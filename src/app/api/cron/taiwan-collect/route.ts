@@ -11,7 +11,7 @@
  *   구글 뉴스에 불필요한 요청만 쌓인다. 주 1회(10일 창)면 겹치면서도 누락이 없다.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { collectTaiwanArticles } from '@/lib/sparkscope/taiwan-collect';
+import { collectTaiwanArticles, TW_SELF_NAME } from '@/lib/sparkscope/taiwan-collect';
 import { analyzeArticles } from '@/lib/sparkscope/analyzer';
 import { ensureArticleKo, ensureArticleEn } from '@/lib/sparkscope/translate-content';
 import { prisma } from '@/lib/prisma';
@@ -38,8 +38,10 @@ export async function GET(request: NextRequest) {
     // analyzeArticles(raw, portfolioUniverse, trendingTopics) — 3번째까지 필수.
     // 대만 대상 이름을 universe로 넘겨 분류 시 회사 맥락을 준다. trendingTopics는 국내 이슈
     // 기준이라 대만엔 의미가 없어 빈 배열로 둔다.
+    // 자사 대상('스파크랩 타이완')도 함께 수집하므로 universe에 넣어준다 —
+    // 안 넣으면 분석기가 자사 기사를 아는 회사 없는 기사로 취급한다.
     const universe = await prisma.monitoringTarget.findMany({
-      where: { category: 'portfolio_company_tw' },
+      where: { OR: [{ category: 'portfolio_company_tw' }, { name: TW_SELF_NAME }] },
       select: { name: true },
     });
     const analyzed = await analyzeArticles(raw, universe.map(u => u.name), []);

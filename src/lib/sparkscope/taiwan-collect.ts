@@ -30,6 +30,16 @@ import type { RawArticle } from './types';
 
 export const TAIWAN_NEWS_LOCALE = { hl: 'zh-TW', gl: 'TW', ceid: 'TW:zh-Hant' } as const;
 
+/**
+ * 대만 스파크랩 자사 언급 감시 대상.
+ *
+ * 이 대상은 category가 sparklabs_self라 원래는 collector.ts(네이버)가 담당하지만, 네이버는
+ * 대만 매체를 색인하지 않아 실제로 0건이었다(2026-09-07 확인 — 최근 90일 0건). 자사 언급도
+ * 대만 매체에서 찾아야 하므로 이 수집기가 함께 조회한다. 대신 저장할 때 category는
+ * 대상의 것(sparklabs_self)을 그대로 쓴다 — 자사 기사가 포트폴리오사로 분류되면 안 된다.
+ */
+export const TW_SELF_NAME = '스파크랩 타이완';
+
 export type TaiwanFeedItem = {
   title: string;
   link: string;
@@ -111,11 +121,26 @@ async function fetchXml(url: string): Promise<string> {
  * 스크래핑이 불가능하기 때문. 따라서 제목만으로 판정되며, 그만큼 문맥어 설정이 중요하다.
  *
  * @param sinceDays 조회 기간(일). 주 1회 실행 기준 10일 정도면 누락 없이 겹친다.
+ * @param opts.onlySelf 자사 언급(스파크랩 타이완)만 조회한다. 백필용 —
+ *   포트폴리오사 69개를 같이 훑으면 구글 뉴스 요청이 70배가 된다.
  */
-export async function collectTaiwanArticles(sinceDays = 10): Promise<RawArticle[]> {
+export async function collectTaiwanArticles(
+  sinceDays = 10,
+  opts: { onlySelf?: boolean } = {},
+): Promise<RawArticle[]> {
   const pack = packFor('zh-TW');
+  const selfWhere = { category: 'sparklabs_self', name: TW_SELF_NAME };
   const targets = await prisma.monitoringTarget.findMany({
-    where: { category: TAIWAN_CATEGORY, status: 'ACTIVE' },
+    where: opts.onlySelf
+      ? { status: 'ACTIVE', ...selfWhere }
+      : {
+          status: 'ACTIVE',
+          OR: [
+            { category: TAIWAN_CATEGORY },
+            // 대만 자사 언급 — 위 TW_SELF_NAME 주석 참고.
+            selfWhere,
+          ],
+        },
     orderBy: { name: 'asc' },
   });
 
@@ -125,7 +150,15 @@ export async function collectTaiwanArticles(sinceDays = 10): Promise<RawArticle[
   const seenLinks = new Set<string>();
 
   for (const t of targets) {
-    const names = [t.name, t.englishName, t.primaryKeyword].filter(
+    const isSelf = t.category === 'sparklabs_self';
+    // 자사 대상은 별칭까지 검색어에 넣는다 — 대만 매체는 "SparkLabs Taipei"처럼 영문
+    // 브랜드명을 중문 문장 안에 그대로 쓰므로, 한국어 이름만으로는 검색이 안 걸린다.
+    // (중국어 음역명은 존재하지 않는다 — 공식 중문 페이지도 라틴 표기를 쓴다.)
+    // 검색을 넓히는 것뿐이고, 통과 여부는 아래 isRelevant()가 contextWords로 다시 좁힌다.
+    const aliases = isSelf
+      ? (t.helperKeywords ?? '').split(',').map(v => v.trim()).filter(Boolean)
+      : [];
+    const names = [t.name, t.englishName, t.primaryKeyword, ...aliases].filter(
       (v): v is string => !!v && v.trim().length > 0,
     );
     const uniqueNames = [...new Set(names)];
@@ -195,19 +228,23 @@ export async function collectTaiwanArticles(sinceDays = 10): Promise<RawArticle[
         link: it.link,
         source,
         pubDate: it.pubDate,
-        matchedKeyword: t.name,
-        category: TAIWAN_CATEGORY,
+        // 자사 기사는 한국 파이프라인과 같은 기준으로 matchedKeyword=primaryKeyword를 쓴다
+        // (대시보드가 sparklabs_self를 primaryKeyword로 거른다). 대만 포폴사는 기존대로 name.
+        matchedKeyword: isSelf ? t.primaryKeyword : t.name,
+        category: t.category as RawArticle['category'],
         // 공시·시세 자동생성물은 우선순위를 낮춰 대시보드 상단을 차지하지 않게 한다.
         // 큐레이션 밖 매체는 공시(10)보다도 아래(5)에 둔다.
-        basePriority: excluded ? 5 : isDisclosure ? 10 : 70,
+        // 자사 기사는 한국 파이프라인과 같이 최상위(100).
+        basePriority: excluded ? 5 : isDisclosure ? 10 : isSelf ? 100 : 70,
       });
     }
   }
 
   const offRoster = out.filter(a => a.basePriority === 5).length;
+  const selfCount = out.filter(a => a.category === 'sparklabs_self').length;
   console.log(
-    `[taiwan-collect] ${targets.length}개사 조회 → ${out.length}건 수집 ` +
-    `(큐레이션 매체 ${out.length - offRoster}건 · 제외 매체 ${offRoster}건)`,
+    `[taiwan-collect] ${targets.length}개 대상 조회 → ${out.length}건 수집 ` +
+    `(큐레이션 매체 ${out.length - offRoster}건 · 제외 매체 ${offRoster}건 · 자사 ${selfCount}건)`,
   );
   return out;
 }

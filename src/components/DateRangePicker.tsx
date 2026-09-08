@@ -39,7 +39,7 @@ const ACCENT = {
 // 고른 기간만 위로 올려보낸다(Inter 탭은 기간·국가를 다 고른 뒤 '확인'을 눌러야 조회된다).
 // 이때 하이라이트는 부모가 넘겨주는 from/to(=선택 중인 값) 기준으로 그려지므로 즉시 반응한다.
 export function DateRangePicker({
-  from, to, min, max, company, tab, scope, extraParams, accent = 'purple', onStage, hideLabel, trailing,
+  from, to, min, max, company, tab, scope, extraParams, accent = 'purple', onStage, hideLabel, trailing, presetLabels,
 }: {
   from: string; to: string; min: string; max: string;
   company?: string; tab?: string; scope?: string; extraParams?: Record<string, string>;
@@ -49,6 +49,12 @@ export function DateRangePicker({
   hideLabel?: boolean;
   /** 프리셋 버튼 오른쪽에 덧붙일 것(예: 포트폴리오사 탭의 한국/대만 전환). */
   trailing?: React.ReactNode;
+  /**
+   * 보여줄 프리셋만 골라낸다(안 주면 전부). 데이터가 그 기간까지 없는 탭에서
+   * 긴 기간 버튼을 눌러도 빈 화면만 나오므로, 그 탭에서는 아예 감춘다.
+   * 예: 대만 자사 언급은 백필을 1개월치만 해서 ['7일','1개월']만 준다.
+   */
+  presetLabels?: readonly string[];
 }) {
   const tr = useT();
   const router = useRouter();
@@ -105,7 +111,7 @@ export function DateRangePicker({
 
       {/* 프리셋 버튼: 선택된 기간과 일치하는 버튼만 강조 (Intra 보라 / Inter 초록) */}
       <div className="flex gap-1 flex-wrap">
-        {PRESETS.map(p => {
+        {PRESETS.filter(p => !presetLabels || presetLabels.includes(p.label)).map(p => {
           const start = presetFrom(p.shift);
           const active = t === max && f === start;
           return (

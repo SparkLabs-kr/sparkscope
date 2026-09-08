@@ -79,8 +79,11 @@ const REGION_LABEL: Record<RegionId, string> = {
 };
 const REGION_VIEWS: Record<RegionId, readonly TabId[]> = {
   kr: ['sparklabs', 'portfolio', 'competitor'],
-  tw: ['portfolio'],
+  tw: ['sparklabs', 'portfolio'],
 };
+// 대만 자사 언급을 가려내는 감시 대상 이름 — sparklabs_self는 카테고리가 하나뿐이라
+// 국가를 이 키로 가른다(taiwan-collect.ts의 TW_SELF_NAME과 반드시 같은 값이어야 한다).
+const TW_SELF_KEYWORD = '스파크랩 타이완';
 // 2단 탭 문구 — 같은 tab이라도 국가에 따라 라벨이 달라진다(예: '한국 업계 모니터링').
 const VIEW_LABEL: Record<RegionId, Partial<Record<TabId, string>>> = {
   kr: {
@@ -89,6 +92,7 @@ const VIEW_LABEL: Record<RegionId, Partial<Record<TabId, string>>> = {
     competitor: '🏁 한국 업계 모니터링',
   },
   tw: {
+    sparklabs: '🏢 스파크랩 직접 언급',
     portfolio: '📊 포트폴리오사',
   },
 };
@@ -139,18 +143,22 @@ function getKstNow() {
   return new Date(Date.now() + 9 * 60 * 60 * 1000);
 }
 
-function resolveRange(searchParams: { from?: string; to?: string }) {
+// defaultMonths: 기본 조회 기간(개월). 보통 3개월이지만, 기사 백필이 그만큼 안 된 화면은
+// 더 짧게 준다 — 데이터 없는 구간까지 조회해놓고 "기사가 없다"고 보여주면 오해를 준다.
+function resolveRange(searchParams: { from?: string; to?: string }, defaultMonths = 3) {
   const todayStr = fmt(getKstNow());
   const def = getKstNow();
-  def.setUTCMonth(def.getUTCMonth() - 3); // 기본 기간: 최근 3개월 (유의미한 흐름 파악)
+  def.setUTCMonth(def.getUTCMonth() - defaultMonths); // 기본 기간 (유의미한 흐름 파악)
   let from = isValidYmd(searchParams.from) ? clamp(searchParams.from, MIN_DATE, todayStr) : fmt(def);
   let to = isValidYmd(searchParams.to) ? clamp(searchParams.to, MIN_DATE, todayStr) : todayStr;
   if (from > to) [from, to] = [to, from];
 
-  // 라벨: 기본(최근 3개월)이면 "최근 3개월", 아니면 "YYYY.M.D ~ YYYY.M.D"
+  // 라벨: 기본 기간이면 "최근 N개월", 아니면 "YYYY.M.D ~ YYYY.M.D"
   const isDefaultRange = to === todayStr && from === fmt(def);
   const pretty = (s: string) => { const [y, m, d] = s.split('-'); return `${y}.${Number(m)}.${Number(d)}`; };
-  const label = isDefaultRange ? getT()('최근 3개월') : `${pretty(from)} ~ ${pretty(to)}`;
+  const label = isDefaultRange
+    ? getT()('최근 {n}개월', { n: defaultMonths })
+    : `${pretty(from)} ~ ${pretty(to)}`;
   return { from, to, label, isDefaultRange };
 }
 
@@ -209,6 +217,9 @@ async function loadDashboardData(
   // (portfolio_company / portfolio_company_tw) — 2.3의 "국가를 별도 필드로" 작업이
   // 끝나면 이 인자가 country 필드 조건으로 바뀐다.
   pfCategory: PortfolioCategory = 'portfolio_company',
+  // 어느 나라의 자사 언급을 볼 것인가. 포트폴리오와 달리 sparklabs_self는 카테고리가
+  // 하나뿐이어서, 감시 대상(matchedKeyword)으로 한국/대만을 가른다.
+  region: RegionId = 'kr',
 ) {
   // AI가 생성한 문장(위기 원인·경쟁사 트렌드)은 사전계산된 한국어를 저장해두므로,
   // EN 화면이면 그 문장의 영어판을 채워서 읽는다(DashboardInsight JSON 안에 캐시된다).
@@ -218,8 +229,18 @@ async function loadDashboardData(
   const until = new Date(`${to}T23:59:59`);
   const where = { pubDate: { gte: since, lte: until }, isNoise: false };
   const portfolioWhere = { ...where, category: pfCategory };
-  // 스파크랩 기사: 자체 카테고리 + 제목에 '스파크랩' 언급 (매체·톤 분석용)
-  const sparklabsWhere = { ...where, OR: [{ category: 'sparklabs_self' as string }, { title: { contains: '스파크랩' } }] };
+  // 스파크랩 기사: 자체 카테고리 + 제목에 '스파크랩' 언급 (매체·톤 분석용).
+  //
+  // 국가별로 갈라야 한다 — sparklabs_self는 카테고리가 하나뿐이므로 감시 대상 이름으로 가른다.
+  // 대만 탭은 '스파크랩 타이완'에 걸린 기사만, 한국 탭은 그 나머지만 본다. 안 가르면 두 탭이
+  // 같은 기사를 중복해서 세고, "대만 자사 언급"에 한국 기사가 그대로 뜬다.
+  const sparklabsWhere = region === 'tw'
+    ? { ...where, category: 'sparklabs_self' as string, matchedKeyword: TW_SELF_KEYWORD }
+    : {
+        ...where,
+        OR: [{ category: 'sparklabs_self' as string }, { title: { contains: '스파크랩' } }],
+        NOT: { matchedKeyword: TW_SELF_KEYWORD },
+      };
   const negOr = [{ tone: 'NEGATIVE' as string | null }, ...NEGATIVE_KEYWORDS.map(k => ({ title: { contains: k } }))];
   // 긍정 하이라이트용 — AI 긍정 톤 + 명확한 호재 키워드
   const POSITIVE_KEYWORDS = ['투자 유치', '시리즈', '상장', '수상', '선정', 'MOU', '파트너십', '업무협약', '출시', '런칭', '흑자', '수출', '돌파', '체결'];
@@ -754,13 +775,20 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const isEn = getLocale() === 'en';
   const locale: 'ko' | 'en' = isEn ? 'en' : 'ko';
   const intlLocale = isEn ? 'en-US' : 'ko-KR';
-  const range = resolveRange(searchParams);
   const company = typeof searchParams.company === 'string' && searchParams.company ? searchParams.company : undefined;
-  const tab = resolveTab(searchParams.tab);
   const scope = resolveScope(searchParams.scope);
-  // 어느 나라 포트폴리오를 볼 것인가 (?country=tw). 기본은 한국.
+  // 어느 나라를 볼 것인가 (?country=tw). 기본은 한국.
   const region: RegionId = resolveRegion(searchParams.country);
-  const data = await loadDashboardData(range.from, range.to, company, range.isDefaultRange, categoryOfRegion(region));
+  // 그 국가에 없는 관점으로는 들어갈 수 없게 한다 — ?tab=competitor&country=tw 같은 URL을
+  // 그대로 그리면 "대만" 탭 아래에 한국 업계 데이터가 뜬다. 수집 기사 DB는 국가 계층 밖이라 예외.
+  const rawTab = resolveTab(searchParams.tab);
+  const tab: TabId = rawTab === DB_TAB ? DB_TAB : clampView(region, rawTab);
+  // 대만 자사 언급은 기사 백필을 1개월치만 했다(2026-09-07). 그래서 이 화면에서는
+  // 긴 기간 프리셋을 감추고, 기본 기간도 3개월 대신 1개월로 잡는다 — 안 그러면
+  // 3개월로 조회되면서 앞 2개월이 통째로 빈 구간인 채로 보인다.
+  const isTwSelf = region === 'tw' && tab === 'sparklabs';
+  const range = resolveRange(searchParams, isTwSelf ? 1 : 3);
+  const data = await loadDashboardData(range.from, range.to, company, range.isDefaultRange, categoryOfRegion(region), region);
   const session = await getServerSession(authOptions);
   const canScrap = canScrapEmail(session?.user?.email ?? null);
   const pendingSuggestionCount = canScrap ? await prisma.noiseSuggestion.count({ where: { status: 'PENDING' } }) : 0;
@@ -808,6 +836,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const tabHref = (t: TabId) => {
     const params = new URLSearchParams({ from: range.from, to: range.to, tab: t, scope });
     if (data.selectedCompany) params.set('company', data.selectedCompany);
+    if (region !== 'kr') params.set('country', region);
+    return `/dashboard?${params.toString()}`;
+  };
+  // 수집 기사 DB 링크 — 지금 보고 있는 기간(과 필요하면 회사 필터)을 그대로 들고 넘어간다.
+  // 회사를 주면 DB 탭이 그 회사 기사만 펼쳐서 보여준다(selectedCompany = matchedKeyword).
+  const dbHref = (company?: string) => {
+    const params = new URLSearchParams({ from: range.from, to: range.to, tab: DB_TAB, scope });
+    if (company) params.set('company', company);
     if (region !== 'kr') params.set('country', region);
     return `/dashboard?${params.toString()}`;
   };
@@ -910,10 +946,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           <Link
             href={tabHref(DB_TAB)}
             aria-current={tab === DB_TAB ? 'page' : undefined}
-            className={`self-center rounded-xl border px-4 py-2 text-[13px] font-bold whitespace-nowrap transition-colors ${
+            className={`self-center rounded-xl border-2 px-4 py-2.5 text-sm font-extrabold whitespace-nowrap transition-colors ${
               tab === DB_TAB
-                ? 'bg-amber-50 border-amber-600 text-amber-800'
-                : 'border-dashed border-spark-border-strong bg-spark-subtle text-spark-muted hover:text-spark-ink-soft'
+                ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                : 'border-blue-500 bg-blue-50 text-blue-700 hover:bg-blue-100'
             }`}
           >
             {tr(DB_LABEL)}
@@ -963,6 +999,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())}
           company={data.selectedCompany} tab={tab}
           extraParams={region !== 'kr' ? { country: region } : undefined}
+          presetLabels={isTwSelf ? ['7일', '1개월'] : undefined}
         />
       </div>
 
@@ -996,7 +1033,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
       {/* ── 스파크랩 (가장 궁금한 정보) ── */}
       {tab === 'sparklabs' && <>
-      <SectionTitle title={`🏢 ${tr('스파크랩')}`} sub={tr('우리 자사가 어디에, 어떤 논조로 보도되는가')} />
+      <SectionTitle title={`🏢 ${tr('스파크랩')}`} sub={tr('우리 자사가 어디에, 어떤 논조로 보도되는가')} dbHref={dbHref()} />
       <div className="flex flex-col gap-4 mb-8">
         <div data-tour="media-panel" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
           <div className="font-bold mb-4">📰 {tr('매체별 노출 분포 (스파크랩)')} <InfoTip text={tr("선택 기간 동안 '스파크랩' 기사를 다룬 매체 분포입니다(주요 26개 매체 기준).\n어느 매체가 우리를 가장 많이 써주는지 보여줍니다.")} /></div>
@@ -1007,8 +1044,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           <ToneBreakdown articles={data.toneArticles as any} />
         </div>
 
-        {/* 스파크랩 펀드 현황 */}
-        {data.sparkLabsFundSummary && (
+        {/* 스파크랩 펀드 현황 — 대만은 제외한다. 펀드 데이터가 한국 법인 기준이라
+            대만 탭에 그리면 한국 펀드를 대만 것처럼 보여주게 된다. */}
+        {region !== 'tw' && data.sparkLabsFundSummary && (
           <div data-tour="fund-panel" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
             <div className="font-bold mb-4">🏦 {tr('스파크랩 펀드 현황')}</div>
             <div className="flex flex-wrap gap-4 mb-4">
@@ -1067,7 +1105,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
       {/* ── 포트폴리오사 ── */}
       {tab === 'portfolio' && <>
-      <SectionTitle title={`📊 ${tr('포트폴리오사')}`} sub={tr('어느 포트폴리오사가 활발히 노출되고, 부정 이슈는 없는가')} />
+      <SectionTitle title={`📊 ${tr('포트폴리오사')}`} sub={tr('어느 포트폴리오사가 활발히 노출되고, 부정 이슈는 없는가')} dbHref={dbHref()} />
 
       {/* 실시간 위기 감지 — 위기 없을 땐 '정상' 상태를 명시해 기능이 살아있음을 표시 */}
       <div data-tour="crisis-panel" className="mb-6">
@@ -1080,8 +1118,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
       {/* 긍정·부정 나란히 (대비가 한눈에) */}
       <div data-tour="pos-neg" className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-        <PortfolioPositives items={data.portfolioPositives} rangeLabel={range.label} locale={locale} />
-        <PortfolioNegatives items={data.portfolioNegatives} rangeLabel={range.label} locale={locale} />
+        <PortfolioPositives items={data.portfolioPositives} rangeLabel={range.label} locale={locale} dbHref={dbHref()} />
+        <PortfolioNegatives items={data.portfolioNegatives} rangeLabel={range.label} locale={locale} dbHref={dbHref()} />
       </div>
 
       {/* 포트폴리오 TOP15 → 기획기사 피칭 (위아래 배치)
@@ -1089,7 +1127,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           기준이라 대만 포트폴리오사에는 사실상 안 붙는 값이고, 화면에 카드만 비어 있는
           채로 남아 혼란을 준다(2026-09-07). */}
       <div className="grid grid-cols-1 gap-4 mb-8">
-        <div data-tour="top15">
+        <div data-tour="top15" className="relative">
+          <div className="absolute right-5 top-5 z-10"><DbLink href={dbHref()} label="전체 기사" /></div>
           <PortfolioTopList items={data.portfolioTop} rangeLabel={range.label} prevRangeLabel={data.portfolioTopPrevRangeLabel} showChange={data.portfolioTopHasEnoughPrevData} />
         </div>
         {region !== 'tw' && (
@@ -1118,6 +1157,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       {/* 경쟁사 모니터링 — Tier1 직접 경쟁 액셀러레이터 언급량·최근 이슈 */}
       {tab === 'competitor' && (
         <div data-tour="competitor-panel" className="mb-6">
+          <div className="mb-3 flex justify-end"><DbLink href={dbHref()} /></div>
           <CompetitorPanel
             competitors={data.competitors}
             cardCompetitors={data.pinnedCompetitors}
@@ -1215,7 +1255,25 @@ function computeDday(maturityDateIso: string): number | null {
   return Math.ceil((mat.getTime() - today.getTime()) / 86400000);
 }
 
-function SectionTitle({ title, sub }: { title: string; sub?: string }) {
+/**
+ * 이 패널의 기사들을 "수집 기사 DB"에서 이어서 보게 하는 링크.
+ *
+ * 각 탭은 목적에 맞게 추린 화면이라 3~15건만 보여준다. 그 뒤에 있는 전체 기사는 DB 탭에만
+ * 있으므로(분류·검색·정렬·CSV), 추려 보다가 원본으로 내려갈 길을 각 패널에 열어둔다.
+ */
+function DbLink({ href, label }: { href: string; label?: string }) {
+  const tr = getT();
+  return (
+    <Link
+      href={href}
+      className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700 transition-colors hover:border-blue-400 hover:bg-blue-100 whitespace-nowrap"
+    >
+      🗄️ {tr(label ?? '수집 기사 DB에서 보기')} →
+    </Link>
+  );
+}
+
+function SectionTitle({ title, sub, dbHref }: { title: string; sub?: string; dbHref?: string }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-4 mt-4">
       <div className="flex items-center gap-2.5">
@@ -1223,15 +1281,19 @@ function SectionTitle({ title, sub }: { title: string; sub?: string }) {
         <h2 className="text-[17px] font-extrabold tracking-tight text-spark-ink">{title}</h2>
       </div>
       {sub && <span className="text-xs text-spark-muted">{sub}</span>}
+      {dbHref && <span className="ml-auto"><DbLink href={dbHref} /></span>}
     </div>
   );
 }
 
-function PortfolioPositives({ items, rangeLabel, locale }: { items: { id?: string; company: string; title: string; titleEn?: string | null; titleKo?: string | null; source: string; pubDate: Date; link: string; mediaCount?: number }[]; rangeLabel: string; locale: 'ko' | 'en' }) {
+function PortfolioPositives({ items, rangeLabel, locale, dbHref }: { items: { id?: string; company: string; title: string; titleEn?: string | null; titleKo?: string | null; source: string; pubDate: Date; link: string; mediaCount?: number }[]; rangeLabel: string; locale: 'ko' | 'en'; dbHref?: string }) {
   const tr = getT();
   return (
     <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
+      <div className="flex items-start justify-between gap-2">
       <div className="font-bold mb-1">✨ {tr('포트폴리오 긍정 하이라이트')} <InfoTip text={tr('{range} 동안 포트폴리오사의 긍정 논조(투자유치·상장·수상·파트너십 등) 기사 중, 여러 매체가 다룬 순으로 TOP 3.', { range: rangeLabel })} /></div>
+      {dbHref && <DbLink href={dbHref} label="전체 기사" />}
+      </div>
       <div className="text-xs text-spark-muted mb-4">{tr('{range} · 매체 노출 많은 순 TOP {n}', { range: rangeLabel, n: items.length })}</div>
       {items.length > 0 ? (
         <div className="space-y-2 max-h-80 overflow-y-auto scroll-slim pr-1">
@@ -1256,11 +1318,14 @@ function PortfolioPositives({ items, rangeLabel, locale }: { items: { id?: strin
   );
 }
 
-function PortfolioNegatives({ items, rangeLabel, locale }: { items: { id?: string; company: string; title: string; titleEn?: string | null; titleKo?: string | null; source: string; pubDate: Date; link: string; mediaCount?: number; riskFlag?: string | null }[]; rangeLabel: string; locale: 'ko' | 'en' }) {
+function PortfolioNegatives({ items, rangeLabel, locale, dbHref }: { items: { id?: string; company: string; title: string; titleEn?: string | null; titleKo?: string | null; source: string; pubDate: Date; link: string; mediaCount?: number; riskFlag?: string | null }[]; rangeLabel: string; locale: 'ko' | 'en'; dbHref?: string }) {
   const tr = getT();
   return (
     <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
+      <div className="flex items-start justify-between gap-2">
       <div className="font-bold mb-1">⚠️ {tr('포트폴리오 부정 기사')} <InfoTip text={tr('{range} 동안 포트폴리오사 부정 논조 기사 중, 여러 매체가 다룬 순으로 TOP 3.', { range: rangeLabel })} /></div>
+      {dbHref && <DbLink href={dbHref} label="전체 기사" />}
+      </div>
       <div className="text-xs text-gray-500 mb-4">{tr('{range} · 매체 노출 많은 순 TOP {n}', { range: rangeLabel, n: items.length })}</div>
       {items.length > 0 ? (
         <div className="space-y-2 max-h-80 overflow-y-auto pr-1 scroll-slim">

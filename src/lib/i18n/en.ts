@@ -144,6 +144,7 @@ export const EN: Record<string, string> = {
   '3개월': '3m',
   '1년': '1y',
   '최근 3개월': 'Last 3 months',
+  '최근 {n}개월': 'Last {n} months',
 
   // ── 카테고리 라벨 ─────────────────────────────────────────────────
   '스파크랩': 'SparkLabs',
@@ -179,6 +180,8 @@ export const EN: Record<string, string> = {
   '🗄️ 수집 기사 DB': '🗄️ Article database',
   '대만 업계 모니터링은 감시 대상(AC·VC·업계 키워드)이 아직 전부 한국 기준이라 준비 중입니다.':
     'Taiwan industry monitoring is not available yet — the monitored AC/VC and industry keywords are all Korea-based.',
+  '수집 기사 DB에서 보기': 'Open in article database',
+  '전체 기사': 'All articles',
   '대시보드 섹션': 'Dashboard sections',
   '{range} 데이터 기준': 'Based on {range} data',
   '{range} 해외 매체·논문 데이터 기준': 'Based on {range} global media and paper data',
