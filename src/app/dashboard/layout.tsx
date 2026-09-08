@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSessionUser } from '@/lib/authz';
-import { countPending } from '@/lib/sparkscope/access-request';
+import { countPending, canApproveAccess } from '@/lib/sparkscope/access-request';
 import { SignOutButton } from '@/components/SignOutButton';
 import { ScrollTopButton } from '@/components/ScrollTopButton';
 import { DashboardTutorial } from '@/components/DashboardTutorial';
@@ -21,7 +21,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const initial = user.email[0].toUpperCase();
   // 접근 요청은 메일로 알리지만, 메일은 실패할 수 있다. 본부가 매일 보는
   // 화면에 대기 건수를 띄워 두면 알림이 실패해도 요청이 묻히지 않는다.
-  const { pending, unnotified } = await countPending().catch(() => ({ pending: 0, unnotified: 0 }));
+  // 배지는 승인할 수 있는 사람에게만 — 다른 직원에게 보여도 눌러 들어갈 수 없다.
+  const mayApprove = canApproveAccess(user.email);
+  const { pending, unnotified } = mayApprove
+    ? await countPending().catch(() => ({ pending: 0, unnotified: 0 }))
+    : { pending: 0, unnotified: 0 };
   const t = getT();
 
   return (

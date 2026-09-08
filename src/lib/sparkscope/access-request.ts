@@ -13,6 +13,7 @@
  */
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { OPEN_ACCESS } from '@/lib/flags';
 
 const KIND = 'access_request';
 
@@ -137,4 +138,31 @@ export async function countPending(): Promise<{ pending: number; unnotified: num
     pending: pending.length,
     unnotified: pending.filter(r => r.notified === false).length,
   };
+}
+
+/**
+ * 승인 권한이 있는 주소. 알림을 받는 사람과 같은 목록을 쓴다 —
+ * 목록을 둘로 나누면 사람이 바뀔 때 한쪽만 고쳐져서 어긋난다.
+ * ACCESS_REQUEST_APPROVERS 로 따로 지정할 수도 있다.
+ *
+ * 사내 메일이면 누구나 ADMIN 이 되므로(authz.ts) 승인까지 열어 두면
+ * 전 직원이 외부 회사에 포트폴리오 자료 접근을 줄 수 있다. 그래서 승인은
+ * 키워드 관리(SCRAP_ALLOWED_EMAILS)처럼 지정된 사람만 한다.
+ */
+export function accessApprovers(): string[] {
+  const raw =
+    process.env.ACCESS_REQUEST_APPROVERS ??
+    process.env.ACCESS_REQUEST_REVIEWERS ??
+    'marketing@sparklabs.co.kr';
+  return raw
+    .split(',')
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/** 이 사람이 승인·거절을 할 수 있는가. */
+export function canApproveAccess(email: string | null | undefined): boolean {
+  if (OPEN_ACCESS) return true; // 로컬 협업 모드
+  if (!email) return false;
+  return accessApprovers().includes(email.trim().toLowerCase());
 }

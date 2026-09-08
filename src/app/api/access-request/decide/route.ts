@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/authz';
-import { getRequest, markDecided } from '@/lib/sparkscope/access-request';
+import { getRequest, markDecided, canApproveAccess } from '@/lib/sparkscope/access-request';
 import { sendNotice } from '@/lib/sparkscope/mailer';
 
 export const runtime = 'nodejs';
@@ -25,6 +25,10 @@ const Body = z.object({
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin();
   if (!auth.ok) return auth.response;
+  // 승인은 지정된 사람만 — 사내 메일이면 전원 ADMIN 이기 때문이다(authz.ts).
+  if (!canApproveAccess(auth.user.email)) {
+    return NextResponse.json({ error: 'not_approver' }, { status: 403 });
+  }
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'invalid' }, { status: 400 });

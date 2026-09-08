@@ -6,7 +6,7 @@
  */
 import { redirect } from 'next/navigation';
 import { getSessionUser } from '@/lib/authz';
-import { listRequests } from '@/lib/sparkscope/access-request';
+import { listRequests, canApproveAccess } from '@/lib/sparkscope/access-request';
 import { AccessRequestList } from '@/components/AccessRequestList';
 
 export const runtime = 'nodejs';
@@ -17,6 +17,9 @@ export default async function AccountsPage() {
   if (!user) redirect('/login?callbackUrl=%2Fdashboard%2Faccounts');
   // 포트폴리오사 계정이 이 화면에 들어오면 다른 회사의 요청까지 보게 된다.
   if (user.role !== 'ADMIN') redirect('/dashboard');
+  // 승인은 마케팅팀(ACCESS_REQUEST_APPROVERS)만. 사내 메일이면 전원 ADMIN 이라
+  // role 검사만으로는 전 직원이 외부 회사 접근을 허가할 수 있게 된다.
+  if (!canApproveAccess(user.email)) redirect('/dashboard');
 
   const requests = await listRequests().catch(() => []);
   return (
