@@ -72,6 +72,16 @@ export const FEEDS: Feed[] = [
   // /topics/ai/rss는 200이지만 RSS가 아니라 HTML을 돌려준다(2026-09-08 확인).
   // 넣으려면 HTML 파싱이 필요해 별도 작업으로 남긴다.
 
+  // ── 한국 바이오·제약 전문지 ──
+  //
+  // AI타임스와 같은 이유로 domain을 'bio'로 둔다(한국어 제목은 영어 키워드 판정을 통과 못 함).
+  // 국내 소식은 news-digest의 문턱(4점 이상)을 넘어야 목록에 오르므로, 유입량이 많아도
+  // 예산·인사 같은 기사가 상위를 채우지 않는다.
+  // biospectator는 RSS가 404라 제외했다(2026-09-08 확인).
+  { name: '바이오타임즈', url: 'https://www.biotimes.co.kr/rss/allArticle.xml', domain: 'bio', tier: 3 },
+  { name: '약업신문', url: 'https://www.pharmnews.com/rss/allArticle.xml', domain: 'bio', tier: 3 },
+  { name: '메디파나뉴스', url: 'https://www.medipana.com/rss/allArticle.xml', domain: 'bio', tier: 3 },
+
   // ── 바이오 전문지 ──
   { name: 'STAT News', url: 'https://www.statnews.com/feed/', domain: 'bio', tier: 1 },
   { name: 'Endpoints News', url: 'https://endpts.com/feed/', domain: 'bio', tier: 1 },

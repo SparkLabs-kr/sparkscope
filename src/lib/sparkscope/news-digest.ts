@@ -11,7 +11,7 @@
  * 순위 = 다룬 매체 수 → 매체 등급 → 최신순.
  */
 import { FEEDS, DOMAIN_KEYWORDS, type Feed } from './news-feeds';
-import { scoreImportance, type Importance } from './news-importance';
+import { scoreImportance, type Importance, type Verdict } from './news-importance';
 import { groupSameStory } from './news-cluster';
 import { collectPopular } from './news-popular';
 
@@ -33,6 +33,8 @@ export interface DigestItem {
   /** 매체가 집계한 인기기사 등수(1부터). RSS에 없는 실측 참여도 신호다.
    *  없으면 null — 인기 목록에 오르지 않았다는 뜻이고 감점 사유는 아니다. */
   popularRank: number | null;
+  /** 국내(한국) 업계·정책 소식인가. 한국 매체가 보도한 해외 소식은 false다. */
+  domestic: boolean;
   /**
    * 요약을 만들 때만 쓰는 원문 발췌. 화면에는 내보내지 않는다(라우트에서 지운다) —
    * 매체 본문을 그대로 싣는 것은 이용약관 문제이고, 클라이언트 페이로드도 커진다.
@@ -265,6 +267,7 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
         summary: null,
         importance: null,
         popularRank: null,
+        domestic: false,
       };
     })
     .sort((a, b) =>
@@ -313,6 +316,7 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
         summary: null,
         importance: null,
         popularRank: p.rank,
+        domestic: !!p.domestic,
       });
     }
   }
@@ -337,9 +341,9 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
     ...items.filter(i => i.popularRank == null),
   ];
 
-  const scores = await scoreImportance(forScoring).catch(e => {
+  const verdicts = await scoreImportance(forScoring).catch(e => {
     console.error('[news-digest] 중요도 산정 실패 — 예전 기준으로 정렬합니다:', e);
-    return new Map<string, Importance>();
+    return new Map<string, Verdict>();
   });
 
   // 인기 등수는 중요도 바로 다음 기준이다. 매체가 실제 조회수로 매긴 값이라
@@ -348,7 +352,12 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
   const rank = (it: { popularRank: number | null }) => it.popularRank ?? 99;
 
   const scored = items
-    .map(it => ({ ...it, importance: scores.get(it.url) ?? null }))
+    .map(it => {
+      const v = verdicts.get(it.url);
+      // 국내 여부는 채점 결과를 우선한다 — 수집 경로(국내 매체)가 아니라 기사 주제가 기준이다.
+      // 한국 매체가 보도한 오픈AI 소식은 국내 소식이 아니다.
+      return { ...it, importance: v?.score ?? null, domestic: v ? v.domestic : it.domestic };
+    })
     .sort((a, b) =>
       (b.importance ?? 3) - (a.importance ?? 3) ||
       rank(a) - rank(b) ||
@@ -356,9 +365,20 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
       a.tier - b.tier ||
       b.publishedAt.localeCompare(a.publishedAt));
 
+  // 국내 소식은 문턱을 높인다.
+  //
+  // 이 화면의 목적은 해외 트렌드를 보는 것이고, 국내 업계 동향은 Intra 탭이 따로 다룬다.
+  // 국내 집계판(bioin 등)을 넣으면 R&D 예산·기관 통합·인사 같은 기사가 조회수만으로
+  // 상위를 채우는데, 그건 여기서 볼 것이 아니다. "우리나라 뉴스는 엄청 큰 이슈만"이라는
+  // 기준(2026-09-08 합의)을 4점 이상으로 옮겼다.
+  //
+  // 해외 소식은 그대로 3점까지 통과한다 — 국내만 기준이 다르다.
+  const DOMESTIC_MIN: Importance = 4;
+  const passable = scored.filter(it => !it.domestic || (it.importance ?? 0) >= DOMESTIC_MIN);
+
   // 병합 대상 — 최종 노출 수의 세 배 정도만. 같은 사건이 셋으로 쪼개져도 이 안에 든다.
-  const shortlist = scored.slice(0, Math.max(limit * 3, 20));
-  const rest = scored.slice(shortlist.length);
+  const shortlist = passable.slice(0, Math.max(limit * 3, 20));
+  const rest = passable.slice(shortlist.length);
 
   const buckets = await groupSameStory(shortlist).catch(e => {
     console.error('[news-digest] 사건 병합 실패 — 병합 없이 진행합니다:', e);

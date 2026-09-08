@@ -31,6 +31,13 @@ const MAX_CANDIDATES = 160;
 
 export type Importance = 1 | 2 | 3 | 4 | 5;
 
+/** 채점 결과 — 중요도와 "국내 업계 소식인가". */
+export interface Verdict {
+  score: Importance;
+  /** 국내(한국) 업계·정책 소식인가. 해외 소식을 한국 매체가 보도한 것은 false다. */
+  domestic: boolean;
+}
+
 const SYSTEM = [
   '당신은 AI·바이오 산업을 추적하는 벤처투자사의 리서치 담당입니다.',
   '기사 제목 목록을 보고 각 건이 그 산업에 얼마나 큰 일인지 1~5로 매깁니다.',
@@ -58,39 +65,49 @@ const SYSTEM = [
   '- 제목이 모호하면 낮게 줍니다. 확실히 큰 일일 때만 4~5를 줍니다.',
   '- 같은 사안이 여러 건 있으면 각각 같은 점수를 줍니다.',
   '',
-  '출력은 JSON 객체 하나입니다: {"scores":[{"i":0,"s":3},{"i":1,"s":5}, ...]}',
-  'i는 입력에 준 번호, s는 1~5 정수입니다. 모든 항목에 대해 빠짐없이 답합니다.',
+  '각 항목에 국내 여부(kr)도 표시합니다:',
+  '  kr=true  한국 국내의 업계·정책·기관 소식. 한국 기업·정부·대학이 주인공인 건.',
+  '           예: "R&D 예산 39조", "KAIST가 개발", "연구재단 통합", "국내 제약사 수출"',
+  '  kr=false 해외에서 일어난 일. 한국 매체가 보도했어도 주인공이 해외면 false입니다.',
+  '           예: "오픈AI가 GPT-6 공개", "구글 제미나이 3.8", "미스트랄 조달"',
+  '           (한국 기업이 해외 건에 참여한 정도라면 false입니다 — 예: "삼성이 미스트랄에 투자")',
+  '',
+  '출력은 JSON 객체 하나입니다: {"scores":[{"i":0,"s":3,"kr":false},{"i":1,"s":5,"kr":true}, ...]}',
+  'i는 입력에 준 번호, s는 1~5 정수, kr은 true/false입니다. 모든 항목에 빠짐없이 답합니다.',
 ].join('\n');
 
 export interface Scorable { url: string; title: string }
 
-async function readCache(urls: string[]): Promise<Map<string, Importance>> {
+async function readCache(urls: string[]): Promise<Map<string, Verdict>> {
   if (urls.length === 0) return new Map();
   const rows = await prisma.dashboardInsight.findMany({
     where: { kind: KIND, key: { in: urls } },
     select: { key: true, value: true },
   });
-  const out = new Map<string, Importance>();
+  const out = new Map<string, Verdict>();
   for (const r of rows) {
-    const n = Number(r.value);
-    if (n >= 1 && n <= 5) out.set(r.key, n as Importance);
+    try {
+      // 옛 캐시는 점수 하나만 담긴 문자열("4")이다 — 국내 여부를 모르니 무시하고 다시 만든다.
+      const v = JSON.parse(r.value);
+      if (v && v.score >= 1 && v.score <= 5) out.set(r.key, { score: v.score, domestic: !!v.domestic });
+    } catch { /* 옛 형식·깨진 캐시는 버린다 */ }
   }
   return out;
 }
 
-async function writeCache(pairs: { url: string; score: Importance }[]): Promise<void> {
+async function writeCache(pairs: { url: string; verdict: Verdict }[]): Promise<void> {
   // 건수가 많아 순차로 돌리면 왕복이 길어진다 — 동시에 던진다.
   await Promise.all(pairs.map(p =>
     prisma.dashboardInsight.upsert({
       where: { kind_key: { kind: KIND, key: p.url } },
-      create: { kind: KIND, key: p.url, value: String(p.score) },
-      update: { value: String(p.score) },
+      create: { kind: KIND, key: p.url, value: JSON.stringify(p.verdict) },
+      update: { value: JSON.stringify(p.verdict) },
     }).catch(e => console.error('[news-importance] 캐시 저장 실패:', p.url, e))));
 }
 
-async function scoreBatch(batch: Scorable[]): Promise<Map<string, Importance>> {
+async function scoreBatch(batch: Scorable[]): Promise<Map<string, Verdict>> {
   const listing = batch.map((b, i) => `${i}. ${b.title}`).join('\n');
-  const out = new Map<string, Importance>();
+  const out = new Map<string, Verdict>();
   try {
     const res = await client().chat.completions.create({
       model: MODEL,
@@ -99,10 +116,12 @@ async function scoreBatch(batch: Scorable[]): Promise<Map<string, Importance>> {
       response_format: { type: 'json_object' },
     });
     const raw = res.choices[0]?.message?.content ?? '{}';
-    const parsed = JSON.parse(raw) as { scores?: { i: number; s: number }[] };
-    for (const { i, s } of parsed.scores ?? []) {
+    const parsed = JSON.parse(raw) as { scores?: { i: number; s: number; kr?: boolean }[] };
+    for (const { i, s, kr } of parsed.scores ?? []) {
       const item = batch[i];
-      if (item && s >= 1 && s <= 5) out.set(item.url, Math.round(s) as Importance);
+      if (item && s >= 1 && s <= 5) {
+        out.set(item.url, { score: Math.round(s) as Importance, domestic: !!kr });
+      }
     }
   } catch (e) {
     console.error('[news-importance] 점수 산정 실패(해당 묶음 건너뜀):', e);
@@ -114,12 +133,12 @@ async function scoreBatch(batch: Scorable[]): Promise<Map<string, Importance>> {
  * 후보 전체에 중요도를 매긴다. 캐시에 있는 것은 건너뛴다.
  * 실패하거나 빠진 항목은 Map에 없고, 호출부가 기본값으로 처리한다.
  */
-export async function scoreImportance(items: Scorable[]): Promise<Map<string, Importance>> {
+export async function scoreImportance(items: Scorable[]): Promise<Map<string, Verdict>> {
   const uniq = new Map<string, Scorable>();
   for (const it of items) if (it.url && it.title) uniq.set(it.url, it);
   const all = [...uniq.values()].slice(0, MAX_CANDIDATES);
 
-  const cached = await readCache(all.map(a => a.url)).catch(() => new Map<string, Importance>());
+  const cached = await readCache(all.map(a => a.url)).catch(() => new Map<string, Verdict>());
   const todo = all.filter(a => !cached.has(a.url));
   if (todo.length === 0) return cached;
 
@@ -128,8 +147,8 @@ export async function scoreImportance(items: Scorable[]): Promise<Map<string, Im
   // 묶음끼리 독립이라 한꺼번에 던진다. 한 묶음이 실패해도 나머지는 살아남는다.
   const results = await Promise.all(batches.map(scoreBatch));
 
-  const fresh: { url: string; score: Importance }[] = [];
-  for (const m of results) for (const [url, score] of m) { cached.set(url, score); fresh.push({ url, score }); }
+  const fresh: { url: string; verdict: Verdict }[] = [];
+  for (const m of results) for (const [url, verdict] of m) { cached.set(url, verdict); fresh.push({ url, verdict }); }
   if (fresh.length > 0) await writeCache(fresh);
 
   console.log(`[news-importance] ${fresh.length}건 새로 산정 (캐시 ${all.length - todo.length}건)`);
