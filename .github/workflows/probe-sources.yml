@@ -1,0 +1,29 @@
+# 외부 소스가 데이터센터 IP에서 접근되는지 확인하는 일회성 진단.
+#
+# 왜 필요한가: FierceBiotech는 내 맥에서 200인데 Vercel 서버리스에서는 403이다
+# (2026-09-08 프로덕션 로그로 확인). 매체가 데이터센터 IP를 막는 것이라, 어디서
+# 긁을지를 정하려면 각 실행 환경에서 실제로 찍어 봐야 한다. 스키마만 보고 판단하지
+# 않는다는 이 저장소의 규칙과 같은 이유다.
+name: probe-sources
+on: workflow_dispatch
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 상태 코드 확인
+        run: |
+          UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+          for u in \
+            "https://www.fiercebiotech.com/biotech" \
+            "https://www.fiercebiotech.com/rss/xml" \
+            "https://endpoints.news/" \
+            "https://www.statnews.com/" \
+            "https://www.aitimes.com/news/articleList.html?view_type=sm&box_idxno=20" \
+            "https://www.bioin.or.kr/hbrd_News.do?cmd=list&bid=todaynews" \
+            "https://venturebeat.com/feed/" \
+            "https://www.gartner.com/en/ai" \
+            "https://www.mckinsey.com/insights/rss" ; do
+            code=$(curl -s -A "$UA" --max-time 25 -o /tmp/o "$u" -w '%{http_code}')
+            echo "$code  $(wc -c < /tmp/o | tr -d ' ')바이트  $u"
+          done
