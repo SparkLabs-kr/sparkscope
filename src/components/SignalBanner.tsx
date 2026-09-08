@@ -30,9 +30,7 @@ const RANGES = [
   { days: 30, label: '이번 달' },
 ] as const;
 
-/** 오른쪽 레일에 세울 커뮤니티 수. 나머지는 아래 '더 많은 시그널'로 내려간다. */
-const RAIL_SOURCES = 3;
-/** 레일 카드 하나에 보여줄 글 수 — 히어로 높이와 맞아떨어지는 선. */
+/** 커뮤니티 카드 하나에 보여줄 글 수. */
 const RAIL_POSTS = 3;
 /** 히어로를 뺀 나머지 뉴스 중 스트립에 깔 개수. */
 const STRIP = 6;
@@ -57,7 +55,6 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
   const [digest, setDigest] = useState<DigestResp | null>(null);
   const [social, setSocial] = useState<SocialSource[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
-  const [showRest, setShowRest] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -85,8 +82,6 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
   const hero = items[0];
   const strip = items.slice(1, 1 + STRIP);
   const live = (digest?.feeds ?? []).filter(f => f.ok && f.count > 0);
-  const rail = (social ?? []).slice(0, RAIL_SOURCES);
-  const rest = (social ?? []).slice(RAIL_SOURCES);
 
   return (
     <div className="bg-white border border-spark-border rounded-2xl p-5">
@@ -112,8 +107,10 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
         </div>
       </div>
 
-      {/* ── 1) 히어로 + 2) 레일 ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 mt-4 items-start">
+      {/* ── 1) 히어로 ──
+          예전엔 오른쪽에 커뮤니티 레일을 세로로 세웠는데, 레일이 히어로보다 훨씬 길어서
+          오른쪽만 아래로 튀어나왔다(2026-09-08). 커뮤니티는 아래 전체 폭으로 내렸다. */}
+      <div className="mt-4">
         {digest === null ? (
           <div className="h-64 rounded-xl bg-spark-subtle animate-pulse" />
         ) : !hero ? (
@@ -123,12 +120,6 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
         ) : (
           <Hero item={hero} locale={locale} />
         )}
-
-        <div className="flex flex-col gap-2.5">
-          {social === null
-            ? [0, 1, 2].map(i => <div key={i} className="h-[74px] rounded-xl bg-spark-subtle animate-pulse" />)
-            : rail.map(s => <RailCard key={s.id} source={s} locale={locale} limit={RAIL_POSTS} />)}
-        </div>
       </div>
 
       {/* ── 3) 스트립 ── */}
@@ -146,31 +137,31 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
         </ol>
       )}
 
+      {/* ── 3) 커뮤니티 시그널 — 전체 폭.
+             한 줄에 3개씩 깔리므로 카드 길이가 서로 달라도 옆 칸을 밀지 않는다
+             (items-start). 소스 순서는 social-collect.ts의 배열 순서다 — Reddit은
+             점수 정렬이 안 돼서 맨 끝이다. */}
+      <div className="mt-5 border-t border-spark-border pt-4">
+        <div className="flex items-baseline gap-2">
+          <h4 className="text-[13.5px] font-extrabold text-spark-ink">🔥 {t('소셜 시그널')}</h4>
+          <span className="text-[11.5px] text-spark-muted">
+            {t('이 분야 종사자들이 지금 이야기하는 글 — 기사보다 며칠 먼저 움직입니다.')}
+          </span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5 mt-3 items-start">
+          {social === null
+            ? [0, 1, 2].map(i => <div key={i} className="h-[150px] rounded-xl bg-spark-subtle animate-pulse" />)
+            : social.length === 0
+              ? <p className="text-[12.5px] text-spark-muted">{t('표시할 커뮤니티 시그널이 없습니다.')}</p>
+              : social.map(s => <RailCard key={s.id} source={s} locale={locale} limit={RAIL_POSTS} />)}
+        </div>
+      </div>
+
       {digest && (
         <p className="mt-3 text-[11.5px] text-spark-muted">
           {t('매체 {n}곳에서 수집', { n: live.length })}
           {social && social.length > 0 && ` · ${t('커뮤니티 {n}곳', { n: social.length })}`}
         </p>
-      )}
-
-      {/* ── 4) 나머지 시그널 ── */}
-      {rest.length > 0 && (
-        <div className="mt-3 border-t border-spark-border pt-3">
-          <button
-            type="button"
-            onClick={() => setShowRest(v => !v)}
-            aria-expanded={showRest}
-            className="text-[12.5px] font-semibold text-spark-muted hover:text-spark-purple"
-          >
-            {showRest ? t('접기') : t('나머지 시그널 {n}곳 보기', { n: rest.length })}
-            <span className="ml-1">{showRest ? '▲' : '▼'}</span>
-          </button>
-          {showRest && (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5 mt-3 items-start">
-              {rest.map(s => <RailCard key={s.id} source={s} locale={locale} limit={4} />)}
-            </div>
-          )}
-        </div>
       )}
     </div>
   );

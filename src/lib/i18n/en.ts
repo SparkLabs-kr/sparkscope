@@ -1101,6 +1101,9 @@ export const EN: Record<string, string> = {
   '국제뉴스': 'Kukje News',
   // 소셜 시그널 (Inter 탭)
   '소셜 시그널': 'Social signals',
+  '이 분야 종사자들이 지금 이야기하는 글 — 기사보다 며칠 먼저 움직입니다.':
+    'What people in the field are actually discussing — usually days ahead of the press.',
+  '표시할 커뮤니티 시그널이 없습니다.': 'No community signals to show.',
   '지금 소셜 미디어에서 가장 주목해야 할 뉴스':
     'What to watch on social right now',
   // 커뮤니티 선정 이유 — social-collect.ts의 WHY와 문구가 정확히 일치해야 한다.

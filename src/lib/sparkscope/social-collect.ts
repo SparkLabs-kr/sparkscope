@@ -16,16 +16,10 @@
  *    토픽 수집이 불가능해 넣지 않았다. 계정을 큐레이션해 getAuthorFeed로 긁는 길은 열려 있다.
  *  - X: 무료 경로가 없고 API가 유료(Basic $200/월)라 2026-09-04에 제외했다.
  *
- * 캐시는 두 겹이다:
- *   1) 라우트 캐시(revalidate) — 소스마다 갱신 속도가 달라 시간도 다르게 준다(REVALIDATE).
- *   2) SocialSignal 테이블 — 받아온 글을 남겨두고, 어떤 소스가 0건으로 오면 저장분을
- *      대신 보여준다(stale=true로 화면에 밝힌다). Reddit이 인증 없이는 429가 잦아서
- *      AI 탭에서 칸이 통째로 사라지던 문제(2026-09-08) 때문에 넣었다.
- *
- * ⚠️ 이 모듈은 prisma를 import 하므로 클라이언트 컴포넌트에서 값(value)으로 import 하면
- *    안 된다. SignalBanner는 `import type`으로만 가져간다(타입은 컴파일 시 사라진다).
+ * 이 모듈은 "외부에서 긁어오는" 일만 한다. 저장·조회는 social-store.ts가, 주기 관리는
+ * social-refresh.ts가 맡는다(크론 /api/cron/collect-social). 화면은 DB에서만 읽으므로
+ * 외부가 일시적으로 죽어도 칸이 사라지지 않는다.
  */
-import { prisma } from '@/lib/prisma';
 
 export type SocialDomain = 'ai' | 'bio';
 export type SocialSourceId =
@@ -58,8 +52,6 @@ export interface SocialSource {
   note: string;          // 화면에 그대로 노출되는 상태 설명
   /** 왜 이 매체를 골랐는지 — 어떤 정보에 특화돼 있는지 한 줄. 화면에 그대로 나간다. */
   why: string;
-  /** 이번 조회가 0건이라 DB에 저장된 지난 결과를 대신 보여주는 중. 화면에 그대로 밝힌다. */
-  stale?: boolean;
   posts: SocialPost[];
 }
 
@@ -104,9 +96,12 @@ export const COLLECT_INTERVAL_SEC: Record<SocialSourceId, number> = {
 };
 
 /** 도메인별로 화면에 세울 소스 순서. 배열 순서가 곧 화면 순서다. */
+// Reddit은 맨 끝이다(2026-09-08). 인증 없이 받으면 점수를 못 받아 최신순으로만 뜨는데,
+// 최신순 목록은 "지금 뭐가 뜨나"에 답하지 못해 위에 둘 값이 없다.
+// REDDIT_CLIENT_ID/SECRET을 넣어 주간 업보트 순으로 정렬되면 위로 올린다.
 export const DOMAIN_SOURCES: Record<SocialDomain, SocialSourceId[]> = {
-  ai: ['hf', 'hf_new', 'hn', 'reddit', 'lobsters', 'arxiv'],
-  bio: ['hn', 'reddit', 'biorxiv', 'trials', 'pubmed'],
+  ai: ['hf', 'hf_new', 'hn', 'lobsters', 'arxiv', 'reddit'],
+  bio: ['hn', 'biorxiv', 'trials', 'pubmed', 'reddit'],
 };
 
 /** 소스 표시 이름·정렬 방식 — DB에서 읽어 화면 모양으로 되살릴 때 쓴다. */
@@ -574,70 +569,10 @@ export async function collectSocialSignals(domain: SocialDomain, sinceMs: number
           reddit.ranked ? '2시간마다 갱신 · 주간 업보트 순' : '2시간마다 갱신 · 점수 없음(RSS) — 최신순'),
       ];
 
-  // 이번에 받은 건 저장하고, 0건인 소스는 저장된 지난 결과로 되살린다.
-  // Reddit이 대표 사례다 — 인증 없이 받으면 429가 잦아서, 캐시가 없으면 어떤 날은
-  // AI 탭에서 Reddit 칸이 통째로 사라졌다(2026-09-08 사용자 신고). 소스 하나가
-  // 일시적으로 막혔다고 화면에서 없어지면 "왜 없어졌지"를 매번 다시 조사해야 한다.
-  return Promise.all(list.map(async s => {
-    if (s.posts.length > 0) {
-      await persistSource(domain, s.id, s.posts);
-      return s;
-    }
-    const cached = await recallSource(domain, s.id);
-    if (cached.length === 0) return s;
-    return { ...s, posts: cached, connected: true, stale: true };
-  }));
+  // 응답이 아예 없는 소스는 빼지 않고 그대로 돌려준다 — 저장·조회는 social-store.ts가
+  // 담당하고(크론이 채운다), 화면은 DB에서 읽으므로 이번 조회가 0건이어도 칸이 사라지지 않는다.
+  // 예전에 여기서 0건 소스를 걸러냈더니 Reddit이 429를 맞은 날 AI 탭에서 칸이 통째로
+  // 사라졌다(2026-09-08 사용자 신고).
+  return list;
 }
 
-/**
- * 받아온 글을 SocialSignal에 남긴다 — 다음에 그 소스가 0건이면 이걸 대신 보여준다.
- * 실패해도 조용히 넘어간다: 저장은 부가 기능이고, 이것 때문에 패널이 죽으면 안 된다.
- */
-async function persistSource(domain: SocialDomain, source: SocialSourceId, posts: SocialPost[]): Promise<void> {
-  try {
-    const now = new Date();
-    await Promise.all(posts.map(p => prisma.socialSignal.upsert({
-      where: { source_externalId: { source, externalId: p.externalId } },
-      create: {
-        source, externalId: p.externalId, domain,
-        title: p.title, url: p.url, origin: p.origin ?? null, author: p.author ?? null,
-        publishedAt: p.date ? new Date(`${p.date}T00:00:00Z`) : null,
-        points: p.points ?? 0, comments: p.comments ?? 0, pointsLabel: p.pointsLabel ?? null,
-        lastSeenAt: now,
-      },
-      // 제목·URL은 바뀌지 않지만 점수는 오른다. titleKo는 라우트가 채우므로 건드리지 않는다.
-      update: { points: p.points ?? 0, comments: p.comments ?? 0, lastSeenAt: now, domain },
-    })));
-  } catch (e) {
-    console.error('[social] 저장 실패(무시):', source, e);
-  }
-}
-
-/** 저장된 지난 결과. 너무 오래된 건 쓰지 않는다 — 옛 글을 "지금 뜨는 글"로 보여주면 거짓이다. */
-const RECALL_MAX_DAYS = 14;
-
-async function recallSource(domain: SocialDomain, source: SocialSourceId): Promise<SocialPost[]> {
-  try {
-    const rows = await prisma.socialSignal.findMany({
-      where: { domain, source, lastSeenAt: { gte: new Date(Date.now() - RECALL_MAX_DAYS * 86400_000) } },
-      // 점수가 있으면 인기순, 없으면 최신순 — 원본 소스의 정렬 기준을 그대로 따른다.
-      orderBy: [{ points: 'desc' }, { publishedAt: 'desc' }],
-      take: 10,
-    });
-    return rows.map(r => ({
-      externalId: r.externalId,
-      title: r.title,
-      titleKo: r.titleKo ?? undefined,
-      url: r.url,
-      date: (r.publishedAt ?? r.lastSeenAt).toISOString().slice(0, 10),
-      points: r.points || undefined,
-      comments: r.comments || undefined,
-      origin: r.origin ?? undefined,
-      author: r.author ?? undefined,
-      pointsLabel: r.pointsLabel ?? undefined,
-    }));
-  } catch (e) {
-    console.error('[social] 저장분 조회 실패(무시):', source, e);
-    return [];
-  }
-}
