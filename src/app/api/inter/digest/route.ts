@@ -9,12 +9,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { collectDigest, type NewsDomain } from '@/lib/sparkscope/news-digest';
 import { ensureSummaries } from '@/lib/sparkscope/news-summary';
 import { ensurePortfolioHits } from '@/lib/sparkscope/news-portfolio';
+import { requireUser } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 export const preferredRegion = 'icn1';
 export const revalidate = 1800;
 
 export async function GET(req: NextRequest) {
+  // 로그인 확인은 여기서 한다 — middleware는 Edge라 쿠키 유무만 본다.
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+
   const sp = req.nextUrl.searchParams;
   const domain: NewsDomain = sp.get('domain') === 'ai' ? 'ai' : 'bio';
   const dRaw = Number(sp.get('days'));

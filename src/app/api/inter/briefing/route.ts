@@ -18,6 +18,7 @@ import {
   type BriefingInput,
 } from '@/lib/sparkscope/inter-briefing';
 import { sendDigestEmail } from '@/lib/sparkscope/mailer';
+import { requireUser } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 export const preferredRegion = 'icn1';
@@ -65,6 +66,10 @@ function parseInput(b: any): BriefingInput | null {
 }
 
 export async function POST(req: Request) {
+  // 쓰기 라우트다 — 로그인 확인을 건너뛸 수 없다.
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+
   // 권한은 스크랩(별표)과 같은 기준 — SCRAP_ALLOWED_EMAILS에 있는 사람만.
   // 포폴사 대표에게 나갈 문서를 만드는 기능이라 대시보드 열람 권한보다 좁게 잡는다.
   // (canScrap은 OPEN_ACCESS 협업 모드에선 항상 true라, 발표·개발 중에는 그대로 열린다.)

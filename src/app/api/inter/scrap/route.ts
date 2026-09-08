@@ -6,10 +6,15 @@ import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { canScrap } from '@/lib/scrap';
+import { requireUser } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
+  // 쓰기 라우트다 — 로그인 확인을 건너뛸 수 없다.
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+
   const session = await getServerSession(authOptions);
   const email = session?.user?.email ?? null;
   if (!canScrap(email)) return NextResponse.json({ error: '스크랩 권한이 없습니다.' }, { status: 403 });

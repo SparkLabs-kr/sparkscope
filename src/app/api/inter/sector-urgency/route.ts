@@ -15,6 +15,7 @@ import { authOptions } from '@/lib/auth';
 import { OPEN_ACCESS } from '@/lib/flags';
 import { prisma } from '@/lib/prisma';
 import { summarizeSectorBadgeReason } from '@/lib/sparkscope/inter-insight';
+import { requireUser } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 
@@ -38,6 +39,10 @@ function cacheKey(s: SectorInput): string {
 }
 
 export async function POST(req: Request) {
+  // 쓰기 라우트다 — 로그인 확인을 건너뛸 수 없다.
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+
   const session = OPEN_ACCESS
     ? ({ user: { email: 'dev@localhost' } } as any)
     : await getServerSession(authOptions);

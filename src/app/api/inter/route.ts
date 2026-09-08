@@ -12,6 +12,7 @@ import {
 import { getLocale } from '@/lib/i18n/server';
 import { ensureInsightEn, ensureInterReasonEn } from '@/lib/sparkscope/translate-content';
 import { nearestSummaryPeriodKey } from '@/lib/sparkscope/inter-summary-periods';
+import { requireUser } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 // DB(Supabase)와 같은 리전에서 돌게 — 대시보드(page.tsx)와 동일한 이유.
@@ -29,6 +30,10 @@ function isValidYmd(s: string | null): s is string {
 const PERIOD_DAYS: Record<string, number> = { '7d': 7, '1m': 30, '3m': 90, '1y': 365 };
 
 export async function GET(req: NextRequest) {
+  // 로그인 확인은 여기서 한다 — middleware는 Edge라 쿠키 유무만 본다.
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+
   const locale = getLocale();
   const sp = req.nextUrl.searchParams;
   const domain: InterDomain = sp.get('domain') === 'ai' ? 'ai' : 'bio';

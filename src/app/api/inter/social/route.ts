@@ -22,6 +22,7 @@ import {
 } from '@/lib/sparkscope/social-collect';
 import { readSignals } from '@/lib/sparkscope/social-store';
 import { refreshSocialSignals } from '@/lib/sparkscope/social-refresh';
+import { requireUser } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 export const preferredRegion = 'icn1';
@@ -66,6 +67,10 @@ async function buildSources(domain: SocialDomain, sinceMs: number): Promise<Soci
 }
 
 export async function GET(req: NextRequest) {
+  // 로그인 확인은 여기서 한다 — middleware는 Edge라 쿠키 유무만 본다.
+  const auth = await requireUser();
+  if (!auth.ok) return auth.response;
+
   const sp = req.nextUrl.searchParams;
   const domain: SocialDomain = sp.get('domain') === 'ai' ? 'ai' : 'bio';
 
