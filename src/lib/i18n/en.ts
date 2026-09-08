@@ -1278,4 +1278,7 @@ export const EN: Record<string, string> = {
     'This address cannot sign in yet. If you are a portfolio company, your access request must be approved first.',
   '로그인에 실패했습니다. 링크를 새로 받아 주세요.':
     'Sign-in failed. Please request a new link.',
+  '로그인이 계속 안 되면': 'Still cannot sign in?',
+  '로그인 상태 초기화': 'Reset sign-in state',
+  '로그인 상태를 초기화했습니다. 다시 로그인해 주세요.': 'Sign-in state cleared. Please sign in again.',
 };

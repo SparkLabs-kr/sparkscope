@@ -44,6 +44,8 @@ function LoginForm() {
     );
   }
 
+  const wasReset = params.get('reset') === '1';
+
   const errorBanner = error ? (
     <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] leading-relaxed text-amber-800">
       {error === 'Verification'
@@ -66,6 +68,11 @@ function LoginForm() {
         <p className="text-sm text-gray-600 mb-6 text-center">{t('어느 쪽에 해당하시나요?')}</p>
 
         {errorBanner}
+        {wasReset && !error && (
+          <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-[13px] text-emerald-800">
+            {t('로그인 상태를 초기화했습니다. 다시 로그인해 주세요.')}
+          </div>
+        )}
 
         <div className="space-y-2.5">
           <button
@@ -106,6 +113,15 @@ function LoginForm() {
             </div>
           </a>
         </div>
+
+        {/* 죽은 세션 쿠키에 걸리면 사용자가 스스로 빠져나올 방법이 없다.
+            쿠키는 httpOnly 라서 브라우저에서 지울 수 없으므로 서버에 맡긴다. */}
+        <p className="mt-6 text-center text-[11.5px] text-gray-400">
+          {t('로그인이 계속 안 되면')}{' '}
+          <a href="/api/session-reset" className="underline hover:text-spark-purple">
+            {t('로그인 상태 초기화')}
+          </a>
+        </p>
       </div>
     );
   }

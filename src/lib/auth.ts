@@ -73,6 +73,33 @@ const emailProvider = EmailProvider({
 const defaultSendVerification = emailProvider.sendVerificationRequest;
 emailProvider.sendVerificationRequest = async params => {
   if (!(await canSignIn(params.identifier))) return;
+
+  /**
+   * 새 링크를 보낼 때 이전 링크를 무효화한다.
+   *
+   * NextAuth 는 요청할 때마다 토큰을 새로 만들고 이전 것을 지우지 않는다.
+   * 그래서 받은편지함에 여러 링크가 유효한 상태로 쌓이고, 사람은 어느 것이
+   * 최신인지 모른 채 아무거나 누른다. "가장 최근 메일을 누르세요"라고 적어
+   * 두는 것보다, 최신 것만 남기는 편이 확실하다.
+   *
+   * 방금 만들어진 토큰은 만료 시각이 가장 늦다 — 그것만 남기고 지운다.
+   * 실패해도 로그인 자체는 막지 않는다(링크는 이미 유효하다).
+   */
+  try {
+    const rows = await prisma.verificationToken.findMany({
+      where: { identifier: params.identifier },
+      select: { token: true, expires: true },
+    });
+    if (rows.length > 1) {
+      const newest = rows.reduce((a, b) => (a.expires > b.expires ? a : b));
+      await prisma.verificationToken.deleteMany({
+        where: { identifier: params.identifier, token: { not: newest.token } },
+      });
+    }
+  } catch (e) {
+    console.error('[auth] 이전 로그인 링크 정리 실패:', e);
+  }
+
   await defaultSendVerification(params);
 };
 

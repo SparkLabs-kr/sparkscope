@@ -8,6 +8,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSessionUser } from '@/lib/authz';
+import { hasStaleSession } from '@/lib/session-cookie';
 import { getCompanyScope } from '@/lib/sparkscope/company-scope';
 import { prisma } from '@/lib/prisma';
 import { ArticleListView } from '@/components/ArticleListView';
@@ -23,7 +24,7 @@ const DAYS = 90;
 
 export default async function PortfolioPage() {
   const user = await getSessionUser();
-  if (!user) redirect('/login?callbackUrl=%2Fportfolio');
+  if (!user) redirect(hasStaleSession() ? '/api/session-reset' : '/login?callbackUrl=%2Fportfolio');
   // 사내 계정은 전체 대시보드가 있다.
   if (user.role === 'ADMIN') redirect('/dashboard');
   if (!user.companyId) {

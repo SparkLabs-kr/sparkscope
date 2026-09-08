@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSessionUser } from '@/lib/authz';
+import { hasStaleSession } from '@/lib/session-cookie';
 import { countPending, canApproveAccess } from '@/lib/sparkscope/access-request';
 import { SignOutButton } from '@/components/SignOutButton';
 import { ScrollTopButton } from '@/components/ScrollTopButton';
@@ -12,7 +13,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // 이 레이아웃이 /dashboard/* 6개 화면의 유일한 관문이다.
   // OPEN_ACCESS 처리는 getSessionUser 안에 있다.
   const user = await getSessionUser();
-  if (!user) redirect('/login');
+  // 쿠키가 남아 있는데 세션이 없으면 /login 으로만 보내면 안 된다 — 쿠키가
+  // 그대로라 다시 여기로 와서 같은 일이 반복된다. 서버가 쿠키를 지우는
+  // 경로로 보내 상태를 끊는다.
+  if (!user) redirect(hasStaleSession() ? '/api/session-reset' : '/login');
   // 사내 대시보드는 경쟁사·시너지·다른 포트폴리오사 자료를 함께 보여준다.
   // 포트폴리오사 계정은 자기 회사 화면으로 보낸다 — 여기서 막지 않으면
   // page.tsx 40여 군데 조회를 하나하나 막아야 한다.
