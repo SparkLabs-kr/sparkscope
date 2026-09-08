@@ -19,6 +19,11 @@ export async function GET(req: NextRequest) {
   // 로그인 확인은 여기서 한다 — middleware는 Edge라 쿠키 유무만 본다.
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
+  // 이 API는 포트폴리오사 전체를 대상으로 시너지·매칭을 계산한다. 회사 하나로
+  // 좁힐 수 있는 성질이 아니므로 포트폴리오사 계정에는 닫는다.
+  if (auth.user.role !== 'ADMIN') {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  }
 
   const sp = req.nextUrl.searchParams;
   const domain: NewsDomain = sp.get('domain') === 'ai' ? 'ai' : 'bio';

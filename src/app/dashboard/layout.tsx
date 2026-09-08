@@ -1,8 +1,6 @@
-import { getServerSession } from 'next-auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { authOptions } from '@/lib/auth';
-import { OPEN_ACCESS } from '@/lib/flags';
+import { getSessionUser } from '@/lib/authz';
 import { SignOutButton } from '@/components/SignOutButton';
 import { ScrollTopButton } from '@/components/ScrollTopButton';
 import { DashboardTutorial } from '@/components/DashboardTutorial';
@@ -10,13 +8,16 @@ import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { getT } from '@/lib/i18n/server';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  // 협업 개발 단계(OPEN_ACCESS)면 로그인 없이 임시 세션 사용
-  const session = OPEN_ACCESS
-    ? ({ user: { email: 'dev@localhost', id: 'dev' } } as any)
-    : await getServerSession(authOptions);
-  if (!session?.user?.email) redirect('/login');
+  // 이 레이아웃이 /dashboard/* 6개 화면의 유일한 관문이다.
+  // OPEN_ACCESS 처리는 getSessionUser 안에 있다.
+  const user = await getSessionUser();
+  if (!user) redirect('/login');
+  // 사내 대시보드는 경쟁사·시너지·다른 포트폴리오사 자료를 함께 보여준다.
+  // 포트폴리오사 계정은 자기 회사 화면으로 보낸다 — 여기서 막지 않으면
+  // page.tsx 40여 군데 조회를 하나하나 막아야 한다.
+  if (user.role !== 'ADMIN') redirect('/portfolio');
 
-  const initial = session.user.email[0].toUpperCase();
+  const initial = user.email[0].toUpperCase();
   const t = getT();
 
   return (
@@ -35,7 +36,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <div className="flex items-center gap-3 text-sm text-spark-muted">
           <LanguageSwitcher />
           <span className="hidden md:inline px-2 py-0.5 rounded-md bg-spark-subtle border border-spark-border text-[11px] font-semibold tracking-wide text-spark-ink-soft">🔒 INTERNAL</span>
-          <span className="hidden md:inline text-[13px]">{session.user.email}</span>
+          <span className="hidden md:inline text-[13px]">{user.email}</span>
           <div className="w-7 h-7 rounded-full bg-spark-purple text-white grid place-items-center text-xs font-bold">{initial}</div>
           <SignOutButton />
         </div>
