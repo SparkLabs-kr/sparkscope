@@ -46,7 +46,6 @@ async function buildSources(domain: SocialDomain, sinceMs: number): Promise<Soci
       // 점수가 실제로 있는 소스만 "인기순"이라고 말한다 — 전부 0인데 인기순이라고
       // 표시하면 순위가 아닌 목록을 순위로 오해하게 된다.
       ranked: meta.ranked && rows.some(r => r.peakPoints > 0),
-      note: meta.note,
       why: whyOf(id),
       posts: rows.map(r => ({
         externalId: r.externalId,

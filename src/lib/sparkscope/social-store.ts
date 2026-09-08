@@ -202,3 +202,30 @@ export async function pruneSignalSamples(keepDays = 7): Promise<number> {
   const { count } = await prisma.socialSignalSample.deleteMany({ where: { sampledAt: { lt: cutoff } } });
   return count;
 }
+
+/**
+ * 한국어 제목이 비어 있는 행 — 번역 백필 대상.
+ *
+ * 번역은 수집하는 그 순간에만 붙기 때문에, 이 구조가 생기기 전에 쌓인 행이나 번역 호출이
+ * 실패한 행은 titleKo가 계속 null로 남는다. 그걸 뒤늦게 채우기 위한 조회다.
+ * 최근 것부터 채운다 — 화면 위쪽에 뜨는 것이 먼저 한국어가 돼야 체감이 된다.
+ */
+export async function findUntranslated(
+  domain: string,
+  sources: readonly string[],
+  limit: number,
+): Promise<{ id: string; title: string }[]> {
+  return prisma.socialSignal.findMany({
+    where: { domain, source: { in: [...sources] }, titleKo: null },
+    orderBy: { lastSeenAt: 'desc' },
+    take: limit,
+    select: { id: true, title: true },
+  });
+}
+
+/** 번역된 제목을 채워 넣는다. */
+export async function setTitleKo(pairs: { id: string; titleKo: string }[]): Promise<void> {
+  await Promise.all(pairs.map(p =>
+    prisma.socialSignal.update({ where: { id: p.id }, data: { titleKo: p.titleKo } }),
+  ));
+}

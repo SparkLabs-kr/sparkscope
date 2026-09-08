@@ -49,7 +49,6 @@ export interface SocialSource {
   label: string;
   connected: boolean;
   ranked: boolean;       // true면 인기순, false면 최신순
-  note: string;          // 화면에 그대로 노출되는 상태 설명
   /** 왜 이 매체를 골랐는지 — 어떤 정보에 특화돼 있는지 한 줄. 화면에 그대로 나간다. */
   why: string;
   posts: SocialPost[];
@@ -59,16 +58,19 @@ export interface SocialSource {
  * 매체 특징 한 줄 — 화면에 그대로 나간다.
  * "왜 하필 여기냐"는 질문에 매번 말로 답하지 않으려고 코드에 적어 둔다.
  */
+// 매체 특징 한 줄 — 카드에 그대로 나간다.
+// 짧게 유지한다. 카드가 3열로 깔리는데 설명이 세 줄씩 차지하면 정작 글 제목이 안 읽힌다
+// (2026-09-08 사용자 피드백: "가독성이 떨어진다, 쓸데없는 텍스트를 지워라").
 const WHY: Record<SocialSourceId, string> = {
-  hf: 'AI 모델이 공개되는 바로 그 자리. 논문·기사보다 가중치가 먼저 올라와서, 새 모델은 여기서 가장 빨리 확인된다.',
-  hf_new: '실제로 쓰이기 시작한 모델만 골라 공개일 순으로. 이번 주에 어떤 모델이 새로 나왔는지 한 번에 확인한다.',
-  hn: '실리콘밸리 엔지니어·창업자가 모이는 곳. 기술 발표와 오픈소스가 언론 보도보다 며칠 먼저 올라오고, 댓글에 현업자 검증이 붙는다.',
-  reddit: '분야별 종사자 커뮤니티. 채용·실험 실패·규제 체감 같은 업계 내부 분위기가 기사로 나오기 전에 먼저 드러난다.',
-  lobsters: 'HN보다 조용하지만 인프라·개발도구 쪽이 강하다. 사람이 적어 홍보성 글이 거의 없고 기술 논의 밀도가 높다.',
-  arxiv: '논문 원본이 심사 전에 공개되는 곳. 기사로 옮겨지기 며칠~몇 주 전의 원 자료를 그대로 본다.',
-  biorxiv: '바이오 프리프린트 원본. 학술지 심사를 기다리지 않고 올라와서, 연구 결과를 가장 이른 시점에 확인할 수 있다.',
-  pubmed: '정식 게재된 논문 색인. 프리프린트와 달리 심사를 통과한 것만 들어와, 근거의 무게가 다르다.',
-  trials: '임상시험 단계 변경과 FDA 리콜·회수. 회사가 발표하기 전에 등록 정보가 먼저 바뀌는 경우가 많아 기사보다 앞선다.',
+  hf: '새 AI 모델이 논문·기사보다 먼저 올라오는 곳',
+  hf_new: '새 AI 모델이 논문·기사보다 먼저 올라오는 곳',
+  hn: '엔지니어·창업자 커뮤니티. 기술 발표가 언론보다 며칠 빠르다',
+  reddit: '분야별 종사자 커뮤니티. 업계 내부 분위기가 먼저 드러난다',
+  lobsters: '인프라·개발도구 논의가 밀도 높게 오가는 곳',
+  arxiv: '심사 전 논문 원본',
+  biorxiv: '바이오 프리프린트 원본',
+  pubmed: '심사를 통과해 정식 게재된 논문',
+  trials: '임상 단계 변경과 FDA 리콜 — 회사 발표보다 앞선다',
 };
 
 /** 소스별 캐시(초) — 원본이 갱신되는 속도에 맞춘다. 조사 결과(2026-09-08) 기준. */
@@ -105,16 +107,16 @@ export const DOMAIN_SOURCES: Record<SocialDomain, SocialSourceId[]> = {
 };
 
 /** 소스 표시 이름·정렬 방식 — DB에서 읽어 화면 모양으로 되살릴 때 쓴다. */
-export const SOURCE_META: Record<SocialSourceId, { label: string; ranked: boolean; note: string }> = {
-  hf:       { label: 'Hugging Face · 인기 모델', ranked: true,  note: '6시간마다 갱신 · HF 트렌딩 점수 순' },
-  hf_new:   { label: 'Hugging Face · 새 모델',   ranked: false, note: '6시간마다 갱신 · 이번 주 주목받은 모델 중 공개순' },
-  hn:       { label: 'Hacker News',              ranked: true,  note: '2시간마다 갱신 · 업보트+댓글×2 기준' },
-  reddit:   { label: 'Reddit',                   ranked: false, note: '2시간마다 갱신 · 점수 없음(RSS) — 최신순' },
-  lobsters: { label: 'Lobsters',                 ranked: true,  note: '6시간마다 갱신 · 업보트+댓글×2 기준' },
-  arxiv:    { label: 'arXiv (cs.AI)',            ranked: false, note: '하루 1회 갱신 · 등록순' },
-  biorxiv:  { label: 'bioRxiv · medRxiv',        ranked: false, note: '하루 1회 갱신 · 공개순' },
-  pubmed:   { label: 'PubMed',                   ranked: false, note: '하루 1회 갱신 · 게재순' },
-  trials:   { label: 'ClinicalTrials · FDA',     ranked: false, note: '하루 1회 갱신 · 갱신순' },
+export const SOURCE_META: Record<SocialSourceId, { label: string; ranked: boolean }> = {
+  hf:       { label: 'Hugging Face', ranked: true },
+  hf_new:   { label: 'Hugging Face', ranked: false },
+  hn:       { label: 'Hacker News',              ranked: true },
+  reddit:   { label: 'Reddit',                   ranked: false },
+  lobsters: { label: 'Lobsters',                 ranked: true },
+  arxiv:    { label: 'arXiv (cs.AI)',            ranked: false },
+  biorxiv:  { label: 'bioRxiv · medRxiv',        ranked: false },
+  pubmed:   { label: 'PubMed',                   ranked: false },
+  trials:   { label: 'ClinicalTrials · FDA',     ranked: false },
 };
 
 /** 제목이 고유명사라 번역하면 안 되는 소스 — HF 모델 id는 이름 그 자체다. */
@@ -546,27 +548,28 @@ export async function collectSocialSignals(domain: SocialDomain, sinceMs: number
     isAi ? [] : fetchTrials().catch(empty([] as SocialPost[])),
   ]);
 
-  const src = (
-    id: SocialSourceId, label: string, posts: SocialPost[], ranked: boolean, note: string,
-  ): SocialSource => ({ id, label, connected: posts.length > 0, ranked, note, why: WHY[id], posts });
+  // 화면에 쓰는 label·ranked는 SOURCE_META가 단일 소스다(라우트가 DB에서 되살릴 때도 그걸 쓴다).
+  // 여기서는 수집 결과를 담기만 한다.
+  const src = (id: SocialSourceId, posts: SocialPost[]): SocialSource => ({
+    id, label: SOURCE_META[id].label, connected: posts.length > 0,
+    ranked: SOURCE_META[id].ranked, why: WHY[id], posts,
+  });
 
   const list: SocialSource[] = isAi
     ? [
-        src('hf', 'Hugging Face · 인기 모델', hfTrend, true, '6시간마다 갱신 · HF 트렌딩 점수 순'),
-        src('hf_new', 'Hugging Face · 새 모델', hfNew, false, '6시간마다 갱신 · 이번 주 주목받은 모델 중 공개순'),
-        src('hn', 'Hacker News', hn, true, '2시간마다 갱신 · 업보트+댓글×2 기준'),
-        src('lobsters', 'Lobsters', lobsters, true, '6시간마다 갱신 · 업보트+댓글×2 기준'),
-        src('arxiv', 'arXiv (cs.AI)', arxiv, false, '하루 1회 갱신 · 등록순'),
-        src('reddit', 'Reddit', reddit.posts, reddit.ranked,
-          reddit.ranked ? '2시간마다 갱신 · 주간 업보트 순' : '2시간마다 갱신 · 점수 없음(RSS) — 최신순'),
+        src('hf', hfTrend),
+        src('hf_new', hfNew),
+        src('hn', hn),
+        src('lobsters', lobsters),
+        src('arxiv', arxiv),
+        src('reddit', reddit.posts),
       ]
     : [
-        src('hn', 'Hacker News', hn, true, '2시간마다 갱신 · 업보트+댓글×2 기준'),
-        src('biorxiv', 'bioRxiv · medRxiv', biorxiv, false, '하루 1회 갱신 · 공개순'),
-        src('trials', 'ClinicalTrials · FDA', trials, false, '하루 1회 갱신 · 갱신순'),
-        src('pubmed', 'PubMed', pubmed, false, '하루 1회 갱신 · 게재순'),
-        src('reddit', 'Reddit', reddit.posts, reddit.ranked,
-          reddit.ranked ? '2시간마다 갱신 · 주간 업보트 순' : '2시간마다 갱신 · 점수 없음(RSS) — 최신순'),
+        src('hn', hn),
+        src('biorxiv', biorxiv),
+        src('trials', trials),
+        src('pubmed', pubmed),
+        src('reddit', reddit.posts),
       ];
 
   // 응답이 아예 없는 소스는 빼지 않고 그대로 돌려준다 — 저장·조회는 social-store.ts가

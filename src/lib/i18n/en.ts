@@ -1104,6 +1104,22 @@ export const EN: Record<string, string> = {
   '이 분야 종사자들이 지금 이야기하는 글 — 기사보다 며칠 먼저 움직입니다.':
     'What people in the field are actually discussing — usually days ahead of the press.',
   '표시할 커뮤니티 시그널이 없습니다.': 'No community signals to show.',
+  '여러 매체가 함께 다룬 뉴스를 봅니다.': 'News that multiple outlets covered together.',
+  '가장 화제': 'Most discussed',
+  '새 AI 모델이 논문·기사보다 먼저 올라오는 곳': 'Where new AI models land before papers or press',
+  '엔지니어·창업자 커뮤니티. 기술 발표가 언론보다 며칠 빠르다':
+    'Engineers and founders — technical news lands days before the press',
+  '분야별 종사자 커뮤니티. 업계 내부 분위기가 먼저 드러난다':
+    'Practitioner communities — the industry mood shows up here first',
+  '인프라·개발도구 논의가 밀도 높게 오가는 곳': 'Dense discussion on infrastructure and developer tools',
+  '심사 전 논문 원본': 'Preprints, before peer review',
+  '바이오 프리프린트 원본': 'Bio preprints, before peer review',
+  '심사를 통과해 정식 게재된 논문': 'Peer-reviewed, formally published papers',
+  '임상 단계 변경과 FDA 리콜 — 회사 발표보다 앞선다':
+    'Trial phase changes and FDA recalls — ahead of company announcements',
+  '업보트': 'upvotes',
+  '좋아요': 'likes',
+  '다운로드': 'downloads',
   '지금 소셜 미디어에서 가장 주목해야 할 뉴스':
     'What to watch on social right now',
   // 커뮤니티 선정 이유 — social-collect.ts의 WHY와 문구가 정확히 일치해야 한다.

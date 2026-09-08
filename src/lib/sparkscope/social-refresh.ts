@@ -16,7 +16,7 @@ import {
   type SocialDomain,
   type SocialSourceId,
 } from './social-collect';
-import { saveSignals, lastCollectedAt, pruneSignalSamples, type RawSignal } from './social-store';
+import { saveSignals, lastCollectedAt, pruneSignalSamples, findUntranslated, setTitleKo, type RawSignal } from './social-store';
 import { translateBatchMemo } from './translate-content';
 
 /** 수집 대상 기간 — 이보다 오래된 글은 애초에 받아오지 않는다. */
@@ -102,7 +102,44 @@ export async function refreshSocialSignals(
   );
 
   const { saved, failed } = await saveSignals(rows);
-  return { domain, refreshed: [...due], skipped, saved, failed, translated };
+
+  // 이번에 새로 받은 것 말고, DB에 남아 있는 미번역 행도 함께 채운다.
+  //
+  // 왜 필요한가: 번역은 "수집한 그 순간"에만 붙는다. 그래서 이 구조가 생기기 전에 쌓인 행,
+  // 번역 호출이 실패한 행, 주기가 안 돌아온 소스의 행은 titleKo가 영원히 null로 남는다.
+  // 실제로 그 상태였다 — 2026-09-08 확인 시 Hacker News 223건 중 209건, Reddit 128건 중
+  // 108건이 미번역이라 한국어 화면에 영어 문장이 그대로 나갔다(사용자 신고).
+  const backfilled = await backfillMissingKo(domain).catch(e => {
+    console.error('[social-refresh] 미번역 백필 실패(무시):', e);
+    return 0;
+  });
+
+  return { domain, refreshed: [...due], skipped, saved, failed, translated: translated + backfilled };
+}
+
+/** 한 번에 번역할 미번역 행 수 — 크론 한 회차가 너무 길어지지 않는 선. */
+const KO_BACKFILL_LIMIT = 60;
+
+/**
+ * titleKo가 비어 있는 행을 채운다. 남아 있으면 다음 회차가 이어서 처리한다.
+ * 모델 id처럼 번역하면 안 되는 소스(NO_TRANSLATE)는 건너뛴다.
+ */
+async function backfillMissingKo(domain: SocialDomain): Promise<number> {
+  const ids = DOMAIN_SOURCES[domain].filter(id => !NO_TRANSLATE.has(id));
+  if (ids.length === 0) return 0;
+
+  const rows = await findUntranslated(domain, ids, KO_BACKFILL_LIMIT);
+  if (rows.length === 0) return 0;
+
+  const ko = await translateBatchMemo(rows.map(r => r.title), 'ko');
+  const pairs = rows
+    .map((r, i) => ({ id: r.id, titleKo: ko[i] }))
+    .filter((p): p is { id: string; titleKo: string } => !!p.titleKo && p.titleKo.trim().length > 0);
+
+  if (pairs.length === 0) return 0;
+  await setTitleKo(pairs);
+  console.log(`[social-refresh] ${domain} 미번역 ${rows.length}건 중 ${pairs.length}건 번역 저장`);
+  return pairs.length;
 }
 
 /** 두 도메인을 모두 갱신하고 오래된 샘플을 정리한다. 크론이 부르는 진입점. */
