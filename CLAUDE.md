@@ -218,6 +218,42 @@ TypeError: Cannot read properties of undefined (reading 'findMany')
 
 ---
 
+## 🔓 파트너에게 DB를 여는 규칙 (Supabase anon key)
+
+블루사이트(AI SparkClaw)에 anon key를 넘겼다. 그쪽은 우리 API가 아니라 **Supabase를 직접
+조회**해서 자기 홈페이지 배너에 우리 AI 시그널을 띄운다. 즉 **DB 권한 설정이 곧 접근 통제**다.
+
+### 지금 열려 있는 것 — 뷰 2개뿐
+
+| 대상 | 내용 |
+|---|---|
+| `inter_news_public` | Inter 기사 목록 (제목·링크·매체·섹터·국가) |
+| `ai_signal_feed_public` | AI 시그널 TOP 5 최신 회차 |
+
+나머지는 전부 막혀 있다. 2026-09-08 anon key로 실측: 공개 뷰 200,
+`MonitoringTarget`·`InterPortfolioMatch`·`Article`·`SocialSignal`·`User`·`Session`·
+원본 `AiSignalFeed` 전부 **401**, POST도 **401**.
+
+### 새 테이블을 만들 때 지킬 것
+
+- ✅ **`ENABLE ROW LEVEL SECURITY`를 항상 같이 쓴다.**
+  Supabase UI로 만들면 RLS가 켜지지만, 이 저장소는 `apply-migration.ts`로 raw SQL을 쓰기
+  때문에 **RLS가 꺼진 채로 생성된다.** 지금 안 새는 건 anon에 GRANT가 없어서일 뿐이다.
+- ✅ 파트너에게 여는 것은 **뷰만**. 테이블을 직접 GRANT 하지 않는다.
+- ✅ 뷰는 **컬럼을 하나씩 골라서** 쓴다. `SELECT *`를 쓰면 나중에 컬럼이 늘 때 같이 나간다.
+- ❌ 뷰에 **포트폴리오사 매칭·내부 분석(`ourTake`·`riskFlag`·`relatedCompanies`·
+  `pitchScore`)을 절대 넣지 않는다.** 창업자 관련 비공개 정보다.
+- ✅ 뷰를 추가·변경했으면 anon key로 **직접 호출해 확인한다.** 스키마만 보고 판단하지 않는다.
+
+### AI 시그널 TOP 5는 왜 테이블에 물질화하나
+
+TOP 5의 절반(뉴스)은 조회 시점에 RSS로 만들어져 **DB에 없었고**, 랭킹 규칙(소스별 등수 환산
++ 가중치)도 TypeScript에 있어 SQL 뷰만으로는 재현할 수 없다. 그래서 발송 시각에 계산 결과를
+`AiSignalFeed`에 저장한다(`signal-publish.ts`). 다이제스트 메일에 들어간 것과 **같은 객체**를
+그대로 저장하므로 메일과 파트너 배너가 갈리지 않는다.
+
+---
+
 ## 📚 관련 문서
 
 - `README.md` — 배포 및 운영 가이드

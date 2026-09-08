@@ -16,6 +16,7 @@ import { checkConfigDrift, formatDriftReport } from './config-drift';
 import { buildDigestData, renderDigestHtml, buildClusteredPool, rankTop3Pool } from './digest';
 import { attachInterDigest } from './inter-digest';
 import { attachAiSignals } from './signal-digest';
+import { publishSignalFeed } from './signal-publish';
 import { buildDigestKeyMap, buildDigestContextMap, passesDigestGuard } from './review';
 import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } from './mailer';
 import { collectInterNews } from './inter-collect';
@@ -365,6 +366,11 @@ export async function runDailyDigest(opts: RunOptions = {}) {
     const data = await attachAiSignals(await attachInterDigest(
       buildDigestData(digestReady, '', undefined, scrappedLinks, verifiedTop3),
     ));
+    // 파트너(블루사이트)가 읽어 갈 수 있게 같은 TOP 5를 DB에 물질화한다.
+    // 메일에 들어간 것과 같은 객체라 둘이 갈리지 않는다. 실패해도 발송은 계속한다.
+    await publishSignalFeed(data.aiSignals).catch(e =>
+      console.error('[runner] AI 시그널 발행 실패(무시):', e));
+
     const html = renderDigestHtml(data, opts.baseUrl);
     const subject = buildSubject(data.dateLabel, data.top3[0]?.title);
 

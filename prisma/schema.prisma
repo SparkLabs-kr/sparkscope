@@ -26,14 +26,14 @@ model User {
   // ===== 계정 종류 (2.1 로그인·계정 체계) =====
   // role: ADMIN(스파크랩 내부 — 전체 열람) / PORTFOLIO(포트폴리오사 — 공개 범위만)
   // 스파크랩 도메인 메일로 처음 로그인하면 events.createUser가 ADMIN을 넣는다(src/lib/auth.ts).
-  role          String    @default("PORTFOLIO")
+  role          String            @default("PORTFOLIO")
   // PORTFOLIO 계정이 소속된 회사. MonitoringTarget(category=portfolio_company*)을 그대로 가리킨다 —
   // 회사 테이블을 새로 만들지 않는 이유는 포트폴리오사가 이미 감시대상으로 등록돼 있기 때문.
   companyId     String?
   company       MonitoringTarget? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   // 관리자가 계정을 비활성화하면 false — 매직 링크가 와도 로그인이 막힌다(삭제하지 않아 이력이 남는다).
-  active        Boolean   @default(true)
-  invitedBy     String?   // 계정을 발급한 관리자 이메일
+  active        Boolean           @default(true)
+  invitedBy     String? // 계정을 발급한 관리자 이메일
   invitedAt     DateTime?
   deactivatedAt DateTime?
   lastLoginAt   DateTime?
@@ -107,12 +107,12 @@ model MonitoringTarget {
   embeddedAt      DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  // 이 회사에 소속된 포트폴리오사 계정 (2.1 로그인·계정 체계)
+  users           User[] // 이 회사에 연결된 포트폴리오사 계정
 
   @@index([category, status])
   @@index([region])
   @@index([sector])
-  // 이 회사에 소속된 포트폴리오사 계정 (2.1 로그인·계정 체계)
-  users           User[]   // 이 회사에 연결된 포트폴리오사 계정
 }
 
 // 한국 × 해외지사 포트폴리오 시너지 후보.
@@ -453,4 +453,40 @@ model SocialSignalSample {
 
   @@index([signalId, sampledAt])
   @@index([sampledAt])
+}
+
+// 파트너 공개용 AI 시그널 피드 (2026-09-08).
+//
+// 블루사이트가 Supabase anon key로 직접 읽어 자기 배너에 띄운다. 그쪽이 우리 API를
+// 부르는 게 아니라 DB를 직접 조회하는 구조라, "무엇이 나가는가"를 테이블·뷰로 못박는다.
+//
+// 왜 물질화하는가: TOP 5의 절반(뉴스)은 조회 시점에 RSS로 만들어져 DB에 없었고,
+// 랭킹 규칙도 TypeScript에 있어 SQL 뷰만으로는 재현할 수 없다.
+// 다이제스트 메일과 같은 함수(signal-feed.ts)가 만든 결과를 그대로 저장하므로
+// 메일과 파트너 배너가 갈리지 않는다.
+//
+// 접근: 이 테이블 자체는 RLS를 켜고 anon 권한을 회수했다. 파트너는 컬럼을 골라 만든
+// ai_signal_feed_public 뷰로만 본다(마이그레이션 참고).
+model AiSignalFeed {
+  id          String   @id @default(cuid())
+  // 발행 회차 — 같은 회차의 5건이 같은 값을 갖는다.
+  publishedAt DateTime @default(now())
+  rank        Int
+  kind        String // 'news' | 'signal'
+  domain      String   @default("ai")
+  title       String
+  titleKo     String?
+  url         String
+  source      String // 표시 이름 (Reuters, Hugging Face · 인기 모델)
+  sourceId    String // 기계용 ('news' | hf | hn | …)
+  author      String?
+  points      Int?
+  pointsLabel String?
+  comments    Int?
+  alsoInCount Int?
+  summary     String? // 한 줄 설명 — 뉴스는 요약, 나머지는 blurb
+  summaryEn   String?
+  itemDate    String? // 원문 발행일 YYYY-MM-DD
+
+  @@index([publishedAt, rank])
 }
