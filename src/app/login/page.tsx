@@ -11,6 +11,10 @@ function LoginForm() {
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const checkEmail = params.get('check') === 'email';
+  // NextAuth가 실패를 ?error=로 실어 보낸다. 가장 흔한 건 Verification —
+  // 매직 링크는 한 번 쓰면 소진되므로, 링크를 다시 누르거나 새로고침하면 여기로 온다.
+  // 이걸 "로그인 실패"로 보여주면 잠긴 줄 알게 된다. 실제로는 다시 받으면 그만이다.
+  const error = params.get('error');
 
   if (checkEmail) {
     return (
@@ -37,6 +41,19 @@ function LoginForm() {
     >
       <div className="text-xs font-bold tracking-wider text-spark-purple mb-2 text-center">SPARKSCOPE</div>
       <h1 className="text-2xl font-bold mb-2 text-center">{t('로그인')}</h1>
+
+      {/* 실패 안내 — 무엇이 잘못됐고 무엇을 하면 되는지 한 줄로. 아래 폼이 그대로 있어
+          같은 화면에서 바로 다시 받을 수 있다. */}
+      {error && (
+        <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] leading-relaxed text-amber-800">
+          {error === 'Verification'
+            ? t('이 로그인 링크는 이미 사용했거나 만료됐습니다. 링크는 한 번만 쓸 수 있어요 — 아래에서 새로 받아 주세요.')
+            : error === 'AccessDenied'
+              ? t('이 메일 주소로는 접근할 수 없습니다. @sparklabs.co.kr 주소로 시도해 주세요.')
+              : t('로그인에 실패했습니다. 아래에서 링크를 새로 받아 주세요.')}
+        </div>
+      )}
+
       <p className="text-sm text-gray-600 mb-6 text-center">
         {t('@sparklabs.co.kr 이메일을 입력하면 로그인 링크를 보내드립니다')}
       </p>

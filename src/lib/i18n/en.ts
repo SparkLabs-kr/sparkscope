@@ -1198,4 +1198,12 @@ export const EN: Record<string, string> = {
     'Recent articles',
   '최근 기사가 없습니다.':
     'No recent articles.',
+
+  // 로그인 실패 안내 (2026-09-08)
+  '이 로그인 링크는 이미 사용했거나 만료됐습니다. 링크는 한 번만 쓸 수 있어요 — 아래에서 새로 받아 주세요.':
+    'This sign-in link has already been used or has expired. Each link works once — request a new one below.',
+  '이 메일 주소로는 접근할 수 없습니다. @sparklabs.co.kr 주소로 시도해 주세요.':
+    'This email address does not have access. Please use your @sparklabs.co.kr address.',
+  '로그인에 실패했습니다. 아래에서 링크를 새로 받아 주세요.':
+    'Sign-in failed. Request a new link below.',
 };
