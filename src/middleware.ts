@@ -24,8 +24,11 @@ import { OPEN_ACCESS } from '@/lib/flags';
  *  · /api/auth/*  — 로그인 자체를 처리한다. 막으면 아무도 못 들어온다.
  *  · /api/cron/*  — Vercel Cron·GitHub Actions가 세션 없이 부른다.
  *                   대신 각 라우트가 CRON_SECRET 헤더를 직접 검사한다.
+ *  · /api/partner/* — 파트너 사이트(블루사이트)가 세션 없이 부른다.
+ *                   대신 라우트가 PARTNER_API_KEY를 직접 검사한다. 키가 설정돼 있지
+ *                   않으면 503으로 닫힌다 — 빈 값끼리 맞아 열리는 일이 없게.
  */
-const PUBLIC_API = ['/api/auth', '/api/cron'];
+const PUBLIC_API = ['/api/auth', '/api/cron', '/api/partner'];
 
 const SESSION_COOKIES = ['next-auth.session-token', '__Secure-next-auth.session-token'];
 

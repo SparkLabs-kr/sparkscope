@@ -127,59 +127,58 @@ export async function readSignals(
   perSource = 10,
 ): Promise<Map<string, StoredSignal[]>> {
   const since = new Date(sinceMs);
-  const timeless = sources.filter(s => TIMELESS_SOURCES.has(s));
-  const dated = sources.filter(s => !TIMELESS_SOURCES.has(s));
 
-  const rows = await prisma.socialSignal.findMany({
-    where: {
-      domain,
-      OR: [
-        // 지금 뜨는 것 목록 — 발행일을 보지 않는다.
-        ...(timeless.length ? [{ source: { in: timeless } }] : []),
-        // 새로 나온 것 목록 — 발행일 창을 적용한다.
-        // 발행일을 모르는 항목(publishedAt null)도 버리지 않는다 — 논문·임상 쪽에
-        // 날짜가 비는 경우가 있고, 그것만으로 목록에서 지울 이유는 없다.
-        ...(dated.length ? [{
-          source: { in: dated },
-          OR: [{ publishedAt: { gte: since } }, { publishedAt: null }],
-        }] : []),
-      ],
-    },
-    select: {
-      source: true, externalId: true, domain: true, title: true, titleKo: true, url: true,
-      origin: true, author: true, publishedAt: true, points: true, pointsLabel: true,
-      comments: true, lastSeenAt: true,
-      // 최고 점수 — 기간 랭킹의 기준.
-      samples: { select: { points: true }, orderBy: { points: 'desc' }, take: 1 },
-    },
-    // 후보를 넉넉히 받아 아래에서 소스별로 자른다.
-    orderBy: { points: 'desc' },
-    take: sources.length * perSource * 4,
-  });
+  // ⚠️ 소스를 한 번의 쿼리로 묶어 점수순으로 자르면 안 된다.
+  //
+  //    소스별 점수 규모가 네 자릿수 차이다 — HF 다운로드 26,731 / HN 업보트 2,288 /
+  //    Lobsters 업보트 13 / arXiv 0. 전체를 points 순으로 정렬해 상위 N개만 받으면
+  //    그 N개가 전부 HF·HN으로 채워지고 점수가 낮은 소스는 한 건도 안 걸린다.
+  //    실제로 그랬다(2026-09-08): 파트너 API의 소셜 5건 중 4건이 HF였고
+  //    Lobsters·arXiv는 통째로 사라졌다.
+  //
+  //    그래서 소스마다 따로 조회한다. 쿼리 수는 소스 수만큼 늘지만 전부 인덱스를 타는
+  //    작은 조회이고, 동시에 던지므로 체감 지연은 한 번과 비슷하다.
+  const entries = await Promise.all(sources.map(async source => {
+    const timeless = TIMELESS_SOURCES.has(source);
+    const rows = await prisma.socialSignal.findMany({
+      where: {
+        domain,
+        source,
+        // "지금 뜨는 것" 목록은 발행일을 보지 않는다. 발행일을 모르는 항목
+        // (논문·임상에서 종종 빈다)도 그것만으로 지우지 않는다.
+        ...(timeless ? {} : { OR: [{ publishedAt: { gte: since } }, { publishedAt: null }] }),
+      },
+      select: {
+        source: true, externalId: true, domain: true, title: true, titleKo: true, url: true,
+        origin: true, author: true, publishedAt: true, points: true, pointsLabel: true,
+        comments: true, lastSeenAt: true,
+        // 최고 점수 — 기간 랭킹의 기준.
+        samples: { select: { points: true }, orderBy: { points: 'desc' }, take: 1 },
+      },
+      // 점수가 있는 소스는 점수순, 없는 소스는 최신순으로 후보를 받는다.
+      orderBy: timeless ? { points: 'desc' } : [{ publishedAt: 'desc' }, { points: 'desc' }],
+      take: perSource * 3,
+    });
 
-  const out = new Map<string, StoredSignal[]>();
-  for (const r of rows) {
-    const peak = Math.max(r.points, r.samples[0]?.points ?? 0);
-    const list = out.get(r.source) ?? [];
-    list.push({
+    const list: StoredSignal[] = rows.map(r => ({
       source: r.source, externalId: r.externalId, domain: r.domain as 'ai' | 'bio',
       title: r.title, titleKo: r.titleKo, url: r.url, origin: r.origin, author: r.author,
       publishedAt: r.publishedAt, points: r.points, pointsLabel: r.pointsLabel,
-      comments: r.comments, peakPoints: peak, lastSeenAt: r.lastSeenAt,
-    });
-    out.set(r.source, list);
-  }
+      comments: r.comments, peakPoints: Math.max(r.points, r.samples[0]?.points ?? 0),
+      lastSeenAt: r.lastSeenAt,
+    }));
 
-  // 소스마다 정렬 기준이 다르다 — 점수가 있으면 최고 점수 순, 없으면 최신순.
-  // 점수 없는 소스(논문·임상)를 점수순으로 세우면 전부 0이라 순서가 무의미해진다.
-  for (const [src, list] of out) {
+    // 소스 안에서 다시 세운다 — 점수가 있으면 최고 점수 순, 없으면 최신순.
+    // 점수 없는 소스(논문·임상)를 점수순으로 세우면 전부 0이라 순서가 무의미해진다.
     const ranked = list.some(s => s.peakPoints > 0);
     list.sort(ranked
       ? (a, b) => (b.peakPoints + b.comments * 2) - (a.peakPoints + a.comments * 2)
       : (a, b) => (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0));
-    out.set(src, list.slice(0, perSource));
-  }
-  return out;
+
+    return [source, list.slice(0, perSource)] as const;
+  }));
+
+  return new Map(entries.filter(([, list]) => list.length > 0));
 }
 
 /** 소스별 마지막 수집 시각 — 크론이 "지금 돌 차례인 소스"를 고를 때 쓴다. */
