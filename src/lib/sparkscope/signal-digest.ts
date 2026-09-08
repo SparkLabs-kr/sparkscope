@@ -34,6 +34,10 @@ function renderRow(it: FeedItem): string {
     } else if (it.alsoInCount) {
       meta.push(`<span class="s-also">+${it.alsoInCount}개 매체가 함께 보도</span>`);
     }
+    // 지표 소스는 항목으로 싣지 않고 근거로만 밝힌다.
+    if (it.indicatorSources?.length) {
+      meta.push(`<span class="s-src">🧭 ${it.indicatorSources.slice(0, 2).join(' · ')}</span>`);
+    }
   } else {
     if (it.author) meta.push(`<span class="s-auth">${esc(it.author)}</span>`);
     if (it.points) meta.push(`<span class="s-pt">▲ ${num(it.points)} ${esc(it.pointsLabel ?? '')}</span>`);

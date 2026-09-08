@@ -13,9 +13,10 @@
  * 했다면 업계가 그 사안을 큰일로 본다는 독립적인 합의다. 그 값(headlineOutlets)을
  * 중요도 바로 다음 기준으로 쓰고, 둘 이상이면 중요도에 바닥을 깔아준다.
  *
- * 순위 = 중요도 → 헤드라인 매체 수 → 헤드라인 자리 → 인기 등수 → 다룬 매체 수 → 등급 → 최신순.
+ * 순위 = 중요도 → 헤드라인 매체 수 → 헤드라인 자리 → 지표 소스 수 → 인기 등수
+ *        → 다룬 매체 수 → 등급 → 최신순.
  */
-import { FEEDS, DOMAIN_KEYWORDS, type Feed } from './news-feeds';
+import { FEEDS, INDICATOR_FEEDS, DOMAIN_KEYWORDS, type Feed } from './news-feeds';
 import { scoreImportance, type Importance, type Verdict } from './news-importance';
 import { groupSameStory } from './news-cluster';
 import { collectPopular } from './news-popular';
@@ -48,6 +49,20 @@ export interface DigestItem {
   headlineOutlets: number;
   /** 그중 가장 위쪽 자리(1 = 히어로). 없으면 null. */
   headlineRank: number | null;
+  /**
+   * 지표 소스(컨설팅 리포트·벤더 블로그·큐레이션 뉴스레터) 중 이 사안을 다룬 곳 수.
+   * 지표 소스 자체는 절대 화면에 뜨지 않는다 — 기사가 아니라 오피니언·발표이므로
+   * "뉴스"로 띄우면 안 된다는 판단(2026-09-08). 대신 우리가 가진 기사와 같은
+   * 사안이면 그 기사가 지금 업계 의제라는 근거가 된다.
+   */
+  indicatorOutlets: number;
+  /** 어느 지표 소스가 다뤘나 — 근거를 화면에 밝히기 위한 값. */
+  indicators: { source: string; title: string; url: string }[];
+  /**
+   * 이 항목 자체가 지표 소스인가. 내부 표시일 뿐이고, 결과에 true인 항목은 없다 —
+   * 사건 병합 뒤에 전부 걸러낸다. 사실상 collectDigest 안에서만 산다.
+   */
+  indicator?: boolean;
   /** 국내(한국) 업계·정책 소식인가. 한국 매체가 보도한 해외 소식은 false다. */
   domestic: boolean;
   /**
@@ -224,6 +239,61 @@ function groupImportance(group: { importance: Importance | null }[]): Importance
   return best > 0 ? (best as Importance) : null;
 }
 
+/**
+ * 지표 소스 수집 — 항목으로는 쓰지 않고, 사건 병합에만 끼워 넣는다.
+ *
+ * 왜 토큰 클러스터가 아니라 LLM 병합 단계에 넣나: 지표는 대부분 영어고 우리 기사는
+ * 한국어가 섞여 있어서 제목 단어가 겹치지 않는다("OpenAI's generational leap with
+ * GPT-6 Astra" vs "세계 최고 AI 모델 'GPT-6 아스트라' 전격 공개"의 공통 토큰은 0이다).
+ * LLM 병합은 언어를 넘어 같은 사안을 알아보므로 거기서만 쓸모가 있다.
+ */
+const INDICATOR_MAX = 20;
+
+async function collectIndicators(domain: NewsDomain, cutoff: number): Promise<DigestItem[]> {
+  const results = await Promise.all(INDICATOR_FEEDS.map(async (f: Feed) => {
+    try {
+      const entries = parseFeed(await getFeed(f.url));
+      return entries.filter(e => {
+        if (e.date && e.date.getTime() < cutoff) return false;
+        if (f.domain === 'general') return DOMAIN_KEYWORDS[domain].test(e.title);
+        return f.domain === domain;
+      }).map(e => ({ ...e, feed: f }));
+    } catch (e) {
+      console.error('[news-digest] 지표 피드 실패:', f.name, e);
+      return [];
+    }
+  }));
+
+  return results.flat()
+    .sort((a, b) => (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0))
+    // 상한을 둔다 — 병합 프롬프트에 들어가는 양이 곧 비용이고, 오래된 리포트는
+    // "지금 의제"를 말해 주지 않는다.
+    .slice(0, INDICATOR_MAX)
+    .map<DigestItem>(e => ({
+      title: e.title,
+      url: e.url,
+      source: e.feed.name,
+      independent: !!e.feed.independent,
+      publishedAt: (e.date ?? new Date()).toISOString().slice(0, 10),
+      tier: e.feed.tier,
+      alsoIn: [],
+      blurb: null,
+      sourceText: null,
+      grounding: 'headline',
+      portfolio: null,
+      summary: null,
+      // 지표는 채점하지 않는다. 자기 점수로 목록에 오를 일이 없기 때문이다.
+      importance: null,
+      popularRank: null,
+      headlineOutlets: 0,
+      headlineRank: null,
+      indicatorOutlets: 0,
+      indicators: [],
+      indicator: true,
+      domestic: false,
+    }));
+}
+
 export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): Promise<{
   items: DigestItem[];
   feeds: { name: string; ok: boolean; count: number }[];
@@ -290,6 +360,8 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
         popularRank: null,
         headlineOutlets: 0,
         headlineRank: null,
+        indicatorOutlets: 0,
+        indicators: [],
         domestic: false,
       };
     })
@@ -349,6 +421,8 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
         popularRank: p.headlineRank != null ? null : p.rank,
         headlineRank: p.headlineRank ?? null,
         headlineOutlets: p.headlineRank != null ? 1 : 0,
+        indicatorOutlets: 0,
+        indicators: [],
         domestic: !!p.domestic,
       });
     }
@@ -399,6 +473,10 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
     (b.importance ?? 3) - (a.importance ?? 3) ||
     b.headlineOutlets - a.headlineOutlets ||
     hrank(a) - hrank(b) ||
+    // 지표(리포트·벤더 블로그·뉴스레터)가 같은 사안을 다뤘나. 1면 합의보다는 약하지만
+    // 조회수보다는 앞이다 — 그 주제가 업계 의제에 올랐다는 뜻이다. 중요도 바닥은
+    // 깔아주지 않는다: 오피니언은 사건보다 느리게 움직여서 과대평가하기 쉽다.
+    b.indicatorOutlets - a.indicatorOutlets ||
     rank(a) - rank(b) ||
     b.alsoIn.length - a.alsoIn.length ||
     a.tier - b.tier ||
@@ -428,16 +506,30 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
     it => !it.domestic || it.headlineRank != null || (it.importance ?? 0) >= DOMESTIC_MIN);
 
   // 병합 대상 — 최종 노출 수의 세 배 정도만. 같은 사건이 셋으로 쪼개져도 이 안에 든다.
-  const shortlist = passable.slice(0, Math.max(limit * 3, 20));
-  const rest = passable.slice(shortlist.length);
+  const news = passable.slice(0, Math.max(limit * 3, 20));
+  const rest = passable.slice(news.length);
+
+  // 지표를 여기서 합친다. 점수와 무관하게 무조건 넣는다 — 지표는 채점하지 않으므로
+  // 점수로 줄을 세우면 전부 뒤로 밀려 병합 대상에 들지 못한다.
+  const indicators = await collectIndicators(domain, cutoff).catch(e => {
+    console.error('[news-digest] 지표 수집 실패(무시):', e);
+    return [] as DigestItem[];
+  });
+  const shortlist = [...news, ...indicators];
 
   const buckets = await groupSameStory(shortlist).catch(e => {
     console.error('[news-digest] 사건 병합 실패 — 병합 없이 진행합니다:', e);
     return shortlist.map((_, i) => [i]);
   });
 
-  const merged: DigestItem[] = buckets.map(idx => {
-    const group = idx.map(i => shortlist[i]);
+  const merged: DigestItem[] = buckets.flatMap(idx => {
+    const all = idx.map(i => shortlist[i]);
+    // 지표는 대표가 될 수 없고 "함께 보도"에도 세지 않는다 — 기사가 아니니까.
+    const group = all.filter(g => !g.indicator);
+    const ind = all.filter(g => g.indicator);
+    // 지표만 모인 그룹은 통째로 버린다. 맥킨지 리포트가 단독으로 목록에 오르는 일은 없다.
+    if (group.length === 0) return [];
+
     // 대표는 등급이 높은 쪽, 같으면 최신. 중요도는 그룹 최고값을 쓴다 —
     // 같은 사건인데 한 매체 제목이 모호해 낮게 채점된 것 때문에 강등되면 안 된다.
     const rep = group.reduce((best, cur) =>
@@ -454,10 +546,14 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
     const headlineRank = group.reduce<number | null>(
       (m, g) => (g.headlineRank == null ? m : m == null ? g.headlineRank : Math.min(m, g.headlineRank)), null);
 
-    return {
+    return [{
       ...rep,
       headlineOutlets,
       headlineRank,
+      indicatorOutlets: new Set(ind.map(g => g.source)).size,
+      indicators: ind.map(g => ({ source: g.source, title: g.title, url: g.url })),
+      // 대표를 그대로 펼치면 내부 표시가 따라올 수 있다 — 명시적으로 끈다.
+      indicator: false,
       // 경쟁 매체 둘 이상이 동시에 1면에 걸었으면 최소 4점을 보장한다.
       //
       // 우리 채점은 제목만 보고 하는 판단이라 업계 맥락을 놓친다 — "Novartis' Phase 3
@@ -480,7 +576,7 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
       // 요약 근거도 합친다 — 매체마다 강조점이 달라 한 곳만 볼 때보다 두터워진다.
       sourceText: group.map(g => g.sourceText).filter(Boolean).slice(0, 3).join('\n\n---\n\n') || null,
       blurb: rep.blurb ?? group.find(g => g.blurb)?.blurb ?? null,
-    };
+    }];
   });
 
   // 병합으로 자리가 비면 뒤쪽 후보가 올라온다.

@@ -66,6 +66,9 @@ export interface FeedItem {
   comments: number | null;
   /** 같은 사안을 다룬 다른 매체 수. 커뮤니티 글은 null. */
   alsoInCount: number | null;
+  /** 지표 소스(리포트·벤더 블로그·뉴스레터) 중 같은 사안을 다룬 곳 이름. 뉴스가 아니라
+   *  근거로만 쓴다(news-digest.ts). 커뮤니티 글은 빈 배열. */
+  indicatorSources: string[];
   /** 이 사안을 1면 헤드라인으로 건 매체 수. 함께 보도한 것보다 강한 신호다
    *  (news-digest.ts 참고). 커뮤니티 글은 null. */
   headlineOutlets: number | null;
@@ -106,6 +109,7 @@ async function newsCandidates(): Promise<Candidate[]> {
     comments: null,
     alsoInCount: it.alsoIn.length,
     headlineOutlets: it.headlineOutlets || null,
+    indicatorSources: [...new Set(it.indicators.map(x => x.source))],
     summaryKo: it.summary?.ko ?? null,
     summaryEn: it.summary?.en ?? null,
     blurb: null,
@@ -137,6 +141,7 @@ async function signalCandidates(): Promise<Candidate[]> {
         comments: row.comments || null,
         alsoInCount: null,
         headlineOutlets: null,
+        indicatorSources: [],
         summaryKo: null,
         summaryEn: null,
         blurb: row.blurb ?? null,

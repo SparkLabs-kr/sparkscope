@@ -269,6 +269,13 @@ function Hero({ item, locale }: { item: DigestItem; locale: string }) {
             📰 {t('{n}개 매체가 1면 헤드라인', { n: item.headlineOutlets })}
           </span>
         )}
+        {/* 지표 소스(리포트·벤더 블로그·뉴스레터)는 뉴스로 띄우지 않는다. 대신 같은
+            사안을 다뤘다는 사실만 근거로 밝힌다 — 1차 출처 확인이나 의제 신호다. */}
+        {item.indicators.length > 0 && (
+          <span className="text-[11px] text-spark-muted" title={item.indicators.map(i => i.title).join('\n')}>
+            🧭 {item.indicators.map(i => i.source).filter((v, i, a) => a.indexOf(v) === i).slice(0, 2).join(' · ')}
+          </span>
+        )}
         {/* 여러 매체가 동시에 다뤘다는 것 자체가 이 기사를 1위로 만든 근거다. */}
         {item.headlineOutlets < 2 && item.alsoIn.length > 0 && (
           <span className="text-[11.5px] font-bold text-rose-600">

@@ -31,6 +31,35 @@ export interface Feed {
   independent?: boolean;
 }
 
+/**
+ * 지표 전용 소스 — 화면에 뉴스로 띄우지 않는다.
+ *
+ * 컨설팅 리포트(맥킨지)·벤더 블로그(딥마인드)·큐레이션 뉴스레터(The Rundown)는
+ * 기사가 아니라 오피니언·발표·요약이다. 이걸 뉴스 목록에 섞으면 "업계에서 지금
+ * 무슨 일이 일어났나"가 아니라 "누가 무슨 의견을 냈나"가 올라온다.
+ *
+ * 그런데 버리기도 아깝다 — 여기가 무엇을 다루는지는 그 자체로 동향 지표다.
+ * 특히 The Rundown은 그날 AI 업계의 가장 큰 사건을 골라 머리기사로 쓰고,
+ * 딥마인드 블로그는 모델 공개를 1차 출처로 확인해 준다. 그래서 이 소스들은
+ * 항목으로 노출하지 않고, 우리가 이미 가진 기사와 같은 사안이면 그 기사의
+ * 순위를 올리는 데만 쓴다(news-digest.ts의 indicatorOutlets).
+ *
+ * 못 넣은 곳(2026-09-08 실측):
+ *   · Gartner — /en/ai 와 newsroom RSS 모두 403. 서버에서 접근이 막혀 있다.
+ *   · VentureBeat 자체 RSS — Vercel 봇 검문(429)에 걸린다. 피드버너 주소로 우회했고,
+ *     그쪽은 열려 있어 지표가 아니라 정식 뉴스 피드로 넣었다.
+ *   · McKinsey /insights/rss 는 전사 피드라 철도·유틸리티·자동차가 섞여 온다.
+ *     'general'로 두어 AI 키워드가 있는 것만 통과시킨다.
+ */
+export const INDICATOR_FEEDS: Feed[] = [
+  // 그날 AI 업계의 최대 사건을 골라 머리기사로 쓴다 — 편집 판단이 가장 선명하다.
+  { name: 'The Rundown AI', url: 'https://www.therundown.ai/feed', domain: 'ai', tier: 2, independent: true },
+  // 모델 공개의 1차 출처. "제미나이 3.8 플래시 공개"가 실제 발표인지 확인해 준다.
+  { name: 'Google DeepMind Blog', url: 'https://deepmind.google/blog/rss.xml', domain: 'ai', tier: 2 },
+  // 컨설팅 리포트 — 사건 속보는 아니지만 어떤 주제가 의사결정 의제에 올랐나를 본다.
+  { name: 'McKinsey Insights', url: 'https://www.mckinsey.com/insights/rss', domain: 'general', tier: 3 },
+];
+
 export const FEEDS: Feed[] = [
   // ── 금융·종합 ──
   { name: 'Financial Times', url: 'https://www.ft.com/technology?format=rss', domain: 'general', tier: 1 },
@@ -54,6 +83,8 @@ export const FEEDS: Feed[] = [
   { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index', domain: 'general', tier: 2 },
   { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml', domain: 'general', tier: 2 },
   { name: 'MIT Technology Review', url: 'https://www.technologyreview.com/feed/', domain: 'general', tier: 1 },
+  // venturebeat.com/feed 는 Vercel 봇 검문(429)에 막힌다. 피드버너 주소는 열려 있다.
+  { name: 'VentureBeat', url: 'https://feeds.feedburner.com/venturebeat/SZYF', domain: 'general', tier: 2 },
 
   // ── 한국 AI 전문지 ──
   //
