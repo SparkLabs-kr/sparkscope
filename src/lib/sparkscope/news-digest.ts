@@ -48,13 +48,53 @@ export interface DigestItem {
 
 const UA = 'Mozilla/5.0 (compatible; SparkScope/1.0; +https://sparkscope.sparklabs.co.kr)';
 
+/**
+ * 피드 하나를 읽되 앞부분만 가져온다.
+ *
+ * 일부 뉴스레터 피드는 본문 전체를 실어서 매우 크다 — Substack의
+ * magazine.sebastianraschka.com이 2.7MB, oneusefulthing.org가 0.9MB다(2026-09-08 실측).
+ * Next의 데이터 캐시는 2MB를 넘는 응답을 저장하지 못해서, 그 피드는 캐시에 못 들어가고
+ * 30분마다 2.7MB를 통째로 다시 받으며 로그에 오류를 남기고 있었다
+ * ("Failed to set Next.js data cache, items over 2MB can not be cached").
+ *
+ * 우리에게 필요한 것은 최근 항목의 제목·날짜·짧은 소개뿐이고, RSS는 최신 항목이
+ * 앞에 온다. 그래서 앞에서부터 읽다가 상한에 닿으면 끊는다. 마지막 항목이 잘려도
+ * 파싱은 <item>…</item> 블록 단위 정규식이라 그 조각만 버려지고 나머지는 멀쩡하다.
+ *
+ * ⚠️ next: { revalidate }를 같이 쓰면 안 된다. Next의 데이터 캐시는 우리가 스트림을
+ *    읽기 전에 본문 전체를 버퍼링하므로, 아래 상한이 적용되지 않고 2MB 초과 오류도
+ *    그대로 난다(실측으로 확인). cache: 'no-store'로 그 계층을 빼고, 대신 이 함수를
+ *    부르는 라우트가 이미 응답 단위로 30분 캐시한다(/api/inter/digest의 revalidate).
+ */
+const FEED_MAX_BYTES = 1_500_000;
+
 async function getFeed(url: string): Promise<string> {
   const res = await fetch(url, {
     headers: { 'User-Agent': UA, Accept: 'application/rss+xml,application/atom+xml,application/xml;q=0.9,*/*;q=0.8' },
-    next: { revalidate: 1800 },
+    cache: 'no-store',
   });
   if (!res.ok) throw new Error(`${res.status}`);
-  return res.text();
+
+  // Content-Length가 있으면 그것만 보고 판단할 수도 있지만, 없는 피드가 많아
+  // 실제로 읽으면서 센다.
+  const reader = res.body?.getReader();
+  if (!reader) return res.text();
+
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (total < FEED_MAX_BYTES) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    total += value.length;
+  }
+  // 상한에 걸려 중간에 멈췄으면 남은 연결을 붙들고 있지 않는다.
+  await reader.cancel().catch(() => {});
+
+  const buf = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) { buf.set(c, at); at += c.length; }
+  return new TextDecoder('utf-8').decode(buf);
 }
 
 function unescapeXml(s: string): string {
