@@ -287,6 +287,10 @@ export const EN: Record<string, string> = {
   '펀드 데이터 없음': 'No fund data',
   // ── Inter (해외 트렌드) ───────────────────────────────────────────
   '바이오': 'Bio',
+  // 스코프·도메인 세그먼티드 컨트롤의 부제(2026-09-08)
+  '내부 생태계': 'Internal',
+  '제약 · 진단 · 유전체': 'Pharma · Dx · Genomics',
+  '모델 · 반도체 · 에이전트': 'Models · Chips · Agents',
   '국가별 트렌드': 'By country',
   '미국': 'US',
   '중국': 'China',

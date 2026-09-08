@@ -868,24 +868,45 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
   return (
     <>
-      {/* 스코프 전환 — Intra(내부 생태계) / Inter(해외 트렌드) */}
-      <div className="flex flex-wrap items-center gap-3 mb-5">
-        <div data-tour="scope-switch" className="flex gap-0.5 rounded-lg bg-spark-cream p-0.5">
+      {/* 스코프 전환 — Intra(내부 생태계) / Inter(해외 트렌드).
+          작은 텍스트 토글이던 것을 세그먼티드 컨트롤로 바꿨다(2026-09-08). 아이콘과 이름을
+          위아래로 쌓고 활성 칸에만 색·그림자를 줘서, 지금 어느 화면인지가 한눈에 보이게 한다. */}
+      <div className="mb-5">
+        <div
+          data-tour="scope-switch"
+          className="inline-flex items-stretch gap-1 rounded-2xl border border-spark-border bg-spark-cream p-1 shadow-[inset_0_1px_2px_rgba(26,20,40,0.04)]"
+        >
           {SCOPES.map(s => {
             const active = s.id === scope;
-            const activeCls = s.id === 'inter' ? 'bg-emerald-600 text-white' : 'bg-spark-purple text-white';
+            const [icon, ...rest] = s.label.split(' ');
+            const name = rest.join(' ');
+            const activeCls = s.id === 'inter'
+              ? 'bg-emerald-600 text-white shadow-[0_2px_8px_-2px_rgba(5,150,105,0.5)]'
+              : 'bg-spark-purple text-white shadow-[0_2px_8px_-2px_rgba(80,70,229,0.5)]';
             return (
               <Link
                 key={s.id}
                 href={scopeHref(s.id)}
-                className={`rounded-md px-4 py-1.5 text-xs font-bold transition-colors whitespace-nowrap ${active ? activeCls : 'text-spark-muted hover:text-spark-ink-soft'}`}
+                aria-current={active ? 'page' : undefined}
+                className={`group flex items-center gap-2.5 rounded-xl px-4 py-2 transition-all whitespace-nowrap ${
+                  active ? activeCls : 'text-spark-muted hover:bg-white/70 hover:text-spark-ink-soft'
+                }`}
               >
-                {s.label}
+                <span className={`text-[17px] leading-none transition-transform ${active ? '' : 'grayscale opacity-60 group-hover:grayscale-0 group-hover:opacity-100'}`}>
+                  {icon}
+                </span>
+                <span className="flex flex-col items-start leading-tight">
+                  <span className="text-[14px] font-extrabold tracking-tight">{name}</span>
+                  {/* 설명을 활성 칸 안에 넣어, 밖에 떠 있던 회색 한 줄을 없앤다. */}
+                  <span className={`text-[10.5px] font-medium ${active ? 'text-white/75' : 'text-spark-muted/70'}`}>
+                    {s.id === 'inter' ? tr('해외 트렌드') : tr('내부 생태계')}
+                  </span>
+                </span>
               </Link>
             );
           })}
         </div>
-        <span className="text-[11px] text-spark-muted">{tr(activeScope.desc)}</span>
+        <p className="mt-2 text-[11.5px] text-spark-muted">{tr(activeScope.desc)}</p>
       </div>
 
       {/* 헤더(오늘 날짜 · 제목 · 스크랩함) — Intra/Inter 두 스코프에서 동일하게 보인다.

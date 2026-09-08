@@ -198,17 +198,28 @@ export function InterPanel({
 
   return (
     <div>
-      {/* 바이오 / AI 도메인 탭 */}
-      <div data-tour="inter-domain" className="flex flex-col sm:flex-row gap-3 mb-6">
-        <DomainTabBig label={t('바이오')} active={domain === 'bio'} activeCls="bg-cyan-50 border-cyan-600 text-cyan-700" onClick={() => pushParams({ domain: 'bio' })} />
-        <DomainTabBig label="AI" active={domain === 'ai'} activeCls="bg-emerald-50 border-emerald-600 text-emerald-700" onClick={() => pushParams({ domain: 'ai' })} />
+      {/* 바이오 / AI 도메인 탭 — 테두리 두꺼운 버튼 두 개가 따로 놀던 것을 하나의
+          세그먼티드 컨트롤로 묶었다(2026-09-08). 한 덩어리로 보여야 "둘 중 하나"라는 게 읽힌다. */}
+      <div data-tour="inter-domain" className="mb-6">
+        <div className="inline-flex w-full sm:w-auto items-stretch gap-1 rounded-2xl border border-spark-border bg-spark-cream p-1">
+          <DomainTabBig
+            icon="🧬" label={t('바이오')} sub={t('제약 · 진단 · 유전체')}
+            active={domain === 'bio'} activeCls="bg-cyan-600 text-white shadow-[0_2px_10px_-3px_rgba(8,145,178,0.6)]"
+            onClick={() => pushParams({ domain: 'bio' })}
+          />
+          <DomainTabBig
+            icon="🤖" label="AI" sub={t('모델 · 반도체 · 에이전트')}
+            active={domain === 'ai'} activeCls="bg-emerald-600 text-white shadow-[0_2px_10px_-3px_rgba(5,150,105,0.6)]"
+            onClick={() => pushParams({ domain: 'ai' })}
+          />
+        </div>
       </div>
 
-      {/* 지금 주목받는 뉴스 · 소셜 시그널 — 2분할로 나란히.
-          둘 다 "지금 뭐가 뜨나"를 보는 섹션이라, 세로로 쌓으면 같은 걸 보려고 스크롤을
-          두 번 해야 했다. 좁은 화면(lg 미만)에서는 자연히 위아래로 떨어진다.
-          기간은 적용된 from을 쓴다(draft 아님). */}
-      <div data-tour="inter-now" className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 items-start">
+      {/* 지금 주목받는 뉴스 · 소셜 시그널 — 위아래로 쌓되 각자 화면 폭을 다 쓴다.
+          2분할일 때는 칸이 좁아 기사 한 줄이 두세 줄로 접히고 오른쪽이 비었다.
+          이제 각 섹션이 전체 폭을 쓰고, 안에서 기사를 여러 열로 늘어놓아 빈 자리를 채운다
+          (2026-09-08). 기간은 적용된 from을 쓴다(draft 아님). */}
+      <div data-tour="inter-now" className="flex flex-col gap-4 mb-6">
         <NewsDigest domain={domain} />
         <SocialSignals domain={domain} from={from} />
       </div>
@@ -339,17 +350,24 @@ export function InterPanel({
   );
 }
 
-function DomainTabBig({ label, active, activeCls, onClick }: { label: string; active: boolean; activeCls: string; onClick: () => void }) {
-  const t = useT();
+function DomainTabBig({ icon, label, sub, active, activeCls, onClick }: {
+  icon: string; label: string; sub: string; active: boolean; activeCls: string; onClick: () => void;
+}) {
   return (
     <button
       onClick={onClick}
       aria-pressed={active}
-      className={`rounded-xl border-2 px-8 py-3.5 text-[16px] font-bold transition-colors ${
-        active ? activeCls : 'bg-white border-spark-border text-spark-muted hover:bg-spark-subtle hover:text-spark-ink-soft'
+      className={`group flex flex-1 items-center justify-center gap-2.5 rounded-xl px-6 py-2.5 transition-all sm:flex-none ${
+        active ? activeCls : 'text-spark-muted hover:bg-white/70 hover:text-spark-ink-soft'
       }`}
     >
-      {label}
+      <span className={`text-[19px] leading-none ${active ? '' : 'grayscale opacity-60 group-hover:grayscale-0 group-hover:opacity-100'}`}>
+        {icon}
+      </span>
+      <span className="flex flex-col items-start leading-tight">
+        <span className="text-[15px] font-extrabold tracking-tight">{label}</span>
+        <span className={`text-[10.5px] font-medium ${active ? 'text-white/75' : 'text-spark-muted/70'}`}>{sub}</span>
+      </span>
     </button>
   );
 }

@@ -14,8 +14,8 @@ import type { SocialSource } from '@/lib/sparkscope/social-collect';
 
 const ICON: Record<string, string> = { hn: 'Y', reddit: '👽' };
 
-/** 처음에 보여줄 글 수. 나머지는 접어 둔다 — 2분할 칸이라 세로가 짧다. */
-const PREVIEW = 3;
+/** 처음에 보여줄 글 수. (2026-09-08: 전체 폭을 쓰게 되면서 3건 → 5건) */
+const PREVIEW = 5;
 
 export function SocialSignals({ domain, from }: { domain: 'bio' | 'ai'; from: string }) {
   const t = useT();
@@ -42,7 +42,8 @@ export function SocialSignals({ domain, from }: { domain: 'bio' | 'ai'; from: st
         </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-3.5 mt-4">
+      {/* 소스를 가로로 늘어놓아 전체 폭을 채운다 — 세로로 쌓으면 오른쪽이 통째로 비었다. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 mt-4 items-start">
         {sources === null
           ? [0, 1].map(i => (
               <div key={i} className="h-56 rounded-xl border border-spark-border bg-spark-subtle animate-pulse" />

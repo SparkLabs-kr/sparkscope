@@ -20,8 +20,9 @@ type Resp = {
   feeds: { name: string; ok: boolean; count: number }[];
 };
 
-/** 처음에 보여줄 기사 수. 나머지는 '더 보기'로 접어 둔다. */
-const PREVIEW = 3;
+/** 처음에 보여줄 기사 수. 나머지는 '더 보기'로 접어 둔다.
+ *  (2026-09-08: 전체 폭을 쓰는 3열 그리드로 바뀌면서 3건 → 6건 — 한 줄이 비지 않게) */
+const PREVIEW = 6;
 
 const RANGES = [
   { days: 1, label: '오늘' },
@@ -94,9 +95,16 @@ export function NewsDigest({ domain }: { domain: 'bio' | 'ai' }) {
       ) : data.items.length === 0 ? (
         <p className="mt-4 text-[13px] text-spark-muted">{t('이 기간에 표시할 기사가 없습니다.')}</p>
       ) : (
-        <ol className="mt-3 border border-spark-border rounded-xl overflow-hidden">
+        /* 전체 폭을 쓰므로 한 줄에 여러 건을 늘어놓는다. 펼친 항목만 줄 전체를 차지해서
+           긴 설명이 좁은 칸에 갇히지 않게 한다(col-span-full). */
+        <ol className="mt-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
           {(showAll ? data.items : data.items.slice(0, PREVIEW)).map((it, i) => (
-            <li key={it.url} className="border-b border-spark-border last:border-b-0 bg-white px-4 py-2.5">
+            <li
+              key={it.url}
+              className={`rounded-xl border border-spark-border bg-white px-4 py-3 transition-colors ${
+                open === it.url ? 'md:col-span-2 xl:col-span-3 border-spark-purple/40 bg-spark-subtle/40' : 'hover:border-spark-purple/30'
+              }`}
+            >
               <div className="flex items-center gap-2 text-[11.5px] text-spark-muted mb-1">
                 <span className="font-extrabold text-orange-600 tabular-nums">{i + 1}</span>
                 <span className="font-semibold text-spark-ink-soft">{it.source}</span>
