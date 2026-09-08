@@ -30,6 +30,8 @@ import type { SparkLabsFundSummary } from '@/lib/sparkscope/fund-db';
 import { RISK_FLAGS } from '@/lib/sparkscope/risk-flags';
 import { InterPanel } from '@/components/InterPanel';
 import { PortfolioTopList } from '@/components/PortfolioTopList';
+import { SynergyBoard, type SynergyRow } from '@/components/SynergyBoard';
+import { businessContext } from '@/lib/sparkscope/synergy';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -44,6 +46,7 @@ const TABS = [
   { id: 'portfolio', label: '📊 포트폴리오사' },
   { id: 'competitor', label: '🏁 업계 모니터링' },
   { id: 'articles', label: '📋 최근 수집 기사' },
+  { id: 'synergy', label: '🤝 시너지' },
 ] as const;
 export type TabId = (typeof TABS)[number]['id'];
 
@@ -101,6 +104,15 @@ const VIEW_LABEL: Record<RegionId, Partial<Record<TabId, string>>> = {
 // 나란히 두지 않고 오른쪽에 떼어 놓는다.
 const DB_TAB: TabId = 'articles';
 const DB_LABEL = '🗄️ 수집 기사 DB';
+// 시너지도 국가 계층 밖이다 — 한국·대만 어느 쪽에도 속하지 않고 "두 나라를 잇는" 화면이라
+// 1단(국가) 아래에 두면 어느 국가의 화면인지 물어보게 된다(2026-09-08 결정).
+const SYNERGY_TAB: TabId = 'synergy';
+const SYNERGY_LABEL = '🤝 한국 × 대만 시너지';
+/** 국가 계층 밖 탭 — 1단 국가 탭과 나란히 두지 않고 오른쪽에 떼어 놓는다. */
+const OUTSIDE_TABS: readonly TabId[] = [DB_TAB, SYNERGY_TAB];
+function isOutside(t: TabId): boolean {
+  return OUTSIDE_TABS.includes(t);
+}
 /** 그 국가에서 볼 수 있는 관점인지 — 대만에서 업계 모니터링 등으로 튀는 것을 막는다. */
 function clampView(r: RegionId, t: TabId): TabId {
   return REGION_VIEWS[r].includes(t) ? t : REGION_VIEWS[r][0];
@@ -206,6 +218,50 @@ async function fetchRecentTabArticles(
     take: take - recent.length,
   });
   return [...recent, ...older];
+}
+
+/**
+ * 시너지 조합 조회 — SynergyPair를 읽어 화면용으로 만든다. LLM 호출 0회.
+ *
+ * 기본은 ACTIVE(Live) 회사만. Exit·중단 회사는 행사 초대 대상에서 보통 빼지만, Exit사는
+ * 연사·멘토로 부르기 좋아서 토글로 켤 수 있게 한다(2026-09-08 결정).
+ *
+ * 회사 설명(notes)과 상태는 SynergyPair에 복제하지 않고 MonitoringTarget에서 그때그때
+ * 조인한다 — 설명이 바뀌면 배치를 다시 돌리지 않아도 화면이 최신을 보여줘야 한다.
+ */
+async function loadSynergyRows(includeExit: boolean): Promise<SynergyRow[]> {
+  const pairs = await prisma.synergyPair.findMany({
+    where: { relation: { in: ['same', 'complement', 'chain'] } },
+    orderBy: { similarity: 'desc' },
+    take: 400,
+  });
+  if (pairs.length === 0) return [];
+
+  const ids = [...new Set(pairs.flatMap(p => [p.krTargetId, p.twTargetId]))];
+  const targets = await prisma.monitoringTarget.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true, notes: true, status: true, portfolioStatus: true },
+  });
+  const byId = new Map(targets.map(t => [t.id, t]));
+
+  const rows: SynergyRow[] = [];
+  for (const p of pairs) {
+    const kr = byId.get(p.krTargetId);
+    const tw = byId.get(p.twTargetId);
+    if (!kr || !tw) continue; // 회사가 삭제됐으면 조합도 안 보여준다
+    const live = (t: { status: string; portfolioStatus: string | null }) =>
+      t.status === 'ACTIVE' && t.portfolioStatus !== 'Exit' && t.portfolioStatus !== 'Written-off';
+    if (!includeExit && (!live(kr) || !live(tw))) continue;
+    rows.push({
+      id: p.id,
+      krName: kr.name, krDesc: businessContext(kr.notes), krStatus: kr.portfolioStatus,
+      twName: tw.name, twDesc: businessContext(tw.notes), twStatus: tw.portfolioStatus,
+      sector: p.sector, similarity: p.similarity,
+      relation: p.relation as SynergyRow['relation'],
+      rationale: p.rationale, collabFormat: p.collabFormat, feedback: p.feedback,
+    });
+  }
+  return rows;
 }
 
 async function loadDashboardData(
@@ -770,7 +826,7 @@ function buildTrendData(records: { matchedKeyword: string; pubDate: Date }[], si
   return { labels, datasets };
 }
 
-export default async function DashboardPage({ searchParams }: { searchParams: { from?: string; to?: string; company?: string; tab?: string; scope?: string; domain?: string; country?: string } }) {
+export default async function DashboardPage({ searchParams }: { searchParams: { from?: string; to?: string; company?: string; tab?: string; scope?: string; domain?: string; country?: string; exit?: string } }) {
   const tr = getT();
   const isEn = getLocale() === 'en';
   const locale: 'ko' | 'en' = isEn ? 'en' : 'ko';
@@ -782,7 +838,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   // 그 국가에 없는 관점으로는 들어갈 수 없게 한다 — ?tab=competitor&country=tw 같은 URL을
   // 그대로 그리면 "대만" 탭 아래에 한국 업계 데이터가 뜬다. 수집 기사 DB는 국가 계층 밖이라 예외.
   const rawTab = resolveTab(searchParams.tab);
-  const tab: TabId = rawTab === DB_TAB ? DB_TAB : clampView(region, rawTab);
+  const tab: TabId = isOutside(rawTab) ? rawTab : clampView(region, rawTab);
   // 대만 자사 언급은 기사가 얇다 — 1개월 창에는 0건이고 3개월에 4건, 전체 14건이다
   // (2026-09-08 실측. 기사가 6월 證交所·Google 협업 발표에 몰려 있다). 1개월만 두면
   // 탭이 항상 비어 보이므로 3개월까지는 고를 수 있게 남긴다. 1년은 여전히 감춘다 —
@@ -840,6 +896,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     if (region !== 'kr') params.set('country', region);
     return `/dashboard?${params.toString()}`;
   };
+  // ── 시너지 탭 데이터 ────────────────────────────────────────
+  // 배치(scripts/build-synergy-pairs.ts)가 미리 계산해둔 것을 읽기만 한다 — LLM 호출 0회.
+  // relation='none'은 감춘다(근거 없다고 판정된 조합).
+  const includeExit = searchParams.exit === '1';
+  const synergyHref = (withExit: boolean) => {
+    const params = new URLSearchParams({ tab: SYNERGY_TAB, scope });
+    if (withExit) params.set('exit', '1');
+    if (region !== 'kr') params.set('country', region);
+    return `/dashboard?${params.toString()}`;
+  };
+  const synergyRows: SynergyRow[] = tab === SYNERGY_TAB ? await loadSynergyRows(includeExit) : [];
+
   // 수집 기사 DB 링크 — 지금 보고 있는 기간(과 필요하면 회사 필터)을 그대로 들고 넘어간다.
   // 회사를 주면 DB 탭이 그 회사 기사만 펼쳐서 보여준다(selectedCompany = matchedKeyword).
   const dbHref = (company?: string) => {
@@ -941,13 +1009,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       <>
       {/* 섹션 탭 — 국가(1단) × 관점(2단) 2단 계층.
           1단 탭은 아래 2단 줄과 테두리로 이어 붙여(아래쪽 border 제거 + 카드 상단 모서리만
-          둥글게) 소속이 눈에 보이게 한다. 수집 기사 DB는 이 계층 밖이므로 오른쪽에 점선으로
-          떼어 놓는다. */}
+          둥글게) 소속이 눈에 보이게 한다. 수집 기사 DB와 시너지는 이 계층 밖이므로
+          오른쪽에 떼어 놓는다. */}
       <nav data-tour="intra-tabs" className="mb-6" aria-label={tr('대시보드 섹션')}>
         <div className="flex flex-wrap items-stretch gap-2 sm:flex-nowrap">
           {/* 1단 — 국가 */}
           {REGIONS.map(r => {
-            const active = tab !== DB_TAB && r.id === region;
+            const active = !isOutside(tab) && r.id === region;
             return (
               <Link
                 key={r.id}
@@ -964,7 +1032,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             );
           })}
           <span className="hidden flex-1 border-b border-spark-border sm:block" aria-hidden="true" />
-          {/* 계층 밖 — 수집 기사 DB */}
+          {/* 계층 밖 — 두 나라를 잇는 시너지 + 전체 기사 원본 */}
+          <Link
+            href={tabHref(SYNERGY_TAB)}
+            aria-current={tab === SYNERGY_TAB ? 'page' : undefined}
+            className={`self-center rounded-xl border-2 px-4 py-2.5 text-sm font-extrabold whitespace-nowrap transition-colors ${
+              tab === SYNERGY_TAB
+                ? 'bg-violet-600 border-violet-600 text-white shadow-sm'
+                : 'border-violet-500 bg-violet-50 text-violet-700 hover:bg-violet-100'
+            }`}
+          >
+            {tr(SYNERGY_LABEL)}
+          </Link>
           <Link
             href={tabHref(DB_TAB)}
             aria-current={tab === DB_TAB ? 'page' : undefined}
@@ -978,8 +1057,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           </Link>
         </div>
 
-        {/* 2단 — 관점. DB 탭은 국가 계층 밖이라 2단이 없다. */}
-        {tab !== DB_TAB && (
+        {/* 2단 — 관점. 계층 밖 탭(DB·시너지)은 2단이 없다. */}
+        {!isOutside(tab) && (
           <div className="rounded-b-xl rounded-tr-xl border border-spark-border bg-white px-4 py-3">
             <div className="flex flex-wrap gap-2">
               {REGION_VIEWS[region].map(v => {
@@ -1015,6 +1094,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           어느 쪽이 이기는지 알 수 없다).
           country를 extraParams로 넘기는 것이 중요하다. 안 넘기면 기간을 바꾸는 순간
           country가 빠져 대만을 보다가 한국으로 튕긴다. */}
+      {/* 시너지 탭은 기간과 무관하다 — 기사가 아니라 회사 사업설명으로 계산한 조합이라
+          기간을 바꿔도 결과가 안 바뀐다. 있으면 바꿔도 안 변한다는 오해만 준다. */}
+      {tab !== SYNERGY_TAB && (
       <div data-tour="date-range" className="mb-6">
         <DateRangePicker
           key={`${range.from}_${range.to}`}
@@ -1024,10 +1106,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           presetLabels={isTwSelf ? ['7일', '1개월', '3개월'] : undefined}
         />
       </div>
+      )}
 
 
-      {/* 이슈 급증 배너 + KPI — 경쟁사 탭 제외 */}
-      {tab !== 'competitor' && (
+      {/* 이슈 급증 배너 + KPI — 경쟁사·시너지 탭 제외 (시너지는 기사 집계와 무관) */}
+      {tab !== 'competitor' && tab !== SYNERGY_TAB && (
         <>
           {data.spikes.length > 0 && (
             <div data-tour="spike-banner" className="mb-6 space-y-2">
@@ -1187,6 +1270,34 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             rangeLabel={range.label}
             overallTrend={data.overallTrend}
           />
+        </div>
+      )}
+
+      {/* ── 한국 × 대만 시너지 ── 국가 계층 밖. 배치가 미리 계산한 조합을 읽기만 한다. */}
+      {tab === SYNERGY_TAB && (
+        <div className="mb-6">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-[17px] font-extrabold tracking-tight text-spark-ink">
+                🤝 {tr('한국 × 대만 포트폴리오 시너지')}
+              </h2>
+              <p className="mt-1 max-w-[70ch] text-xs text-spark-muted">
+                {tr('같은 주제에서 양국 포트폴리오사를 나란히 세워, 행사·기획에 같이 부를 조합을 찾습니다. 조합을 누르면 근거와 협업 형식이 펼쳐집니다.')}
+              </p>
+            </div>
+            {/* Exit 포함 토글 — 기본은 ACTIVE만. Exit사는 연사·멘토로 부르기 좋다. */}
+            <Link
+              href={synergyHref(!includeExit)}
+              className={`shrink-0 rounded-lg border px-3 py-1.5 text-[12px] font-bold transition-colors ${
+                includeExit
+                  ? 'border-spark-purple bg-spark-purple text-white'
+                  : 'border-spark-border bg-white text-spark-ink-soft hover:border-spark-purple hover:text-spark-purple'
+              }`}
+            >
+              {includeExit ? tr('✓ Exit 포함') : tr('Exit 포함')}
+            </Link>
+          </div>
+          <SynergyBoard rows={synergyRows} hasExitRows={!includeExit} />
         </div>
       )}
 

@@ -70,9 +70,56 @@ model MonitoringTarget {
   portfolioStatus String?  // 포트폴리오 CSV 원본 상태값 (Live/Exit/Written-off) — status(ACTIVE)와 별개, 표시용 라벨
   tier            String?  // 포트폴리오 CSV 원본 티어 (A/B/C)
   notes           String?
+  // ── 지사(국가) ──────────────────────────────────────────────
+  // 'kr' | 'tw' | 'sa' | 'au' | 'us' …  지사가 늘어날 때마다 category를 쪼개는 방식
+  // (portfolio_company_tw)은 무너지므로, 국가는 이 컬럼 하나로 표현한다.
+  // 기존 category는 되돌리기·수집 파이프라인 호환을 위해 그대로 둔다(2026-09-08).
+  region          String?
+  // ── 시너지 매칭용 (scripts/tag-portfolio-sectors.ts · embed-portfolio.ts가 채운다) ──
+  // master-keywords.json이 아니라 태깅/임베딩 스크립트가 소유하는 컬럼이다.
+  // seedKeywords()의 update 블록에 넣지 마라 — 넣으면 시드가 돌 때마다 지워진다.
+  domain          String?  // '바이오' | 'AI' | '기타산업' (inter-taxonomy.ts)
+  sector          String?  // COMPANY_*_SECTORS 중 하나
+  embedding       String?  // JSON 배열(Float[256]) — 사업설명 임베딩. pgvector 없이 저장.
+  // 실제로 임베딩한 텍스트. 한국어 설명은 영어로 정규화해서 넣는다 — 언어가 다르면
+  // 같은 사업이어도 코사인이 눌리기 때문(embed-portfolio.ts 주석 참고).
+  embedSource     String?
+  embeddedAt      DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   @@index([category, status])
+  @@index([region])
+  @@index([sector])
+}
+
+// 한국 × 해외지사 포트폴리오 시너지 후보.
+//
+// 배치(scripts/build-synergy-pairs.ts)가 주 1회 미리 계산해서 채우고, 대시보드는 읽기만 한다.
+// 218 × 69 = 15,042쌍을 매번 LLM에 물어볼 수 없으므로 코사인 유사도로 후보를 좁힌 뒤
+// 상위 후보만 LLM이 검증한다. 다이제스트·DashboardInsight와 같은 "미리 계산 → 읽기만" 패턴.
+model SynergyPair {
+  id           String   @id @default(cuid())
+  krTargetId   String
+  krName       String
+  twTargetId   String
+  twName       String
+  twRegion     String   // 'tw' — 지사가 늘어나도 같은 표를 쓴다
+  sector       String?  // 두 회사를 묶은 섹터 (표시·필터용)
+  similarity   Float    // 코사인 유사도 0~1
+  // 'same'(같은 업종) | 'complement'(보완) | 'chain'(밸류체인) | 'none'(협업 근거 없음)
+  // 'none'도 저장한다 — 다시 계산하지 않기 위한 기록이고, 화면에서는 감춘다.
+  relation     String
+  rationale    String?  // "왜 이 둘인가" 한두 문장 (LLM이 미리 써둔 값)
+  collabFormat String?  // 협업 형식 제안
+  // 사람 피드백 — 배치가 다시 돌아도 덮어쓰지 않는다.
+  feedback     String?  // 'up' | 'down'
+  feedbackBy   String?
+  feedbackAt   DateTime?
+  computedAt   DateTime @default(now())
+  @@unique([krTargetId, twTargetId])
+  @@index([relation])
+  @@index([sector])
+  @@index([similarity])
 }
 
 model Article {
