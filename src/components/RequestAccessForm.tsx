@@ -6,12 +6,19 @@
  * 여기서 계정이 생기는 게 아니라서, 바로 로그인해 보려다 실패하는 일을 막는다.
  */
 import { useMemo, useState } from 'react';
-import { useT } from '@/lib/i18n/client';
+import { useLocale, useT } from '@/lib/i18n/client';
 
-type Company = { id: string; name: string };
+type Company = { id: string; name: string; englishName: string | null };
 
 export function RequestAccessForm({ companies }: { companies: Company[] }) {
   const t = useT();
+  const locale = useLocale();
+  /**
+   * 화면에 쓸 회사명. EN 화면에 한국어 회사명이 그대로 나오면 대표가
+   * 자기 회사를 못 찾는다(284/287곳에 englishName 이 있다).
+   */
+  const label = (c: Company) =>
+    locale === 'en' ? (c.englishName?.trim() || c.name) : c.name;
   const [sent, setSent] = useState<null | 'ok' | 'staff' | 'has_account'>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -22,7 +29,13 @@ export function RequestAccessForm({ companies }: { companies: Company[] }) {
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return companies.slice(0, 50);
-    return companies.filter(c => c.name.toLowerCase().includes(needle)).slice(0, 50);
+    // 한국어·영문 어느 쪽으로 쳐도 찾아진다 — '스카이랩스'와 'Sky Labs' 둘 다.
+    return companies
+      .filter(c =>
+        c.name.toLowerCase().includes(needle) ||
+        (c.englishName ?? '').toLowerCase().includes(needle),
+      )
+      .slice(0, 50);
   }, [companies, q]);
 
   if (sent) {
@@ -100,7 +113,7 @@ export function RequestAccessForm({ companies }: { companies: Company[] }) {
       >
         <option value="">{t('목록에서 선택')}</option>
         {filtered.map(c => (
-          <option key={c.id} value={c.id}>{c.name}</option>
+          <option key={c.id} value={c.id}>{label(c)}</option>
         ))}
       </select>
 

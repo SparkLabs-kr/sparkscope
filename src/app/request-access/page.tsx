@@ -19,10 +19,10 @@ export default async function RequestAccessPage() {
   const companies = await prisma.monitoringTarget
     .findMany({
       where: { category: { startsWith: 'portfolio_company' }, status: 'ACTIVE' },
-      select: { id: true, name: true },
+      select: { id: true, name: true, englishName: true },
       orderBy: { name: 'asc' },
     })
-    .catch(() => [] as { id: string; name: string }[]);
+    .catch(() => [] as { id: string; name: string; englishName: string | null }[]);
 
   return (
     <main className="min-h-screen flex items-center justify-center px-6 py-12">
