@@ -92,6 +92,8 @@ export async function saveSignals(signals: RawSignal[]): Promise<{ saved: number
 }
 
 export interface StoredSignal extends RawSignal {
+  /** 한 줄 설명 — HF 모델처럼 제목만으로 용도를 알 수 없는 항목에 붙는다. */
+  blurb: string | null;
   /** 그 기간에 관측된 최고 점수. 랭킹은 이 값으로 매긴다. */
   peakPoints: number;
   publishedAt: Date | null;
@@ -151,7 +153,7 @@ export async function readSignals(
       select: {
         source: true, externalId: true, domain: true, title: true, titleKo: true, url: true,
         origin: true, author: true, publishedAt: true, points: true, pointsLabel: true,
-        comments: true, lastSeenAt: true,
+        comments: true, lastSeenAt: true, blurb: true,
         // 최고 점수 — 기간 랭킹의 기준.
         samples: { select: { points: true }, orderBy: { points: 'desc' }, take: 1 },
       },
@@ -165,7 +167,7 @@ export async function readSignals(
       title: r.title, titleKo: r.titleKo, url: r.url, origin: r.origin, author: r.author,
       publishedAt: r.publishedAt, points: r.points, pointsLabel: r.pointsLabel,
       comments: r.comments, peakPoints: Math.max(r.points, r.samples[0]?.points ?? 0),
-      lastSeenAt: r.lastSeenAt,
+      lastSeenAt: r.lastSeenAt, blurb: r.blurb,
     }));
 
     // 소스 안에서 다시 세운다 — 점수가 있으면 최고 점수 순, 없으면 최신순.

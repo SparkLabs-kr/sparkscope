@@ -18,6 +18,7 @@ import {
 } from './social-collect';
 import { saveSignals, lastCollectedAt, pruneSignalSamples, findUntranslated, setTitleKo, type RawSignal } from './social-store';
 import { translateBatchMemo } from './translate-content';
+import { fillHfBlurbs } from './hf-model-blurb';
 
 /** 수집 대상 기간 — 이보다 오래된 글은 애초에 받아오지 않는다. */
 const LOOKBACK_DAYS = 30;
@@ -155,9 +156,15 @@ export async function refreshAllSocialSignals(opts: { force?: boolean } = {}) {
       results.push({ domain, refreshed: [], skipped: [], saved: 0, failed: 0, translated: 0 });
     }
   }
+  // HF 모델 한 줄 설명 — 제목이 모델 id라 그것만으로는 용도를 알 수 없다.
+  // 실패해도 수집 결과는 그대로 나간다.
+  const blurbs = await fillHfBlurbs().catch(e => {
+    console.error('[social-refresh] HF 설명 생성 실패(무시):', e);
+    return 0;
+  });
   const pruned = await pruneSignalSamples().catch(e => {
     console.error('[social-refresh] 샘플 정리 실패:', e);
     return 0;
   });
-  return { results, pruned };
+  return { results, pruned, blurbs };
 }

@@ -69,6 +69,9 @@ export interface FeedItem {
   /** 쉬운 말 요약. 뉴스에만 있다. */
   summaryKo: string | null;
   summaryEn: string | null;
+  /** 한 줄 설명 — "이게 뭐고 왜 화제인가". HF 모델처럼 제목이 id라 용도를 알 수
+   *  없는 항목에 붙는다. 뉴스는 summaryKo가 그 역할을 하므로 비어 있다. */
+  blurb: string | null;
 }
 
 export interface SignalFeed {
@@ -101,6 +104,7 @@ async function newsCandidates(): Promise<Candidate[]> {
     alsoInCount: it.alsoIn.length,
     summaryKo: it.summary?.ko ?? null,
     summaryEn: it.summary?.en ?? null,
+    blurb: null,
     // 등수 점수 × 가중치. 여러 매체가 함께 다뤘으면 그만큼 올려 준다 —
     // 이 섹션에서 "중요하다"의 가장 단단한 근거가 그것이다.
     score: (1 / (i + 1)) * SOURCE_WEIGHT.news * (1 + 0.3 * it.alsoIn.length),
@@ -129,6 +133,7 @@ async function signalCandidates(): Promise<Candidate[]> {
         alsoInCount: null,
         summaryKo: null,
         summaryEn: null,
+        blurb: row.blurb ?? null,
         score: (1 / (i + 1)) * (SOURCE_WEIGHT[id] ?? 0.5),
       });
     });
