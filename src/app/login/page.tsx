@@ -49,18 +49,18 @@ function LoginForm() {
           {error === 'Verification'
             ? t('이 로그인 링크는 이미 사용했거나 만료됐습니다. 링크는 한 번만 쓸 수 있어요 — 아래에서 새로 받아 주세요.')
             : error === 'AccessDenied'
-              ? t('이 메일 주소로는 접근할 수 없습니다. @sparklabs.co.kr 주소로 시도해 주세요.')
+              ? t('이 메일 주소로는 접근할 수 없습니다. 사내 계정이거나 승인된 포트폴리오사 계정이어야 합니다.')
               : t('로그인에 실패했습니다. 아래에서 링크를 새로 받아 주세요.')}
         </div>
       )}
 
       <p className="text-sm text-gray-600 mb-6 text-center">
-        {t('@sparklabs.co.kr 이메일을 입력하면 로그인 링크를 보내드립니다')}
+        {t('이메일을 입력하면 로그인 링크를 보내드립니다')}
       </p>
       <input
         type="email"
         required
-        placeholder="name@sparklabs.co.kr"
+        placeholder="name@company.com"
         value={email}
         onChange={e => setEmail(e.target.value)}
         className="w-full px-4 py-3 border border-gray-200 rounded-lg mb-3 focus:outline-none focus:border-spark-purple"

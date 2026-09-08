@@ -1248,4 +1248,8 @@ export const EN: Record<string, string> = {
     'Request access',
   '접근 요청 {n}건': '{n} access request(s)',
   '알림 메일이 나가지 않은 요청이 있습니다': 'Some requests were never emailed to reviewers',
+  '이메일을 입력하면 로그인 링크를 보내드립니다':
+    'Enter your email and we will send you a sign-in link',
+  '이 메일 주소로는 접근할 수 없습니다. 사내 계정이거나 승인된 포트폴리오사 계정이어야 합니다.':
+    'This address cannot sign in. It must be a SparkLabs account or an approved portfolio company account.',
 };
