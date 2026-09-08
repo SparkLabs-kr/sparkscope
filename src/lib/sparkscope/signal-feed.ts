@@ -1,130 +1,158 @@
 /**
  * AI 시그널 TOP 5 — 다이제스트 메일과 파트너 사이트가 공유하는 하나의 선정 로직.
  *
- * 같은 "오늘의 AI 트렌드"를 두 곳에 내보내는데, 고르는 규칙이 갈라지면 메일과 파트너
+ * 같은 "이번 주 AI 트렌드"를 두 곳에 내보내는데, 고르는 규칙이 갈라지면 메일과 파트너
  * 배너에 서로 다른 목록이 뜬다. 그래서 선정은 여기 한 곳에서만 한다.
  *
- * 두 갈래를 각각 5건씩 뽑는다 — 성격이 달라서 한 줄로 세우면 비교가 성립하지 않는다.
- *  · news    "오늘의 시그널" — 신뢰할 수 있는 매체가 함께 다룬 기사. 여러 매체가 겹칠수록 위.
- *  · signals "소셜 시그널"   — 커뮤니티·모델 허브에서 화제인 글. 소스별 점수 규모가
- *                              네 자릿수 차이(HF 다운로드 26,731 vs Lobsters 업보트 13)라
- *                              점수를 그대로 비교하면 한 소스가 5칸을 다 먹는다.
- *                              소스 안에서의 순위를 쓰고, 소스를 돌아가며 한 건씩 뽑는다.
+ * 뉴스("오늘의 시그널")와 커뮤니티 글("소셜 시그널")을 섞어 하나의 순위 5건을 만든다.
+ *
+ * ⚠️ 점수를 그대로 비교하면 안 된다.
+ *    소스별 점수 규모가 네 자릿수 차이다 — HF 다운로드 60,343 / HN 업보트 2,288 /
+ *    Lobsters 업보트 13 / arXiv 0. 원점수로 한 줄 세우면 HF가 5칸을 다 먹고,
+ *    뉴스는 점수 개념이 아예 없어서 순위에 들어오지도 못한다.
+ *
+ *    그래서 원점수를 버리고 "자기 소스 안에서 몇 등인가"로 환산한다(1/등수).
+ *    같은 소스의 두 번째 항목은 절반, 세 번째는 1/3이 되므로 한 소스가 목록을
+ *    독점하지 않고 자연스럽게 여러 소스가 섞인다.
  */
 import { collectDigest, type DigestItem } from './news-digest';
 import { ensureSummaries } from './news-summary';
 import { readSignals } from './social-store';
 import { DOMAIN_SOURCES, SOURCE_META } from './social-collect';
 
-/** 메일·파트너 모두 5건. */
+/** 메일·파트너 모두 합쳐서 5건. */
 export const TOP_N = 5;
 /** 조회 창 — 다이제스트가 월·수·금이라 직전 발송 이후를 덮으려면 이 정도가 필요하다. */
 const NEWS_DAYS = 7;
 const SIGNAL_HOURS = 24 * 14;
 
-export interface FeedNews {
-  rank: number;
-  title: string;
-  titleKo: string | null;
-  url: string;
-  source: string;
-  publishedAt: string;
-  /** 같은 사안을 다룬 다른 매체 수 — 이 값이 클수록 위로 온다. */
-  alsoInCount: number;
-  summaryKo: string | null;
-  summaryEn: string | null;
-}
+/**
+ * 소스별 가중치 — "같은 등수라면 어느 쪽을 위에 둘까".
+ *
+ * 뉴스가 가장 높다. 여러 매체가 각자 취재해 같은 사안을 다뤘다는 것은 편집자 여럿이
+ * 독립적으로 중요하다고 판단했다는 뜻이라, 커뮤니티 업보트보다 무거운 신호다.
+ * 그다음이 실무자 검증이 붙는 HN, 모델 공개(HF), 나머지 순.
+ * Reddit이 가장 낮은 것은 지금 점수를 못 받아 최신순이기 때문이다 — OAuth 승인이
+ * 나면 이 값을 올려야 한다.
+ */
+const SOURCE_WEIGHT: Record<string, number> = {
+  news: 1.0,
+  hn: 0.85,
+  hf: 0.8,
+  hf_new: 0.7,
+  lobsters: 0.6,
+  arxiv: 0.55,
+  reddit: 0.45,
+};
 
-export interface FeedSignal {
+export interface FeedItem {
   rank: number;
+  /** 'news' 매체 보도 · 'signal' 커뮤니티·모델 허브 글 — 배너에서 다르게 그릴 수 있게. */
+  kind: 'news' | 'signal';
   title: string;
   titleKo: string | null;
   url: string;
-  /** 소스 표시 이름 (Hugging Face · 인기 모델, Hacker News …) */
+  /** 표시 이름 — 매체명(Reuters) 또는 소스명(Hugging Face · 인기 모델) */
   source: string;
+  /** 기계용 식별자 — 'news' 또는 소스 id(hf·hn·lobsters…) */
   sourceId: string;
-  /** 만든 곳·1저자 (OpenAI, Qwen …) */
+  publishedAt: string | null;
+  /** 만든 곳·1저자. 뉴스는 비어 있다. */
   author: string | null;
+  /** 커뮤니티 글의 반응 수. 뉴스는 null. */
   points: number | null;
-  /** points가 세는 단위 — 업보트/좋아요/다운로드 */
+  /** points가 세는 단위 — 업보트 / 좋아요 / 다운로드 */
   pointsLabel: string | null;
   comments: number | null;
-  publishedAt: string | null;
+  /** 같은 사안을 다룬 다른 매체 수. 커뮤니티 글은 null. */
+  alsoInCount: number | null;
+  /** 쉬운 말 요약. 뉴스에만 있다. */
+  summaryKo: string | null;
+  summaryEn: string | null;
 }
 
 export interface SignalFeed {
   domain: 'ai';
   generatedAt: string;
-  news: FeedNews[];
-  signals: FeedSignal[];
+  items: FeedItem[];
 }
 
-/** 뉴스 TOP 5 — 여러 매체가 함께 다룬 순. collectDigest가 이미 그 순으로 준다. */
-async function topNews(): Promise<FeedNews[]> {
+/** 순위 계산 전 내부 표현 — 자기 소스 안에서의 등수를 들고 다닌다. */
+type Candidate = Omit<FeedItem, 'rank'> & { score: number };
+
+async function newsCandidates(): Promise<Candidate[]> {
   const { items } = await collectDigest('ai', NEWS_DAYS, TOP_N * 2);
   const top = items.slice(0, TOP_N);
   // 요약이 없으면 채운다. 이미 있는 기사는 캐시에서 나오므로 다시 과금되지 않는다.
   await ensureSummaries(top).catch(e => console.error('[signal-feed] 요약 실패(무시):', e));
 
   return top.map((it: DigestItem, i) => ({
-    rank: i + 1,
+    kind: 'news' as const,
     title: it.title,
     titleKo: it.summary?.titleKo ?? null,
     url: it.url,
     source: it.source,
+    sourceId: 'news',
     publishedAt: it.publishedAt,
+    author: null,
+    points: null,
+    pointsLabel: null,
+    comments: null,
     alsoInCount: it.alsoIn.length,
     summaryKo: it.summary?.ko ?? null,
     summaryEn: it.summary?.en ?? null,
+    // 등수 점수 × 가중치. 여러 매체가 함께 다뤘으면 그만큼 올려 준다 —
+    // 이 섹션에서 "중요하다"의 가장 단단한 근거가 그것이다.
+    score: (1 / (i + 1)) * SOURCE_WEIGHT.news * (1 + 0.3 * it.alsoIn.length),
   }));
 }
 
-/**
- * 소셜 TOP 5 — 소스를 돌아가며 한 건씩(라운드로빈).
- *
- * 점수로 한 줄 세우기를 하지 않는 이유: 소스별 점수 규모가 네 자릿수 차이라
- * HF 다운로드가 항상 이긴다. "여러 커뮤니티에서 각각 무엇이 1위인가"가
- * 배너에 더 쓸모 있는 정보다.
- */
-async function topSignals(): Promise<FeedSignal[]> {
+async function signalCandidates(): Promise<Candidate[]> {
   const ids = DOMAIN_SOURCES.ai;
   const bySource = await readSignals('ai', ids, Date.now() - SIGNAL_HOURS * 3600_000, TOP_N);
 
-  const out: FeedSignal[] = [];
-  for (let round = 0; round < TOP_N && out.length < TOP_N; round++) {
-    for (const id of ids) {
-      if (out.length >= TOP_N) break;
-      const row = bySource.get(id)?.[round];
-      if (!row) continue;
+  const out: Candidate[] = [];
+  for (const id of ids) {
+    (bySource.get(id) ?? []).forEach((row, i) => {
       out.push({
-        rank: out.length + 1,
+        kind: 'signal',
         title: row.title,
         titleKo: row.titleKo ?? null,
         url: row.url,
         source: SOURCE_META[id]?.label ?? id,
         sourceId: id,
+        publishedAt: row.publishedAt ? row.publishedAt.toISOString().slice(0, 10) : null,
         author: row.author ?? null,
         points: row.peakPoints > 0 ? row.peakPoints : null,
         pointsLabel: row.pointsLabel ?? null,
         comments: row.comments || null,
-        publishedAt: row.publishedAt ? row.publishedAt.toISOString().slice(0, 10) : null,
+        alsoInCount: null,
+        summaryKo: null,
+        summaryEn: null,
+        score: (1 / (i + 1)) * (SOURCE_WEIGHT[id] ?? 0.5),
       });
-    }
+    });
   }
   return out;
 }
 
 /**
- * 두 갈래를 함께 만든다.
+ * 뉴스와 커뮤니티를 섞어 TOP 5를 만든다.
  *
  * ⚠️ 포트폴리오사 매칭은 넣지 않는다. 어느 포트폴리오사가 어떤 트렌드에 연결되는지는
- *    창업자 관련 비공개 정보이고, 파트너 배너에 나가면 안 된다. 메일에도 이 섹션에는
- *    넣지 않는다 — 포트폴리오 연결은 바로 위 '글로벌 트렌드 × 포트폴리오' 섹션의 몫이다.
+ *    창업자 관련 비공개 정보라 파트너 배너에 나가면 안 된다. 메일에서도 포트폴리오
+ *    연결은 바로 위 '글로벌 트렌드 × 포트폴리오' 섹션의 몫이다.
  */
 export async function buildSignalFeed(): Promise<SignalFeed> {
   const [news, signals] = await Promise.all([
-    topNews().catch(e => { console.error('[signal-feed] 뉴스 실패:', e); return [] as FeedNews[]; }),
-    topSignals().catch(e => { console.error('[signal-feed] 소셜 실패:', e); return [] as FeedSignal[]; }),
+    newsCandidates().catch(e => { console.error('[signal-feed] 뉴스 실패:', e); return [] as Candidate[]; }),
+    signalCandidates().catch(e => { console.error('[signal-feed] 소셜 실패:', e); return [] as Candidate[]; }),
   ]);
-  return { domain: 'ai', generatedAt: new Date().toISOString(), news, signals };
+
+  const items = [...news, ...signals]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, TOP_N)
+    .map(({ score, ...rest }, i) => ({ rank: i + 1, ...rest }));
+
+  return { domain: 'ai', generatedAt: new Date().toISOString(), items };
 }
