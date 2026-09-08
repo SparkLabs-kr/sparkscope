@@ -25,7 +25,8 @@ function renderRow(it: FeedItem): string {
   // 뉴스는 요약(summaryKo), 커뮤니티·모델·논문은 설명(blurb)이 같은 자리를 채운다.
   const desc = it.blurb || it.summaryKo;
 
-  const meta: string[] = [`<span class="s-src">${esc(it.source)}</span>`];
+  // 카드 위쪽 라벨 — 어디서 온 신호이고 얼마나 반응이 있었는지.
+  const meta: string[] = [];
   if (it.kind === 'news') {
     if (it.alsoInCount) meta.push(`<span class="s-also">+${it.alsoInCount}개 매체가 함께 보도</span>`);
   } else {
@@ -33,19 +34,21 @@ function renderRow(it: FeedItem): string {
     if (it.points) meta.push(`<span class="s-pt">▲ ${num(it.points)} ${esc(it.pointsLabel ?? '')}</span>`);
   }
 
-  const kind = it.kind === 'news'
-    ? '<span class="s-kind s-k-news">뉴스</span>'
-    : '<span class="s-kind s-k-sig">커뮤니티</span>';
+  const kindTag = it.kind === 'news'
+    ? '<span class="s-tag s-t-news">뉴스</span>'
+    : '<span class="s-tag s-t-sig">커뮤니티</span>';
 
+  // 카드는 종류에 따라 색을 달리한다 — 뉴스(보라)와 커뮤니티(주황)가 한 줄씩
+  // 번갈아 나오는데, 같은 색이면 다섯 장이 하나의 덩어리로 뭉개져 보인다.
   return `
-  <table class="s-row" cellpadding="0" cellspacing="0" width="100%"><tr>
-    <td class="s-no">${it.rank}</td>
-    <td>
-      <div class="s-head">${kind}${meta.join('')}</div>
-      <div class="s-title"><a href="${esc(it.url)}" target="_blank">${esc(title)}</a></div>
-      ${desc ? `<div class="s-desc">${esc(desc)}</div>` : ''}
-    </td>
-  </tr></table>`;
+  <div class="signal-card ${it.kind === 'news' ? 'sc-news' : 'sc-sig'}">
+    <div class="s-card-top">
+      <span class="s-rank">${it.rank}</span>${kindTag}<span class="s-src">${esc(it.source)}</span>
+    </div>
+    <div class="s-title"><a href="${esc(it.url)}" target="_blank">${esc(title)}</a></div>
+    ${meta.length ? `<div class="s-meta">${meta.join('')}</div>` : ''}
+    ${desc ? `<div class="s-desc">${esc(desc)}</div>` : ''}
+  </div>`;
 }
 
 /** 항목이 하나도 없으면 섹션 자체를 그리지 않는다 — 빈 제목만 남는 것보다 낫다. */
@@ -53,7 +56,7 @@ export function renderSignalSection(feed: SignalFeed | null): string {
   if (!feed || feed.items.length === 0) return '';
   return `
   <div class="signal-sec">
-    <div class="section-label signal-lb">🤖 이번 주 AI 트렌드 TOP ${feed.items.length}</div>
+    <div class="s-head-big">🤖 이번 주 AI 트렌드 TOP ${feed.items.length}</div>
     <div class="s-sub">
       신뢰할 수 있는 매체의 보도와 개발자·연구자 커뮤니티에서 화제인 글을 함께 세운 순위입니다.
       대시보드 Inter 탭 AI 도메인과 같은 기준입니다.
@@ -64,24 +67,34 @@ export function renderSignalSection(feed: SignalFeed | null): string {
 
 /** 이 섹션 전용 CSS — 기존 클래스는 하나도 덮어쓰지 않는다(전부 s- / signal- 접두). */
 export const SIGNAL_EMAIL_CSS = `
-.signal-sec{padding:20px 28px;background:#FAF9FF;border-top:2px solid #6D28D9;border-bottom:1px solid #E4DFF7}
-.section-label.signal-lb{color:#6D28D9}
-.s-sub{font-size:11.5px;color:#6B7280;line-height:1.6;margin:-4px 0 14px}
-.s-row{border-bottom:1px dashed #EDE9FB}
-.s-row:last-child{border-bottom:0}
-.s-no{width:26px;vertical-align:top;padding:10px 10px 10px 0;font-size:16px;font-weight:800;color:#6D28D9;text-align:right}
-.s-row td{padding:10px 0}
-.s-head{margin-bottom:4px;line-height:1.9}
-.s-kind{font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:3px;margin-right:6px;white-space:nowrap}
-.s-k-news{background:#EDE9FB;color:#5B21B6}
-.s-k-sig{background:#FFF1E7;color:#C2410C}
-.s-src{font-size:10.5px;font-weight:700;color:#514E5C;margin-right:6px}
-.s-auth{font-size:10px;font-weight:700;color:#6D28D9;margin-right:6px}
-.s-also{font-size:10px;font-weight:700;color:#047857;background:#ECFDF5;border-radius:3px;padding:2px 5px;margin-right:6px}
-.s-pt{font-size:10.5px;font-weight:700;color:#C2410C}
-.s-title{font-size:14px;font-weight:600;line-height:1.4}
+.signal-sec{padding:22px 28px;background:#FAF9FF;border-top:2px solid #6D28D9;border-bottom:1px solid #E4DFF7}
+/* 섹션 제목 — 다른 섹션의 11px kicker보다 크게 잡는다. Inter 띠(.i-strip-title)와 같은 취지로,
+   "여기부터 다른 이야기"라는 걸 색뿐 아니라 크기로도 갈라 준다. */
+.s-head-big{font-size:19px;font-weight:800;color:#4C1D95;line-height:1.3;margin-bottom:6px}
+.s-sub{font-size:12.5px;color:#6B7280;line-height:1.6;margin-bottom:16px}
+
+/* 항목마다 한 장씩 — 촘촘한 목록이면 다섯 건이 한 덩어리로 뭉개진다.
+   Inter 섹션의 .inter-match와 같은 모양(왼쪽 색 띠 + 카드)으로 맞춰 두 섹션이 형제로 읽히게 한다. */
+.signal-card{padding:15px 17px;border-radius:6px;margin-bottom:11px}
+.signal-card.sc-news{background:#F3F0FF;border-left:5px solid #6D28D9}
+.signal-card.sc-sig{background:#FFF6EF;border-left:5px solid #EA580C}
+
+.s-card-top{margin-bottom:9px;line-height:1.9}
+.s-rank{display:inline-block;min-width:19px;font-size:14px;font-weight:800;color:#6B7280}
+.s-tag{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;margin-right:7px}
+.s-t-news{background:#EDE9FE;color:#5B21B6}
+.s-t-sig{background:#FFEDD5;color:#9A3412}
+.s-src{font-size:11.5px;font-weight:700;color:#514E5C}
+
+.s-title{font-size:15.5px;font-weight:700;line-height:1.42;margin-bottom:7px}
 .s-title a{color:#1A1A1A;text-decoration:none}
-.s-desc{font-size:11.5px;color:#6B7280;line-height:1.6;margin-top:4px}
+
+.s-meta{margin-bottom:7px;line-height:1.9}
+.s-auth{font-size:11px;font-weight:700;color:#6D28D9;margin-right:8px}
+.s-also{display:inline-block;font-size:11px;font-weight:700;color:#047857;background:#ECFDF5;border-radius:10px;padding:2px 9px;margin-right:7px}
+.s-pt{font-size:11.5px;font-weight:800;color:#C2410C}
+
+.s-desc{font-size:12.5px;color:#4B5563;line-height:1.68}
 `;
 
 /**
