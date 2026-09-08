@@ -179,6 +179,10 @@ export const EN: Record<string, string> = {
   '🏁 한국 업계 모니터링': '🏁 Korea industry monitoring',
   '🗄️ 수집 기사 DB': '🗄️ Article database',
   '🤝 한국 × 대만 시너지': '🤝 Korea × Taiwan synergy',
+  '양국 포트폴리오를 잇는 화면입니다 — 국가·기간 선택이 없습니다.':
+    'This view bridges both portfolios — no country or date selection.',
+  '한국·대만 기사가 한 통에 들어간 원본 데이터입니다.':
+    'Raw data — Korean and Taiwanese articles in one table.',
   '한국 × 대만 포트폴리오 시너지': 'Korea × Taiwan portfolio synergy',
   '같은 주제에서 양국 포트폴리오사를 나란히 세워, 행사·기획에 같이 부를 조합을 찾습니다. 조합을 누르면 근거와 협업 형식이 펼쳐집니다.':
     'Puts portfolio companies from both countries side by side within a shared theme, so you can find pairs worth inviting to the same event. Click a pair to see the reasoning and a suggested collaboration format.',

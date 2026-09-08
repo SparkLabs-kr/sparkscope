@@ -1,0 +1,4 @@
+#!/bin/sh
+# git pull / merge 후 — 스키마가 바뀌었으면 Prisma 클라이언트를 재생성한다.
+# ORIG_HEAD는 머지 직전 HEAD를 가리킨다.
+. "$(dirname "$0")/prisma-generate-if-changed.sh" ORIG_HEAD HEAD

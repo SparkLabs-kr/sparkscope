@@ -172,6 +172,52 @@ db push가 그것들을 DROP 하려 든다. `ALTER TABLE ... ADD COLUMN IF NOT E
 
 ---
 
+## 🗄️ Prisma 스키마를 바꿀 때 (컬럼·모델 추가)
+
+### 1) 마이그레이션은 손으로 쓰고 스크립트로 적용한다
+
+`prisma migrate`도, `prisma db push`도 쓰지 않는다(위 drift 문제). 멱등 SQL을 직접 쓴다.
+
+```bash
+# prisma/migrations/<YYYYMMDD_설명>/migration.sql 을 만든 뒤
+npx tsx --env-file=.env.local scripts/apply-migration.ts prisma/migrations/<dir>/migration.sql --dry
+npx tsx --env-file=.env.local scripts/apply-migration.ts prisma/migrations/<dir>/migration.sql
+```
+
+`ADD COLUMN IF NOT EXISTS` / `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`로만
+쓴다 — 여러 번 돌려도 안전해야 하고, 그래야 나중에 누가 다시 돌려도 사고가 안 난다.
+
+주의: **`/** */` 블록 주석은 Prisma 스키마 문법이 아니다.** `//`만 쓴다
+(2026-09-08, `/** */`로 썼다가 `prisma generate`가 P1012로 실패).
+
+### 2) 생성된 클라이언트는 git에 없다 — pull 후 재생성이 필요하다
+
+`node_modules/@prisma/client`는 커밋되지 않는다. 그래서 **모델이 추가된 커밋을 pull 하면
+코드는 새 모델을 쓰는데 클라이언트는 옛것이라** 화면이 이렇게 죽는다:
+
+```
+TypeError: Cannot read properties of undefined (reading 'findMany')
+→ prisma.synergyPair is undefined
+```
+
+`NoiseSuggestion`·`NoiseReportRequest`·`SynergyPair`에서 **세 번 반복된 사고**라 자동화했다:
+
+| 언제 | 무엇이 도는가 |
+|---|---|
+| `git pull` / merge | `.husky/post-merge` → 스키마가 바뀌었으면 `prisma generate` |
+| 브랜치 전환 | `.husky/post-checkout` → 같음 |
+| `npm install` (새 clone) | `postinstall` → 항상 `prisma generate` |
+| 배포 | `build` 스크립트가 이미 `prisma generate && next build` |
+
+세 훅 모두 실패해도 pull/checkout을 막지 않는다(안내만 남긴다). 판단 로직은
+`.husky/prisma-generate-if-changed.sh` 한 곳에 있다.
+
+- ✅ **재생성 후 개발 서버는 직접 재시작해야 한다.** 실행 중인 Next.js 프로세스는 옛
+  클라이언트를 메모리에 들고 있어서, 파일만 바뀌어도 반영되지 않는다.
+- ✅ 훅이 안 돈 것 같으면 `npx prisma generate`를 직접 실행하면 된다 — 훅은 편의장치일 뿐이다.
+
+---
+
 ## 📚 관련 문서
 
 - `README.md` — 배포 및 운영 가이드

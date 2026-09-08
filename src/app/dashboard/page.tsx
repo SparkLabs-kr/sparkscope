@@ -1008,9 +1008,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       ) : (
       <>
       {/* 섹션 탭 — 국가(1단) × 관점(2단) 2단 계층.
-          1단 탭은 아래 2단 줄과 테두리로 이어 붙여(아래쪽 border 제거 + 카드 상단 모서리만
-          둥글게) 소속이 눈에 보이게 한다. 수집 기사 DB와 시너지는 이 계층 밖이므로
-          오른쪽에 떼어 놓는다. */}
+          1단 탭은 아래 흰 카드와 테두리로 이어 붙여(아래쪽 border 제거 + 카드 상단 모서리만
+          둥글게) 소속이 눈에 보이게 한다.
+          계층 밖 탭(시너지·수집 기사 DB)은 그 흰 카드 오른쪽 끝, 세로 구분선 뒤에 둔다 —
+          예전엔 1단 탭 줄에 나란히 뒀는데 카드 위 테두리에 딱 붙어서 어디에 속한 버튼인지
+          애매했다(2026-09-08). 카드 안에 넣으면서 "국가와 같은 층이 아니다"는 건
+          구분선과 색으로 표시한다. */}
       <nav data-tour="intra-tabs" className="mb-6" aria-label={tr('대시보드 섹션')}>
         <div className="flex flex-wrap items-stretch gap-2 sm:flex-nowrap">
           {/* 1단 — 국가 */}
@@ -1032,36 +1035,21 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             );
           })}
           <span className="hidden flex-1 border-b border-spark-border sm:block" aria-hidden="true" />
-          {/* 계층 밖 — 두 나라를 잇는 시너지 + 전체 기사 원본 */}
-          <Link
-            href={tabHref(SYNERGY_TAB)}
-            aria-current={tab === SYNERGY_TAB ? 'page' : undefined}
-            className={`self-center rounded-xl border-2 px-4 py-2.5 text-sm font-extrabold whitespace-nowrap transition-colors ${
-              tab === SYNERGY_TAB
-                ? 'bg-violet-600 border-violet-600 text-white shadow-sm'
-                : 'border-violet-500 bg-violet-50 text-violet-700 hover:bg-violet-100'
-            }`}
-          >
-            {tr(SYNERGY_LABEL)}
-          </Link>
-          <Link
-            href={tabHref(DB_TAB)}
-            aria-current={tab === DB_TAB ? 'page' : undefined}
-            className={`self-center rounded-xl border-2 px-4 py-2.5 text-sm font-extrabold whitespace-nowrap transition-colors ${
-              tab === DB_TAB
-                ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
-                : 'border-blue-500 bg-blue-50 text-blue-700 hover:bg-blue-100'
-            }`}
-          >
-            {tr(DB_LABEL)}
-          </Link>
         </div>
 
-        {/* 2단 — 관점. 계층 밖 탭(DB·시너지)은 2단이 없다. */}
-        {!isOutside(tab) && (
-          <div className="rounded-b-xl rounded-tr-xl border border-spark-border bg-white px-4 py-3">
-            <div className="flex flex-wrap gap-2">
-              {REGION_VIEWS[region].map(v => {
+        {/* 흰 카드 — 왼쪽은 2단(관점), 오른쪽은 계층 밖 탭.
+            계층 밖 탭을 보고 있을 때도 이 카드는 그린다(그 안에 버튼이 있으므로). */}
+        <div className="rounded-b-xl rounded-tr-xl border border-spark-border bg-white px-4 py-3">
+          <div className="flex flex-wrap items-center gap-y-2 gap-x-2">
+            {/* 왼쪽 — 관점(2단). 계층 밖 탭일 때는 지금 보고 있는 화면을 한 줄로 알려준다. */}
+            {isOutside(tab) ? (
+              <span className="text-[12.5px] font-semibold text-spark-muted">
+                {tab === SYNERGY_TAB
+                  ? tr('양국 포트폴리오를 잇는 화면입니다 — 국가·기간 선택이 없습니다.')
+                  : tr('한국·대만 기사가 한 통에 들어간 원본 데이터입니다.')}
+              </span>
+            ) : (
+              REGION_VIEWS[region].map(v => {
                 const active = v === tab;
                 return (
                   <Link
@@ -1077,15 +1065,42 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                     {tr(VIEW_LABEL[region][v] ?? v)}
                   </Link>
                 );
-              })}
-            </div>
-            {region === 'tw' && (
-              <p className="mt-2 text-[11px] text-spark-muted">
-                {tr('대만 업계 모니터링은 감시 대상(AC·VC·업계 키워드)이 아직 전부 한국 기준이라 준비 중입니다.')}
-              </p>
+              })
             )}
+
+            {/* 오른쪽 — 계층 밖 탭. 세로 구분선으로 "국가와 같은 층이 아니다"를 표시한다. */}
+            <div className="ml-auto flex items-center gap-2 sm:border-l sm:border-spark-border sm:pl-3">
+              <Link
+                href={tabHref(SYNERGY_TAB)}
+                aria-current={tab === SYNERGY_TAB ? 'page' : undefined}
+                className={`rounded-xl border-2 px-3 py-1.5 text-[13px] font-extrabold whitespace-nowrap transition-colors ${
+                  tab === SYNERGY_TAB
+                    ? 'bg-violet-600 border-violet-600 text-white shadow-sm'
+                    : 'border-violet-500 bg-violet-50 text-violet-700 hover:bg-violet-100'
+                }`}
+              >
+                {tr(SYNERGY_LABEL)}
+              </Link>
+              <Link
+                href={tabHref(DB_TAB)}
+                aria-current={tab === DB_TAB ? 'page' : undefined}
+                className={`rounded-xl border-2 px-3 py-1.5 text-[13px] font-extrabold whitespace-nowrap transition-colors ${
+                  tab === DB_TAB
+                    ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                    : 'border-blue-500 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                }`}
+              >
+                {tr(DB_LABEL)}
+              </Link>
+            </div>
           </div>
-        )}
+
+          {region === 'tw' && !isOutside(tab) && (
+            <p className="mt-2 text-[11px] text-spark-muted">
+              {tr('대만 업계 모니터링은 감시 대상(AC·VC·업계 키워드)이 아직 전부 한국 기준이라 준비 중입니다.')}
+            </p>
+          )}
+        </div>
       </nav>
 
       {/* 기간 선택 — 탭 바로 아래에 두어 어느 탭에서도 같은 자리에서 기간을 바꿀 수 있게 한다.

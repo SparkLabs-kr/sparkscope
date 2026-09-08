@@ -1,0 +1,5 @@
+#!/bin/sh
+# 브랜치 전환 후 — 스키마가 다르면 Prisma 클라이언트를 재생성한다.
+# 인자: $1=이전 HEAD, $2=새 HEAD, $3=1이면 브랜치 체크아웃(파일 체크아웃은 0)
+[ "$3" = "1" ] || exit 0
+. "$(dirname "$0")/prisma-generate-if-changed.sh" "$1" "$2"
