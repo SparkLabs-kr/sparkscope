@@ -38,6 +38,7 @@ model Account {
   id_token          String?
   session_state     String?
   user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([provider, providerAccountId])
 }
 
@@ -53,22 +54,23 @@ model VerificationToken {
   identifier String
   token      String   @unique
   expires    DateTime
+
   @@unique([identifier, token])
 }
 
 // ===== SparkScope 핵심 =====
 model MonitoringTarget {
-  id              String   @id @default(cuid())
-  name            String   @unique
+  id              String    @id @default(cuid())
+  name            String    @unique
   englishName     String?
-  category        String   // sparklabs_self / portfolio_company / industry_trend / executive / competitor
-  status          String   @default("ACTIVE") // ACTIVE / PAUSED / EXIT
+  category        String // sparklabs_self / portfolio_company / industry_trend / executive / competitor
+  status          String    @default("ACTIVE") // ACTIVE / PAUSED / EXIT
   primaryKeyword  String
-  helperKeywords  String?  // 쉼표 구분, 동음이의어 대응 (e.g. "PlayKeyboard, 비트바이트앱")
-  excludeWords    String?  // 쉼표 구분, 노이즈 차단
-  contextWords    String?  // 쉼표 구분, 문맥어 — 지정 시 제목에 하나라도 포함돼야 통과 (예: "교통안전, AI, 스마트교통")
-  portfolioStatus String?  // 포트폴리오 CSV 원본 상태값 (Live/Exit/Written-off) — status(ACTIVE)와 별개, 표시용 라벨
-  tier            String?  // 포트폴리오 CSV 원본 티어 (A/B/C)
+  helperKeywords  String? // 쉼표 구분, 동음이의어 대응 (e.g. "PlayKeyboard, 비트바이트앱")
+  excludeWords    String? // 쉼표 구분, 노이즈 차단
+  contextWords    String? // 쉼표 구분, 문맥어 — 지정 시 제목에 하나라도 포함돼야 통과 (예: "교통안전, AI, 스마트교통")
+  portfolioStatus String? // 포트폴리오 CSV 원본 상태값 (Live/Exit/Written-off) — status(ACTIVE)와 별개, 표시용 라벨
+  tier            String? // 포트폴리오 CSV 원본 티어 (A/B/C)
   notes           String?
   // ── 지사(국가) ──────────────────────────────────────────────
   // 'kr' | 'tw' | 'sa' | 'au' | 'us' …  지사가 늘어날 때마다 category를 쪼개는 방식
@@ -78,15 +80,16 @@ model MonitoringTarget {
   // ── 시너지 매칭용 (scripts/tag-portfolio-sectors.ts · embed-portfolio.ts가 채운다) ──
   // master-keywords.json이 아니라 태깅/임베딩 스크립트가 소유하는 컬럼이다.
   // seedKeywords()의 update 블록에 넣지 마라 — 넣으면 시드가 돌 때마다 지워진다.
-  domain          String?  // '바이오' | 'AI' | '기타산업' (inter-taxonomy.ts)
-  sector          String?  // COMPANY_*_SECTORS 중 하나
-  embedding       String?  // JSON 배열(Float[256]) — 사업설명 임베딩. pgvector 없이 저장.
+  domain          String? // '바이오' | 'AI' | '기타산업' (inter-taxonomy.ts)
+  sector          String? // COMPANY_*_SECTORS 중 하나
+  embedding       String? // JSON 배열(Float[256]) — 사업설명 임베딩. pgvector 없이 저장.
   // 실제로 임베딩한 텍스트. 한국어 설명은 영어로 정규화해서 넣는다 — 언어가 다르면
   // 같은 사업이어도 코사인이 눌리기 때문(embed-portfolio.ts 주석 참고).
   embedSource     String?
   embeddedAt      DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
   @@index([category, status])
   @@index([region])
   @@index([sector])
@@ -98,24 +101,25 @@ model MonitoringTarget {
 // 218 × 69 = 15,042쌍을 매번 LLM에 물어볼 수 없으므로 코사인 유사도로 후보를 좁힌 뒤
 // 상위 후보만 LLM이 검증한다. 다이제스트·DashboardInsight와 같은 "미리 계산 → 읽기만" 패턴.
 model SynergyPair {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   krTargetId   String
   krName       String
   twTargetId   String
   twName       String
-  twRegion     String   // 'tw' — 지사가 늘어나도 같은 표를 쓴다
-  sector       String?  // 두 회사를 묶은 섹터 (표시·필터용)
-  similarity   Float    // 코사인 유사도 0~1
+  twRegion     String // 'tw' — 지사가 늘어나도 같은 표를 쓴다
+  sector       String? // 두 회사를 묶은 섹터 (표시·필터용)
+  similarity   Float // 코사인 유사도 0~1
   // 'same'(같은 업종) | 'complement'(보완) | 'chain'(밸류체인) | 'none'(협업 근거 없음)
   // 'none'도 저장한다 — 다시 계산하지 않기 위한 기록이고, 화면에서는 감춘다.
   relation     String
-  rationale    String?  // "왜 이 둘인가" 한두 문장 (LLM이 미리 써둔 값)
-  collabFormat String?  // 협업 형식 제안
+  rationale    String? // "왜 이 둘인가" 한두 문장 (LLM이 미리 써둔 값)
+  collabFormat String? // 협업 형식 제안
   // 사람 피드백 — 배치가 다시 돌아도 덮어쓰지 않는다.
-  feedback     String?  // 'up' | 'down'
+  feedback     String? // 'up' | 'down'
   feedbackBy   String?
   feedbackAt   DateTime?
-  computedAt   DateTime @default(now())
+  computedAt   DateTime  @default(now())
+
   @@unique([krTargetId, twTargetId])
   @@index([relation])
   @@index([sector])
@@ -123,42 +127,43 @@ model SynergyPair {
 }
 
 model Article {
-  id                String   @id @default(cuid())
-  title             String
-  link              String   @unique
-  source            String
-  pubDate           DateTime
-  matchedKeyword    String
-  category          String   // sparklabs_self / portfolio_company / industry_trend / etc
+  id               String    @id @default(cuid())
+  title            String
+  link             String    @unique
+  source           String
+  pubDate          DateTime
+  matchedKeyword   String
+  category         String // sparklabs_self / portfolio_company / industry_trend / etc
   // 분석 결과
-  importance        String?  // CRITICAL / HIGH / MEDIUM / LOW
-  tone              String?  // POSITIVE / NEUTRAL / NEGATIVE / MIXED
-  oneLiner          String?
-  ourTake           String?  // 본부 관점 한 줄
-  relatedCompanies  String?  // JSON 배열
-  pitchScore        Int?     // 0-100, 기획기사 피칭 기회 점수
-  pitchTopic        String?
+  importance       String? // CRITICAL / HIGH / MEDIUM / LOW
+  tone             String? // POSITIVE / NEUTRAL / NEGATIVE / MIXED
+  oneLiner         String?
+  ourTake          String? // 본부 관점 한 줄
+  relatedCompanies String? // JSON 배열
+  pitchScore       Int? // 0-100, 기획기사 피칭 기회 점수
+  pitchTopic       String?
   // 영어 화면(EN)용 번역 캐시 — 화면에 뜰 때 채우고 재사용한다.
   // 채우는 쪽은 lib/sparkscope/translate-content.ts, 전체 백필은 scripts/backfill-title-en.ts.
-  titleEn           String?
-  oneLinerEn        String?
-  pitchTopicEn      String?
+  titleEn          String?
+  oneLinerEn       String?
+  pitchTopicEn     String?
   // 한국어 화면(KO)용 번역 캐시 — 원문이 한국어가 아닐 때만 채운다.
   // title은 "원문 그대로"라서 대만 기사는 중문이 들어 있다. 한국어 화면에 중문이 그대로
   // 나가지 않도록 여기에 한국어 제목을 캐시한다. 원문이 이미 한국어면 null로 두고
   // 화면은 title로 떨어진다 — 국내 4만여 건을 헛번역하지 않기 위한 것이다.
-  titleKo           String?
-  riskFlag          String?
-  isNoise           Boolean  @default(false)
-  noiseReason       String?
-  priorityScore     Int      @default(0)
+  titleKo          String?
+  riskFlag         String?
+  isNoise          Boolean   @default(false)
+  noiseReason      String?
+  priorityScore    Int       @default(0)
   // 스크랩 (본부 큐레이션)
-  isScrapped        Boolean  @default(false)
-  scrappedAt        DateTime?
-  scrappedBy        String?
+  isScrapped       Boolean   @default(false)
+  scrappedAt       DateTime?
+  scrappedBy       String?
   // 메타
-  collectedAt       DateTime @default(now())
-  analyzedAt        DateTime?
+  collectedAt      DateTime  @default(now())
+  analyzedAt       DateTime?
+
   @@index([pubDate])
   @@index([category, importance])
   @@index([matchedKeyword])
@@ -172,12 +177,12 @@ model Article {
 // 실제 컬럼 생성은 scripts/enable-vector.ts가 raw SQL로 한다(db push를 쓰지 않는다).
 // 여기 적어두는 건 나중에 db push가 이 테이블을 모르는 채로 지워버리지 않게 하려는 것.
 model ArticleEmbedding {
-  articleId String   @id
+  articleId String                     @id
   // text-embedding-3-small을 512차원으로 줄여서 쓴다.
   // 1536차원이면 30만 건 기준 저장·인덱스가 3배로 커지는데 이 용도에선 체감 차이가 없다.
   embedding Unsupported("vector(512)")
   model     String
-  updatedAt DateTime @default(now())
+  updatedAt DateTime                   @default(now())
 }
 
 // 개인 북마크 — 로그인한 사용자 각자의 북마크 목록. ★ 스크랩(본부 큐레이션·다이제스트용)과 별개로,
@@ -187,6 +192,7 @@ model Bookmark {
   userId    String
   articleId String
   createdAt DateTime @default(now())
+
   @@unique([userId, articleId])
   @@index([userId])
 }
@@ -195,17 +201,18 @@ model Bookmark {
 // 신고 1건만 보고 자동 적용하면 과적합(그 기사 하나 막으려다 진짜 관련기사까지 막는) 위험이
 // 있어서(2026-08 946건 소급판정 사고에서 배운 교훈), 사람이 한 번 보고 승인해야 반영된다.
 model NoiseSuggestion {
-  id             String   @id @default(cuid())
-  articleId      String
-  targetName     String   // MonitoringTarget.name
-  field          String   // 'excludeWords' | 'contextWords'
-  currentValue   String?  // 제안 당시 기존 값(승인 시 이 값 기준으로 이어붙임 — 그 사이 바뀌었으면 감지용)
-  addition       String   // 추가로 제안하는 문구만(전체 값 아님)
-  reason         String   // AI가 이렇게 제안한 이유
-  status         String   @default("PENDING") // PENDING / APPROVED / REJECTED
-  createdAt      DateTime @default(now())
-  resolvedAt     DateTime?
-  resolvedBy     String?
+  id           String    @id @default(cuid())
+  articleId    String
+  targetName   String // MonitoringTarget.name
+  field        String // 'excludeWords' | 'contextWords'
+  currentValue String? // 제안 당시 기존 값(승인 시 이 값 기준으로 이어붙임 — 그 사이 바뀌었으면 감지용)
+  addition     String // 추가로 제안하는 문구만(전체 값 아님)
+  reason       String // AI가 이렇게 제안한 이유
+  status       String    @default("PENDING") // PENDING / APPROVED / REJECTED
+  createdAt    DateTime  @default(now())
+  resolvedAt   DateTime?
+  resolvedBy   String?
+
   @@index([status])
   @@index([articleId])
 }
@@ -217,12 +224,13 @@ model NoiseSuggestion {
 model NoiseReportRequest {
   id         String    @id @default(cuid())
   articleId  String
-  reportedBy String    // 신고자 이메일
-  reason     String    // 신고 사유 (필수 입력)
+  reportedBy String // 신고자 이메일
+  reason     String // 신고 사유 (필수 입력)
   status     String    @default("PENDING") // PENDING / APPROVED / REJECTED
   createdAt  DateTime  @default(now())
   resolvedAt DateTime?
   resolvedBy String?
+
   @@index([status])
   @@index([articleId])
 }
@@ -247,7 +255,7 @@ model AnalysisAuditFlag {
   snapshotTone     String?
   snapshotRiskFlag String?
   snapshotOneLiner String?
-  issue            String    // AI가 짚은 불일치 내용 한 줄
+  issue            String // AI가 짚은 불일치 내용 한 줄
   // 'high' = 본문을 정상적으로 다시 가져온 상태에서 나온 판정. 'low' = 재수집 자체가
   // 의심스러움(본문이 너무 짧거나 무관한 내용) — 사람이 원문 링크를 직접 열어봐야 한다.
   confidence       String    @default("high")
@@ -255,30 +263,31 @@ model AnalysisAuditFlag {
   createdAt        DateTime  @default(now())
   resolvedAt       DateTime?
   resolvedBy       String?
+
   @@index([status])
   @@index([articleId])
 }
 
 model Digest {
-  id          String   @id @default(cuid())
-  date        DateTime @unique
-  subject     String
-  htmlBody    String
-  recipients  Int      @default(0)
-  sentAt      DateTime?
-  errorMsg    String?
-  createdAt   DateTime @default(now())
+  id         String    @id @default(cuid())
+  date       DateTime  @unique
+  subject    String
+  htmlBody   String
+  recipients Int       @default(0)
+  sentAt     DateTime?
+  errorMsg   String?
+  createdAt  DateTime  @default(now())
 }
 
 model RunLog {
-  id          String   @id @default(cuid())
-  runType     String   // daily / manual / test / dashboard-insights
-  startedAt   DateTime @default(now())
-  finishedAt  DateTime?
-  status      String   // RUNNING / SUCCESS / FAILED
-  collected   Int      @default(0)
-  analyzed    Int      @default(0)
-  errors      String?
+  id         String    @id @default(cuid())
+  runType    String // daily / manual / test / dashboard-insights
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  status     String // RUNNING / SUCCESS / FAILED
+  collected  Int       @default(0)
+  analyzed   Int       @default(0)
+  errors     String?
 }
 
 // 대시보드 AI 요약 사전계산 결과 — 위기 원인 / 경쟁사 트렌드.
@@ -286,53 +295,56 @@ model RunLog {
 // (렌더링 시점에 LLM을 호출하지 않아 탭 클릭이 항상 빠르게 반응하도록).
 model DashboardInsight {
   id         String   @id @default(cuid())
-  kind       String   // crisis_cause / competitor_trend / competitor_overall
-  key        String   // crisis_cause·competitor_trend: 회사명 / competitor_overall: "overall" 고정값
-  value      String   // JSON — {"cause":"..."} / {"points":[...]} / {"lines":[...]}
+  kind       String // crisis_cause / competitor_trend / competitor_overall
+  key        String // crisis_cause·competitor_trend: 회사명 / competitor_overall: "overall" 고정값
+  value      String // JSON — {"cause":"..."} / {"points":[...]} / {"lines":[...]}
   computedAt DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
   @@unique([kind, key])
   @@index([kind])
 }
 
 // ===== Inter(해외 트렌드) 탭 =====
 model InterNews {
-  id        String   @id @default(cuid())
-  source    String   // TechCrunch, Ars Technica, Wired, MIT Tech Review
-  title     String
-  url       String   @unique
+  id          String             @id @default(cuid())
+  source      String // TechCrunch, Ars Technica, Wired, MIT Tech Review
+  title       String
+  url         String             @unique
   publishedAt DateTime
-  rawText   String?  // 기사 본문 (선택, 나중에 포트폴리오 매칭에서 쓸 수 있음)
-  collectedAt DateTime @default(now())
-  verdicts  InterNewsVerdict[]
+  rawText     String? // 기사 본문 (선택, 나중에 포트폴리오 매칭에서 쓸 수 있음)
+  collectedAt DateTime           @default(now())
+  verdicts    InterNewsVerdict[]
+
   @@index([collectedAt])
   @@index([source])
 }
 
 model InterNewsVerdict {
-  id        String   @id @default(cuid())
-  newsId    String
-  news      InterNews @relation(fields: [newsId], references: [id], onDelete: Cascade)
-  relevant  Boolean
-  reason    String   // "AI 인프라 트렌드", "노이즈: 쿠폰 행사" 등
-  domain    String?  // 'bio' | 'ai' — relevant=true인 기사만 채워짐
-  sector    String?  // [레거시] inter-taxonomy.ts BIO_TREND_SECTORS/AI_TREND_SECTORS의 key. 축이 섞여 있어(주제+사건유형) 아래 두 컬럼으로 분리됨. 되돌리기용으로 보존.
+  id          String                @id @default(cuid())
+  newsId      String
+  news        InterNews             @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  relevant    Boolean
+  reason      String // "AI 인프라 트렌드", "노이즈: 쿠폰 행사" 등
+  domain      String? // 'bio' | 'ai' — relevant=true인 기사만 채워짐
+  sector      String? // [레거시] inter-taxonomy.ts BIO_TREND_SECTORS/AI_TREND_SECTORS의 key. 축이 섞여 있어(주제+사건유형) 아래 두 컬럼으로 분리됨. 되돌리기용으로 보존.
   // 축 분리 (2026-08-04) — sector 하나에 주제와 사건유형이 섞여 있어서 "머크가 항암 신약사 인수"가
   // 항암이 아니라 투자·산업동향으로 분류되고, 그 카테고리 혼자 relevant 450건 중 151건(34%)을 먹고 있었다.
-  topicSector String?  // 무엇에 관한 기사인가 — BIO_TOPIC_SECTORS/AI_TOPIC_SECTORS의 key
-  eventType   String?  // 무슨 일이 일어났는가 — INTER_EVENT_TYPES의 key (투자·딜/규제·승인/연구성과/제품·상용화/시장·인물)
-  country   String?  // 'us' | 'cn' | 'jp' | 'sa' | 'other' — 기사가 다루는 트렌드의 주요 국가(매체 소속 국가 아님). relevant=true만 채워짐
-  titleKo   String?  // 제목 한국어 번역
-  reasonEn  String?  // EN 화면용 판정 사유 번역 캐시 (translate-content.ts가 채운다)
-  model     String   @default("gemini-3.1-flash-lite") // 판정한 모델
-  filteredAt DateTime @default(now())
+  topicSector String? // 무엇에 관한 기사인가 — BIO_TOPIC_SECTORS/AI_TOPIC_SECTORS의 key
+  eventType   String? // 무슨 일이 일어났는가 — INTER_EVENT_TYPES의 key (투자·딜/규제·승인/연구성과/제품·상용화/시장·인물)
+  country     String? // 'us' | 'cn' | 'jp' | 'sa' | 'other' — 기사가 다루는 트렌드의 주요 국가(매체 소속 국가 아님). relevant=true만 채워짐
+  titleKo     String? // 제목 한국어 번역
+  reasonEn    String? // EN 화면용 판정 사유 번역 캐시 (translate-content.ts가 채운다)
+  model       String                @default("gemini-3.1-flash-lite") // 판정한 모델
+  filteredAt  DateTime              @default(now())
   // 스크랩 (Inter 탭) — Article.isScrapped와 같은 패턴. 스크랩 단위를 InterNews가 아닌
   // verdict로 두는 이유: 화면에 보이는 건 판정 결과(한국어 제목·도메인·섹터)이고,
   // 스크랩함에서도 그 정보를 그대로 보여줘야 한다.
-  isScrapped Boolean  @default(false)
-  scrappedAt DateTime?
-  scrappedBy String?
-  matches   InterPortfolioMatch[]
+  isScrapped  Boolean               @default(false)
+  scrappedAt  DateTime?
+  scrappedBy  String?
+  matches     InterPortfolioMatch[]
+
   @@unique([newsId, model])
   @@index([filteredAt])
   @@index([relevant])
@@ -344,15 +356,74 @@ model InterNewsVerdict {
 }
 
 model InterPortfolioMatch {
-  id              String   @id @default(cuid())
-  verdictId       String
-  verdict         InterNewsVerdict @relation(fields: [verdictId], references: [id], onDelete: Cascade)
-  companyName     String   // 포트폴리오 회사명
-  reason          String   // "생성형 AI 투자 발표", "CEO 인용" 등
-  reasonEn        String?  // EN 화면용 매칭 사유 번역 캐시
-  model           String   @default("gpt-5.4-mini")
-  matchedAt       DateTime @default(now())
+  id          String           @id @default(cuid())
+  verdictId   String
+  verdict     InterNewsVerdict @relation(fields: [verdictId], references: [id], onDelete: Cascade)
+  companyName String // 포트폴리오 회사명
+  reason      String // "생성형 AI 투자 발표", "CEO 인용" 등
+  reasonEn    String? // EN 화면용 매칭 사유 번역 캐시
+  model       String           @default("gpt-5.4-mini")
+  matchedAt   DateTime         @default(now())
+
   @@unique([verdictId, companyName, model])
   @@index([matchedAt])
   @@index([companyName])
+}
+
+// 소셜 시그널 — 커뮤니티·모델 허브·논문 원본에서 긁어온 항목.
+//
+// 화면을 열 때마다 외부 API를 다시 때리던 것을 크론이 미리 채우는 구조로 바꾼다
+// (2026-09-08). 그래야 (1) 외부가 죽어도 화면이 안 비고, (2) "지난 24시간 중 가장
+// 화제였던 글"을 물어볼 수 있고, (3) 같은 제목을 다시 번역하지 않는다.
+//
+// 테이블 자체는 2026-09-02에 maxnambranch가 먼저 만들어 프로덕션에 적용해 뒀다
+// (당시 main에는 반영되지 않아 스키마만 비어 있었다). 그 설계를 그대로 따른다:
+//
+//  · 식별키를 (source, externalId)로 잡은 것 — URL로 잡으면 안 된다. 같은 기사가
+//    HN에 여러 번 올라오면 URL은 같고 objectID는 다르다. 실제로 지금 테이블에
+//    그런 행이 5쌍 있고, URL 유니크로 만들려다 마이그레이션이 그 지점에서 깨졌다.
+//  · 시점별 수치를 SocialSignalSample에 남기는 것 — 점수는 오르내리므로 한 번의
+//    조회로는 "얼마나 빨리 오르고 있는가"를 알 수 없다.
+model SocialSignal {
+  id          String               @id @default(cuid())
+  // 소스는 문자열로 둔다 — 새 채널을 붙일 때 스키마를 바꾸지 않기 위해서.
+  source      String // 'hn' | 'reddit' | 'hf' | 'hf_new' | 'hf_papers' | 'lobsters' | 'arxiv' | 'biorxiv' | 'pubmed' | 'trials' | 'github' | 'blog'
+  externalId  String // 소스가 주는 고유 id (HN objectID, HF 모델 id, PMID, NCT 번호 등)
+  domain      String // 'ai' | 'bio'
+  title       String
+  url         String
+  origin      String? // r/MachineLearning, text-generation, PHASE1 등 세부 출처
+  author      String? // 만든 곳·1저자 (OpenAI, Qwen, Hoffmann-La Roche…)
+  publishedAt DateTime?
+  firstSeenAt DateTime             @default(now())
+  lastSeenAt  DateTime             @default(now())
+  // 최신 수치 — 목록을 그릴 때 샘플 테이블을 조인하지 않아도 되게 중복 저장한다.
+  points      Int                  @default(0) // 업보트 · 좋아요 · 다운로드 · 스타
+  comments    Int                  @default(0)
+  // ── 아래 두 컬럼은 2026-09-08에 추가 ──
+  // KO 화면용 번역 캐시. 메모리 캐시는 배포마다 날아가 같은 제목에 계속 과금됐다.
+  //  고유명사 소스(HF 모델명)는 번역하지 않으므로 비워 둔다.
+  titleKo     String?
+  // points가 무엇을 세는지. 소스마다 다르다 — 좋아요 14,271과 다운로드 26,731을
+  //  같은 ▲로 쓰면 규모를 오해한다.
+  pointsLabel String?
+  samples     SocialSignalSample[]
+
+  @@unique([source, externalId])
+  @@index([domain, lastSeenAt])
+  @@index([firstSeenAt])
+}
+
+// 시점별 수치. 두 샘플의 차이가 상승 속도다.
+// 소스×항목×시간이라 놔두면 계속 늘어나므로 pruneSignalSamples()가 주기적으로 자른다.
+model SocialSignalSample {
+  id        String       @id @default(cuid())
+  signalId  String
+  signal    SocialSignal @relation(fields: [signalId], references: [id], onDelete: Cascade)
+  points    Int
+  comments  Int
+  sampledAt DateTime     @default(now())
+
+  @@index([signalId, sampledAt])
+  @@index([sampledAt])
 }

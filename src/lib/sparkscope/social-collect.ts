@@ -16,9 +16,16 @@
  *    토픽 수집이 불가능해 넣지 않았다. 계정을 큐레이션해 getAuthorFeed로 긁는 길은 열려 있다.
  *  - X: 무료 경로가 없고 API가 유료(Basic $200/월)라 2026-09-04에 제외했다.
  *
- * 아직 DB에 쌓지 않는다 — 라우트 캐시(revalidate)로만 버틴다. 소스마다 갱신 속도가
- * 달라서 캐시 시간도 소스별로 다르게 준다(REVALIDATE).
+ * 캐시는 두 겹이다:
+ *   1) 라우트 캐시(revalidate) — 소스마다 갱신 속도가 달라 시간도 다르게 준다(REVALIDATE).
+ *   2) SocialSignal 테이블 — 받아온 글을 남겨두고, 어떤 소스가 0건으로 오면 저장분을
+ *      대신 보여준다(stale=true로 화면에 밝힌다). Reddit이 인증 없이는 429가 잦아서
+ *      AI 탭에서 칸이 통째로 사라지던 문제(2026-09-08) 때문에 넣었다.
+ *
+ * ⚠️ 이 모듈은 prisma를 import 하므로 클라이언트 컴포넌트에서 값(value)으로 import 하면
+ *    안 된다. SignalBanner는 `import type`으로만 가져간다(타입은 컴파일 시 사라진다).
  */
+import { prisma } from '@/lib/prisma';
 
 export type SocialDomain = 'ai' | 'bio';
 export type SocialSourceId =
@@ -26,6 +33,9 @@ export type SocialSourceId =
   | 'biorxiv' | 'pubmed' | 'trials';
 
 export interface SocialPost {
+  /** 소스가 주는 고유 id — DB 식별키(source, externalId)의 뒷부분.
+   *  URL로 잡으면 안 된다: 같은 기사가 HN에 여러 번 올라오면 URL은 같고 id는 다르다. */
+  externalId: string;
   title: string;
   /** 한국어 제목 — KO 화면일 때만 라우트가 채운다. 없으면 원문(title)을 쓴다. */
   titleKo?: string;
@@ -48,6 +58,8 @@ export interface SocialSource {
   note: string;          // 화면에 그대로 노출되는 상태 설명
   /** 왜 이 매체를 골랐는지 — 어떤 정보에 특화돼 있는지 한 줄. 화면에 그대로 나간다. */
   why: string;
+  /** 이번 조회가 0건이라 DB에 저장된 지난 결과를 대신 보여주는 중. 화면에 그대로 밝힌다. */
+  stale?: boolean;
   posts: SocialPost[];
 }
 
@@ -68,11 +80,55 @@ const WHY: Record<SocialSourceId, string> = {
 };
 
 /** 소스별 캐시(초) — 원본이 갱신되는 속도에 맞춘다. 조사 결과(2026-09-08) 기준. */
-const REVALIDATE = {
+export const REVALIDATE = {
   fast: 2 * 3600,    // Reddit · HN — 반응이 시간 단위로 바뀐다
   medium: 6 * 3600,  // HF trending · Lobsters — 완만하게 변한다
   daily: 24 * 3600,  // arXiv · bioRxiv · PubMed · 임상 — 원본이 하루 1회 배치
 } as const;
+
+/**
+ * 소스별 수집 주기(초). 크론이 이 값으로 "지금 돌 차례인가"를 판단한다.
+ * 캐시 시간(REVALIDATE)과 같은 근거에서 나온 값이라 같은 상수를 쓴다 —
+ * 원본이 하루 1회 갱신되는 곳을 2시간마다 긁는 것은 남의 서버만 축내는 일이다.
+ */
+export const COLLECT_INTERVAL_SEC: Record<SocialSourceId, number> = {
+  hn: REVALIDATE.fast,
+  reddit: REVALIDATE.fast,
+  hf: REVALIDATE.medium,
+  hf_new: REVALIDATE.medium,
+  lobsters: REVALIDATE.medium,
+  arxiv: REVALIDATE.daily,
+  biorxiv: REVALIDATE.daily,
+  pubmed: REVALIDATE.daily,
+  trials: REVALIDATE.daily,
+};
+
+/** 도메인별로 화면에 세울 소스 순서. 배열 순서가 곧 화면 순서다. */
+export const DOMAIN_SOURCES: Record<SocialDomain, SocialSourceId[]> = {
+  ai: ['hf', 'hf_new', 'hn', 'reddit', 'lobsters', 'arxiv'],
+  bio: ['hn', 'reddit', 'biorxiv', 'trials', 'pubmed'],
+};
+
+/** 소스 표시 이름·정렬 방식 — DB에서 읽어 화면 모양으로 되살릴 때 쓴다. */
+export const SOURCE_META: Record<SocialSourceId, { label: string; ranked: boolean; note: string }> = {
+  hf:       { label: 'Hugging Face · 인기 모델', ranked: true,  note: '6시간마다 갱신 · HF 트렌딩 점수 순' },
+  hf_new:   { label: 'Hugging Face · 새 모델',   ranked: false, note: '6시간마다 갱신 · 이번 주 주목받은 모델 중 공개순' },
+  hn:       { label: 'Hacker News',              ranked: true,  note: '2시간마다 갱신 · 업보트+댓글×2 기준' },
+  reddit:   { label: 'Reddit',                   ranked: false, note: '2시간마다 갱신 · 점수 없음(RSS) — 최신순' },
+  lobsters: { label: 'Lobsters',                 ranked: true,  note: '6시간마다 갱신 · 업보트+댓글×2 기준' },
+  arxiv:    { label: 'arXiv (cs.AI)',            ranked: false, note: '하루 1회 갱신 · 등록순' },
+  biorxiv:  { label: 'bioRxiv · medRxiv',        ranked: false, note: '하루 1회 갱신 · 공개순' },
+  pubmed:   { label: 'PubMed',                   ranked: false, note: '하루 1회 갱신 · 게재순' },
+  trials:   { label: 'ClinicalTrials · FDA',     ranked: false, note: '하루 1회 갱신 · 갱신순' },
+};
+
+/** 제목이 고유명사라 번역하면 안 되는 소스 — HF 모델 id는 이름 그 자체다. */
+export const NO_TRANSLATE: ReadonlySet<string> = new Set(['hf', 'hf_new']);
+
+/** 매체 특징 한 줄 — 화면에 그대로 나간다. */
+export function whyOf(id: SocialSourceId): string {
+  return WHY[id];
+}
 
 const HN_QUERIES: Record<SocialDomain, string[]> = {
   ai: ['AI agent', 'LLM', 'machine learning', 'OpenAI', 'Anthropic', 'GPU inference', 'foundation model'],
@@ -98,6 +154,7 @@ const isChrome = (t: string) => SKIP.some(s => t.toLowerCase().includes(s));
 
 const ymd = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 const UA = 'SparkScope/1.0';
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
 async function getText(url: string, revalidate: number = REVALIDATE.fast): Promise<string> {
   const res = await fetch(url, { headers: { 'User-Agent': UA }, next: { revalidate } });
@@ -142,6 +199,7 @@ function toHfPost(m: HfModel, metric: 'likes' | 'downloads'): SocialPost {
   const [owner, ...rest] = m.id.split('/');
   const name = rest.join('/') || m.id;
   return {
+    externalId: m.id,
     title: name,
     url: `https://huggingface.co/${m.id}`,
     date: (m.createdAt ?? '').slice(0, 10),
@@ -212,6 +270,7 @@ async function fetchHackerNews(domain: SocialDomain, sinceMs: number): Promise<S
     if (!h?.title || seen.has(h.objectID)) continue;
     if (isChrome(h.title)) continue;
     seen.set(h.objectID, {
+      externalId: String(h.objectID),
       title: h.title,
       url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`,
       date: ymd(h.created_at_i * 1000),
@@ -256,6 +315,7 @@ async function fetchReddit(domain: SocialDomain): Promise<{ posts: SocialPost[];
               const d = c.data;
               if (!d?.title || isChrome(d.title)) return [];
               return [{
+                externalId: String(d.id),
                 title: d.title, url: `https://www.reddit.com${d.permalink}`,
                 date: ymd(d.created_utc * 1000), points: d.ups, pointsLabel: '업보트',
                 comments: d.num_comments, origin: `r/${sub}`,
@@ -270,8 +330,17 @@ async function fetchReddit(domain: SocialDomain): Promise<{ posts: SocialPost[];
     }
   }
 
-  // RSS 폴백. 429가 잦은 경로라 실패는 그 서브레딧만 버린다.
-  const perSub = await Promise.all(SUBREDDITS[domain].map(async sub => {
+  // RSS 폴백.
+  //
+  // 순차로 받는다 — 서브레딧 7곳을 Promise.all로 동시에 치면 Reddit이 첫 요청만 통과시키고
+  // 나머지를 전부 429로 막는다(2026-09-08 실측: 병렬 7개 중 1개만 200). 인증 없는 Reddit은
+  // 초당 1요청도 버거워서, 간격을 두고 필요한 만큼만 받고 끝낸다.
+  // 근본 해결은 REDDIT_CLIENT_ID/SECRET을 넣어 위 OAuth 경로를 타는 것이다.
+  const perSub: SocialPost[][] = [];
+  for (const sub of SUBREDDITS[domain]) {
+    // 이미 충분히 모았으면 더 요청하지 않는다 — 요청 수 자체가 429의 원인이다.
+    if (perSub.reduce((n, a) => n + a.length, 0) >= 12) break;
+    if (perSub.length > 0) await sleep(1200);
     const acc: SocialPost[] = [];
     try {
       const xml = await getText(`https://www.reddit.com/r/${sub}/hot/.rss?limit=12`, REVALIDATE.fast);
@@ -280,13 +349,19 @@ async function fetchReddit(domain: SocialDomain): Promise<{ posts: SocialPost[];
         const url = entry.match(/<link href="(.*?)"/)?.[1];
         const upd = entry.match(/<updated>(.*?)<\/updated>/)?.[1];
         if (!title || !url || isChrome(title)) continue;
-        acc.push({ title: decodeXml(title.trim()), url, date: (upd ?? '').slice(0, 10), origin: `r/${sub}` });
+        // Atom의 <id>는 t3_xxx 꼴이라 OAuth 경로의 d.id와 같은 값이 된다 —
+        // 나중에 자격증명이 붙어도 같은 글이 두 행으로 갈리지 않는다.
+        const rawId = entry.match(/<id>(?:t3_)?(.*?)<\/id>/)?.[1];
+        acc.push({
+          externalId: (rawId ?? url).replace(/^t3_/, ''),
+          title: decodeXml(title.trim()), url, date: (upd ?? '').slice(0, 10), origin: `r/${sub}`,
+        });
       }
     } catch (e) {
       console.error('[social] Reddit RSS 실패:', sub, e);
     }
-    return acc;
-  }));
+    perSub.push(acc);
+  }
   // 서브레딧별로 고르게 섞는다 — 그냥 이어붙이면 앞 서브레딧이 10칸을 다 먹는다.
   const out: SocialPost[] = [];
   for (let i = 0; out.length < 10 && i < 12; i++) {
@@ -304,6 +379,7 @@ async function fetchLobsters(): Promise<SocialPost[]> {
   return rows
     .filter(r => r?.title && !isChrome(r.title))
     .map(r => ({
+      externalId: String(r.short_id ?? r.comments_url),
       title: r.title,
       url: r.url || r.comments_url,
       date: (r.created_at ?? '').slice(0, 10),
@@ -329,9 +405,11 @@ async function fetchArxiv(): Promise<SocialPost[]> {
   return (xml.match(/<item>[\s\S]*?<\/item>/g) ?? []).slice(0, 8).map(item => {
     const raw = tag(item, 'dc:date') || tag(item, 'pubDate');
     const ms = Date.parse(raw);
+    const link = tag(item, 'link');
     return {
+      externalId: link.split('/abs/')[1] ?? link,
       title: tag(item, 'title'),
-      url: tag(item, 'link'),
+      url: link,
       date: Number.isNaN(ms) ? raw.slice(0, 10) : ymd(ms),
       author: tag(item, 'dc:creator').split(',')[0]?.trim() || undefined,
     };
@@ -348,6 +426,7 @@ async function fetchBiorxiv(): Promise<SocialPost[]> {
       const j = await getJson<{ collection?: any[] }>(
         `https://api.biorxiv.org/details/${server}/${from}/${to}`, REVALIDATE.daily);
       return (j.collection ?? []).map(r => ({
+        externalId: String(r.doi),
         title: r.title,
         url: `https://www.${server}.org/content/${r.doi}`,
         date: r.date,
@@ -384,6 +463,7 @@ async function fetchPubmed(): Promise<SocialPost[]> {
     const r = sum.result?.[id];
     if (!r?.title) return [];
     return [{
+      externalId: String(id),
       title: decodeXml(String(r.title).replace(/<[^>]+>/g, '')),
       url: `https://pubmed.ncbi.nlm.nih.gov/${id}/`,
       date: (r.sortpubdate ?? r.pubdate ?? '').slice(0, 10).replace(/\//g, '-'),
@@ -412,6 +492,7 @@ async function fetchTrials(): Promise<SocialPost[]> {
         const nct = p?.identificationModule?.nctId;
         if (!title || !nct) return [];
         return [{
+          externalId: String(nct),
           title,
           url: `https://clinicaltrials.gov/study/${nct}`,
           date: (p?.statusModule?.lastUpdatePostDateStruct?.date ?? '').slice(0, 10),
@@ -427,6 +508,7 @@ async function fetchTrials(): Promise<SocialPost[]> {
         if (!r?.product_description) return [];
         const d = String(r.report_date ?? '');
         return [{
+          externalId: String(r.recall_number ?? `${r.recalling_firm}:${r.report_date}`),
           title: `[회수] ${String(r.product_description).slice(0, 120)}`,
           url: 'https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts',
           date: d.length === 8 ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}` : '',
@@ -449,6 +531,10 @@ const empty = <T,>(v: T) => () => v;
  * 도메인별 소스 목록 — 배열 순서가 곧 화면 순서다.
  * "지금 뭐가 뜨나"에 바로 답하는 것(점수가 있는 곳)을 위에 두고,
  * 원본 자료(논문·임상)는 그다음에 둔다.
+ *
+ * Reddit은 맨 끝이다(2026-09-08). 인증 없이 받으면 점수를 못 받아 최신순으로만 뜨는데,
+ * 최신순 목록은 "지금 뭐가 뜨나"에 답하지 못해 위에 둘 값이 없다. Reddit OAuth
+ * (REDDIT_CLIENT_ID/SECRET)를 넣어 주간 업보트 순으로 정렬되면 위로 올린다.
  */
 export async function collectSocialSignals(domain: SocialDomain, sinceMs: number): Promise<SocialSource[]> {
   const isAi = domain === 'ai';
@@ -474,22 +560,84 @@ export async function collectSocialSignals(domain: SocialDomain, sinceMs: number
         src('hf', 'Hugging Face · 인기 모델', hfTrend, true, '6시간마다 갱신 · HF 트렌딩 점수 순'),
         src('hf_new', 'Hugging Face · 새 모델', hfNew, false, '6시간마다 갱신 · 이번 주 주목받은 모델 중 공개순'),
         src('hn', 'Hacker News', hn, true, '2시간마다 갱신 · 업보트+댓글×2 기준'),
-        src('reddit', 'Reddit', reddit.posts, reddit.ranked,
-          reddit.ranked ? '2시간마다 갱신 · 주간 업보트 순' : '2시간마다 갱신 · 점수 없음(RSS) — 최신순'),
         src('lobsters', 'Lobsters', lobsters, true, '6시간마다 갱신 · 업보트+댓글×2 기준'),
         src('arxiv', 'arXiv (cs.AI)', arxiv, false, '하루 1회 갱신 · 등록순'),
+        src('reddit', 'Reddit', reddit.posts, reddit.ranked,
+          reddit.ranked ? '2시간마다 갱신 · 주간 업보트 순' : '2시간마다 갱신 · 점수 없음(RSS) — 최신순'),
       ]
     : [
         src('hn', 'Hacker News', hn, true, '2시간마다 갱신 · 업보트+댓글×2 기준'),
-        src('reddit', 'Reddit', reddit.posts, reddit.ranked,
-          reddit.ranked ? '2시간마다 갱신 · 주간 업보트 순' : '2시간마다 갱신 · 점수 없음(RSS) — 최신순'),
         src('biorxiv', 'bioRxiv · medRxiv', biorxiv, false, '하루 1회 갱신 · 공개순'),
         src('trials', 'ClinicalTrials · FDA', trials, false, '하루 1회 갱신 · 갱신순'),
         src('pubmed', 'PubMed', pubmed, false, '하루 1회 갱신 · 게재순'),
+        src('reddit', 'Reddit', reddit.posts, reddit.ranked,
+          reddit.ranked ? '2시간마다 갱신 · 주간 업보트 순' : '2시간마다 갱신 · 점수 없음(RSS) — 최신순'),
       ];
 
-  // 응답이 아예 없는 소스는 자리만 차지하므로 빼되, 전부 실패했으면 그대로 둬서
-  // "왜 비었는지"(연결 필요/응답 없음)를 화면이 말할 수 있게 한다.
-  const alive = list.filter(s => s.posts.length > 0);
-  return alive.length > 0 ? alive : list;
+  // 이번에 받은 건 저장하고, 0건인 소스는 저장된 지난 결과로 되살린다.
+  // Reddit이 대표 사례다 — 인증 없이 받으면 429가 잦아서, 캐시가 없으면 어떤 날은
+  // AI 탭에서 Reddit 칸이 통째로 사라졌다(2026-09-08 사용자 신고). 소스 하나가
+  // 일시적으로 막혔다고 화면에서 없어지면 "왜 없어졌지"를 매번 다시 조사해야 한다.
+  return Promise.all(list.map(async s => {
+    if (s.posts.length > 0) {
+      await persistSource(domain, s.id, s.posts);
+      return s;
+    }
+    const cached = await recallSource(domain, s.id);
+    if (cached.length === 0) return s;
+    return { ...s, posts: cached, connected: true, stale: true };
+  }));
+}
+
+/**
+ * 받아온 글을 SocialSignal에 남긴다 — 다음에 그 소스가 0건이면 이걸 대신 보여준다.
+ * 실패해도 조용히 넘어간다: 저장은 부가 기능이고, 이것 때문에 패널이 죽으면 안 된다.
+ */
+async function persistSource(domain: SocialDomain, source: SocialSourceId, posts: SocialPost[]): Promise<void> {
+  try {
+    const now = new Date();
+    await Promise.all(posts.map(p => prisma.socialSignal.upsert({
+      where: { source_externalId: { source, externalId: p.externalId } },
+      create: {
+        source, externalId: p.externalId, domain,
+        title: p.title, url: p.url, origin: p.origin ?? null, author: p.author ?? null,
+        publishedAt: p.date ? new Date(`${p.date}T00:00:00Z`) : null,
+        points: p.points ?? 0, comments: p.comments ?? 0, pointsLabel: p.pointsLabel ?? null,
+        lastSeenAt: now,
+      },
+      // 제목·URL은 바뀌지 않지만 점수는 오른다. titleKo는 라우트가 채우므로 건드리지 않는다.
+      update: { points: p.points ?? 0, comments: p.comments ?? 0, lastSeenAt: now, domain },
+    })));
+  } catch (e) {
+    console.error('[social] 저장 실패(무시):', source, e);
+  }
+}
+
+/** 저장된 지난 결과. 너무 오래된 건 쓰지 않는다 — 옛 글을 "지금 뜨는 글"로 보여주면 거짓이다. */
+const RECALL_MAX_DAYS = 14;
+
+async function recallSource(domain: SocialDomain, source: SocialSourceId): Promise<SocialPost[]> {
+  try {
+    const rows = await prisma.socialSignal.findMany({
+      where: { domain, source, lastSeenAt: { gte: new Date(Date.now() - RECALL_MAX_DAYS * 86400_000) } },
+      // 점수가 있으면 인기순, 없으면 최신순 — 원본 소스의 정렬 기준을 그대로 따른다.
+      orderBy: [{ points: 'desc' }, { publishedAt: 'desc' }],
+      take: 10,
+    });
+    return rows.map(r => ({
+      externalId: r.externalId,
+      title: r.title,
+      titleKo: r.titleKo ?? undefined,
+      url: r.url,
+      date: (r.publishedAt ?? r.lastSeenAt).toISOString().slice(0, 10),
+      points: r.points || undefined,
+      comments: r.comments || undefined,
+      origin: r.origin ?? undefined,
+      author: r.author ?? undefined,
+      pointsLabel: r.pointsLabel ?? undefined,
+    }));
+  } catch (e) {
+    console.error('[social] 저장분 조회 실패(무시):', source, e);
+    return [];
+  }
 }

@@ -1,52 +1,90 @@
 /**
- * 소셜 시그널 API — Inter 탭 도메인별 커뮤니티 화제글.
- * GET /api/inter/social?domain=bio|ai&from=YYYY-MM-DD
+ * 소셜 시그널 API — Inter 탭 도메인별 커뮤니티·모델·논문 시그널.
+ * GET /api/inter/social?domain=bio|ai&hours=24&lang=ko
  *
- * DB를 안 쓴다(“지금 뜨는 글”이라 이력이 불필요). 외부 API 부담을 줄이려 30분 캐시.
+ * DB만 읽는다. 외부 API는 크론(/api/cron/collect-social)이 소스별 주기로 부른다.
+ * 예전에는 이 라우트가 조회할 때마다 외부를 직접 때려서 —
+ *   · 외부가 죽거나 레이트리밋에 걸리면 그 순간 화면이 비었고,
+ *   · "지난 24시간 중 가장 화제였던 글"을 물어볼 수 없었으며(지금 순간만 알았다),
+ *   · 같은 제목을 매번 다시 번역했다(메모리 캐시라 배포마다 날아갔다).
+ *
+ * 다만 DB가 비어 있으면(첫 배포·새 소스 추가 직후) 그 자리에서 한 번 긁어 채운다 —
+ * 크론이 처음 돌 때까지 화면이 비어 있는 것보다 낫다.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { collectSocialSignals, type SocialDomain } from '@/lib/sparkscope/social-collect';
-import { translateBatchMemo } from '@/lib/sparkscope/translate-content';
+import {
+  DOMAIN_SOURCES,
+  SOURCE_META,
+  whyOf,
+  type SocialDomain,
+  type SocialSource,
+  type SocialSourceId,
+} from '@/lib/sparkscope/social-collect';
+import { readSignals } from '@/lib/sparkscope/social-store';
+import { refreshSocialSignals } from '@/lib/sparkscope/social-refresh';
 
 export const runtime = 'nodejs';
 export const preferredRegion = 'icn1';
-export const revalidate = 1800; // 30분 — 소스별 실제 갱신 주기는 social-collect.ts의 REVALIDATE가 잡는다
+// DB 조회라 짧게 잡아도 부담이 없다. 크론이 채운 것을 빨리 반영하는 쪽이 낫다.
+export const revalidate = 300;
 
-/** 제목이 고유명사라 번역하면 안 되는 소스 — HF 모델 id는 이름 그 자체다. */
-const NO_TRANSLATE = new Set(['hf', 'hf_new']);
+/** 기본 조회 창 — "요즘 뭐가 뜨나"는 최근 2주 정도가 자연스럽다. */
+const DEFAULT_HOURS = 24 * 14;
+
+/** DB에서 읽은 것을 화면이 쓰는 모양(SocialSource[])으로 되살린다. */
+async function buildSources(domain: SocialDomain, sinceMs: number): Promise<SocialSource[]> {
+  const ids = DOMAIN_SOURCES[domain];
+  const bySource = await readSignals(domain, ids, sinceMs);
+
+  return ids.map<SocialSource>(id => {
+    const rows = bySource.get(id) ?? [];
+    const meta = SOURCE_META[id];
+    return {
+      id,
+      label: meta.label,
+      connected: rows.length > 0,
+      // 점수가 실제로 있는 소스만 "인기순"이라고 말한다 — 전부 0인데 인기순이라고
+      // 표시하면 순위가 아닌 목록을 순위로 오해하게 된다.
+      ranked: meta.ranked && rows.some(r => r.peakPoints > 0),
+      note: meta.note,
+      why: whyOf(id),
+      posts: rows.map(r => ({
+        externalId: r.externalId,
+        title: r.title,
+        titleKo: r.titleKo ?? undefined,
+        url: r.url,
+        date: r.publishedAt ? r.publishedAt.toISOString().slice(0, 10) : '',
+        // 화면에는 그 기간의 최고 점수를 보여준다 — 랭킹 기준과 표시 값이 달라지면
+        // "왜 이게 위에 있지?"를 설명할 수 없다.
+        points: r.peakPoints > 0 ? r.peakPoints : undefined,
+        pointsLabel: r.pointsLabel ?? undefined,
+        comments: r.comments || undefined,
+        origin: r.origin ?? undefined,
+        author: r.author ?? undefined,
+      })),
+    };
+  });
+}
 
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const domain: SocialDomain = sp.get('domain') === 'ai' ? 'ai' : 'bio';
 
-  // from이 없거나 이상하면 최근 90일 — Inter 탭 기본 조회 기간과 맞춘다.
-  const fromRaw = sp.get('from');
-  const parsed = fromRaw && /^\d{4}-\d{2}-\d{2}$/.test(fromRaw) ? Date.parse(fromRaw) : NaN;
-  const sinceMs = Number.isNaN(parsed) ? Date.now() - 90 * 86400_000 : parsed;
+  const hoursRaw = Number(sp.get('hours'));
+  const hours = Number.isFinite(hoursRaw) && hoursRaw > 0 ? Math.min(hoursRaw, 24 * 90) : DEFAULT_HOURS;
+  const sinceMs = Date.now() - hours * 3600_000;
 
   try {
-    const sources = await collectSocialSignals(domain, sinceMs);
+    let sources = await buildSources(domain, sinceMs);
 
-    // 한국어 화면이면 글 제목을 번역해서 함께 내려준다. 커뮤니티 글은 전부 영어라
-    // KO 탭에서 이 섹션만 영어로 남아 있었다(2026-09-04).
-    // 번역이 실패해도 원문 제목으로 그냥 보여준다 — 이 패널 때문에 화면이 비면 안 된다.
-    if (sp.get('lang') === 'ko') {
-      // 모델 이름은 번역 대상이 아니다 — 고유명사라 옮기면 검색도 안 되고 뜻도 없다.
-      // (2026-09-08: "Qwen3.8-27B"가 "쿼웬3.8-27B"로, "MiniCPM5-2B"가 "미니CPM5-2B"로 나갔다)
-      const translatable = sources.filter(s => !NO_TRANSLATE.has(s.id));
-      const titles = translatable.flatMap(s => s.posts.map(p => p.title));
-      if (titles.length > 0) {
-        try {
-          const ko = await translateBatchMemo(titles, 'ko');
-          let i = 0;
-          for (const s of translatable) for (const p of s.posts) p.titleKo = ko[i++] ?? undefined;
-        } catch (e) {
-          console.error('[api/inter/social] 제목 번역 실패 — 원문으로 표시:', e);
-        }
-      }
+    // 첫 채움 — 아직 크론이 한 번도 안 돌았거나 소스를 새로 추가한 직후.
+    if (sources.every(s => s.posts.length === 0)) {
+      console.log(`[api/inter/social] ${domain} DB 비어 있음 — 즉석 수집 후 저장`);
+      await refreshSocialSignals(domain, { force: true });
+      sources = await buildSources(domain, sinceMs);
     }
 
-    return NextResponse.json({ domain, sources });
+    return NextResponse.json({ domain, hours, sources: sources.filter(s => s.posts.length > 0) });
   } catch (e: any) {
     console.error('[api/inter/social] 실패:', e);
     // 이 패널 하나 때문에 Inter 탭 전체가 죽으면 안 된다 — 빈 배열로 응답한다.
