@@ -13,6 +13,7 @@
 import { FEEDS, DOMAIN_KEYWORDS, type Feed } from './news-feeds';
 import { scoreImportance, type Importance } from './news-importance';
 import { groupSameStory } from './news-cluster';
+import { collectPopular } from './news-popular';
 
 export type NewsDomain = 'ai' | 'bio';
 
@@ -29,6 +30,9 @@ export interface DigestItem {
   blurb: string | null;
   /** 업계에 얼마나 큰 일인가 1~5 (news-importance.ts). 순위의 1순위 기준. */
   importance: Importance | null;
+  /** 매체가 집계한 인기기사 등수(1부터). RSS에 없는 실측 참여도 신호다.
+   *  없으면 null — 인기 목록에 오르지 않았다는 뜻이고 감점 사유는 아니다. */
+  popularRank: number | null;
   /**
    * 요약을 만들 때만 쓰는 원문 발췌. 화면에는 내보내지 않는다(라우트에서 지운다) —
    * 매체 본문을 그대로 싣는 것은 이용약관 문제이고, 클라이언트 페이로드도 커진다.
@@ -260,12 +264,58 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
         portfolio: null,
         summary: null,
         importance: null,
+        popularRank: null,
       };
     })
     .sort((a, b) =>
       b.alsoIn.length - a.alsoIn.length ||
       a.tier - b.tier ||
       b.publishedAt.localeCompare(a.publishedAt));
+
+  // 매체가 집계한 인기기사를 후보에 합친다.
+  //
+  // 두 가지를 동시에 메운다(news-popular.ts 주석 참고):
+  //  · RSS 창이 좁아 며칠 지난 큰 뉴스가 후보에 아예 없었다. aitimes.com RSS는 최신
+  //    50건 = 약 24시간치라, 9월 3일에 나온 "GPT-6 아스트라 전격 공개"가 빠져 있었다.
+  //  · RSS에는 참여도가 없다. 매체가 낸 인기 순위가 우리가 가진 유일한 실측 신호다.
+  //
+  // 이미 RSS로 들어온 기사면 등수만 붙이고, 없던 기사면 후보로 추가한다.
+  const popular = await collectPopular(domain).catch(e => {
+    console.error('[news-digest] 인기기사 수집 실패(무시):', e);
+    return [] as Awaited<ReturnType<typeof collectPopular>>;
+  });
+
+  if (popular.length > 0) {
+    const byUrl = new Map(items.map(i => [i.url, i] as const));
+    // 제목으로도 찾는다 — 목록 페이지 URL에 view_type 같은 파라미터가 붙어 RSS와 다를 수 있다.
+    const byTitle = new Map(items.map(i => [i.title.trim(), i] as const));
+    for (const p of popular) {
+      const hit = byUrl.get(p.url) ?? byTitle.get(p.title.trim());
+      if (hit) {
+        // 여러 매체 인기 목록에 오르면 더 높은 등수를 남긴다.
+        hit.popularRank = Math.min(hit.popularRank ?? 99, p.rank);
+        continue;
+      }
+      items.push({
+        title: p.title,
+        url: p.url,
+        source: p.source,
+        independent: false,
+        // 인기 목록은 발행일을 주지 않는다. 날짜 필터는 이미 지난 단계이므로
+        // 오늘로 두되, 이 값이 순위의 마지막 tiebreak에만 쓰인다는 점을 감안한 것이다.
+        publishedAt: new Date().toISOString().slice(0, 10),
+        tier: 2,
+        alsoIn: [],
+        blurb: null,
+        sourceText: null,
+        grounding: 'headline',
+        portfolio: null,
+        summary: null,
+        importance: null,
+        popularRank: p.rank,
+      });
+    }
+  }
 
   // 순서: ① 중요도 채점 → ② 상위 후보만 사건 단위로 병합 → ③ 최종 정렬.
   //
@@ -275,15 +325,33 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
   //
   // 점수를 못 받은 항목(호출 실패·상한 초과)은 3점으로 둔다 — 0으로 두면 채점 실패가
   // 곧 강등이 되어, 오류가 조용히 순위를 망친다.
-  const scores = await scoreImportance(items).catch(e => {
+  // 채점 순서 — 인기 목록에 오른 것을 먼저 넘긴다.
+  //
+  // scoreImportance에는 상한(MAX_CANDIDATES)이 있어 넘치는 만큼 잘린다. 인기기사는
+  // items 뒤쪽에 추가되므로 그대로 넘기면 정확히 그것들이 잘려 나가고, 점수를 못 받아
+  // 기본값 3으로 가라앉는다 — 실제로 그렇게 됐다(2026-09-08: AI타임스코리아
+  // 인기 1~4위인 GPT-6 아스트라·제미나이 3.8·페이블 5.1이 전부 목록에 안 떴다).
+  // 가장 확실한 신호를 가진 것부터 채점한다.
+  const forScoring = [
+    ...items.filter(i => i.popularRank != null),
+    ...items.filter(i => i.popularRank == null),
+  ];
+
+  const scores = await scoreImportance(forScoring).catch(e => {
     console.error('[news-digest] 중요도 산정 실패 — 예전 기준으로 정렬합니다:', e);
     return new Map<string, Importance>();
   });
+
+  // 인기 등수는 중요도 바로 다음 기준이다. 매체가 실제 조회수로 매긴 값이라
+  // "여러 매체가 다뤘나"보다 신뢰도가 높다 — 후자는 우리 병합 정확도에 의존한다.
+  // 목록에 없는 기사는 큰 값으로 둬서 뒤로 가되, 중요도가 높으면 여전히 위에 온다.
+  const rank = (it: { popularRank: number | null }) => it.popularRank ?? 99;
 
   const scored = items
     .map(it => ({ ...it, importance: scores.get(it.url) ?? null }))
     .sort((a, b) =>
       (b.importance ?? 3) - (a.importance ?? 3) ||
+      rank(a) - rank(b) ||
       b.alsoIn.length - a.alsoIn.length ||
       a.tier - b.tier ||
       b.publishedAt.localeCompare(a.publishedAt));
@@ -311,6 +379,10 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
     return {
       ...rep,
       importance: groupImportance(group),
+      // 그룹 안에서 가장 높은 등수를 쓴다 — 같은 사건인데 한 매체에서만 인기 목록에
+      // 올랐다면 그 사건이 인기라는 뜻이다.
+      popularRank: group.reduce<number | null>(
+        (m, g) => (g.popularRank == null ? m : m == null ? g.popularRank : Math.min(m, g.popularRank)), null),
       alsoIn: [...outlets.entries()].map(([source, url]) => ({ source, url })),
       // 요약 근거도 합친다 — 매체마다 강조점이 달라 한 곳만 볼 때보다 두터워진다.
       sourceText: group.map(g => g.sourceText).filter(Boolean).slice(0, 3).join('\n\n---\n\n') || null,
@@ -322,6 +394,7 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
   const ordered = [...merged, ...rest]
     .sort((a, b) =>
       (b.importance ?? 3) - (a.importance ?? 3) ||
+      rank(a) - rank(b) ||
       b.alsoIn.length - a.alsoIn.length ||
       a.tier - b.tier ||
       b.publishedAt.localeCompare(a.publishedAt));
