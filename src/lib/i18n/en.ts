@@ -1246,4 +1246,6 @@ export const EN: Record<string, string> = {
     'From a SparkLabs portfolio company?',
   '접근 요청하기':
     'Request access',
+  '접근 요청 {n}건': '{n} access request(s)',
+  '알림 메일이 나가지 않은 요청이 있습니다': 'Some requests were never emailed to reviewers',
 };

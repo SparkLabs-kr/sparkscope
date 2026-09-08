@@ -11,8 +11,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { createRequest } from '@/lib/sparkscope/access-request';
-import { sendOwnerAlert } from '@/lib/sparkscope/mailer';
+import { createRequest, markNotified } from '@/lib/sparkscope/access-request';
+import { sendNotice, sendOwnerAlert } from '@/lib/sparkscope/mailer';
 import { isStaffEmail } from '@/lib/auth';
 
 export const runtime = 'nodejs';
@@ -89,9 +89,31 @@ export async function POST(req: NextRequest) {
       '승인하면 이 주소로 로그인 링크를 받을 수 있게 되고, 그 계정은',
       `${company.name} 자료만 볼 수 있습니다.`,
     ].join('\n');
-    // 메일이 실패해도 요청은 남는다 — 승인 화면에서 볼 수 있다.
-    await sendOwnerAlert(reviewers(), `[SparkScope] 접근 요청 — ${company.name}`, lines)
-      .catch(e => console.error('[access-request] 알림 메일 실패:', e));
+    // 메일이 실패해도 요청은 남는다 — 다만 조용히 넘기지 않는다.
+    // 알림이 안 나갔는데 아무 표시가 없으면, 요청은 저장돼 있는데 아무도
+    // 모르는 채로 회사가 며칠을 기다리게 된다. 결과를 요청에 기록해서
+    // 대시보드가 경고를 띄우도록 한다.
+    let notified = false;
+    let notifyError: string | undefined;
+    const subject = `[SparkScope] 접근 요청 — ${company.name}`;
+    try {
+      const sent = await sendNotice(reviewers(), subject, lines);
+      notified = sent.ok;
+      notifyError = sent.error;
+      if (!notified) {
+        // 정식 발신이 막히면 onboarding 발신으로 한 번 더 — 최선노력.
+        notified = await sendOwnerAlert(reviewers(), subject, lines);
+        if (notified) notifyError = undefined;
+      }
+    } catch (e) {
+      notifyError = String((e as Error)?.message ?? e).slice(0, 300);
+    }
+    if (!notified) {
+      console.error('[access-request] 알림 메일 실패:', notifyError);
+    }
+    await markNotified(request.token, notified, notifyError).catch(() => {});
+
+    return NextResponse.json({ ok: true, created, notified }, { status: 200 });
   }
 
   return NextResponse.json({ ok: true, created }, { status: 200 });

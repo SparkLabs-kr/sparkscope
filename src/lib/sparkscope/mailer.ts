@@ -63,6 +63,41 @@ export async function isSendDomainVerified(): Promise<{ verified: boolean; statu
   }
 }
 
+/**
+ * 지정한 주소로 알림 메일을 보낸다. 발신은 인증된 도메인(DIGEST_FROM_EMAIL)을 쓴다.
+ *
+ * sendOwnerAlert 를 쓰면 안 되는 이유: 그쪽 발신은 onboarding@resend.dev 로,
+ * 도메인 미인증일 때를 위한 최선노력 경로다. Resend 의 그 발신 주소는 계정
+ * 소유자 본인 주소로만 배달되므로 marketing@ 같은 곳으로는 조용히 실패한다.
+ * sparklabs.co.kr 은 이미 verified 이므로 정식 발신을 쓴다.
+ *
+ * 실패하면 false 를 돌려주고, 부르는 쪽이 그 사실을 기록한다.
+ */
+export async function sendNotice(
+  to: string | string[],
+  subject: string,
+  text: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const toList = (Array.isArray(to) ? to : to.split(',')).map(s => s.trim()).filter(Boolean);
+  if (!apiKey) return { ok: false, error: 'RESEND_API_KEY 미설정' };
+  if (toList.length === 0) return { ok: false, error: '수신자 없음' };
+  const from = process.env.DIGEST_FROM_EMAIL ?? 'sparkscope@sparklabs.co.kr';
+  try {
+    const resend = new Resend(apiKey);
+    const { error } = await resend.emails.send({
+      from: `SparkScope <${from}>`,
+      to: toList,
+      subject,
+      html: `<pre style="font-family:sans-serif;white-space:pre-wrap;font-size:14px;line-height:1.6">${text}</pre>`,
+    });
+    if (error) return { ok: false, error: String(error.message ?? error).slice(0, 300) };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message ?? e).slice(0, 300) };
+  }
+}
+
 /** 정식 발송이 막힐 때(도메인 미인증 등) 담당자에게 onboarding 발신으로 최선노력 알림. 콤마로 여러 명 지정 가능. */
 export async function sendOwnerAlert(to: string | string[], subject: string, text: string): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;

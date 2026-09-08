@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/authz';
 import { getRequest, markDecided } from '@/lib/sparkscope/access-request';
-import { sendOwnerAlert } from '@/lib/sparkscope/mailer';
+import { sendNotice } from '@/lib/sparkscope/mailer';
 
 export const runtime = 'nodejs';
 
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
 
   // 신청자에게 알린다 — 승인됐고 이제 로그인 링크를 받을 수 있다는 것.
   const base = process.env.NEXTAUTH_URL ?? 'https://sparkscope.vercel.app';
-  await sendOwnerAlert(
+  await sendNotice(
     request.email,
     '[SparkScope] 접근이 승인되었습니다',
     [

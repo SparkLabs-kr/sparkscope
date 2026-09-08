@@ -64,6 +64,12 @@ export function AccessRequestList({ requests }: { requests: AccessRequest[] }) {
               {r.referrer && (
                 <div className="text-[12px] text-spark-muted mt-0.5">담당자 · {r.referrer}</div>
               )}
+              {r.notified === false && (
+                <div className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11.5px] text-rose-800">
+                  이 요청은 알림 메일이 나가지 않았습니다. 승인·거절은 그대로 가능합니다.
+                  {r.notifyError ? ` (${r.notifyError})` : ''}
+                </div>
+              )}
               <div className="flex gap-2 mt-3">
                 <button
                   type="button" disabled={busy === r.token}

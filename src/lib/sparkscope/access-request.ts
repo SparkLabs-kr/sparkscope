@@ -29,6 +29,13 @@ export type AccessRequest = {
   status: 'pending' | 'approved' | 'denied';
   decidedAt?: string;
   decidedBy?: string;
+  /**
+   * 마케팅팀 알림 메일이 실제로 나갔는지. 메일이 실패했는데 조용히 넘어가면
+   * 요청은 저장돼 있지만 아무도 모르는 상태가 된다 — 그 상태를 눈에 보이게
+   * 남긴다(대시보드가 이 값을 읽어 경고를 띄운다).
+   */
+  notified?: boolean;
+  notifyError?: string;
 };
 
 /** 요청 하나를 만들어 저장한다. 같은 메일로 대기 중인 요청이 있으면 그것을 돌려준다. */
@@ -105,4 +112,29 @@ export async function markDecided(
 async function findPendingByEmail(email: string): Promise<AccessRequest | null> {
   const all = await listRequests();
   return all.find(r => r.email === email && r.status === 'pending') ?? null;
+}
+
+/** 알림 메일 발송 결과를 요청에 기록한다. */
+export async function markNotified(
+  token: string,
+  notified: boolean,
+  notifyError?: string,
+): Promise<void> {
+  const request = await getRequest(token);
+  if (!request) return;
+  const next: AccessRequest = { ...request, notified, notifyError };
+  await prisma.dashboardInsight.update({
+    where: { kind_key: { kind: KIND, key: token } },
+    data: { value: JSON.stringify(next) },
+  });
+}
+
+/** 대기 중인 요청 수 — 대시보드 배너용. 실패해도 화면을 막지 않는다. */
+export async function countPending(): Promise<{ pending: number; unnotified: number }> {
+  const all = await listRequests().catch(() => []);
+  const pending = all.filter(r => r.status === 'pending');
+  return {
+    pending: pending.length,
+    unnotified: pending.filter(r => r.notified === false).length,
+  };
 }
