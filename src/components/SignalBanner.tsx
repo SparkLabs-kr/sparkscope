@@ -270,7 +270,7 @@ function Hero({ item, locale }: { item: DigestItem; locale: string }) {
           </span>
         ) : item.headlineRank === 1 ? (
           <span className="text-[11.5px] font-bold text-rose-600">
-            📰 {t('{s} 머리기사', { s: item.source })}
+            📰 {t('{s} 머리기사', { s: item.headlineSource ?? item.source })}
           </span>
         ) : null}
         {/* 지표 소스(리포트·벤더 블로그·뉴스레터)는 뉴스로 띄우지 않는다. 대신 같은

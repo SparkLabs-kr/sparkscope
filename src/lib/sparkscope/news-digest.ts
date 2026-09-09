@@ -50,6 +50,13 @@ export interface DigestItem {
   /** 그중 가장 위쪽 자리(1 = 히어로). 없으면 null. */
   headlineRank: number | null;
   /**
+   * 그 자리를 준 매체. 대표 기사의 매체와 다를 수 있다 — 사건 병합 뒤 대표는 등급으로
+   * 고르는데(STAT tier1 > Fierce tier2), 1면에 건 곳은 다른 매체일 수 있기 때문이다.
+   * 실제로 그랬다: AZ COPD 건의 대표는 STAT인데 머리기사로 건 곳은 FierceBiotech여서
+   * 화면에 "STAT News 머리기사"라는 틀린 문구가 나갔다.
+   */
+  headlineSource: string | null;
+  /**
    * 지표 소스(컨설팅 리포트·벤더 블로그·큐레이션 뉴스레터) 중 이 사안을 다룬 곳 수.
    * 지표 소스 자체는 절대 화면에 뜨지 않는다 — 기사가 아니라 오피니언·발표이므로
    * "뉴스"로 띄우면 안 된다는 판단(2026-09-08). 대신 우리가 가진 기사와 같은
@@ -304,6 +311,7 @@ async function collectIndicators(domain: NewsDomain, cutoff: number): Promise<Di
       popularRank: null,
       headlineOutlets: 0,
       headlineRank: null,
+      headlineSource: null,
       indicatorOutlets: 0,
       indicators: [],
       indicator: true,
@@ -377,6 +385,7 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
         popularRank: null,
         headlineOutlets: 0,
         headlineRank: null,
+        headlineSource: null,
         indicatorOutlets: 0,
         indicators: [],
         domestic: false,
@@ -411,6 +420,7 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
           // 같은 기사가 여러 곳 헤드라인에 걸릴 수는 없다(URL이 매체마다 다르다).
           // 여기서 세는 것은 "이 URL이 헤드라인이었나"까지고, 매체 수를 합치는 것은
           // 사건 병합 뒤에 한다 — 그때가 되어야 서로 다른 매체의 같은 사안이 한 줄이 된다.
+          if (p.headlineRank < (hit.headlineRank ?? 99)) hit.headlineSource = p.source;
           hit.headlineRank = Math.min(hit.headlineRank ?? 99, p.headlineRank);
           hit.headlineOutlets = Math.max(hit.headlineOutlets, 1);
         } else {
@@ -437,6 +447,7 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
         importance: null,
         popularRank: p.headlineRank != null ? null : p.rank,
         headlineRank: p.headlineRank ?? null,
+        headlineSource: p.headlineRank != null ? p.source : null,
         headlineOutlets: p.headlineRank != null ? 1 : 0,
         indicatorOutlets: 0,
         indicators: [],
@@ -560,13 +571,18 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
     // 병합 전에는 URL이 매체마다 달라 각각 별개 항목이었다.
     const headlineOutlets = new Set(
       group.filter(g => g.headlineRank != null).map(g => g.source)).size;
-    const headlineRank = group.reduce<number | null>(
-      (m, g) => (g.headlineRank == null ? m : m == null ? g.headlineRank : Math.min(m, g.headlineRank)), null);
+    // 가장 위쪽 자리를 준 매체를 같이 들고 온다 — 대표 매체와 다를 수 있다.
+    const lead = group
+      .filter(g => g.headlineRank != null)
+      .sort((a, b) => (a.headlineRank ?? 99) - (b.headlineRank ?? 99))[0];
+    const headlineRank = lead?.headlineRank ?? null;
+    const headlineSource = lead?.headlineSource ?? lead?.source ?? null;
 
     return [{
       ...rep,
       headlineOutlets,
       headlineRank,
+      headlineSource,
       indicatorOutlets: new Set(ind.map(g => g.source)).size,
       indicators: ind.map(g => ({ source: g.source, title: g.title, url: g.url })),
       // 대표를 그대로 펼치면 내부 표시가 따라올 수 있다 — 명시적으로 끈다.
