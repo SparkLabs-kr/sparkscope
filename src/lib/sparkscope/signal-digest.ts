@@ -51,10 +51,15 @@ function renderRow(it: FeedItem): string {
   // FeedItem 타입에 두 종류가 그대로 있고 파트너 쪽에서 되살릴 수 있으므로 남겨 둔다.
   // 카드는 종류에 따라 색을 달리한다 — 뉴스(보라)와 커뮤니티(주황)가 한 줄씩
   // 번갈아 나오는데, 같은 색이면 다섯 장이 하나의 덩어리로 뭉개져 보인다.
+  // 1번은 히어로다. 대시보드에서 그 기사만 큰 배너로 박혀 있는데 메일에서 다섯 장이
+  // 같은 크기면 "그날 가장 큰 일"이라는 정보가 사라진다 — 다섯 개를 마구잡이로
+  // 늘어놓은 것처럼 읽힌다(2026-09-09 피드백). 웹과 같은 위계를 메일에도 준다.
+  const hero = it.rank === 1;
+
   return `
-  <div class="signal-card ${it.kind === 'news' ? 'sc-news' : 'sc-sig'}">
+  <div class="signal-card ${it.kind === 'news' ? 'sc-news' : 'sc-sig'}${hero ? ' sc-hero' : ''}">
     <div class="s-card-top">
-      <span class="s-rank">${it.rank}</span>${kindTag}<span class="s-src">${esc(it.source)}</span>
+      ${hero ? '<span class="s-lead">가장 큰 사안</span>' : `<span class="s-rank">${it.rank}</span>`}${kindTag}<span class="s-src">${esc(it.source)}</span>
     </div>
     <div class="s-title"><a href="${esc(it.url)}" target="_blank">${esc(title)}</a></div>
     ${meta.length ? `<div class="s-meta">${meta.join('')}</div>` : ''}
@@ -89,6 +94,14 @@ export const SIGNAL_EMAIL_CSS = `
 .signal-card{padding:15px 17px;border-radius:6px;margin-bottom:11px}
 .signal-card.sc-news{background:#F3F0FF;border-left:5px solid #6D28D9}
 .signal-card.sc-sig{background:#FFF6EF;border-left:5px solid #EA580C}
+
+/* 1번 카드 — 대시보드 히어로와 같은 위계. 색 띠를 두 배로 굵히고 제목을 키우고
+   테두리를 둘러 "여기가 그날 가장 큰 일"임을 크기로 말한다. 메일은 hover도 없고
+   상호작용도 없으므로 위계를 전부 정적인 형태로 줘야 한다. */
+.signal-card.sc-hero{border-left-width:10px;border:1px solid #C4B5FD;border-left:10px solid #6D28D9;background:#EDE9FE;padding:19px 20px;margin-bottom:15px}
+.sc-hero .s-title{font-size:19px;font-weight:800;line-height:1.34}
+.sc-hero .s-desc{font-size:13.5px;color:#3F3D56;line-height:1.72}
+.s-lead{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:800;background:#6D28D9;color:#FFFFFF;margin-right:7px}
 
 .s-card-top{margin-bottom:9px;line-height:1.9}
 .s-rank{display:inline-block;min-width:19px;font-size:14px;font-weight:800;color:#6B7280}

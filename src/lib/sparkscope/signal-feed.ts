@@ -17,6 +17,7 @@
  */
 import { collectDigest, type DigestItem } from './news-digest';
 import { ensureSummaries } from './news-summary';
+import { readDigest } from './digest-store';
 
 /** 메일·파트너 모두 합쳐서 5건. */
 export const TOP_N = 5;
@@ -78,8 +79,26 @@ export interface SignalFeed {
 /** 순위 계산 전 내부 표현 — 자기 소스 안에서의 등수를 들고 다닌다. */
 type Candidate = Omit<FeedItem, 'rank'> & { score: number };
 
-async function newsCandidates(): Promise<Candidate[]> {
+/**
+ * 대시보드가 보고 있는 목록을 그대로 읽는다.
+ *
+ * 여기서 collectDigest를 다시 부르면 메일과 대시보드가 서로 다른 시점의 결과를
+ * 보게 된다 — RSS도 1면 순위도 몇 시간 만에 바뀌므로, 같은 코드를 두 번 돌리는 것만으로
+ * 목록이 갈린다. 사전계산이 이미 DB에 있으니(digest-store) 그것을 읽는 것이 맞다.
+ * 빠르기도 하다(12초 → 0.1초).
+ *
+ * 사전계산이 없거나 오래됐으면 그 자리에서 만든다 — 메일에 섹션이 비는 것보다 낫다.
+ */
+async function newsItems(): Promise<DigestItem[]> {
+  const cached = await readDigest('ai', NEWS_DAYS).catch(() => null);
+  if (cached?.items.length) return cached.items as DigestItem[];
+  console.log('[signal-feed] 사전계산 없음 — 즉석 계산');
   const { items } = await collectDigest('ai', NEWS_DAYS, TOP_N * 2);
+  return items;
+}
+
+async function newsCandidates(): Promise<Candidate[]> {
+  const items = await newsItems();
   // 커뮤니티를 빼면서 다섯 칸을 전부 뉴스로 채운다 — 예전에는 절반이 커뮤니티라
   // 뉴스 후보를 TOP_N까지만 만들면 됐다.
   const top = items.slice(0, TOP_N);
@@ -123,8 +142,16 @@ export async function buildSignalFeed(): Promise<SignalFeed> {
   const news = await newsCandidates()
     .catch(e => { console.error('[signal-feed] 뉴스 실패:', e); return [] as Candidate[]; });
 
+  // 대시보드 순서를 그대로 쓴다. 점수로 다시 정렬하지 않는다.
+  //
+  // 예전에는 여기서 (1/등수 × 가중치 × 교차보도 보너스)로 다시 줄을 세웠는데,
+  // 그러면 대시보드 1위와 메일 1위가 달라진다 — 실제로 대시보드 3위(GPT-6 아스트라,
+  // 함께 보도 1곳)와 4위(제미나이 3.8, 3곳)가 메일에서 뒤바뀌었다(2026-09-09).
+  //
+  // 대시보드의 순위는 이미 중요도·1면 합의·인기 등수·교차 보도를 다 거친 결과다.
+  // 그것을 여기서 한 번 더 섞으면 두 화면이 갈리기만 하고 더 나아지지 않는다.
+  // "오늘의 시그널에서 가장 크게 박힌 기사"가 메일 1번이어야 한다.
   const items = news
-    .sort((a, b) => b.score - a.score)
     .slice(0, TOP_N)
     .map(({ score, ...rest }, i) => ({ rank: i + 1, ...rest }));
 
