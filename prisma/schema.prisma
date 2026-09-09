@@ -490,3 +490,36 @@ model AiSignalFeed {
 
   @@index([publishedAt, rank])
 }
+
+// 매체가 스스로 노출한 1면 헤드라인·인기기사의 관측 기록.
+//
+// 왜 저장하나: 홈페이지는 "지금 이 순간" 무엇이 걸려 있는지만 보여준다. 그래서 조회할
+// 때마다 긁으면 어제 1면을 휩쓴 사안이 오늘은 신호가 0이 된다 — 실제로 그랬다.
+// 노바티스 Phase 3 실패가 2026-09-08에는 Fierce·Endpoints 1면 동시 톱이었는데,
+// 하루 뒤 매체들이 다음 사안으로 넘어가자 "이번주" 탭에서도 사라졌다.
+// 2시간마다 관측해 쌓아 두면 "이번주 동안 1면을 차지했던 것"을 물어볼 수 있다.
+//
+// bestRank를 따로 두는 이유: 등수는 시간이 지나며 내려간다. 마지막 관측치만 남기면
+// "한때 1면 톱이었다"는 사실이 사라진다. 순위 판정에는 항상 bestRank를 쓴다.
+model NewsHeadline {
+  id       String  @id @default(cuid())
+  // 원문 매체명. 집계판(bioin)에서 온 것은 집계판이 아니라 원문 매체를 쓴다.
+  source   String
+  domain   String // 'ai' | 'bio'
+  // 'headline' 편집국이 1면에 건 것 · 'popular' 조회수 순위에 오른 것
+  // 한 번 headline으로 관측되면 popular로 내리지 않는다 — 더 강한 근거다.
+  kind     String
+  title    String
+  url      String
+  rank     Int // 마지막 관측 등수
+  bestRank Int // 관측 기간 중 가장 높았던 등수
+  views    Int? // 집계판이 조회수를 공개하는 경우만(bioin)
+  domestic Boolean @default(false)
+
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  @@unique([source, url])
+  @@index([domain, lastSeenAt])
+  @@index([domain, kind, bestRank])
+}

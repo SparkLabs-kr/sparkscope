@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   const days = [1, 7, 30].includes(dRaw) ? dRaw : 7;
 
   try {
-    const { items, feeds } = await collectDigest(domain, days, 12);
+    const { items, feeds, keywords } = await collectDigest(domain, days, 12);
     // 요약이 실패해도 목록은 나가야 한다 — ensureSummaries가 안에서 삼킨다.
     await ensureSummaries(items);
     // 요약이 있어야 매칭 근거가 좋아지므로 요약 뒤에 부른다.
@@ -35,9 +35,9 @@ export async function GET(req: NextRequest) {
     // 원문 발췌는 요약을 만드는 데만 쓴다. 화면으로 내보내지 않는다 —
     // 매체 본문을 그대로 싣지 않기 위해서고, 페이로드도 불필요하게 커진다.
     const safe = items.map(({ sourceText, ...rest }) => rest);
-    return NextResponse.json({ domain, days, items: safe, feeds });
+    return NextResponse.json({ domain, days, items: safe, feeds, keywords });
   } catch (e: any) {
     console.error('[api/inter/digest] 실패:', e);
-    return NextResponse.json({ domain, days, items: [], feeds: [], error: String(e?.message ?? e) }, { status: 200 });
+    return NextResponse.json({ domain, days, items: [], feeds: [], keywords: [], error: String(e?.message ?? e) }, { status: 200 });
   }
 }

@@ -18,10 +18,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useT, useLocale } from '@/lib/i18n/client';
 import type { DigestItem } from '@/lib/sparkscope/news-digest';
 import type { SocialSource, SocialPost, SocialSourceId } from '@/lib/sparkscope/social-collect';
+import type { TrendKeyword } from '@/lib/sparkscope/news-keywords';
 
 type DigestResp = {
   items: DigestItem[];
   feeds: { name: string; ok: boolean; count: number }[];
+  keywords: TrendKeyword[];
 };
 
 const RANGES = [
@@ -81,8 +83,8 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
     setDigest(null);
     fetch(`/api/inter/digest?domain=${domain}&days=${days}`)
       .then(r => r.json())
-      .then(d => { if (alive) setDigest({ items: d.items ?? [], feeds: d.feeds ?? [] }); })
-      .catch(() => { if (alive) setDigest({ items: [], feeds: [] }); });
+      .then(d => { if (alive) setDigest({ items: d.items ?? [], feeds: d.feeds ?? [], keywords: d.keywords ?? [] }); })
+      .catch(() => { if (alive) setDigest({ items: [], feeds: [], keywords: [] }); });
     return () => { alive = false; };
   }, [domain, days]);
 
@@ -173,6 +175,34 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
           ))}
         </div>
       </div>
+
+      {/* ── 0) 키워드 줄 ──
+          기사 단위 순위와 다른 각도다. 하나의 큰 사안이 임상 실패·주가·인수 후폭풍처럼
+          여러 기사로 흩어지면 각각은 평범해 보이는데, 이름으로 세면 그 흩어짐이 오히려
+          증거가 된다(2026-09-09: 노바티스가 매체 4곳·기사 10건인데 개별 기사는 상위
+          12건에 하나도 없었다). 세는 단위는 기사 수가 아니라 매체 수다. */}
+      {(digest?.keywords?.length ?? 0) > 0 && (
+        <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
+          <span className="text-[12px] font-bold text-spark-muted">{t('지금 여러 매체가 말하는 이름')}</span>
+          {digest!.keywords.map((k, i) => (
+            <a
+              key={k.key}
+              href={k.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={t('매체 {n}곳 · 기사 {a}건', { n: k.outlets, a: k.articles })}
+              className={`rounded-full border px-2.5 py-1 text-[12px] transition-colors hover:border-spark-purple ${
+                i === 0
+                  ? 'border-spark-purple bg-spark-purple/10 font-extrabold text-spark-purple'
+                  : 'border-spark-border font-semibold text-spark-ink-soft'
+              }`}
+            >
+              {k.label}
+              <span className="ml-1 font-bold tabular-nums opacity-60">{k.outlets}</span>
+            </a>
+          ))}
+        </div>
+      )}
 
       {/* ── 1) 히어로 ──
           예전엔 오른쪽에 커뮤니티 레일을 세로로 세웠는데, 레일이 히어로보다 훨씬 길어서

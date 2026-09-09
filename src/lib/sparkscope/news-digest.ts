@@ -20,6 +20,8 @@ import { FEEDS, INDICATOR_FEEDS, DOMAIN_KEYWORDS, type Feed } from './news-feeds
 import { scoreImportance, type Importance, type Verdict } from './news-importance';
 import { groupSameStory } from './news-cluster';
 import { collectPopular } from './news-popular';
+import { readPopular, savePopular } from './news-popular-store';
+import { extractTrendKeywords, type TrendKeyword } from './news-keywords';
 
 export type NewsDomain = 'ai' | 'bio';
 
@@ -322,6 +324,8 @@ async function collectIndicators(domain: NewsDomain, cutoff: number): Promise<Di
 export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): Promise<{
   items: DigestItem[];
   feeds: { name: string; ok: boolean; count: number }[];
+  /** 여러 매체가 함께 말한 이름 (news-keywords.ts). 실패하면 빈 배열. */
+  keywords: TrendKeyword[];
 }> {
   const cutoff = Date.now() - days * 86_400_000;
 
@@ -404,8 +408,19 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
   //  · RSS에는 참여도가 없다. 매체가 낸 인기 순위가 우리가 가진 유일한 실측 신호다.
   //
   // 이미 RSS로 들어온 기사면 등수만 붙이고, 없던 기사면 후보로 추가한다.
-  const popular = await collectPopular(domain).catch(e => {
-    console.error('[news-digest] 인기기사 수집 실패(무시):', e);
+  //
+  // DB에 쌓아 둔 관측을 읽는다 — 매체 홈페이지는 "지금 이 순간" 1면만 보여주므로
+  // 조회할 때마다 긁으면 어제 1면을 휩쓴 사안이 오늘은 신호 0이 된다(실제로 노바티스
+  // Phase 3 실패가 하루 만에 사라졌다). 2시간마다 도는 크론이 채운다.
+  const popular = await readPopular(domain, cutoff).then(async rows => {
+    if (rows.length > 0) return rows;
+    // 첫 채움 — 크론이 아직 안 돌았거나 소스를 새로 추가한 직후. 화면이 비는 것보다 낫다.
+    console.log(`[news-digest] ${domain} 헤드라인 기록 없음 — 즉석 수집 후 저장`);
+    const fresh = await collectPopular(domain);
+    await savePopular(domain, fresh).catch(e => console.error('[news-digest] 저장 실패(무시):', e));
+    return fresh;
+  }).catch(e => {
+    console.error('[news-digest] 인기기사 조회 실패(무시):', e);
     return [] as Awaited<ReturnType<typeof collectPopular>>;
   });
 
@@ -642,8 +657,19 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
     ranked.push(it);
   }
 
+  // 기사 단위 순위와 별개로 "여러 매체가 함께 말한 이름"을 뽑는다.
+  // 후보 전체(상위 후보 순)를 넘긴다 — 목록에 든 12건만 보면 이미 순위가 걸러낸 것을
+  // 다시 세는 꼴이라, 흩어져 있어서 순위에 못 든 사안을 놓친다.
+  const keywords = await extractTrendKeywords(
+    passable.map(it => ({ url: it.url, title: it.title, source: it.source, importance: it.importance })),
+  ).catch(e => {
+    console.error('[news-digest] 키워드 추출 실패(무시):', e);
+    return [] as TrendKeyword[];
+  });
+
   return {
     items: ranked,
     feeds: results.map(r => ({ name: r.feed.name, ok: r.ok, count: r.entries.length })),
+    keywords,
   };
 }

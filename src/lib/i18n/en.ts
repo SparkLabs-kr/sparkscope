@@ -331,6 +331,8 @@ export const EN: Record<string, string> = {
   '여러 매체가 함께 다룬 뉴스와, 커뮤니티에서 가장 화제인 글을 함께 봅니다.':
     'Stories covered by multiple outlets, alongside what communities are talking about.',
   '{n}개 매체가 1면 헤드라인': '{n} outlets ran it as a headline',
+  '지금 여러 매체가 말하는 이름': 'Names several outlets are talking about',
+  '매체 {n}곳 · 기사 {a}건': '{n} outlets · {a} articles',
   '{s} 머리기사': '{s} lead story',
   '머리기사': 'Lead story',
   '{n}개 1면': '{n} front pages',
