@@ -271,9 +271,11 @@ function EntityCardView({ card, locale }: { card: EntityCard; locale: string }) 
                       목록에는 안 보이던 곳들이다. */}
                   {a.alsoIn?.length > 0 && (
                     <div className="ml-[76px] flex flex-wrap gap-x-2.5 gap-y-0.5 text-[10.5px]">
+                      {/* 회색으로 두었더니 링크로 보이지 않아 "매체 5곳인데 한 곳뿐"으로
+                          읽혔다(2026-09-09 피드백). 보라색 + 밑줄로 링크임을 분명히 한다. */}
                       {a.alsoIn.map(x => (
                         <a key={x.url} href={x.url} target="_blank" rel="noopener noreferrer"
-                           className="text-spark-muted hover:text-spark-purple hover:underline">
+                           className="font-semibold text-spark-purple/85 underline decoration-spark-purple/30 underline-offset-2 hover:decoration-spark-purple">
                           {t('{s} 원문 보기', { s: x.source })} ↗
                         </a>
                       ))}
@@ -323,9 +325,13 @@ function Hero({ item, locale }: { item: DigestItem; locale: string }) {
     : null;
 
   return (
-    <article className="rounded-xl border border-spark-border bg-spark-subtle p-5">
+    /* 히어로에 색을 준다(2026-09-09 피드백). 예전에는 스트립 카드와 배경만 살짝
+       달라서, 그날 제일 중요한 기사가 나머지 여섯 칸과 비슷한 무게로 읽혔다.
+       왼쪽 보랏빛 굵은 띠 + 연한 보라 배경으로 "여기가 1위"를 형태로 말한다.
+       색은 한 곳에만 쓴다 — 카드마다 색을 주면 강조가 사라진다. */
+    <article className="rounded-xl border border-spark-purple/25 border-l-4 border-l-spark-purple bg-gradient-to-br from-spark-light-purple/55 via-white to-white p-5 shadow-card">
       <div className="flex flex-wrap items-center gap-2 mb-2.5">
-        <span className="text-[11px] font-bold px-2 py-0.5 rounded-md border border-spark-border bg-white text-spark-ink-soft">
+        <span className="text-[11px] font-bold px-2 py-0.5 rounded-md border border-spark-purple/30 bg-white text-spark-purple">
           {item.source}
         </span>
         {item.independent && (
@@ -390,7 +396,7 @@ function Hero({ item, locale }: { item: DigestItem; locale: string }) {
             링크인지, 눌렀을 때 어디로 가는지 알기 어려웠다(2026-09-09 피드백). */}
         {item.alsoIn.map(a => (
           <a key={a.url} href={a.url} target="_blank" rel="noopener noreferrer"
-             className="text-spark-muted hover:text-spark-purple hover:underline">
+             className="font-semibold text-spark-purple/85 underline decoration-spark-purple/30 underline-offset-2 hover:decoration-spark-purple">
             {t('{s} 원문 보기', { s: a.source })} ↗
           </a>
         ))}
@@ -514,7 +520,7 @@ function StripCard({ item, locale, open, onToggle }: {
         </a>
         {open && item.alsoIn.map(a => (
           <a key={a.url} href={a.url} target="_blank" rel="noopener noreferrer"
-             className="text-spark-muted hover:text-spark-purple hover:underline">
+             className="font-semibold text-spark-purple/85 underline decoration-spark-purple/30 underline-offset-2 hover:decoration-spark-purple">
             {t('{s} 원문 보기', { s: a.source })} ↗
           </a>
         ))}

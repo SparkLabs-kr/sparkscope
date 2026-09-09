@@ -22,6 +22,7 @@ import { groupSameStory } from './news-cluster';
 import { collectPopular } from './news-popular';
 import { readPopular, savePopular } from './news-popular-store';
 import { extractTrendKeywords, type TrendKeyword } from './news-keywords';
+import { corroborate } from './news-corroborate';
 
 export type NewsDomain = 'ai' | 'bio';
 
@@ -716,6 +717,11 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
     if (ranked.length >= limit) break;
     ranked.push(it);
   }
+
+  // 목록에 올린 기사 중 한 매체만 다룬 것은 다른 매체를 찾아 붙인다.
+  // 어차피 화면에 올릴 기사라면 다른 매체의 원문도 함께 주는 편이 낫다.
+  // 순위를 다시 매기지 않는다 — 이미 정해진 목록에 링크를 덧붙이는 것이다.
+  await corroborate(ranked).catch(e => console.error('[news-digest] 교차 보도 확인 실패(무시):', e));
 
   // 기사 단위 순위와 별개로 "여러 매체가 함께 말한 이름"을 뽑는다.
   // 후보 전체(상위 후보 순)를 넘긴다 — 목록에 든 12건만 보면 이미 순위가 걸러낸 것을

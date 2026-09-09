@@ -169,6 +169,52 @@ const SOURCES: PopularSource[] = [
     },
   },
   {
+    // AI 카테고리 첫 화면. 문서 순서가 곧 편집 순서다(카드가 위에서부터 놓인다).
+    // 자사 행사 홍보(Disrupt·Side Event)가 첫 칸을 차지하는 경우가 있어 걸러낸다 —
+    // 그건 편집 판단이 아니라 광고다.
+    name: 'TechCrunch',
+    url: 'https://techcrunch.com/category/artificial-intelligence/',
+    origin: 'https://techcrunch.com',
+    domain: 'ai',
+    kind: 'headline',
+    headline: {
+      start: 'loop-card__title',
+      window: 45_000,
+      article: /^https:\/\/techcrunch\.com\/20\d\d\/\d\d\/\d\d\/[a-z0-9-]{10,}/,
+      skip: /disrupt|\/events?\/|side-event|sponsored/i,
+    },
+  },
+  {
+    // AI 태그 첫 화면. 링크가 /story/... 상대경로다.
+    name: 'Wired',
+    url: 'https://www.wired.com/tag/artificial-intelligence/',
+    origin: 'https://www.wired.com',
+    domain: 'ai',
+    kind: 'headline',
+    headline: {
+      // 첫 기사 링크 자체를 시작점으로 쓴다. 클래스 이름을 마커로 쓰려 했더니
+      // 'summary-item__content'가 CSS 블록에 먼저 나와서(본문보다 369KB 앞) 창이
+      // 기사에 닿지 못하고 0건이 됐다. 링크 패턴은 그런 오작동이 없다.
+      start: 'href="/story/',
+      window: 45_000,
+      article: /^(https:\/\/www\.wired\.com)?\/story\/[a-z0-9-]{10,}/,
+      skip: /\/sponsored|\/gear\/(deal|coupon)/i,
+    },
+  },
+  {
+    // 기술 섹션. data-testid가 안정적인 마커다(class는 해시라 배포마다 바뀐다).
+    name: 'New York Times Tech',
+    url: 'https://www.nytimes.com/section/technology',
+    origin: 'https://www.nytimes.com',
+    domain: 'ai',
+    kind: 'headline',
+    headline: {
+      start: 'data-testid="main-collection"',
+      window: 45_000,
+      article: /^(https:\/\/www\.nytimes\.com)?\/20\d\d\/\d\d\/\d\d\/[a-z/]+\/[a-z0-9-]{10,}\.html/,
+    },
+  },
+  {
     // 기술 전반. 홈페이지 Most Popular 블록이 서버 렌더라 그대로 읽힌다.
     // 헤드라인 영역은 따로 잡지 않는다 — 이 매체는 소비자 기기 기사가 상단을 많이
     // 차지해서, 편집 판단보다 독자 반응(Most Popular) 쪽이 우리 관심사에 가깝다.
