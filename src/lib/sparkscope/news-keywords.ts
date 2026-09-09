@@ -134,16 +134,16 @@ async function extractBatch(batch: Keywordable[]): Promise<Map<string, Entity[]>
   return out;
 }
 
-/** 집계 키 — 대소문자·공백 차이로 갈라지지 않게 정규화한다. */
-const keyOf = (en: string) => en.toLowerCase().replace(/[\s.,'’-]+/g, '');
-
 /**
- * 후보 기사들에서 "여러 매체가 함께 말한 이름"을 뽑는다.
- * 실패하면 빈 배열을 준다 — 키워드 줄이 비어도 목록은 나가야 한다.
+ * 항목별로 이름을 뽑아 URL → 이름 목록으로 돌려준다.
+ *
+ * 기사에도 커뮤니티 글에도 같은 함수를 쓴다 — 그래야 양쪽에서 나온 이름이 같은 키로
+ * 묶여서 "이 회사에 대한 기사와 반응"을 한 카드에 모을 수 있다(entity-cards.ts).
+ * URL 단위 캐시라 같은 항목에 두 번 과금되지 않는다.
  */
-export async function extractTrendKeywords(items: Keywordable[], limit = 8): Promise<TrendKeyword[]> {
-  if (items.length === 0) return [];
+export async function extractEntities(items: Keywordable[]): Promise<Map<string, Entity[]>> {
   const pool = items.slice(0, MAX_ARTICLES);
+  if (pool.length === 0) return new Map();
 
   const cached = await readCache(pool.map(i => i.url)).catch(() => new Map<string, Entity[]>());
   const missing = pool.filter(i => !cached.has(i.url));
@@ -157,12 +157,27 @@ export async function extractTrendKeywords(items: Keywordable[], limit = 8): Pro
     console.log(`[news-keywords] ${fresh.size}건 새로 추출 (캐시 ${cached.size}건)`);
     await writeCache([...fresh.entries()].map(([url, entities]) => ({ url, entities })));
   }
+  return new Map([...cached, ...fresh]);
+}
+
+/** 집계 키 — 대소문자·공백 차이로 갈라지지 않게 정규화한다. */
+export const keyOf = (en: string) => en.toLowerCase().replace(/[\s.,'’-]+/g, '');
+export type { Entity };
+
+/**
+ * 후보 기사들에서 "여러 매체가 함께 말한 이름"을 뽑는다.
+ * 실패하면 빈 배열을 준다 — 키워드 줄이 비어도 목록은 나가야 한다.
+ */
+export async function extractTrendKeywords(items: Keywordable[], limit = 8): Promise<TrendKeyword[]> {
+  if (items.length === 0) return [];
+  const pool = items.slice(0, MAX_ARTICLES);
+  const byUrl = await extractEntities(pool);
 
   // 매체 수로 센다 — 한 매체가 같은 이름을 여러 번 쓰는 건 편집 성향이지 동향이 아니다.
   type Agg = { label: string; outlets: Set<string>; articles: number; top: number; url: string; rank: number };
   const agg = new Map<string, Agg>();
   pool.forEach((it, idx) => {
-    for (const ent of cached.get(it.url) ?? fresh.get(it.url) ?? []) {
+    for (const ent of byUrl.get(it.url) ?? []) {
       const k = keyOf(ent.en);
       if (!k) continue;
       const cur = agg.get(k);

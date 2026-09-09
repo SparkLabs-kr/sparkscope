@@ -136,6 +136,22 @@ const HN_QUERIES: Record<SocialDomain, string[]> = {
 };
 
 /**
+ * 키워드 없이 그 주 상위권도 함께 가져온다.
+ *
+ * 키워드 검색만으로는 "우리가 미리 생각해 둔 단어"가 들어간 글만 보인다. 그런데 정말
+ * 큰 사건일수록 우리 단어 목록에 없는 이름으로 온다 — 실측(2026-09-09): 오픈AI가
+ * 나비에–스토크스 난제를 풀었다는 글이 HN에서 1,417업보트·604댓글, 후속 글이
+ * 1,191업보트·1,028댓글이었는데, 제목에 AI·LLM·OpenAI 중 무엇도 없어서
+ * ("On the Navier–Stokes Millennium Prize Problem") 우리는 한 건도 못 가져왔다.
+ * 매체 쪽에서도 The Verge가 "legendary mathematical milestone"이라고만 써서
+ * 제목 단어로는 어디에도 걸리지 않았다.
+ *
+ * 그래서 점수만 높으면 주제를 묻지 않고 가져오고, 분야 판정은 뒤에서 한다.
+ * 문턱을 높게 잡는 이유는 HN 상위권 전체를 끌어오면 개발자 잡담이 섞이기 때문이다.
+ */
+const HN_TOP_MIN_POINTS = 500;
+
+/**
  * 서브레딧 — 2026-09-07에 도메인당 3개 → 7개로 확장.
  *
  * 고를 때 기준: (1) 실무자가 모이는 곳, (2) 뉴스가 실제로 먼저 도는 곳.
@@ -253,10 +269,14 @@ async function fetchHackerNews(domain: SocialDomain, sinceMs: number): Promise<S
   const seen = new Map<string, SocialPost>();
 
   // 검색어 7개를 순차로 돌면 왕복이 7번이다 — 서로 독립이라 한꺼번에 던진다.
-  const pages = await Promise.all(HN_QUERIES[domain].map(async q => {
+  // 마지막 빈 문자열은 키워드 없는 상위권 조회다(HN_TOP_MIN_POINTS 주석 참고).
+  const queries = [...HN_QUERIES[domain], ''];
+  const pages = await Promise.all(queries.map(async q => {
     const url = 'https://hn.algolia.com/api/v1/search?' + new URLSearchParams({
       query: q, tags: 'story',
-      numericFilters: `created_at_i>${since},points>20`,
+      numericFilters: q
+        ? `created_at_i>${since},points>20`
+        : `created_at_i>${since},points>${HN_TOP_MIN_POINTS}`,
       hitsPerPage: '20',
     });
     try {

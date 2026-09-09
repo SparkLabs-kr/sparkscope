@@ -20,6 +20,7 @@
 import { prisma } from '@/lib/prisma';
 import type { DigestItem, NewsDomain } from './news-digest';
 import type { TrendKeyword } from './news-keywords';
+import type { EntityCard } from './entity-cards';
 
 const KIND = 'inter_digest';
 const keyOf = (domain: NewsDomain, days: number) => `${domain}:${days}`;
@@ -28,6 +29,8 @@ export interface DigestPayload {
   items: DigestItem[];
   feeds: { name: string; ok: boolean; count: number }[];
   keywords: TrendKeyword[];
+  /** "지금 화제인 이름" 카드 — 기사와 커뮤니티를 이름으로 이어 붙인 것. */
+  entities: EntityCard[];
   computedAt: string;
 }
 

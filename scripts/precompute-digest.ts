@@ -12,6 +12,33 @@ import { collectDigest, type NewsDomain } from '../src/lib/sparkscope/news-diges
 import { ensureSummaries } from '../src/lib/sparkscope/news-summary';
 import { ensurePortfolioHits } from '../src/lib/sparkscope/news-portfolio';
 import { saveDigest } from '../src/lib/sparkscope/digest-store';
+import { buildEntityCards, type CommunityPost } from '../src/lib/sparkscope/entity-cards';
+import { readSignals } from '../src/lib/sparkscope/social-store';
+import { DOMAIN_SOURCES, SOURCE_META, type SocialSourceId } from '../src/lib/sparkscope/social-collect';
+
+/** 커뮤니티 글을 이름 카드가 쓰는 모양으로 읽어 온다. */
+async function communityPosts(domain: NewsDomain, days: number): Promise<CommunityPost[]> {
+  const ids = DOMAIN_SOURCES[domain];
+  // 커뮤니티는 화제가 며칠씩 이어지므로 기사보다 창을 넓게 잡는다 — 최소 2주.
+  const since = Date.now() - Math.max(days, 14) * 86_400_000;
+  const bySource = await readSignals(domain, ids, since, 20);
+  const out: CommunityPost[] = [];
+  for (const [id, rows] of bySource) {
+    for (const r of rows) {
+      out.push({
+        source: SOURCE_META[id as SocialSourceId]?.label ?? id,
+        sourceId: id,
+        title: r.title,
+        titleKo: r.titleKo,
+        url: r.url,
+        points: r.peakPoints,
+        pointsLabel: r.pointsLabel,
+        blurb: r.blurb,
+      });
+    }
+  }
+  return out;
+}
 
 /** 화면이 고를 수 있는 기간. 라우트의 허용값과 같아야 한다. */
 const WINDOWS = [1, 7, 30];
@@ -29,8 +56,11 @@ async function main() {
         await ensurePortfolioHits(items);
         // 원문 발췌는 화면으로 내보내지 않는다 — 라우트가 하던 것과 같게 여기서 지운다.
         const safe = items.map(({ sourceText, ...rest }) => rest);
-        await saveDigest(domain, days, { items: safe, feeds, keywords });
-        console.log(`[precompute-digest] ${domain}/${days}일: ${safe.length}건 · 키워드 ${keywords.length}개 · ${Date.now() - t}ms`);
+        // 이름 카드 — 기사와 커뮤니티를 이름으로 잇는다. 실패해도 목록은 나가야 한다.
+        const entities = await buildEntityCards(domain, safe, await communityPosts(domain, days))
+          .catch(e => { console.error('[precompute-digest] 이름 카드 실패(무시):', e); return []; });
+        await saveDigest(domain, days, { items: safe, feeds, keywords, entities });
+        console.log(`[precompute-digest] ${domain}/${days}일: ${safe.length}건 · 키워드 ${keywords.length}개 · 이름 ${entities.length}개 · ${Date.now() - t}ms`);
         ok++;
       } catch (e) {
         // 한 조합이 실패해도 나머지는 계속한다 — 여섯 칸이 서로 독립이다.

@@ -33,7 +33,8 @@ export async function GET(req: NextRequest) {
     if (cached) {
       return NextResponse.json({
         domain, days, items: cached.items, feeds: cached.feeds,
-        keywords: cached.keywords ?? [], computedAt: cached.computedAt,
+        keywords: cached.keywords ?? [], entities: cached.entities ?? [],
+        computedAt: cached.computedAt,
       });
     }
 
@@ -47,11 +48,13 @@ export async function GET(req: NextRequest) {
     // 매체 본문을 그대로 싣지 않기 위해서고, 페이로드도 불필요하게 커진다.
     const safe = items.map(({ sourceText, ...rest }) => rest);
     // 다음 사람은 기다리지 않게 저장해 둔다.
-    await saveDigest(domain, days, { items: safe, feeds, keywords }).catch(
+    // 즉석 계산 경로에서는 이름 카드를 만들지 않는다 — 여기까지 온 사람은 이미
+    // 오래 기다리고 있고, 이름 카드는 크론이 다음 회차에 채운다.
+    await saveDigest(domain, days, { items: safe, feeds, keywords, entities: [] }).catch(
       e => console.error('[api/inter/digest] 캐시 저장 실패(무시):', e));
-    return NextResponse.json({ domain, days, items: safe, feeds, keywords });
+    return NextResponse.json({ domain, days, items: safe, feeds, keywords, entities: [] });
   } catch (e: any) {
     console.error('[api/inter/digest] 실패:', e);
-    return NextResponse.json({ domain, days, items: [], feeds: [], keywords: [], error: String(e?.message ?? e) }, { status: 200 });
+    return NextResponse.json({ domain, days, items: [], feeds: [], keywords: [], entities: [], error: String(e?.message ?? e) }, { status: 200 });
   }
 }

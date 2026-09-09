@@ -19,11 +19,13 @@ import { useT, useLocale } from '@/lib/i18n/client';
 import type { DigestItem } from '@/lib/sparkscope/news-digest';
 import type { SocialSource, SocialPost, SocialSourceId } from '@/lib/sparkscope/social-collect';
 import type { TrendKeyword } from '@/lib/sparkscope/news-keywords';
+import type { EntityCard } from '@/lib/sparkscope/entity-cards';
 
 type DigestResp = {
   items: DigestItem[];
   feeds: { name: string; ok: boolean; count: number }[];
   keywords: TrendKeyword[];
+  entities: EntityCard[];
 };
 
 const RANGES = [
@@ -75,7 +77,6 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
   const locale = useLocale();
   const [days, setDays] = useState<number>(7);
   const [digest, setDigest] = useState<DigestResp | null>(null);
-  const [social, setSocial] = useState<SocialSource[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
 
   useEffect(() => {
@@ -83,8 +84,8 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
     setDigest(null);
     fetch(`/api/inter/digest?domain=${domain}&days=${days}`)
       .then(r => r.json())
-      .then(d => { if (alive) setDigest({ items: d.items ?? [], feeds: d.feeds ?? [], keywords: d.keywords ?? [] }); })
-      .catch(() => { if (alive) setDigest({ items: [], feeds: [], keywords: [] }); });
+      .then(d => { if (alive) setDigest({ items: d.items ?? [], feeds: d.feeds ?? [], keywords: d.keywords ?? [], entities: d.entities ?? [] }); })
+      .catch(() => { if (alive) setDigest({ items: [], feeds: [], keywords: [], entities: [] }); });
     return () => { alive = false; };
   }, [domain, days]);
 
@@ -92,11 +93,6 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
   // 여기서 days를 넘기면 캐시가 기간마다 쪼개져 같은 데이터를 세 번 받아 온다.
   useEffect(() => {
     let alive = true;
-    setSocial(null);
-    fetch(`/api/inter/social?domain=${domain}&lang=${locale}`)
-      .then(r => r.json())
-      .then(d => { if (alive) setSocial(d.sources ?? []); })
-      .catch(() => { if (alive) setSocial([]); });
     return () => { alive = false; };
   }, [domain, locale]);
 
@@ -105,51 +101,6 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
   const strip = items.slice(1, 1 + STRIP);
   const live = (digest?.feeds ?? []).filter(f => f.ok && f.count > 0);
 
-  // 소셜 히어로 — 커뮤니티 토론글 중 가장 화제인 글 하나.
-  //
-  // 후보를 HERO_SOURCES로 좁히는 게 중요하다. 소스마다 점수 단위가 달라서
-  // (HF 좋아요 14,286 vs HN 업보트 2,288 vs 모델 다운로드 26,731) 전부 섞어 최댓값을
-  // 고르면 항상 HF 모델이 1등이 된다 — 순위가 아니라 단위 차이를 보고 있는 셈이다.
-  // 업보트라는 같은 단위를 쓰는 토론 커뮤니티끼리만 비교한다.
-  const socialHero = useMemo(() => {
-    let best: { source: SocialSource; post: SocialPost } | null = null;
-    for (const s of social ?? []) {
-      if (!HERO_SOURCES.includes(s.id)) continue;
-      for (const p of s.posts) {
-        if (!p.points) continue;
-        if (!best || p.points > (best.post.points ?? 0)) best = { source: s, post: p };
-      }
-    }
-    return best;
-  }, [social]);
-
-  // 같은 매체의 두 정렬(HF 인기 모델·새 모델)은 한 카드로 합친다 — 별개 매체처럼 나란히
-  // 놓이면 같은 곳인 줄 모른다(2026-09-08 사용자 피드백).
-  const socialCards = useMemo<SocialCard[]>(() => {
-    const list = social ?? [];
-    const out: SocialCard[] = [];
-    const used = new Set<string>();
-    for (const s of list) {
-      if (used.has(s.id)) continue;
-      const group = MERGE_GROUPS.find(g => g.ids.includes(s.id));
-      if (group) {
-        const members = group.ids
-          .map(id => list.find(x => x.id === id))
-          .filter((x): x is SocialSource => !!x && x.posts.length > 0);
-        if (members.length > 1) {
-          members.forEach(m => used.add(m.id));
-          out.push({
-            kind: 'merged', key: group.key, label: group.label, why: members[0].why,
-            variants: members.map(m => ({ source: m, tab: m.ranked ? '인기순' : '최신순' })),
-          });
-          continue;
-        }
-      }
-      used.add(s.id);
-      out.push({ kind: 'single', key: s.id, source: s });
-    }
-    return out;
-  }, [social]);
 
   return (
     <>
@@ -239,37 +190,104 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
       )}
       </div>
 
-      {/* ═══ 소셜 시그널 — 별도 카드 ═══
-          전에는 뉴스와 같은 카드 안에 있어서 한 덩어리로 읽혔고, 그래서 어지러웠다
-          (2026-09-08 사용자 피드백). 카드를 나누고 제목도 '오늘의 시그널'과 같은 크기로
-          올려 둘이 대등한 섹션임을 분명히 한다. */}
+      {/* ═══ 지금 화제인 이름 ═══
+          '소셜 시그널' 패널을 없애고 그 자리에 넣었다(2026-09-09).
+
+          왜 합쳤나: 두 패널이 결국 같은 일을 하고 있었다 — 무엇이 중요한가를 말하는
+          것. 다만 각도가 달라서, 뉴스는 "매체가 다뤘다"이고 커뮤니티는 "사람들이
+          실제로 반응했다"이다. 뒤쪽이 영향력의 더 단단한 증거인데, 따로 놓여 있으니
+          어느 기사에 대한 반응인지 알 수 없었다.
+
+          잇는 열쇠는 URL이 아니라 이름이다. 실측(2026-09-09)으로 뉴스와 커뮤니티가
+          기사 단위로 겹친 건 상위 40건 중 0건이었다 — Hacker News가 로이터 기사를
+          그대로 올리지 않기 때문이다. 반면 이름 단위로는 겹친다(AI 상위 8개 중 4개).
+          그래서 카드 하나가 기사가 아니라 이름이다(entity-cards.ts).
+
+          기사가 없는 카드를 남겨 두는 것이 이 자리의 핵심이다 — 커뮤니티가 매체보다
+          먼저 아는 주제(CRISPR 암세포 선택 파괴, 1,002업보트)가 거기서 나온다. */}
       <div className="bg-white border border-spark-border rounded-2xl p-5 mt-4">
         <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5">
-          <h2 className="text-[19px] font-extrabold tracking-tight">🔥 {t('소셜 시그널')}</h2>
+          <h2 className="text-[19px] font-extrabold tracking-tight">🔥 {t('지금 화제인 이름')}</h2>
           <span className="text-[13px] text-spark-muted">
-            {t('이 분야 종사자들이 지금 이야기하는 글 — 기사보다 며칠 먼저 움직입니다.')}
+            {t('여러 매체가 함께 말한 이름과, 커뮤니티에서 실제로 다뤄진 정도를 봅니다.')}
           </span>
         </div>
 
-        {social === null ? (
-          <div className="mt-4 h-24 rounded-xl bg-spark-subtle animate-pulse" />
-        ) : social.length === 0 ? (
-          <p className="mt-4 text-[12.5px] text-spark-muted">{t('표시할 커뮤니티 시그널이 없습니다.')}</p>
+        {digest === null ? (
+          <div className="mt-4 h-40 rounded-xl bg-spark-subtle animate-pulse" />
+        ) : (digest.entities ?? []).length === 0 ? (
+          <p className="mt-4 text-[12.5px] text-spark-muted">{t('아직 여러 곳에서 함께 언급된 이름이 없습니다.')}</p>
         ) : (
-          <>
-            {/* 가장 화제인 글 하나를 뉴스 히어로처럼 위에 세운다 — 뉴스 쪽과 읽는 방식을 맞춘다. */}
-            {socialHero && <SocialHero pick={socialHero} locale={locale} />}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5 mt-3 items-start">
-              {socialCards.map(c =>
-                c.kind === 'merged'
-                  ? <MergedCard key={c.key} label={c.label} why={c.why} variants={c.variants} locale={locale} />
-                  : <RailCard key={c.key} source={c.source} locale={locale} limit={RAIL_POSTS} />)}
-            </div>
-            <p className="mt-3 text-[11.5px] text-spark-muted">{t('커뮤니티 {n}곳', { n: social.length })}</p>
-          </>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5 mt-4 items-start">
+            {digest.entities.map(c => <EntityCardView key={c.key} card={c} locale={locale} />)}
+          </div>
         )}
       </div>
     </>
+  );
+}
+
+/**
+ * 이름 카드 — 한 이름에 달린 기사와 커뮤니티 글.
+ *
+ * 커뮤니티 쪽 이름표가 두 가지인 이유: AI는 Hacker News·Reddit이라 "반응"이 맞지만,
+ * 바이오는 bioRxiv·PubMed·임상등록이라 반응이 아니라 1차 자료다. 실제로 바이오 상위
+ * 6건 중 반응이 붙은 건 0건이었다 — 논문 제목에 회사명이 나올 일이 거의 없다.
+ */
+function EntityCardView({ card, locale }: { card: EntityCard; locale: string }) {
+  const t = useT();
+  const communityLabel = card.communityKind === 'reaction' ? t('커뮤니티 반응') : t('새로 등록된 연구·임상');
+
+  return (
+    <article className="rounded-xl border border-spark-border overflow-hidden flex flex-col">
+      <div className="flex items-center gap-2 px-3.5 py-2.5 bg-spark-subtle border-b border-spark-border">
+        <span className="text-[15px] font-extrabold tracking-tight">{card.label}</span>
+        <span className="ml-auto text-right text-[10.5px] font-bold text-spark-muted tabular-nums leading-tight">
+          {card.outlets > 0 && <>{t('매체 {n}곳', { n: card.outlets })}<br /></>}
+          {card.community.length > 0 && t('커뮤니티 {n}건', { n: card.community.length })}
+        </span>
+      </div>
+
+      <div className="px-3.5 py-3 flex flex-col gap-2.5">
+        {card.articles.length > 0 ? (
+          <>
+            <span className="text-[10.5px] font-extrabold tracking-wider uppercase text-spark-muted">{t('기사')}</span>
+            {card.articles.map(a => (
+              <a key={a.url} href={a.url} target="_blank" rel="noopener noreferrer"
+                 className="flex gap-2 text-[12.5px] leading-snug text-spark-ink-soft hover:text-spark-purple">
+                <span className="shrink-0 w-[68px] text-[10.5px] font-bold text-spark-muted truncate">{a.source}</span>
+                <span className="line-clamp-2">{a.title}</span>
+              </a>
+            ))}
+          </>
+        ) : (
+          // 기사가 없는 카드 — 커뮤니티가 매체보다 먼저 아는 주제다. 그 사실을 그대로 말한다.
+          <p className="text-[11.5px] text-spark-muted">{t('아직 우리 매체 목록에서는 다뤄지지 않았습니다.')}</p>
+        )}
+
+        {card.community.length > 0 && (
+          <div className="border-t border-dashed border-spark-border-strong pt-2.5 flex flex-col gap-2">
+            <span className={`text-[10.5px] font-extrabold tracking-wider uppercase ${
+              card.communityKind === 'reaction' ? 'text-rose-600' : 'text-spark-muted'}`}>
+              {communityLabel}
+            </span>
+            {card.community.map(r => (
+              <a key={r.url} href={r.url} target="_blank" rel="noopener noreferrer"
+                 className="flex gap-2 items-baseline text-[12.5px] leading-snug text-spark-ink-soft hover:text-spark-purple">
+                {r.points > 0 ? (
+                  <span className="shrink-0 min-w-[54px] text-center rounded-md bg-rose-50 px-1.5 py-0.5 text-[11px] font-bold text-rose-600 tabular-nums">
+                    {r.points.toLocaleString()}▲
+                  </span>
+                ) : (
+                  <span className="shrink-0 min-w-[54px] text-center text-[10.5px] font-bold text-spark-muted">{r.source}</span>
+                )}
+                <span className="line-clamp-2">{locale === 'ko' && r.titleKo ? r.titleKo : r.title}</span>
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    </article>
   );
 }
 
@@ -353,122 +371,6 @@ function Hero({ item, locale }: { item: DigestItem; locale: string }) {
         ))}
       </div>
     </article>
-  );
-}
-
-/** 커뮤니티 미니 랭킹. 매체가 무엇에 특화됐는지(why)를 제목 바로 아래 한 줄로 둔다. */
-/** 소셜 쪽 히어로 — 뉴스 히어로와 같은 자리·같은 무게로, 지금 가장 화제인 글 하나. */
-function SocialHero({ pick, locale }: { pick: { source: SocialSource; post: SocialPost }; locale: string }) {
-  const t = useT();
-  const { source, post } = pick;
-  const style = SRC_STYLE[source.id] ?? 'text-spark-ink-soft border-spark-border bg-white';
-  const title = locale === 'ko' ? (post.titleKo || post.title) : post.title;
-  return (
-    <a
-      href={post.url} target="_blank" rel="noopener noreferrer"
-      className="mt-4 block rounded-xl border border-spark-border bg-spark-subtle px-4 py-3.5 transition-colors hover:border-spark-purple/40 hover:bg-white"
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        <span className={`rounded border px-1.5 py-0.5 text-[10.5px] font-bold ${style}`}>{source.label}</span>
-        <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10.5px] font-bold text-rose-700">
-          🔥 {t('가장 화제')}
-        </span>
-        {post.origin && <span className="text-[10.5px] text-spark-muted">{post.origin}</span>}
-        <span className="ml-auto text-[10.5px] text-spark-muted">{post.date}</span>
-      </div>
-      <h3 className="mt-1.5 text-[16px] font-extrabold leading-snug text-spark-ink">{title}</h3>
-      <div className="mt-1.5 flex items-center gap-3 text-[11.5px] text-spark-muted">
-        {post.points != null && (
-          <span className="font-bold text-rose-600 tabular-nums">
-            ▲ {post.points.toLocaleString()} {post.pointsLabel ? t(post.pointsLabel) : ''}
-          </span>
-        )}
-        {post.comments != null && <span className="tabular-nums">💬 {post.comments.toLocaleString()}</span>}
-        {post.author && <span>{post.author}</span>}
-      </div>
-    </a>
-  );
-}
-
-/**
- * 같은 매체의 두 정렬을 한 카드에서 전환해 본다.
- * 두 목록을 위아래로 쌓으면 카드가 다른 칸의 두 배가 되므로, 안에서 탭으로 바꾼다 —
- * "같은 매체인데 정렬만 다르다"는 게 형태로 드러난다.
- */
-function MergedCard({ label, why, variants, locale }: {
-  label: string; why: string;
-  variants: { source: SocialSource; tab: '인기순' | '최신순' }[];
-  locale: string;
-}) {
-  const t = useT();
-  const [tab, setTab] = useState(0);
-  const cur = variants[tab] ?? variants[0];
-  const style = SRC_STYLE[cur.source.id] ?? 'text-spark-ink-soft border-spark-border bg-white';
-
-  return (
-    <section className="rounded-xl border border-spark-border bg-white overflow-hidden">
-      <div className="px-3.5 pt-3 pb-2.5 bg-spark-subtle border-b border-spark-border">
-        <div className="flex items-center gap-2">
-          <span className={`text-[10.5px] font-bold px-1.5 py-0.5 rounded border ${style}`}>{label}</span>
-          {/* 정렬 전환 — 배지가 아니라 누를 수 있는 세그먼트라는 게 보이게 한다. */}
-          <div className="ml-auto flex gap-0.5 rounded-md bg-white p-0.5 border border-spark-border">
-            {variants.map((v, i) => (
-              <button
-                key={v.tab} type="button" onClick={() => setTab(i)} aria-pressed={i === tab}
-                className={`rounded px-1.5 py-0.5 text-[10px] font-bold transition-colors ${
-                  i === tab ? 'bg-spark-ink text-white' : 'text-spark-muted hover:text-spark-ink-soft'
-                }`}
-              >
-                {t(v.tab)}
-              </button>
-            ))}
-          </div>
-        </div>
-        <p className="mt-1.5 text-[11px] leading-relaxed text-spark-muted">{t(why)}</p>
-      </div>
-      <ol>
-        {cur.source.posts.slice(0, RAIL_POSTS).map((p, i) => (
-          <li key={p.url}><PostRow post={p} rank={i + 1} locale={locale} /></li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
-function RailCard({ source, locale, limit }: { source: SocialSource; locale: string; limit: number }) {
-  const t = useT();
-  const style = SRC_STYLE[source.id] ?? 'text-spark-ink-soft border-spark-border bg-white';
-
-  return (
-    <section className="rounded-xl border border-spark-border bg-white overflow-hidden">
-      <div className="px-3.5 pt-3 pb-2.5 bg-spark-subtle border-b border-spark-border">
-        <div className="flex items-center gap-2">
-          <span className={`text-[10.5px] font-bold px-1.5 py-0.5 rounded border ${style}`}>{source.label}</span>
-          <span className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded border ${
-            !source.connected ? 'bg-amber-50 text-amber-700 border-amber-200'
-            : source.ranked ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-            : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
-            {source.connected ? (source.ranked ? t('인기순') : t('최신순')) : t('연결 필요')}
-          </span>
-        </div>
-        {/* 매체 특징 한 줄 — "왜 이 매체냐"에 화면이 스스로 답한다. */}
-        <p className="mt-1.5 text-[11px] leading-relaxed text-spark-muted">{t(source.why)}</p>
-      </div>
-
-      {source.posts.length === 0 ? (
-        <p className="px-3.5 py-6 text-center text-[12px] text-spark-muted">
-          {source.connected ? t('해당 기간 글이 없습니다.') : t('연결되면 여기에 표시됩니다.')}
-        </p>
-      ) : (
-        <ol>
-          {source.posts.slice(0, limit).map((p, i) => (
-            <li key={p.url}>
-              <PostRow post={p} rank={i + 1} locale={locale} />
-            </li>
-          ))}
-        </ol>
-      )}
-    </section>
   );
 }
 
