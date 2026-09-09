@@ -8,6 +8,8 @@ import { redirect } from 'next/navigation';
 import { getSessionUser } from '@/lib/authz';
 import { listRequests, canApproveAccess } from '@/lib/sparkscope/access-request';
 import { AccessRequestList } from '@/components/AccessRequestList';
+import { CompanyAccountList } from '@/components/CompanyAccountList';
+import { listCompanyAccounts } from '@/lib/sparkscope/company-accounts';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,7 +23,10 @@ export default async function AccountsPage() {
   // role 검사만으로는 전 직원이 외부 회사 접근을 허가할 수 있게 된다.
   if (!canApproveAccess(user.email)) redirect('/dashboard');
 
-  const requests = await listRequests().catch(() => []);
+  const [requests, accounts] = await Promise.all([
+    listRequests().catch(() => []),
+    listCompanyAccounts().catch(() => []),
+  ]);
   return (
     <main className="max-w-4xl mx-auto px-6 py-10">
       <h1 className="text-2xl font-extrabold tracking-tight mb-1">포트폴리오사 접근 요청</h1>
@@ -29,6 +34,7 @@ export default async function AccountsPage() {
         승인하면 그 주소로 로그인 링크를 받을 수 있게 되고, 계정은 소속 회사 자료만 봅니다.
       </p>
       <AccessRequestList requests={requests} />
+      <CompanyAccountList accounts={accounts} />
     </main>
   );
 }

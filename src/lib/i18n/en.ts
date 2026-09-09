@@ -1296,4 +1296,28 @@ export const EN: Record<string, string> = {
   '로그인 상태 초기화': 'Reset sign-in state',
   '로그인 상태를 초기화했습니다. 다시 로그인해 주세요.': 'Sign-in state cleared. Please sign in again.',
   '열람 전용': 'Read only',
+
+  // 포트폴리오사 계정 접근 해제 (2026-09-09)
+  '포트폴리오사 계정':
+    'Portfolio company accounts',
+  '접근을 해제하면 즉시 로그아웃되고 새 로그인 링크도 받을 수 없습니다. 다시 열어줄 수 있습니다.':
+    'Revoking signs them out immediately and blocks new sign-in links. You can restore access later.',
+  '활성 포트폴리오사 계정이 없습니다.':
+    'No active portfolio company accounts.',
+  '해제된 계정':
+    'Revoked accounts',
+  '접근 해제':
+    'Revoke access',
+  '다시 열기':
+    'Restore',
+  '로그인 중':
+    'signed in',
+  '회사 없음':
+    'No company',
+  '이 계정의 접근을 해제할까요? 지금 열려 있는 창에서도 바로 로그아웃됩니다.':
+    'Revoke this account? They will be signed out immediately, even in open tabs.',
+  '사내 계정은 이 화면에서 바꿀 수 없습니다.':
+    'Staff accounts cannot be changed here.',
+  '접근 해제 권한이 없습니다.':
+    'You do not have permission to revoke access.',
 };
