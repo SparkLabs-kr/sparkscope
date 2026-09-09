@@ -8,13 +8,13 @@
  * 됐는지 확인하고 그 소스만 긁는다. 하루 1회 갱신되는 원본을 2시간마다 때리는 건
  * 남의 서버만 축내는 일이다.
  *
- * 매체 1면 헤드라인·인기기사도 같은 주기로 함께 관측한다(NewsHeadline). 홈페이지는
- * "지금 이 순간"만 보여주므로, 쌓아 두지 않으면 "이번주에 1면을 차지했던 것"을
- * 물어볼 수 없다. 같은 2시간 주기라 크론을 따로 만들지 않고 여기에 붙였다.
+ * 매체 1면 헤드라인 관측은 여기 있다가 GitHub Actions로 옮겼다
+ * (.github/workflows/collect-headlines.yml). FierceBiotech가 Cloudflare 봇 차단으로
+ * Vercel 서버리스에서는 403이 나는데 GitHub 러너에서는 200이기 때문이다.
+ * 같은 작업을 양쪽에 두지 않는다는 규칙(CLAUDE.md)에 따라 여기서는 뺐다.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { refreshAllSocialSignals } from '@/lib/sparkscope/social-refresh';
-import { refreshPopular, prunePopular } from '@/lib/sparkscope/news-popular-store';
 
 export const runtime = 'nodejs';
 export const preferredRegion = 'icn1';
@@ -37,19 +37,8 @@ export async function GET(request: NextRequest) {
     const force = request.nextUrl.searchParams.get('force') === '1';
     const { results, pruned } = await refreshAllSocialSignals({ force });
     const saved = results.reduce((n, r) => n + r.saved, 0);
-
-    // 1면 헤드라인 관측 — 실패해도 소셜 수집 결과는 그대로 보고한다.
-    let headlines = 0;
-    let headlinesPruned = 0;
-    try {
-      for (const d of ['ai', 'bio'] as const) headlines += await refreshPopular(d);
-      headlinesPruned = await prunePopular();
-    } catch (e) {
-      console.error('[cron/collect-social] 헤드라인 관측 실패:', e);
-    }
-
-    console.log(`[cron/collect-social] 저장 ${saved}건, 헤드라인 ${headlines}건, 샘플 정리 ${pruned}건, ${Date.now() - startedAt}ms`);
-    return NextResponse.json({ ok: true, results, pruned, headlines, headlinesPruned, ms: Date.now() - startedAt });
+    console.log(`[cron/collect-social] 저장 ${saved}건, 샘플 정리 ${pruned}건, ${Date.now() - startedAt}ms`);
+    return NextResponse.json({ ok: true, results, pruned, ms: Date.now() - startedAt });
   } catch (e: any) {
     console.error('[cron/collect-social] 실패:', e);
     return NextResponse.json({ ok: false, error: String(e?.message ?? e) }, { status: 500 });

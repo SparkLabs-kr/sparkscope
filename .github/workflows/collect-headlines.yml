@@ -1,0 +1,51 @@
+name: Collect Headlines (Schedule)
+
+# 매체 1면 헤드라인·인기기사를 2시간마다 관측해 NewsHeadline 테이블에 쌓는다.
+#
+# 왜 GitHub Actions인가: FierceBiotech가 Cloudflare 봇 차단으로 Vercel 서버리스에서
+# 403이 난다(데이터센터 IP 평판 문제. UA는 이미 Chrome이고, UA만으로는 풀리지 않는다).
+# probe-sources 워크플로로 확인해 보니 GitHub 러너에서는 200이라 긁는 주체만 옮겼다.
+#
+# 왜 2시간인가: 매체 홈페이지는 "지금 이 순간" 1면만 보여준다. 쌓아 두지 않으면
+# 어제 1면을 휩쓴 사안이 오늘 신호 0이 된다(2026-09-08 노바티스 건). 소셜 시그널
+# 수집과 같은 주기다.
+#
+# CLAUDE.md 규칙: 같은 작업을 Vercel과 GitHub Actions 양쪽에 만들지 않는다 —
+# vercel.json의 collect-social에서 헤드라인 관측을 빼고 이 워크플로 하나로 뒀다.
+on:
+  schedule:
+    - cron: '7 */2 * * *'  # 2시간마다. 정각은 GitHub 전역 혼잡으로 밀려서 7분에 둔다.
+  workflow_dispatch:
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Collect headlines
+        env:
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
+        run: npx tsx scripts/collect-headlines.ts
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "⚠️ 헤드라인 관측 실패 $(date '+%Y-%m-%d %H:%M:%S')"
+          echo "매체 마크업 변경 또는 접근 차단일 수 있습니다. 위 로그를 확인하세요."

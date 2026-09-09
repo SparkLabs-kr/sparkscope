@@ -116,12 +116,15 @@ export const FEEDS: Feed[] = [
   // ── 바이오 전문지 ──
   { name: 'STAT News', url: 'https://www.statnews.com/feed/', domain: 'bio', tier: 1 },
   { name: 'Endpoints News', url: 'https://endpts.com/feed/', domain: 'bio', tier: 1 },
-  // ⚠️ fiercebiotech.com 은 데이터센터 IP를 막는다 — 로컬에서는 200인데 Vercel
-  //    서버리스에서는 RSS·홈페이지 모두 403이다(2026-09-08 프로덕션 로그로 확인).
-  //    즉 프로덕션에서 이 피드는 실제로 0건이고, 헤드라인 수집도 같이 막힌다.
-  //    IP 문제라 UA를 바꿔도 풀리지 않는다. 남겨 두는 이유는 로컬·다른 실행 환경에서는
-  //    유효하고, 열리면 곧바로 다시 쓰이기 때문이다. 접근성은 .github/workflows/
-  //    probe-sources.yml 로 환경별로 확인한다.
+  // ⚠️ 이 피드는 Vercel에서 403이다 — Cloudflare 봇 차단이고 UA 문제가 아니다.
+  //    같은 Chrome UA로 일반 회선에서는 200이고, python-requests 같은 알려진 스크래퍼
+  //    UA만 403이 난다(2026-09-09 실측). Cloudflare가 UA와 함께 IP 평판을 보고
+  //    데이터센터 대역(Vercel = AWS icn1)을 봇으로 깐 것이다.
+  //
+  //    GitHub Actions 러너에서는 200이다(probe-sources 워크플로로 확인). 1면 헤드라인은
+  //    그래서 GitHub Actions로 옮겨 DB에 쌓고 있고, Fierce 기사도 그 경로로는 후보에
+  //    들어온다. 다만 이 RSS 피드 자체는 여전히 Vercel에서 읽히지 않는다 —
+  //    기사 본문·발행일이 필요한 자리는 비어 있다는 뜻이다.
   { name: 'Fierce Biotech', url: 'https://www.fiercebiotech.com/rss/xml', domain: 'bio', tier: 2 },
   { name: 'In the Pipeline', url: 'https://news.google.com/rss/search?q=when:14d+site:science.org+%22In+the+Pipeline%22&hl=en-US&gl=US&ceid=US:en', domain: 'bio', tier: 2, independent: true },
   { name: 'Ground Truths (Eric Topol)', url: 'https://erictopol.substack.com/feed', domain: 'bio', tier: 2, independent: true },
