@@ -70,7 +70,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <SignOutButton />
         </div>
       </nav>
-      <main className="max-w-7xl mx-auto px-6 sm:px-8 py-7 animate-rise">{children}</main>
+      {/* 폭 상한을 1280px(max-w-7xl)에서 1800px로 넓혔다(2026-09-09).
+          예전 값은 본문이 긴 문서를 읽기 좋은 폭이었는데, 이 대시보드는 읽는 화면이
+          아니라 훑는 화면이다. 카드가 3열로 놓이는 자리에서 양옆에 각각 160px씩
+          빈 띠가 남아 "화면이 안 채워진다"는 지적이 반복됐다.
+          완전히 없애지 않은 이유: 초대형 모니터에서 한 줄이 지나치게 길어지면
+          기사 제목을 따라 읽기 어려워진다. */}
+      <main className="max-w-[1800px] mx-auto px-6 sm:px-8 py-7 animate-rise">{children}</main>
       <ScrollTopButton />
     </div>
   );

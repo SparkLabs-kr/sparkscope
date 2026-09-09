@@ -29,8 +29,15 @@ const BATCH = 40;
 /** 이름을 뽑을 최대 기사 수. 후보가 이보다 많으면 앞쪽(중요도 순)만 본다. */
 const MAX_ARTICLES = 160;
 
-/** 한 기사에서 뽑은 이름. en은 집계 키, ko는 화면 표기다. */
-interface Entity { en: string; ko: string }
+/**
+ * 한 기사에서 뽑은 이름. en은 집계 키, ko는 화면 표기다.
+ *
+ * org는 그 이름을 소유한 회사다. 제품과 회사가 갈라지면 같은 곳의 소식이 카드 둘로
+ * 쪼개진다 — "챗GPT 이미지 2.5 공개"와 "오픈AI, 사이버방어 투자"가 별개 이름으로
+ * 집계돼 각각 매체 수가 반으로 나뉘었다(2026-09-09). 회사 단위로 보기로 했으므로
+ * 집계는 항상 org로 한다.
+ */
+interface Entity { en: string; ko: string; org?: string; orgKo?: string }
 
 export interface TrendKeyword {
   /** 화면에 보여줄 이름 — 한국어가 있으면 한국어. */
@@ -65,13 +72,22 @@ const SYSTEM = [
   'ko에도 영문을 그대로 넣습니다. 제목이 한국어여도 en은 반드시 영문이어야 합니다 —',
   '"노바티스"와 "Novartis"가 갈라지면 매체 수를 셀 수 없습니다.',
   '',
+  '제품·모델·약물 이름에는 그것을 만든 회사를 org(영문)·orgKo(한국어)에 함께 넣습니다.',
+  '  예: {"en":"ChatGPT","ko":"챗GPT","org":"OpenAI","orgKo":"오픈AI"}',
+  '  예: {"en":"Claude","ko":"클로드","org":"Anthropic","orgKo":"앤트로픽"}',
+  '  예: {"en":"Gemini 3.8 Flash","ko":"제미나이 3.8 플래시","org":"Google","orgKo":"구글"}',
+  '  예: {"en":"Imdelltra","ko":"임델트라","org":"Amgen","orgKo":"암젠"}',
+  '이름 자체가 회사면 org에 자기 자신을 넣습니다.',
+  '  예: {"en":"OpenAI","ko":"오픈AI","org":"OpenAI","orgKo":"오픈AI"}',
+  '모회사를 모르면 org를 비웁니다 — 지어내지 않습니다.',
+  '',
   '줄임말이 아니라 정식 명칭을 씁니다 — "아스트라"가 아니라 "GPT-6 아스트라",',
   '"Qwen"이 아니라 "Qwen3.8-Flash-Next"입니다. 같은 대상이 줄임말과 정식 명칭으로',
   '갈라지면 매체 수가 반씩 나뉘어 둘 다 순위에서 밀립니다.',
   '',
   '제목당 최대 3개, 없으면 빈 배열입니다. 억지로 채우지 않습니다.',
   '출력은 JSON 객체 하나입니다:',
-  '{"items":[{"i":0,"e":[{"en":"Novartis","ko":"노바티스"}]},{"i":1,"e":[]}]}',
+  '{"items":[{"i":0,"e":[{"en":"Novartis","ko":"노바티스","org":"Novartis","orgKo":"노바티스"}]},{"i":1,"e":[]}]}',
   'i는 입력에 준 번호입니다. 모든 항목에 빠짐없이 답합니다.',
 ].join('\n');
 
@@ -118,13 +134,18 @@ async function extractBatch(batch: Keywordable[]): Promise<Map<string, Entity[]>
       response_format: { type: 'json_object' },
     });
     const parsed = JSON.parse(res.choices[0]?.message?.content ?? '{}') as
-      { items?: { i: number; e?: { en?: string; ko?: string }[] }[] };
+      { items?: { i: number; e?: { en?: string; ko?: string; org?: string; orgKo?: string }[] }[] };
     for (const { i, e } of parsed.items ?? []) {
       const item = batch[i];
       if (!item) continue;
       const ents = (e ?? [])
         .filter(x => x?.en && x.en.trim().length > 1)
-        .map(x => ({ en: x.en!.trim(), ko: (x.ko || x.en)!.trim() }))
+        .map(x => ({
+          en: x.en!.trim(),
+          ko: (x.ko || x.en)!.trim(),
+          org: x.org?.trim() || undefined,
+          orgKo: x.orgKo?.trim() || undefined,
+        }))
         .slice(0, 3);
       out.set(item.url, ents);
     }
@@ -178,7 +199,8 @@ export async function extractTrendKeywords(items: Keywordable[], limit = 8): Pro
   const agg = new Map<string, Agg>();
   pool.forEach((it, idx) => {
     for (const ent of byUrl.get(it.url) ?? []) {
-      const k = keyOf(ent.en);
+      // 집계는 모회사로 한다 — 제품과 회사가 갈라지면 매체 수가 반으로 나뉜다.
+      const k = keyOf(ent.org || ent.en);
       if (!k) continue;
       const cur = agg.get(k);
       if (cur) {
@@ -189,7 +211,7 @@ export async function extractTrendKeywords(items: Keywordable[], limit = 8): Pro
         if (idx < cur.rank) { cur.rank = idx; cur.url = it.url; }
       } else {
         agg.set(k, {
-          label: ent.ko || ent.en,
+          label: ent.orgKo || ent.org || ent.ko || ent.en,
           outlets: new Set([it.source]),
           articles: 1,
           top: it.importance ?? 0,

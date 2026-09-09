@@ -331,6 +331,12 @@ export const EN: Record<string, string> = {
   '여러 매체가 함께 다룬 뉴스와, 커뮤니티에서 가장 화제인 글을 함께 봅니다.':
     'Stories covered by multiple outlets, alongside what communities are talking about.',
   '{n}개 매체가 1면 헤드라인': '{n} outlets ran it as a headline',
+  '지금 핫한 키워드': 'Hot right now',
+  '여러 매체가 함께 말한 이름과, 커뮤니티에서 실제로 다뤄진 정도.': 'Names several outlets share, and how much the community actually engaged.',
+  '아직 여러 곳에서 함께 언급된 이름이 없습니다.': 'No name is shared across outlets yet.',
+  '아직 우리 매체 목록에서는 다뤄지지 않았습니다.': 'Not covered by our outlets yet.',
+  '커뮤니티 반응': 'Community reaction',
+  '새로 등록된 연구·임상': 'New studies and trials',
   '지금 여러 매체가 말하는 이름': 'Names several outlets are talking about',
   '매체 {n}곳 · 기사 {a}건': '{n} outlets · {a} articles',
   '{s} 머리기사': '{s} lead story',

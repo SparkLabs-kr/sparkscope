@@ -38,17 +38,27 @@ const MODEL = 'gpt-4o-mini';
 
 const SYSTEM = [
   '뉴스 헤드라인 목록을 보고 같은 사건을 다룬 것끼리 묶습니다.',
+  '항목에 "(발췌: ...)"가 붙어 있으면 그것도 함께 보고 판단합니다 —',
+  '제목만으로는 같은 사건인지 알 수 없는 경우가 많습니다.',
   '',
   '같은 사건의 기준:',
   '- 같은 회사의 같은 발표·거래·소송·출시를 다룬 것. 표현이 달라도 같은 사건입니다.',
   '  예: "Mistral hits $24 billion valuation" 과 "Mistral raises record €3bn" → 같은 사건',
   '  예: "Introducing GPT-6 Astra" 와 "OpenAI begins rolling out Astra model" → 같은 사건',
+  '- 제목이 서로 완전히 달라도 발췌가 같은 일을 말하면 같은 사건입니다.',
+  '  예: "On the Navier–Stokes Millennium Prize Problem" 과',
+  '      "Drama swirls around OpenAI\'s legendary mathematical milestone" 과',
+  '      "오픈AI, 수학계 난제 해결 발표" → 셋 다 같은 사건',
   '',
   '다른 사건의 기준:',
   '- 같은 회사라도 사안이 다르면 다른 사건입니다.',
   '  예: "OpenAI가 피소됐다" 와 "OpenAI가 사이버방어에 투자한다" → 다른 사건',
   '  예: "구글이 모델을 냈다" 와 "구글이 데이터센터를 짓는다" → 다른 사건',
   '- 같은 분야의 다른 회사 이야기는 다른 사건입니다.',
+  '- 비슷한 종류의 성과라도 주인공이나 대상이 다르면 다른 사건입니다. 이걸 특히 조심하세요.',
+  '  예: "오픈AI가 나비에-스토크스 난제를 풀었다" 와',
+  '      "앤트로픽 클로드가 페르마의 마지막 정리를 검증했다" → 다른 사건',
+  '      (둘 다 "AI가 수학 난제를 해결"이지만 회사도 문제도 다릅니다)',
   '- 애매하면 묶지 않습니다. 잘못 묶으면 서로 다른 소식이 하나로 사라집니다.',
   '',
   '출력은 JSON 객체 하나입니다: {"groups":[[0,4],[1],[2,7,9], ...]}',
@@ -61,11 +71,59 @@ const SYSTEM = [
  * @returns 같은 사건끼리 묶은 인덱스 배열. 실패하면 전부 홀로 둔다 —
  *          병합에 실패해서 중복이 보이는 것이, 잘못 병합해서 소식이 사라지는 것보다 낫다.
  */
-export async function groupSameStory(items: { title: string }[]): Promise<number[][]> {
+/**
+ * 발췌를 판단에 쓸 수 있는 모양으로 다듬는다.
+ *
+ * 두 가지를 반드시 해야 한다(둘 다 실측으로 걸렸다, 2026-09-09):
+ *
+ * ① 엔티티를 먼저 푼다. 일부 피드는 본문을 이스케이프한 HTML로 싣는다 —
+ *    Simon Willison의 발췌는 "&lt;p&gt;&lt;strong&gt;&lt;a href=..."로 시작하는
+ *    7,900자였다. 태그를 지우는 것만으로는 지워지지 않는다(아직 태그가 아니다).
+ *    그대로 넘기면 앞부분이 전부 마크업이라 무슨 글인지 알 수 없다.
+ *
+ * ② 넉넉히 남긴다. 200자로 자르던 때 AI타임스 기사에서 "나비에-스토크스"가
+ *    딱 그 뒤에 있어서 잘려 나갔고, 같은 사건이 안 묶였다.
+ */
+const HINT_CHARS = 400;
+
+function cleanHint(raw?: string | null): string {
+  if (!raw) return '';
+  return raw
+    // ① 이스케이프를 먼저 푼다. 그래야 아래 태그 제거가 실제로 태그를 지운다.
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'").replace(/&nbsp;/g, ' ')
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&amp;/g, '&')
+    .replace(/<[^>]*>/g, ' ')
+    // URL은 사건을 알아보는 데 도움이 안 되고 자릿수만 먹는다.
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, HINT_CHARS);
+}
+
+export async function groupSameStory(
+  items: { title: string; hint?: string | null }[],
+): Promise<number[][]> {
   const alone = () => items.map((_, i) => [i]);
   if (items.length <= 1) return alone();
 
-  const listing = items.map((it, i) => `${i}. ${it.title}`).join('\n');
+  // 제목만으로는 안 묶이는 경우가 있어 발췌를 한 줄 함께 넘긴다.
+  //
+  // 실측(2026-09-09): 오픈AI가 나비에–스토크스 난제를 풀었다는 같은 사건을 세 매체가
+  // 각각 이렇게 썼다 —
+  //   Simon Willison  "On the Navier–Stokes Millennium Prize Problem"
+  //   The Verge       "Drama swirls around OpenAI's legendary mathematical milestone"
+  //   AI타임스         "오픈AI, 수학계 난제 해결 발표...NYU·앤트로픽과 '표절' 공방"
+  // 공통 단어가 하나도 없다. Verge 제목에는 난제 이름도 회사 이름도 없고, Simon
+  // 제목에는 회사 이름이 없다. 그래서 셋이 따로 놀았고 "함께 보도한 매체 0곳"으로
+  // 8위에 머물렀다. 발췌가 있으면 무엇에 관한 글인지 드러나 묶인다.
+  //
+  const listing = items.map((it, i) => {
+    const hint = cleanHint(it.hint);
+    return hint ? `${i}. ${it.title}\n   (발췌: ${hint})` : `${i}. ${it.title}`;
+  }).join('\n');
   try {
     const res = await client().chat.completions.create({
       model: MODEL,

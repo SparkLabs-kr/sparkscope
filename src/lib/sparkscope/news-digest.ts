@@ -585,7 +585,12 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
   });
   const shortlist = [...news, ...indicators];
 
-  const buckets = await groupSameStory(shortlist).catch(e => {
+  // 발췌를 함께 넘긴다 — 제목이 서로 완전히 다른 같은 사건을 묶으려면 필요하다
+  // (news-cluster.ts의 나비에–스토크스 사례). sourceText가 없는 항목은 매체 설명으로
+  // 대신하고, 그것도 없으면 제목만 넘어간다.
+  const buckets = await groupSameStory(
+    shortlist.map(it => ({ title: it.title, hint: it.sourceText ?? it.blurb ?? null })),
+  ).catch(e => {
     console.error('[news-digest] 사건 병합 실패 — 병합 없이 진행합니다:', e);
     return shortlist.map((_, i) => [i]);
   });

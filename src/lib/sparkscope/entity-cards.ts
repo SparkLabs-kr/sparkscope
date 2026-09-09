@@ -149,10 +149,12 @@ export async function buildEntityCards(
   };
   const agg = new Map<string, Agg>();
   const touch = (e: Entity): Agg => {
-    const k = keyOf(e.en);
+    // 모회사로 묶는다 — 'ChatGPT'와 'OpenAI'가 따로 집계되면 같은 곳 소식이 카드
+    // 둘로 쪼개지고 매체 수도 반으로 나뉜다(2026-09-09 사용자 지적).
+    const k = keyOf(e.org || e.en);
     let cur = agg.get(k);
     if (!cur) {
-      cur = { label: e.ko || e.en, outlets: new Set(), articles: [], community: [], points: 0, mentions: 0 };
+      cur = { label: e.orgKo || e.org || e.ko || e.en, outlets: new Set(), articles: [], community: [], points: 0, mentions: 0 };
       agg.set(k, cur);
     }
     return cur;

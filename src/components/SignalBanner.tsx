@@ -103,7 +103,14 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
 
 
   return (
-    <>
+    /* 넓은 화면에서는 뉴스(왼쪽)와 이름 카드(오른쪽)를 나란히 둔다(2026-09-09).
+       위아래로 쌓았을 때 이름 카드가 3열로 퍼지면서 카드마다 높이가 달라 아래쪽에
+       빈 자리가 크게 남았다. 오른쪽 한 줄로 세우면 그 빈 자리가 사라지고,
+       뉴스를 읽다가 바로 옆에서 반응을 확인할 수 있다.
+       좁은 화면에서는 그대로 위아래로 쌓인다. */
+    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_384px] gap-4">
+    {/* 두 열이 같은 높이로 늘어난다(grid 기본 stretch). 한쪽이 짧으면 그 아래가
+        페이지 배경으로 뚫려 보이는데, 카드가 늘어나면 그 자리가 카드 안이 된다. */}
     <div className="bg-white border border-spark-border rounded-2xl p-5">
       <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5">
         <h2 className="text-[19px] font-extrabold tracking-tight">📡 {t('오늘의 시그널')}</h2>
@@ -127,33 +134,8 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
         </div>
       </div>
 
-      {/* ── 0) 키워드 줄 ──
-          기사 단위 순위와 다른 각도다. 하나의 큰 사안이 임상 실패·주가·인수 후폭풍처럼
-          여러 기사로 흩어지면 각각은 평범해 보이는데, 이름으로 세면 그 흩어짐이 오히려
-          증거가 된다(2026-09-09: 노바티스가 매체 4곳·기사 10건인데 개별 기사는 상위
-          12건에 하나도 없었다). 세는 단위는 기사 수가 아니라 매체 수다. */}
-      {(digest?.keywords?.length ?? 0) > 0 && (
-        <div className="mt-3.5 flex flex-wrap items-center gap-1.5">
-          <span className="text-[12px] font-bold text-spark-muted">{t('지금 여러 매체가 말하는 이름')}</span>
-          {digest!.keywords.map((k, i) => (
-            <a
-              key={k.key}
-              href={k.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={t('매체 {n}곳 · 기사 {a}건', { n: k.outlets, a: k.articles })}
-              className={`rounded-full border px-2.5 py-1 text-[12px] transition-colors hover:border-spark-purple ${
-                i === 0
-                  ? 'border-spark-purple bg-spark-purple/10 font-extrabold text-spark-purple'
-                  : 'border-spark-border font-semibold text-spark-ink-soft'
-              }`}
-            >
-              {k.label}
-              <span className="ml-1 font-bold tabular-nums opacity-60">{k.outlets}</span>
-            </a>
-          ))}
-        </div>
-      )}
+      {/* 키워드 칩 줄은 없앴다(2026-09-09) — 오른쪽 '지금 핫한 키워드' 열이 같은 것을
+          기사·반응까지 붙여서 보여주므로, 칩만 있는 줄은 같은 정보를 두 번 말하는 셈이었다. */}
 
       {/* ── 1) 히어로 ──
           예전엔 오른쪽에 커뮤니티 레일을 세로로 세웠는데, 레일이 히어로보다 훨씬 길어서
@@ -205,11 +187,11 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
 
           기사가 없는 카드를 남겨 두는 것이 이 자리의 핵심이다 — 커뮤니티가 매체보다
           먼저 아는 주제(CRISPR 암세포 선택 파괴, 1,002업보트)가 거기서 나온다. */}
-      <div className="bg-white border border-spark-border rounded-2xl p-5 mt-4">
-        <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5">
-          <h2 className="text-[19px] font-extrabold tracking-tight">🔥 {t('지금 화제인 이름')}</h2>
-          <span className="text-[13px] text-spark-muted">
-            {t('여러 매체가 함께 말한 이름과, 커뮤니티에서 실제로 다뤄진 정도를 봅니다.')}
+      <div className="bg-white border border-spark-border rounded-2xl p-5">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-[17px] font-extrabold tracking-tight">🔥 {t('지금 핫한 키워드')}</h2>
+          <span className="text-[12.5px] leading-snug text-spark-muted">
+            {t('여러 매체가 함께 말한 이름과, 커뮤니티에서 실제로 다뤄진 정도.')}
           </span>
         </div>
 
@@ -218,12 +200,14 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
         ) : (digest.entities ?? []).length === 0 ? (
           <p className="mt-4 text-[12.5px] text-spark-muted">{t('아직 여러 곳에서 함께 언급된 이름이 없습니다.')}</p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5 mt-4 items-start">
+          /* 좁은 열이라 한 줄로 세운다. 좁은 화면에서는 아래로 내려가므로 2열까지 허용해
+             가로로 늘어지는 것을 막는다. */
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 gap-2.5 mt-4 items-start">
             {digest.entities.map(c => <EntityCardView key={c.key} card={c} locale={locale} />)}
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 }
 
