@@ -223,6 +223,23 @@ function tokens(title: string): Set<string> {
  */
 const HEADLINE_CONSENSUS = 2;
 
+/**
+ * 합의가 없어도 최상단 머리기사 하나는 그 자체로 충분한 근거로 본다.
+ *
+ * 처음에는 "두 곳 이상"만 인정했는데, 그러면 매체 한 곳이 막히는 순간 기준이 무너진다.
+ * 실제로 그랬다 — FierceBiotech는 내 맥에서 200인데 Vercel 서버리스에서는 403이다
+ * (데이터센터 IP 차단, 2026-09-08 프로덕션 로그로 확인). 그래서 로컬에서는 노바티스
+ * Phase 3 실패가 Fierce·Endpoints 두 곳 헤드라인으로 1위였는데, 프로덕션에서는
+ * Endpoints 한 곳만 읽혀 문턱에 못 미치고 4위로 내려갔다.
+ *
+ * 지금 헤드라인을 읽을 수 있는 곳이 두세 곳뿐이니 "2곳 중 2곳 일치"는 너무 빡빡하다.
+ * 그리고 어차피 최상단 한 자리는 편집국이 "오늘은 이게 제일 큰일이다"라고 말한 것이라,
+ * 한 곳이어도 근거로 충분하다. 두 번째 자리까지 넓히면 매체마다 두 건씩 올라와
+ * 상위가 헤드라인으로만 채워지므로 1위 자리에서 끊는다.
+ */
+const isConsensus = (outlets: number, rank: number | null) =>
+  outlets >= HEADLINE_CONSENSUS || rank === 1;
+
 /** 같은 사안인가 — 제목의 특징 단어가 충분히 겹치는가. */
 function sameStory(a: Set<string>, b: Set<string>): boolean {
   if (a.size < 3 || b.size < 3) return false;
@@ -565,7 +582,7 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
       // 기준을 넣은 의미가 없어진다(실측: 세 매체가 나란히 건 노바티스 건이 국내
       // R&D 예산 기사 아래 4위에 있었다). 5로 올려 동점으로 만들면 그다음 기준인
       // headlineOutlets가 갈라준다 — 합의가 있는 쪽이 위로 온다.
-      importance: headlineOutlets >= HEADLINE_CONSENSUS
+      importance: isConsensus(headlineOutlets, headlineRank)
         ? (Math.max(groupImportance(group) ?? 0, 5) as Importance)
         : groupImportance(group),
       // 그룹 안에서 가장 높은 등수를 쓴다 — 같은 사건인데 한 매체에서만 인기 목록에

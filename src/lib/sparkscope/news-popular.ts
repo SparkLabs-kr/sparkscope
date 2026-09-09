@@ -325,5 +325,10 @@ export async function collectPopular(domain: 'ai' | 'bio'): Promise<PopularItem[
   const targets = SOURCES.filter(s => s.domain === domain);
   if (targets.length === 0) return [];
   const results = await Promise.all(targets.map(fetchOne));
+  // 어느 소스가 읽혔는지 한 줄로 남긴다. 매체가 데이터센터 IP를 막으면 로컬에서는
+  // 되고 프로덕션에서만 조용히 0건이 되는데(FierceBiotech 403), 그러면 순위가
+  // 왜 다른지 알 수 없다. 실패는 fetchOne이 따로 남기므로 여기서는 성공 건수만 센다.
+  console.log('[news-popular]', domain,
+    targets.map((t, i) => `${t.name}=${results[i].length}`).join(' '));
   return results.flat();
 }

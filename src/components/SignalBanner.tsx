@@ -264,11 +264,15 @@ function Hero({ item, locale }: { item: DigestItem; locale: string }) {
         )}
         {/* 경쟁 매체 여럿이 같은 사안을 1면에 걸었다 — 함께 보도한 것보다 강한 근거라
             먼저 보여준다(news-digest.ts의 headlineOutlets). */}
-        {item.headlineOutlets >= 2 && (
+        {item.headlineOutlets >= 2 ? (
           <span className="text-[11.5px] font-bold text-rose-600">
             📰 {t('{n}개 매체가 1면 헤드라인', { n: item.headlineOutlets })}
           </span>
-        )}
+        ) : item.headlineRank === 1 ? (
+          <span className="text-[11.5px] font-bold text-rose-600">
+            📰 {t('{s} 머리기사', { s: item.source })}
+          </span>
+        ) : null}
         {/* 지표 소스(리포트·벤더 블로그·뉴스레터)는 뉴스로 띄우지 않는다. 대신 같은
             사안을 다뤘다는 사실만 근거로 밝힌다 — 1차 출처 확인이나 의제 신호다. */}
         {item.indicators.length > 0 && (
@@ -277,7 +281,7 @@ function Hero({ item, locale }: { item: DigestItem; locale: string }) {
           </span>
         )}
         {/* 여러 매체가 동시에 다뤘다는 것 자체가 이 기사를 1위로 만든 근거다. */}
-        {item.headlineOutlets < 2 && item.alsoIn.length > 0 && (
+        {item.headlineOutlets < 2 && item.headlineRank !== 1 && item.alsoIn.length > 0 && (
           <span className="text-[11.5px] font-bold text-rose-600">
             🔥 {t('{n}개 매체가 함께 보도', { n: item.alsoIn.length + 1 })}
           </span>
@@ -491,6 +495,8 @@ function StripCard({ item, locale, open, onToggle }: {
         <span className="tabular-nums">{item.publishedAt}</span>
         {item.headlineOutlets >= 2 ? (
           <span className="font-semibold text-rose-600">{t('{n}개 1면', { n: item.headlineOutlets })}</span>
+        ) : item.headlineRank === 1 ? (
+          <span className="font-semibold text-rose-600">{t('머리기사')}</span>
         ) : item.alsoIn.length > 0 ? (
           <span className="font-semibold text-emerald-700">{t('+{n}개 매체', { n: item.alsoIn.length })}</span>
         ) : null}

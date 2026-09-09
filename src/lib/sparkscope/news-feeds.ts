@@ -116,6 +116,12 @@ export const FEEDS: Feed[] = [
   // ── 바이오 전문지 ──
   { name: 'STAT News', url: 'https://www.statnews.com/feed/', domain: 'bio', tier: 1 },
   { name: 'Endpoints News', url: 'https://endpts.com/feed/', domain: 'bio', tier: 1 },
+  // ⚠️ fiercebiotech.com 은 데이터센터 IP를 막는다 — 로컬에서는 200인데 Vercel
+  //    서버리스에서는 RSS·홈페이지 모두 403이다(2026-09-08 프로덕션 로그로 확인).
+  //    즉 프로덕션에서 이 피드는 실제로 0건이고, 헤드라인 수집도 같이 막힌다.
+  //    IP 문제라 UA를 바꿔도 풀리지 않는다. 남겨 두는 이유는 로컬·다른 실행 환경에서는
+  //    유효하고, 열리면 곧바로 다시 쓰이기 때문이다. 접근성은 .github/workflows/
+  //    probe-sources.yml 로 환경별로 확인한다.
   { name: 'Fierce Biotech', url: 'https://www.fiercebiotech.com/rss/xml', domain: 'bio', tier: 2 },
   { name: 'In the Pipeline', url: 'https://news.google.com/rss/search?q=when:14d+site:science.org+%22In+the+Pipeline%22&hl=en-US&gl=US&ceid=US:en', domain: 'bio', tier: 2, independent: true },
   { name: 'Ground Truths (Eric Topol)', url: 'https://erictopol.substack.com/feed', domain: 'bio', tier: 2, independent: true },
