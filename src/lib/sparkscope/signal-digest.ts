@@ -47,6 +47,8 @@ function renderRow(it: FeedItem): string {
     ? '<span class="s-tag s-t-news">뉴스</span>'
     : '<span class="s-tag s-t-sig">커뮤니티</span>';
 
+  // 커뮤니티 분기는 지금 쓰이지 않는다(2026-09-09부터 메일에는 뉴스만 나간다).
+  // FeedItem 타입에 두 종류가 그대로 있고 파트너 쪽에서 되살릴 수 있으므로 남겨 둔다.
   // 카드는 종류에 따라 색을 달리한다 — 뉴스(보라)와 커뮤니티(주황)가 한 줄씩
   // 번갈아 나오는데, 같은 색이면 다섯 장이 하나의 덩어리로 뭉개져 보인다.
   return `
@@ -67,7 +69,7 @@ export function renderSignalSection(feed: SignalFeed | null): string {
   <div class="signal-sec">
     <div class="s-head-big">🤖 이번 주 AI 트렌드 TOP ${feed.items.length}</div>
     <div class="s-sub">
-      신뢰할 수 있는 매체의 보도와 개발자·연구자 커뮤니티에서 화제인 글을 함께 세운 순위입니다.
+      여러 매체가 함께 다룬 사안과 1면 헤드라인을 기준으로 세운 순위입니다.
       대시보드 Inter 탭 AI 도메인과 같은 기준입니다.
     </div>
     ${feed.items.map(renderRow).join('\n')}

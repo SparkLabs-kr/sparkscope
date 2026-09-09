@@ -4,46 +4,35 @@
  * 같은 "이번 주 AI 트렌드"를 두 곳에 내보내는데, 고르는 규칙이 갈라지면 메일과 파트너
  * 배너에 서로 다른 목록이 뜬다. 그래서 선정은 여기 한 곳에서만 한다.
  *
- * 뉴스("오늘의 시그널")와 커뮤니티 글("소셜 시그널")을 섞어 하나의 순위 5건을 만든다.
+ * 뉴스만 넣는다(2026-09-09 결정). 예전에는 커뮤니티 글도 섞어 5건을 만들었는데,
+ * 커뮤니티의 역할은 대시보드에서 뉴스를 뒷받침하는 것이지 그 자체로 트렌드를
+ * 말하는 것이 아니다. 실제로 메일에 나간 초안에서 다섯 칸 중 두 칸이 Hugging Face
+ * 모델 ID였고(Qwen3.8-27B, Qwopus3.8-27B-Flash-GGUF — 뒤쪽은 앞쪽의 파생 모델이다),
+ * "이번 주 AI 트렌드"로 읽기에 약했다. 커뮤니티 반응은 대시보드의 이름 카드에서
+ * 기사 옆에 붙어 제 역할을 한다(entity-cards.ts).
  *
- * ⚠️ 점수를 그대로 비교하면 안 된다.
- *    소스별 점수 규모가 네 자릿수 차이다 — HF 다운로드 60,343 / HN 업보트 2,288 /
- *    Lobsters 업보트 13 / arXiv 0. 원점수로 한 줄 세우면 HF가 5칸을 다 먹고,
- *    뉴스는 점수 개념이 아예 없어서 순위에 들어오지도 못한다.
- *
- *    그래서 원점수를 버리고 "자기 소스 안에서 몇 등인가"로 환산한다(1/등수).
- *    같은 소스의 두 번째 항목은 절반, 세 번째는 1/3이 되므로 한 소스가 목록을
- *    독점하지 않고 자연스럽게 여러 소스가 섞인다.
+ * 점수 환산 방식은 그대로 둔다. 지금은 뉴스 하나뿐이라 "1/등수"가 곧 원래 순위지만,
+ * 소스가 다시 늘어날 때 규모가 다른 점수를 섞는 문제가 되돌아온다 — 예전에 HF
+ * 다운로드 60,343과 Lobsters 업보트 13을 한 줄로 세우려다 겪은 문제다.
  */
 import { collectDigest, type DigestItem } from './news-digest';
 import { ensureSummaries } from './news-summary';
-import { readSignals } from './social-store';
-import { DOMAIN_SOURCES, SOURCE_META } from './social-collect';
 
 /** 메일·파트너 모두 합쳐서 5건. */
 export const TOP_N = 5;
 /** 조회 창 — 다이제스트가 월·수·금이라 직전 발송 이후를 덮으려면 이 정도가 필요하다. */
 const NEWS_DAYS = 7;
-const SIGNAL_HOURS = 24 * 14;
 
 /**
  * 소스별 가중치 — "같은 등수라면 어느 쪽을 위에 둘까".
  *
- * 뉴스가 가장 높다. 여러 매체가 각자 취재해 같은 사안을 다뤘다는 것은 편집자 여럿이
- * 독립적으로 중요하다고 판단했다는 뜻이라, 커뮤니티 업보트보다 무거운 신호다.
- * 그다음이 실무자 검증이 붙는 HN, 모델 공개(HF), 나머지 순.
- * Reddit이 가장 낮은 것은 지금 점수를 못 받아 최신순이기 때문이다 — OAuth 승인이
- * 나면 이 값을 올려야 한다.
+ * 지금은 뉴스만 쓰므로 실질적으로 상수 하나다. 나머지 값은 커뮤니티를 다시 넣을 때
+ * 쓰던 기준을 기록으로 남긴 것이다: 뉴스 1.0 > HN 0.85 > HF 0.8 > HF 신규 0.7 >
+ * Lobsters 0.6 > arXiv 0.55 > Reddit 0.45. 뉴스가 가장 높은 이유는 여러 매체가
+ * 각자 취재해 같은 사안을 다뤘다는 것이 편집자 여럿의 독립적인 판단이라 커뮤니티
+ * 업보트보다 무거운 신호이기 때문이다.
  */
-const SOURCE_WEIGHT: Record<string, number> = {
-  news: 1.0,
-  hn: 0.85,
-  hf: 0.8,
-  hf_new: 0.7,
-  lobsters: 0.6,
-  arxiv: 0.55,
-  reddit: 0.45,
-};
+const SOURCE_WEIGHT = { news: 1.0 } as const;
 
 export interface FeedItem {
   rank: number;
@@ -91,6 +80,8 @@ type Candidate = Omit<FeedItem, 'rank'> & { score: number };
 
 async function newsCandidates(): Promise<Candidate[]> {
   const { items } = await collectDigest('ai', NEWS_DAYS, TOP_N * 2);
+  // 커뮤니티를 빼면서 다섯 칸을 전부 뉴스로 채운다 — 예전에는 절반이 커뮤니티라
+  // 뉴스 후보를 TOP_N까지만 만들면 됐다.
   const top = items.slice(0, TOP_N);
   // 요약이 없으면 채운다. 이미 있는 기사는 캐시에서 나오므로 다시 과금되지 않는다.
   await ensureSummaries(top).catch(e => console.error('[signal-feed] 요약 실패(무시):', e));
@@ -120,37 +111,6 @@ async function newsCandidates(): Promise<Candidate[]> {
   }));
 }
 
-async function signalCandidates(): Promise<Candidate[]> {
-  const ids = DOMAIN_SOURCES.ai;
-  const bySource = await readSignals('ai', ids, Date.now() - SIGNAL_HOURS * 3600_000, TOP_N);
-
-  const out: Candidate[] = [];
-  for (const id of ids) {
-    (bySource.get(id) ?? []).forEach((row, i) => {
-      out.push({
-        kind: 'signal',
-        title: row.title,
-        titleKo: row.titleKo ?? null,
-        url: row.url,
-        source: SOURCE_META[id]?.label ?? id,
-        sourceId: id,
-        publishedAt: row.publishedAt ? row.publishedAt.toISOString().slice(0, 10) : null,
-        author: row.author ?? null,
-        points: row.peakPoints > 0 ? row.peakPoints : null,
-        pointsLabel: row.pointsLabel ?? null,
-        comments: row.comments || null,
-        alsoInCount: null,
-        headlineOutlets: null,
-        indicatorSources: [],
-        summaryKo: null,
-        summaryEn: null,
-        blurb: row.blurb ?? null,
-        score: (1 / (i + 1)) * (SOURCE_WEIGHT[id] ?? 0.5),
-      });
-    });
-  }
-  return out;
-}
 
 /**
  * 뉴스와 커뮤니티를 섞어 TOP 5를 만든다.
@@ -160,12 +120,10 @@ async function signalCandidates(): Promise<Candidate[]> {
  *    연결은 바로 위 '글로벌 트렌드 × 포트폴리오' 섹션의 몫이다.
  */
 export async function buildSignalFeed(): Promise<SignalFeed> {
-  const [news, signals] = await Promise.all([
-    newsCandidates().catch(e => { console.error('[signal-feed] 뉴스 실패:', e); return [] as Candidate[]; }),
-    signalCandidates().catch(e => { console.error('[signal-feed] 소셜 실패:', e); return [] as Candidate[]; }),
-  ]);
+  const news = await newsCandidates()
+    .catch(e => { console.error('[signal-feed] 뉴스 실패:', e); return [] as Candidate[]; });
 
-  const items = [...news, ...signals]
+  const items = news
     .sort((a, b) => b.score - a.score)
     .slice(0, TOP_N)
     .map(({ score, ...rest }, i) => ({ rank: i + 1, ...rest }));
