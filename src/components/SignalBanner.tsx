@@ -108,9 +108,7 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
        빈 자리가 크게 남았다. 오른쪽 한 줄로 세우면 그 빈 자리가 사라지고,
        뉴스를 읽다가 바로 옆에서 반응을 확인할 수 있다.
        좁은 화면에서는 그대로 위아래로 쌓인다. */
-    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_384px] gap-4">
-    {/* 두 열이 같은 높이로 늘어난다(grid 기본 stretch). 한쪽이 짧으면 그 아래가
-        페이지 배경으로 뚫려 보이는데, 카드가 늘어나면 그 자리가 카드 안이 된다. */}
+    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_384px] gap-4 items-start">
     <div className="bg-white border border-spark-border rounded-2xl p-5">
       <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5">
         <h2 className="text-[19px] font-extrabold tracking-tight">📡 {t('오늘의 시그널')}</h2>
@@ -202,7 +200,7 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
         ) : (
           /* 좁은 열이라 한 줄로 세운다. 좁은 화면에서는 아래로 내려가므로 2열까지 허용해
              가로로 늘어지는 것을 막는다. */
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 gap-2.5 mt-4 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 gap-2 mt-3.5 items-start">
             {digest.entities.map(c => <EntityCardView key={c.key} card={c} locale={locale} />)}
           </div>
         )}
@@ -220,57 +218,84 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
  */
 function EntityCardView({ card, locale }: { card: EntityCard; locale: string }) {
   const t = useT();
+  // 기본은 접힌 상태다(2026-09-09). 여섯 카드를 다 펼치면 오른쪽 열이 뉴스보다 세 배
+  // 길어져서 왼쪽 아래가 빈칸으로 남았다. 이름과 숫자만 보이면 "지금 무엇이 화제인가"는
+  // 그대로 읽히고, 근거가 궁금할 때만 펼치면 된다.
+  const [open, setOpen] = useState(false);
   const communityLabel = card.communityKind === 'reaction' ? t('커뮤니티 반응') : t('새로 등록된 연구·임상');
+  const topPoints = card.community[0]?.points ?? 0;
 
   return (
-    <article className="rounded-xl border border-spark-border overflow-hidden flex flex-col">
-      <div className="flex items-center gap-2 px-3.5 py-2.5 bg-spark-subtle border-b border-spark-border">
+    <article className="rounded-xl border border-spark-border overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center gap-2 px-3.5 py-2.5 text-left bg-spark-subtle hover:bg-spark-light-purple/40 transition-colors"
+      >
         <span className="text-[15px] font-extrabold tracking-tight">{card.label}</span>
-        <span className="ml-auto text-right text-[10.5px] font-bold text-spark-muted tabular-nums leading-tight">
-          {card.outlets > 0 && <>{t('매체 {n}곳', { n: card.outlets })}<br /></>}
-          {card.community.length > 0 && t('커뮤니티 {n}건', { n: card.community.length })}
-        </span>
-      </div>
-
-      <div className="px-3.5 py-3 flex flex-col gap-2.5">
-        {card.articles.length > 0 ? (
-          <>
-            <span className="text-[10.5px] font-extrabold tracking-wider uppercase text-spark-muted">{t('기사')}</span>
-            {card.articles.map(a => (
-              <a key={a.url} href={a.url} target="_blank" rel="noopener noreferrer"
-                 className="flex gap-2 text-[12.5px] leading-snug text-spark-ink-soft hover:text-spark-purple">
-                <span className="shrink-0 w-[68px] text-[10.5px] font-bold text-spark-muted truncate">{a.source}</span>
-                <span className="line-clamp-2">{a.title}</span>
-              </a>
-            ))}
-          </>
-        ) : (
-          // 기사가 없는 카드 — 커뮤니티가 매체보다 먼저 아는 주제다. 그 사실을 그대로 말한다.
-          <p className="text-[11.5px] text-spark-muted">{t('아직 우리 매체 목록에서는 다뤄지지 않았습니다.')}</p>
-        )}
-
-        {card.community.length > 0 && (
-          <div className="border-t border-dashed border-spark-border-strong pt-2.5 flex flex-col gap-2">
-            <span className={`text-[10.5px] font-extrabold tracking-wider uppercase ${
-              card.communityKind === 'reaction' ? 'text-rose-600' : 'text-spark-muted'}`}>
-              {communityLabel}
+        {/* 접힌 상태에서도 근거의 크기는 보여준다 — 숫자가 없으면 왜 이 이름이
+            여기 있는지 알 수 없다. */}
+        <span className="flex items-center gap-1.5 text-[10.5px] font-bold tabular-nums">
+          {card.outlets > 0 && (
+            <span className="rounded-md bg-white border border-spark-border px-1.5 py-0.5 text-spark-ink-soft">
+              {t('매체 {n}', { n: card.outlets })}
             </span>
-            {card.community.map(r => (
-              <a key={r.url} href={r.url} target="_blank" rel="noopener noreferrer"
-                 className="flex gap-2 items-baseline text-[12.5px] leading-snug text-spark-ink-soft hover:text-spark-purple">
-                {r.points > 0 ? (
-                  <span className="shrink-0 min-w-[54px] text-center rounded-md bg-rose-50 px-1.5 py-0.5 text-[11px] font-bold text-rose-600 tabular-nums">
-                    {r.points.toLocaleString()}▲
-                  </span>
-                ) : (
-                  <span className="shrink-0 min-w-[54px] text-center text-[10.5px] font-bold text-spark-muted">{r.source}</span>
-                )}
-                <span className="line-clamp-2">{locale === 'ko' && r.titleKo ? r.titleKo : r.title}</span>
-              </a>
-            ))}
-          </div>
-        )}
-      </div>
+          )}
+          {topPoints > 0 && (
+            <span className="rounded-md bg-rose-50 px-1.5 py-0.5 text-rose-600">
+              {topPoints.toLocaleString()}▲
+            </span>
+          )}
+        </span>
+        <span className={`ml-auto shrink-0 text-spark-muted transition-transform ${open ? 'rotate-180' : ''}`}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </span>
+      </button>
+
+      {open && (
+        <div className="px-3.5 py-3 flex flex-col gap-2.5 border-t border-spark-border">
+          {card.articles.length > 0 ? (
+            <>
+              <span className="text-[10.5px] font-extrabold tracking-wider uppercase text-spark-muted">{t('기사')}</span>
+              {card.articles.map(a => (
+                <a key={a.url} href={a.url} target="_blank" rel="noopener noreferrer"
+                   className="flex gap-2 text-[12.5px] leading-snug text-spark-ink-soft hover:text-spark-purple">
+                  <span className="shrink-0 w-[68px] text-[10.5px] font-bold text-spark-muted truncate">{a.source}</span>
+                  <span className="line-clamp-2">{a.title}</span>
+                </a>
+              ))}
+            </>
+          ) : (
+            // 기사가 없는 카드 — 커뮤니티가 매체보다 먼저 아는 주제다. 그 사실을 그대로 말한다.
+            <p className="text-[11.5px] text-spark-muted">{t('아직 우리 매체 목록에서는 다뤄지지 않았습니다.')}</p>
+          )}
+
+          {card.community.length > 0 && (
+            <div className="border-t border-dashed border-spark-border-strong pt-2.5 flex flex-col gap-2">
+              <span className={`text-[10.5px] font-extrabold tracking-wider uppercase ${
+                card.communityKind === 'reaction' ? 'text-rose-600' : 'text-spark-muted'}`}>
+                {communityLabel}
+              </span>
+              {card.community.map(r => (
+                <a key={r.url} href={r.url} target="_blank" rel="noopener noreferrer"
+                   className="flex gap-2 items-baseline text-[12.5px] leading-snug text-spark-ink-soft hover:text-spark-purple">
+                  {r.points > 0 ? (
+                    <span className="shrink-0 min-w-[54px] text-center rounded-md bg-rose-50 px-1.5 py-0.5 text-[11px] font-bold text-rose-600 tabular-nums">
+                      {r.points.toLocaleString()}▲
+                    </span>
+                  ) : (
+                    <span className="shrink-0 min-w-[54px] text-center text-[10.5px] font-bold text-spark-muted">{r.source}</span>
+                  )}
+                  <span className="line-clamp-2">{locale === 'ko' && r.titleKo ? r.titleKo : r.title}</span>
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </article>
   );
 }

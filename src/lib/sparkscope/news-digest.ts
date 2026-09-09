@@ -536,12 +536,19 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
     (b.importance ?? 3) - (a.importance ?? 3) ||
     b.headlineOutlets - a.headlineOutlets ||
     hrank(a) - hrank(b) ||
-    // 지표(리포트·벤더 블로그·뉴스레터)가 같은 사안을 다뤘나. 1면 합의보다는 약하지만
-    // 조회수보다는 앞이다 — 그 주제가 업계 의제에 올랐다는 뜻이다. 중요도 바닥은
-    // 깔아주지 않는다: 오피니언은 사건보다 느리게 움직여서 과대평가하기 쉽다.
-    b.indicatorOutlets - a.indicatorOutlets ||
     rank(a) - rank(b) ||
     b.alsoIn.length - a.alsoIn.length ||
+    // 지표(리포트·벤더 블로그·뉴스레터)는 여기까지 다 같을 때만 본다.
+    //
+    // 처음에는 인기 등수보다 앞에 뒀는데 그게 틀렸다(2026-09-09). 벤더 블로그는
+    // 제품을 낼 때마다 반드시 쓰므로 선별적인 신호가 아니다 — "딥마인드가 블로그에
+    // 썼다"는 사실은 구글이 뭔가를 냈다는 것 이상을 말해 주지 않는다. 반면 인기
+    // 1위와 "다른 매체 2곳도 보도"는 누군가가 실제로 골랐다는 뜻이다.
+    //
+    // 그 순서 때문에 실제로 이런 일이 났다: '제미나이 3.8 플래시'(지표1·인기2위·함께0)가
+    // 'GPT-6 아스트라'(지표0·인기1위·함께2)를 제치고 1위로 올라왔다. 더 약한 근거가
+    // 더 강한 근거를 이긴 것이다.
+    b.indicatorOutlets - a.indicatorOutlets ||
     // 다른 게 같으면 해외 매체를 먼저 둔다. 이 화면은 해외 트렌드를 보는 자리이고,
     // 국내 매체가 전한 해외 소식은 원 매체가 쓴 것보다 한 다리 건넌 것이다.
     // 강한 기준은 아니다 — 신호가 확실하면(GPT-6 아스트라처럼 인기 1위 + 여러 매체)
@@ -656,7 +663,13 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
         (m, g) => (g.popularRank == null ? m : m == null ? g.popularRank : Math.min(m, g.popularRank)), null),
       alsoIn: [...outlets.entries()].map(([source, url]) => ({ source, url })),
       // 요약 근거도 합친다 — 매체마다 강조점이 달라 한 곳만 볼 때보다 두터워진다.
-      sourceText: group.map(g => g.sourceText).filter(Boolean).slice(0, 3).join('\n\n---\n\n') || null,
+      //
+      // 대표 기사의 본문을 반드시 맨 앞에 둔다. 순서를 안 정해 두면 병합이 조금이라도
+      // 틀렸을 때 제목과 요약이 서로 다른 사건을 말한다 — 실제로 '제미나이 3.8 플래시'
+      // 제목에 '웨더넥스트 3' 요약이 붙어 나갔다(2026-09-09). 요약이 제목을 배신하는
+      // 것은 병합 오류보다 더 나쁘게 읽힌다.
+      sourceText: [rep, ...group.filter(g => g !== rep)]
+        .map(g => g.sourceText).filter(Boolean).slice(0, 3).join('\n\n---\n\n') || null,
       blurb: rep.blurb ?? group.find(g => g.blurb)?.blurb ?? null,
     }];
   });
