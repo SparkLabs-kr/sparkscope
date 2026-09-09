@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/authz';
-import { getRequest, markDecided, canApproveAccess } from '@/lib/sparkscope/access-request';
+import { getRequest, markDecided, canApproveAccess, accessApprovers } from '@/lib/sparkscope/access-request';
 import { sendNotice } from '@/lib/sparkscope/mailer';
 
 export const runtime = 'nodejs';
@@ -42,6 +42,26 @@ export async function POST(req: NextRequest) {
 
   if (decision === 'deny') {
     await markDecided(token, 'denied', auth.user.email);
+
+    /**
+     * 거절도 알린다. 알리지 않으면 신청한 사람은 거절된 건지 요청이 사라진
+     * 건지 알 수 없고, 기다리는 것 말고 할 수 있는 일이 없다. 로그인해 보면
+     * "아직 로그인할 수 없습니다"가 떠서 고장으로 읽힌다.
+     *
+     * 사유는 쓰지 않는다 — 승인 화면에서 사유를 입력받지 않으므로 여기서
+     * 지어내면 없는 이유를 만드는 셈이다. 대신 물어볼 곳을 준다.
+     */
+    const reviewer = accessApprovers()[0] ?? 'marketing@sparklabs.co.kr';
+    await sendNotice(
+      request.email,
+      '[SparkScope] 접근 요청 결과',
+      [
+        `${request.name} 님, 요청하신 SparkScope 접근이 승인되지 않았습니다.`,
+        '',
+        `문의는 ${reviewer} 로 연락해 주세요.`,
+      ].join('\n'),
+    ).catch(e => console.error('[access-request] 거절 알림 실패:', e));
+
     return NextResponse.json({ ok: true, status: 'denied' });
   }
 
@@ -94,7 +114,7 @@ export async function POST(req: NextRequest) {
       `아래에서 이 메일 주소(${request.email})를 입력하면 로그인 링크를 보내드립니다.`,
       `${base}/login`,
       '',
-      `${company.name} 관련 자료를 보실 수 있습니다.`,
+      `${company.name} 계정으로 SparkScope 를 열람하실 수 있습니다(열람 전용).`,
     ].join('\n'),
   ).catch(e => console.error('[access-request] 승인 알림 실패:', e));
 
