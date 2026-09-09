@@ -5,7 +5,10 @@ import { NextResponse } from 'next/server';
 import { runDailyDigest } from '@/lib/sparkscope/runner';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60; // 발송만이므로 60초로 충분
+// 발송만 하므로 원래 60초였는데, AI 시그널 섹션이 사전계산을 못 찾으면 그 자리에서
+// 목록을 만든다(signal-feed.ts). 그게 최악의 경우 2분 넘게 걸려서 60초로는 발송
+// 전체가 타임아웃될 수 있다. 넉넉히 잡는다 — 평소에는 사전계산을 읽어 1초도 안 걸린다.
+export const maxDuration = 300;
 
 export async function GET(req: Request) {
   // 인증: Vercel Cron이 보내는 Authorization 헤더 검증

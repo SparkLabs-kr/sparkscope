@@ -87,10 +87,16 @@ type Candidate = Omit<FeedItem, 'rank'> & { score: number };
  * 목록이 갈린다. 사전계산이 이미 DB에 있으니(digest-store) 그것을 읽는 것이 맞다.
  * 빠르기도 하다(12초 → 0.1초).
  *
- * 사전계산이 없거나 오래됐으면 그 자리에서 만든다 — 메일에 섹션이 비는 것보다 낫다.
+ * 허용 나이를 대시보드보다 길게(36시간) 잡는다. 대시보드는 사람이 지금 보는 화면이라
+ * 오래된 목록을 띄우면 안 되지만, 메일은 월·수·금 발송이고 발송 시각에 목록을 새로
+ * 만들다 타임아웃되는 것이 훨씬 나쁘다. 크론이 2시간마다 채우므로 평소에는 2시간 이내이고,
+ * 이 창은 크론이 멈췄을 때만 쓰인다 — 그때 "조금 지난 목록"과 "섹션 없는 메일" 중
+ * 앞을 고른 것이다.
  */
+const MAIL_MAX_AGE_MS = 36 * 3600_000;
+
 async function newsItems(): Promise<DigestItem[]> {
-  const cached = await readDigest('ai', NEWS_DAYS).catch(() => null);
+  const cached = await readDigest('ai', NEWS_DAYS, MAIL_MAX_AGE_MS).catch(() => null);
   if (cached?.items.length) return cached.items as DigestItem[];
   console.log('[signal-feed] 사전계산 없음 — 즉석 계산');
   const { items } = await collectDigest('ai', NEWS_DAYS, TOP_N * 2);
