@@ -91,6 +91,33 @@ export const FEEDS: Feed[] = [
   // venturebeat.com/feed 는 Vercel 봇 검문(429)에 막힌다. 피드버너 주소는 열려 있다.
   { name: 'VentureBeat', url: 'https://feeds.feedburner.com/venturebeat/SZYF', domain: 'general', tier: 2 },
 
+  // ── Inter 수집 파이프라인에서 가져온 매체 (2026-09-09) ──
+  //
+  // inter-collect.ts가 이미 검증해 둔 목록이다. 같은 매체를 두 곳에서 긁고 있었는데
+  // 오늘의 시그널 쪽 목록에는 없어서 배너·키워드 선정에 쓰이지 않았다.
+  // 겹치는 곳(The Verge·Ars·MIT TR·STAT·Endpoints·FT·VentureBeat)은 여기 다시 넣지
+  // 않는다 — 같은 피드가 두 이름으로 들어오면 "함께 보도한 매체 수"가 부풀려진다.
+  //
+  // 넣지 않은 것:
+  //  · WSJ(RSSWSJD.xml) — 2025-01에 멈춘 죽은 피드다(위 주석 참고).
+  //  · Fierce Biotech — Cloudflare 차단으로 뺐다. 1면 스크랩만 쓴다.
+  //  · Impress Watch — 일본어 종합 IT라 domain을 'ai'로 두면 소비자 가전 기사가
+  //    쏟아진다. 영어 키워드 판정('general')으로는 일본어가 전부 걸러지므로 방법이 없다.
+  { name: 'TechCrunch', url: 'https://techcrunch.com/feed/', domain: 'general', tier: 2 },
+  { name: 'Wired', url: 'https://www.wired.com/feed/rss', domain: 'general', tier: 2 },
+  { name: 'Bloomberg', url: 'https://feeds.bloomberg.com/markets/news.rss', domain: 'general', tier: 1 },
+  { name: 'New York Times Tech', url: 'https://feeds.nytimes.com/nyt/rss/technology', domain: 'general', tier: 1 },
+  { name: 'CB Insights', url: 'https://www.cbinsights.com/research/feed/', domain: 'general', tier: 3 },
+
+  // 아시아·중동 — 영어 매체라 종합지와 같은 키워드 판정을 받는다.
+  { name: 'TechNode', url: 'https://technode.com/feed/', domain: 'general', tier: 2 },
+  { name: 'SCMP Tech', url: 'https://www.scmp.com/rss/36/feed', domain: 'general', tier: 2 },
+  { name: 'Wamda', url: 'https://www.wamda.com/feed', domain: 'general', tier: 3 },
+  // 일본어 피드는 영어 키워드 판정을 통과할 수 없으므로 전용 도메인으로 둔다.
+  // 두 곳 다 주제가 좁아서(AI 전문·제약 전문) 그렇게 둬도 엉뚱한 기사가 들어오지 않는다.
+  { name: 'ITmedia AI+', url: 'https://rss.itmedia.co.jp/rss/2.0/aiplus.xml', domain: 'ai', tier: 3 },
+  { name: 'AnswersNews', url: 'https://answers.and-pro.jp/pharmanews/feed/', domain: 'bio', tier: 3 },
+
   // ── 한국 AI 전문지 ──
   //
   // ⚠️ domain을 'general'로 두면 안 된다. 종합지는 글마다 DOMAIN_KEYWORDS로 분야를
@@ -121,6 +148,19 @@ export const FEEDS: Feed[] = [
 
   // ── 바이오 전문지 ──
   { name: 'STAT News', url: 'https://www.statnews.com/feed/', domain: 'bio', tier: 1 },
+  // Inter 파이프라인에서 가져온 바이오 전문지·학술지 (2026-09-09).
+  // 학술지(Nature·Cell·Science)를 tier 2로 두는 이유: 1차 연구는 신뢰도가 가장 높지만
+  // "업계에 무슨 일이 일어났나"의 대표 기사로는 업계지가 더 알맞다.
+  { name: 'BioPharma Dive', url: 'https://www.biopharmadive.com/feeds/news/', domain: 'bio', tier: 1 },
+  { name: 'BioCentury', url: 'https://www.biocentury.com/rss/news.xml', domain: 'bio', tier: 2 },
+  // Nature·Science는 'bio'가 아니라 'general'이다. 종합 과학지라 물리·기후·AI 기사가
+  // 함께 오는데, 'bio' 전용 피드로 두면 그게 전부 바이오 탭에 들어온다 — 실제로
+  // "OpenAI가 수학 밀레니엄 문제를 풀었다"(Nature)가 바이오 3위에 올라왔다(2026-09-09).
+  // 'general'로 두면 글마다 키워드로 분야를 가른다. 제목이 영어라 판정이 작동한다.
+  { name: 'Nature', url: 'https://www.nature.com/nature.rss', domain: 'general', tier: 2 },
+  { name: 'Science', url: 'https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=science', domain: 'general', tier: 2 },
+  // Cell은 세포생물학 전문지라 들어오는 글이 전부 바이오다.
+  { name: 'Cell', url: 'https://www.cell.com/action/showFeed?ui=0&mi=0&ai=n2h&jc=cell&type=etoc&feed=rss', domain: 'bio', tier: 2 },
   { name: 'Endpoints News', url: 'https://endpts.com/feed/', domain: 'bio', tier: 1 },
   // Fierce Biotech RSS는 뺐다(2026-09-09). Cloudflare 봇 차단으로 Vercel에서 403이고,
   // GitHub Actions로 옮길 수도 있었지만 "막히는 매체는 그냥 뺀다"로 정했다.
