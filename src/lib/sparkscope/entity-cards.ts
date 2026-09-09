@@ -39,7 +39,15 @@ export interface EntityCard {
   label: string;
   /** 이 이름을 다룬 서로 다른 매체 수. 카드 순위의 1순위 기준이다. */
   outlets: number;
-  articles: { source: string; title: string; url: string }[];
+  /**
+   * 이 이름을 다룬 기사. alsoIn은 같은 사안을 함께 보도한 다른 매체다.
+   *
+   * 이걸 함께 들고 오는 이유: outlets(매체 수)는 함께 보도한 곳까지 세는데 articles는
+   * 사건 단위라, 헤더에 "매체 5곳"이라고 써 놓고 기사는 2건만 보이는 일이 생겼다
+   * (2026-09-09 실측: 메타 카드의 다섯 매체 중 셋이 Reuters 기사의 alsoIn 안에
+   * 숨어 있었다). 숫자와 목록이 어긋나면 숫자를 신뢰할 수 없다.
+   */
+  articles: { source: string; title: string; url: string; alsoIn: { source: string; url: string }[] }[];
   community: CommunityPost[];
   /** 이 이름이 등장한 전체 항목 수. 회사인지 제품인지를 가르는 데 쓴다 — 회사가 더 넓게 나온다. */
   mentions: number;
@@ -167,7 +175,12 @@ export async function buildEntityCards(
       a.outlets.add(it.source);
       for (const x of it.alsoIn) a.outlets.add(x.source);
       if (a.articles.length < MAX_ARTICLES && !a.articles.some(x => x.url === it.url)) {
-        a.articles.push({ source: it.source, title: it.summary?.titleKo || it.title, url: it.url });
+        a.articles.push({
+          source: it.source,
+          title: it.summary?.titleKo || it.title,
+          url: it.url,
+          alsoIn: it.alsoIn,
+        });
       }
     }
   }

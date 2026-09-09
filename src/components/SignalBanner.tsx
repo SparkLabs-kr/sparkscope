@@ -261,11 +261,25 @@ function EntityCardView({ card, locale }: { card: EntityCard; locale: string }) 
             <>
               <span className="text-[10.5px] font-extrabold tracking-wider uppercase text-spark-muted">{t('기사')}</span>
               {card.articles.map(a => (
-                <a key={a.url} href={a.url} target="_blank" rel="noopener noreferrer"
-                   className="flex gap-2 text-[12.5px] leading-snug text-spark-ink-soft hover:text-spark-purple">
-                  <span className="shrink-0 w-[68px] text-[10.5px] font-bold text-spark-muted truncate">{a.source}</span>
-                  <span className="line-clamp-2">{a.title}</span>
-                </a>
+                <div key={a.url} className="flex flex-col gap-1">
+                  <a href={a.url} target="_blank" rel="noopener noreferrer"
+                     className="flex gap-2 text-[12.5px] leading-snug text-spark-ink-soft hover:text-spark-purple">
+                    <span className="shrink-0 w-[68px] text-[10.5px] font-bold text-spark-muted truncate">{a.source}</span>
+                    <span className="line-clamp-2">{a.title}</span>
+                  </a>
+                  {/* 함께 보도한 매체를 여기서 밝힌다 — 헤더의 "매체 N곳"에 세어져 있으면서
+                      목록에는 안 보이던 곳들이다. */}
+                  {a.alsoIn?.length > 0 && (
+                    <div className="ml-[76px] flex flex-wrap gap-x-2.5 gap-y-0.5 text-[10.5px]">
+                      {a.alsoIn.map(x => (
+                        <a key={x.url} href={x.url} target="_blank" rel="noopener noreferrer"
+                           className="text-spark-muted hover:text-spark-purple hover:underline">
+                          {t('{s} 원문 보기', { s: x.source })} ↗
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
             </>
           ) : (
@@ -372,10 +386,12 @@ function Hero({ item, locale }: { item: DigestItem; locale: string }) {
            className="font-semibold text-spark-purple hover:underline">
           {t('원문 보기')} ↗
         </a>
-        {item.alsoIn.slice(0, 4).map(a => (
+        {/* 같은 사안을 다룬 다른 매체의 원문도 각각 연다. 매체명만 있던 때는 그게
+            링크인지, 눌렀을 때 어디로 가는지 알기 어려웠다(2026-09-09 피드백). */}
+        {item.alsoIn.map(a => (
           <a key={a.url} href={a.url} target="_blank" rel="noopener noreferrer"
              className="text-spark-muted hover:text-spark-purple hover:underline">
-            {a.source} ↗
+            {t('{s} 원문 보기', { s: a.source })} ↗
           </a>
         ))}
       </div>
@@ -441,6 +457,9 @@ function StripCard({ item, locale, open, onToggle }: {
         ) : item.alsoIn.length > 0 ? (
           <span className="font-semibold text-emerald-700">{t('+{n}개 매체', { n: item.alsoIn.length })}</span>
         ) : null}
+        {item.headlineOutlets >= 2 && item.alsoIn.length > 0 && (
+          <span className="font-semibold text-emerald-700">{t('+{n}개 매체', { n: item.alsoIn.length })}</span>
+        )}
       </div>
 
       <button
@@ -485,10 +504,21 @@ function StripCard({ item, locale, open, onToggle }: {
         </p>
       )}
 
-      <a href={item.url} target="_blank" rel="noopener noreferrer"
-         className="inline-block mt-2 text-[11px] font-semibold text-spark-purple hover:underline">
-        {t('원문 보기')} ↗
-      </a>
+      {/* 원문 링크는 대표 매체와 함께 보도한 매체를 모두 나열한다 — "+2개 매체"라고만
+          써 두면 그 두 곳이 어디인지, 어떻게 가는지 알 수 없었다(2026-09-09 피드백).
+          접힌 상태에서는 대표만, 펼치면 전부 보여준다. */}
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+        <a href={item.url} target="_blank" rel="noopener noreferrer"
+           className="font-semibold text-spark-purple hover:underline">
+          {t('원문 보기')} ↗
+        </a>
+        {open && item.alsoIn.map(a => (
+          <a key={a.url} href={a.url} target="_blank" rel="noopener noreferrer"
+             className="text-spark-muted hover:text-spark-purple hover:underline">
+            {t('{s} 원문 보기', { s: a.source })} ↗
+          </a>
+        ))}
+      </div>
     </li>
   );
 }
