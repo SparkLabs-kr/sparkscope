@@ -59,7 +59,7 @@ function renderRow(it: FeedItem): string {
   return `
   <div class="signal-card ${it.kind === 'news' ? 'sc-news' : 'sc-sig'}${hero ? ' sc-hero' : ''}">
     <div class="s-card-top">
-      ${hero ? '<span class="s-lead">가장 큰 사안</span>' : `<span class="s-rank">${it.rank}</span>`}${kindTag}<span class="s-src">${esc(it.source)}</span>
+      ${hero ? '<span class="s-rank s-fire">🔥</span>' : `<span class="s-rank">${it.rank}</span>`}${kindTag}<span class="s-src">${esc(it.source)}</span>
     </div>
     <div class="s-title"><a href="${esc(it.url)}" target="_blank">${esc(title)}</a></div>
     ${meta.length ? `<div class="s-meta">${meta.join('')}</div>` : ''}
@@ -101,7 +101,9 @@ export const SIGNAL_EMAIL_CSS = `
 .signal-card.sc-hero{border-left-width:10px;border:1px solid #C4B5FD;border-left:10px solid #6D28D9;background:#EDE9FE;padding:19px 20px;margin-bottom:15px}
 .sc-hero .s-title{font-size:19px;font-weight:800;line-height:1.34}
 .sc-hero .s-desc{font-size:13.5px;color:#3F3D56;line-height:1.72}
-.s-lead{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:800;background:#6D28D9;color:#FFFFFF;margin-right:7px}
+/* 1번은 등수 숫자 자리에 불 하나만 둔다. 다른 카드의 숫자와 같은 자리·같은 폭이라
+   줄이 어긋나지 않고, 라벨 문구 없이도 "여기가 1번"이 읽힌다. */
+.s-fire{font-size:15px}
 
 .s-card-top{margin-bottom:9px;line-height:1.9}
 .s-rank{display:inline-block;min-width:19px;font-size:14px;font-weight:800;color:#6B7280}
