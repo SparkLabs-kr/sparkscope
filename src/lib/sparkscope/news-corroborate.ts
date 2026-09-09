@@ -23,6 +23,20 @@
  */
 import type { DigestItem } from './news-digest';
 
+/**
+ * 우리가 추적하는 매체로만 한정하는 방법은 시도했다가 버렸다(2026-09-09).
+ *
+ * 구글이 "Alabama Political Reporter"·"LatestLY" 같은 곳을 돌려주는 게 거슬려서
+ * FEEDS 목록에 있는 매체만 받게 해 봤는데, 수확이 0으로 붕괴했다 — AI 단독 보도
+ * 7건 중 0건, 바이오 10건 중 1건. 당연한 결과였다: 우리 목록은 이미 긁은 풀이라
+ * 구글이 거기서 새로 찾아 줄 것이 거의 없다. 붙는 것은 대부분 우리 목록 밖의
+ * 매체다(인공지능신문·디지털투데이·포춘코리아처럼 멀쩡한 곳들이다).
+ *
+ * 그래서 열어 두고, 확실히 걸러낼 수 있는 것만 막는다 — 도메인이 이름 자리에 온
+ * 경우(looksLikeDomain)와 이미 아는 매체(samePublisher). 그 대가로 이따금
+ * 재게시 사이트가 섞인다. 목록을 손으로 관리하는 대신 그 편을 택했다.
+ */
+
 /** 검색은 목록에 실제로 올라가는 것만 한다 — 후보 전체에 하면 낭비다. */
 const MAX_ITEMS = 12;
 /** 한 기사에 붙일 최대 매체 수. 너무 많으면 화면이 링크 줄로 덮인다. */
@@ -89,6 +103,26 @@ function overlaps(a: Set<string>, b: Set<string>, korean: boolean): boolean {
                 : n >= 3 && n / Math.min(a.size, b.size) >= 0.4;
 }
 
+/**
+ * 매체 이름 비교용 키. 이미 아는 매체가 다시 붙는 것을 막는다.
+ *
+ * 대소문자만 맞춰서는 부족했다 — 구글은 같은 곳을 "STAT"이라고도 "STAT News"라고도
+ * 부르고, "Fierce Biotech"와 "FierceBiotech"도 섞여 온다. 그래서 한쪽이 다른 쪽의
+ * 앞부분이면 같은 곳으로 본다(2026-09-09 실측: 두 경우 다 중복으로 붙었다).
+ */
+const nameKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9가-힣]/g, '');
+const samePublisher = (a: string, b: string) =>
+  a === b || (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a)));
+
+/**
+ * 매체명 자리에 도메인이 온 것은 버린다.
+ *
+ * 구글이 발행처 이름을 모를 때 "finance.biggo.com"처럼 도메인을 그대로 준다.
+ * 그런 곳은 대개 기사를 긁어 재게시하는 사이트라 "함께 보도한 매체"로 셀 만하지 않고,
+ * 화면에 "finance.biggo.com 원문 보기"라고 뜨는 것도 이상하다.
+ */
+const looksLikeDomain = (s: string) => /\.[a-z]{2,}$/i.test(s.trim());
+
 /** 구글 뉴스 RSS 제목은 "제목 - 매체명" 형태다. */
 function splitTitle(raw: string): { title: string; source: string } | null {
   const clean = raw.replace(/\s+/g, ' ').trim();
@@ -108,7 +142,7 @@ async function findOthers(item: DigestItem): Promise<{ source: string; url: stri
   const url = 'https://news.google.com/rss/search?' + new URLSearchParams({
     q: queryFor(item.title), ...localeFor(item.title),
   });
-  const known = new Set([item.source, ...item.alsoIn.map(a => a.source)].map(s => s.toLowerCase()));
+  const known = [item.source, ...item.alsoIn.map(a => a.source)].map(nameKey);
   const base = tokens(item.title);
   const korean = isKorean(item.title);
   const out: { source: string; url: string }[] = [];
@@ -126,10 +160,12 @@ async function findOthers(item: DigestItem): Promise<{ source: string; url: stri
       const link = decode(block.match(/<link>([\s\S]*?)<\/link>/)?.[1] ?? '').trim();
       const parsed = splitTitle(rawTitle);
       if (!parsed || !link) continue;
+      if (looksLikeDomain(parsed.source)) continue;
       // 같은 매체는 세지 않는다 — 매체 수가 부풀려진다.
-      if (known.has(parsed.source.toLowerCase())) continue;
+      const key = nameKey(parsed.source);
+      if (!key || known.some(k => samePublisher(k, key))) continue;
       if (!overlaps(base, tokens(parsed.title), korean)) continue;
-      known.add(parsed.source.toLowerCase());
+      known.push(key);
       out.push({ source: parsed.source, url: link });
       if (out.length >= MAX_ADDED) break;
     }

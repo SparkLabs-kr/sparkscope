@@ -150,6 +150,24 @@ const SOURCES: PopularSource[] = [
     },
   },
   {
+    // 바이오파마 업계지. 첫 화면 기사 목록이 서버 렌더라 문서 순서를 그대로 쓴다.
+    // AI 쪽에 1면 스크랩을 붙이면서(TechCrunch·Wired·NYT) 바이오도 같은 수를 갖추려고
+    // 추가했다(2026-09-09). BioCentury도 후보였지만 첫 화면이 JS 렌더라 못 읽는다.
+    name: 'BioPharma Dive',
+    url: 'https://www.biopharmadive.com/',
+    origin: 'https://www.biopharmadive.com',
+    domain: 'bio',
+    kind: 'headline',
+    headline: {
+      // Wired와 같은 이유로 링크 패턴을 시작점으로 쓴다 — 클래스 이름은 CSS 블록에
+      // 먼저 걸릴 위험이 있다.
+      start: 'href="/news/',
+      window: 45_000,
+      article: /^(https:\/\/www\.biopharmadive\.com)?\/news\/[a-z0-9-]{10,}/,
+      skip: /\/sponsored|\/press-release/i,
+    },
+  },
+  {
     // 보건·바이오 전반. 헤드라인(TOP STORIES)과 많이 본(Most Read)을 한 화면에서
     // 같이 주므로 두 신호를 동시에 얻는다. 'STAT Plus:' 접두어는 유료 표시일 뿐이라
     // 떼어낸다 — 붙여두면 다른 매체 제목과 대조가 안 된다.
@@ -241,6 +259,9 @@ const SOURCES: PopularSource[] = [
  *  이들은 RSS로만 들어온다. HTML 파싱을 붙이려면 헤드리스 브라우저가 필요한데,
  *  그만한 값어치가 있는지는 확인되지 않았다.
  */
+
+/** 인기·1면을 긁는 매체 이름. 교차 보도 확인에서 "신뢰하는 매체" 판정에 함께 쓴다. */
+export const POPULAR_SOURCE_NAMES = SOURCES.map(s => s.name);
 
 /** bioin은 조회 기간을 URL로 받는다 — 호출 시점 기준 최근 N일. */
 const BIOIN_DAYS = 14;
