@@ -144,6 +144,9 @@ const SOURCES: PopularSource[] = [
       start: 'epn_regular_section epn_home_featured',
       window: 30_000,
       article: /^https:\/\/endpoints\.news\/[a-z0-9-]{12,}/,
+      // 같은 화면 아래쪽에 Most Read도 있다 — 편집 판단과 독자 반응을 함께 얻는다.
+      popularStart: 'Most Read',
+      popularWindow: 9_000,
     },
   },
   {
@@ -165,7 +168,33 @@ const SOURCES: PopularSource[] = [
       popularWindow: 9_000,
     },
   },
+  {
+    // 기술 전반. 홈페이지 Most Popular 블록이 서버 렌더라 그대로 읽힌다.
+    // 헤드라인 영역은 따로 잡지 않는다 — 이 매체는 소비자 기기 기사가 상단을 많이
+    // 차지해서, 편집 판단보다 독자 반응(Most Popular) 쪽이 우리 관심사에 가깝다.
+    name: 'The Verge',
+    url: 'https://www.theverge.com/',
+    origin: 'https://www.theverge.com',
+    domain: 'ai',
+    kind: 'headline',
+    headline: {
+      // 헤드라인 구역은 비워 두고 인기 구역만 읽는다 — start를 없는 문자열로 두면
+      // cut()이 빈 문자열을 돌려주고 헤드라인은 0건이 된다.
+      start: '\u0000없음',
+      article: /^(https:\/\/www\.theverge\.com)?\/[a-z]+\/\d{4,}\/[a-z0-9-]{10,}/,
+      popularStart: 'duet--homepage--most-popular',
+      popularWindow: 9_000,
+    },
+  },
 ];
+
+/** 다른 매체의 인기 목록은 못 읽는다(2026-09-09 실측).
+ *  · Ars Technica — "Most read"가 카테고리 선택 폼이고 목록은 그 뒤에 JS로 채워진다.
+ *  · CNBC · MIT Technology Review — 마커만 있고 링크는 JS 렌더다.
+ *  · The Economist — 홈페이지가 403(봇 차단).
+ *  이들은 RSS로만 들어온다. HTML 파싱을 붙이려면 헤드리스 브라우저가 필요한데,
+ *  그만한 값어치가 있는지는 확인되지 않았다.
+ */
 
 /** bioin은 조회 기간을 URL로 받는다 — 호출 시점 기준 최근 N일. */
 const BIOIN_DAYS = 14;

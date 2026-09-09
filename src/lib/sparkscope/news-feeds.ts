@@ -29,6 +29,11 @@ export interface Feed {
   tier: 1 | 2 | 3;
   /** 개인·뉴스레터 여부. 화면에서 매체와 구분해 표시한다. */
   independent?: boolean;
+  /**
+   * 한국 매체인가. 순위를 내리기 위한 표시가 아니라 "해외 매체도 다뤘는가"를 판정하기
+   * 위한 것이다 — 국내 소식이라도 해외 매체가 함께 다뤘으면 글로벌 사안으로 본다.
+   */
+  korean?: boolean;
 }
 
 /**
@@ -96,8 +101,8 @@ export const FEEDS: Feed[] = [
   // 영어 피드 21곳에 없던 "GPT-6 아스트라" 관련 기사가 aitimes에 5건 있었다.
   // 한국어 제목이라 단어 겹침으로는 영어 기사와 안 묶이지만, 사건 병합은 LLM이
   // 하므로(news-cluster.ts) 같은 사건이면 언어가 달라도 붙는다.
-  { name: 'AI타임스', url: 'https://www.aitimes.com/rss/allArticle.xml', domain: 'ai', tier: 2 },
-  { name: 'AI타임스코리아', url: 'https://www.aitimes.kr/rss/allArticle.xml', domain: 'ai', tier: 3 },
+  { korean: true, name: 'AI타임스', url: 'https://www.aitimes.com/rss/allArticle.xml', domain: 'ai', tier: 2 },
+  { korean: true, name: 'AI타임스코리아', url: 'https://www.aitimes.kr/rss/allArticle.xml', domain: 'ai', tier: 3 },
 
   // 더밀크(themiilk.com)는 RSS가 없다 — /rss·/feed·/atom.xml은 500,
   // /topics/ai/rss는 200이지만 RSS가 아니라 HTML을 돌려준다(2026-09-08 확인).
@@ -109,23 +114,18 @@ export const FEEDS: Feed[] = [
   // 국내 소식은 news-digest의 문턱(4점 이상)을 넘어야 목록에 오르므로, 유입량이 많아도
   // 예산·인사 같은 기사가 상위를 채우지 않는다.
   // biospectator는 RSS가 404라 제외했다(2026-09-08 확인).
-  { name: '바이오타임즈', url: 'https://www.biotimes.co.kr/rss/allArticle.xml', domain: 'bio', tier: 3 },
-  { name: '약업신문', url: 'https://www.pharmnews.com/rss/allArticle.xml', domain: 'bio', tier: 3 },
-  { name: '메디파나뉴스', url: 'https://www.medipana.com/rss/allArticle.xml', domain: 'bio', tier: 3 },
+// 메디파나뉴스는 뺐다(2026-09-09) — 국내 제약업계 소식만 다뤄서, 해외 트렌드를 보는
+// 이 화면의 목적과 맞지 않는다.
+  { korean: true, name: '바이오타임즈', url: 'https://www.biotimes.co.kr/rss/allArticle.xml', domain: 'bio', tier: 3 },
+  { korean: true, name: '약업신문', url: 'https://www.pharmnews.com/rss/allArticle.xml', domain: 'bio', tier: 3 },
 
   // ── 바이오 전문지 ──
   { name: 'STAT News', url: 'https://www.statnews.com/feed/', domain: 'bio', tier: 1 },
   { name: 'Endpoints News', url: 'https://endpts.com/feed/', domain: 'bio', tier: 1 },
-  // ⚠️ 이 피드는 Vercel에서 403이다 — Cloudflare 봇 차단이고 UA 문제가 아니다.
-  //    같은 Chrome UA로 일반 회선에서는 200이고, python-requests 같은 알려진 스크래퍼
-  //    UA만 403이 난다(2026-09-09 실측). Cloudflare가 UA와 함께 IP 평판을 보고
-  //    데이터센터 대역(Vercel = AWS icn1)을 봇으로 깐 것이다.
-  //
-  //    GitHub Actions 러너에서는 200이다(probe-sources 워크플로로 확인). 1면 헤드라인은
-  //    그래서 GitHub Actions로 옮겨 DB에 쌓고 있고, Fierce 기사도 그 경로로는 후보에
-  //    들어온다. 다만 이 RSS 피드 자체는 여전히 Vercel에서 읽히지 않는다 —
-  //    기사 본문·발행일이 필요한 자리는 비어 있다는 뜻이다.
-  { name: 'Fierce Biotech', url: 'https://www.fiercebiotech.com/rss/xml', domain: 'bio', tier: 2 },
+  // Fierce Biotech RSS는 뺐다(2026-09-09). Cloudflare 봇 차단으로 Vercel에서 403이고,
+  // GitHub Actions로 옮길 수도 있었지만 "막히는 매체는 그냥 뺀다"로 정했다.
+  // 1면 헤드라인 스크랩은 GitHub Actions에서 계속 돌아가므로 Fierce 기사는 그 경로로 들어온다
+  // (.github/workflows/collect-headlines.yml).
   { name: 'In the Pipeline', url: 'https://news.google.com/rss/search?q=when:14d+site:science.org+%22In+the+Pipeline%22&hl=en-US&gl=US&ceid=US:en', domain: 'bio', tier: 2, independent: true },
   { name: 'Ground Truths (Eric Topol)', url: 'https://erictopol.substack.com/feed', domain: 'bio', tier: 2, independent: true },
 

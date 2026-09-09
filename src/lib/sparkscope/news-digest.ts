@@ -75,6 +75,17 @@ export interface DigestItem {
   /** 국내(한국) 업계·정책 소식인가. 한국 매체가 보도한 해외 소식은 false다. */
   domestic: boolean;
   /**
+   * 한국 매체가 아닌 곳도 이 사안을 다뤘는가.
+   *
+   * "국내 소식은 큰 것만"의 판정 기준이다. 우리가 직접 "삼성·SK하이닉스는 글로벌,
+   * KAIST·중소 제약사는 국내"라고 목록을 관리하면 금방 낡는다. 대신 해외 매체가
+   * 함께 다뤘는지를 본다 — 실제로 글로벌한 사안이면 로이터·FT가 쓰고, 국내에서만
+   * 의미 있는 사안이면 한국 매체만 쓴다. 목록을 유지할 필요가 없고 자동으로 맞는다.
+   */
+  foreignCoverage: boolean;
+  /** 이 기사를 낸 곳이 한국 매체인가. foreignCoverage 계산에만 쓴다. */
+  fromKorean?: boolean;
+  /**
    * 요약을 만들 때만 쓰는 원문 발췌. 화면에는 내보내지 않는다(라우트에서 지운다) —
    * 매체 본문을 그대로 싣는 것은 이용약관 문제이고, 클라이언트 페이로드도 커진다.
    */
@@ -316,6 +327,8 @@ async function collectIndicators(domain: NewsDomain, cutoff: number): Promise<Di
       headlineSource: null,
       indicatorOutlets: 0,
       indicators: [],
+      foreignCoverage: false,
+      fromKorean: !!e.feed.korean,
       indicator: true,
       domestic: false,
     }));
@@ -393,6 +406,10 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
         indicatorOutlets: 0,
         indicators: [],
         domestic: false,
+        // 이 단계의 클러스터는 제목 단어가 겹치는 것끼리라 같은 언어끼리 묶인다.
+        // 언어를 넘는 병합은 뒤의 LLM 단계에서 되므로 거기서 다시 계산한다.
+        foreignCoverage: c.members.some(m => !m.feed.korean),
+        fromKorean: !!c.rep.feed.korean,
       };
     })
     .sort((a, b) =>
@@ -467,6 +484,9 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
         indicatorOutlets: 0,
         indicators: [],
         domestic: !!p.domestic,
+        foreignCoverage: false,
+        // 인기 목록의 domestic 표시가 곧 한국 매체 여부다(바이오인 집계는 전부 국내 매체).
+        fromKorean: !!p.domestic,
       });
     }
   }
@@ -522,6 +542,11 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
     b.indicatorOutlets - a.indicatorOutlets ||
     rank(a) - rank(b) ||
     b.alsoIn.length - a.alsoIn.length ||
+    // 다른 게 같으면 해외 매체를 먼저 둔다. 이 화면은 해외 트렌드를 보는 자리이고,
+    // 국내 매체가 전한 해외 소식은 원 매체가 쓴 것보다 한 다리 건넌 것이다.
+    // 강한 기준은 아니다 — 신호가 확실하면(GPT-6 아스트라처럼 인기 1위 + 여러 매체)
+    // 국내 매체 기사도 그대로 1위로 온다.
+    Number(!!a.fromKorean) - Number(!!b.fromKorean) ||
     a.tier - b.tier ||
     b.publishedAt.localeCompare(a.publishedAt);
 
@@ -592,12 +617,16 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
       .sort((a, b) => (a.headlineRank ?? 99) - (b.headlineRank ?? 99))[0];
     const headlineRank = lead?.headlineRank ?? null;
     const headlineSource = lead?.headlineSource ?? lead?.source ?? null;
+    // 한국 매체가 아닌 곳이 하나라도 이 사안을 다뤘는가. 언어를 넘는 병합이 끝난
+    // 지금이 이걸 물어볼 수 있는 시점이다.
+    const foreignCoverage = group.some(g => !g.fromKorean || g.foreignCoverage);
 
     return [{
       ...rep,
       headlineOutlets,
       headlineRank,
       headlineSource,
+      foreignCoverage,
       indicatorOutlets: new Set(ind.map(g => g.source)).size,
       indicators: ind.map(g => ({ source: g.source, title: g.title, url: g.url })),
       // 대표를 그대로 펼치면 내부 표시가 따라올 수 있다 — 명시적으로 끈다.
@@ -627,8 +656,21 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
     }];
   });
 
+  // 국내에서만 다룬 소식은 여기서 뺀다.
+  //
+  // 이 화면의 목적은 해외 트렌드를 보는 것이고, 국내 업계 동향은 Intra 탭이 따로 다룬다.
+  // 앞의 DOMESTIC_MIN(4점)만으로는 부족했다 — R&D 예산·기관 통합·국내 신약 허가·표창
+  // 같은 기사가 4~5점을 받아 상위를 채웠다(2026-09-09 실측: 상위 8건 중 4건).
+  //
+  // 다만 "한국 = 제외"는 틀렸다. 삼성·SK하이닉스처럼 글로벌 사안도 국내 매체가 먼저
+  // 쓴다. 그래서 회사 목록을 관리하는 대신 해외 매체가 함께 다뤘는지를 본다 —
+  // 실제로 글로벌한 사안이면 로이터·FT가 쓰고, 국내에서만 의미 있으면 한국 매체만 쓴다.
+  // 목록을 유지할 필요가 없고 매체 구성이 바뀌어도 자동으로 맞는다.
+  const domesticOnly = (it: DigestItem) => it.domestic && !it.foreignCoverage;
+  const globalish = [...merged, ...rest].filter(it => !domesticOnly(it));
+
   // 병합으로 자리가 비면 뒤쪽 후보가 올라온다.
-  const ordered = [...merged, ...rest]
+  const ordered = globalish
     .sort(byRank);
 
   // 한 매체가 목록을 독점하지 못하게 상한을 둔다.

@@ -1,6 +1,7 @@
-name: Collect Headlines (Schedule)
+name: Collect Headlines & Precompute Digest (Schedule)
 
-# 매체 1면 헤드라인·인기기사를 2시간마다 관측해 NewsHeadline 테이블에 쌓는다.
+# ① 매체 1면 헤드라인·인기기사를 2시간마다 관측해 NewsHeadline 테이블에 쌓고,
+# ② 그것을 반영한 "오늘의 시그널" 패널을 미리 계산해 둔다(순서가 중요하다).
 #
 # 왜 GitHub Actions인가: FierceBiotech가 Cloudflare 봇 차단으로 Vercel 서버리스에서
 # 403이 난다(데이터센터 IP 평판 문제. UA는 이미 Chrome이고, UA만으로는 풀리지 않는다).
@@ -9,6 +10,10 @@ name: Collect Headlines (Schedule)
 # 왜 2시간인가: 매체 홈페이지는 "지금 이 순간" 1면만 보여준다. 쌓아 두지 않으면
 # 어제 1면을 휩쓴 사안이 오늘 신호 0이 된다(2026-09-08 노바티스 건). 소셜 시그널
 # 수집과 같은 주기다.
+#
+# 사전계산을 붙인 이유: 패널이 요청마다 전부 새로 만들고 있었고 캐시가 찬 상태에서도
+# 12.5초가 걸렸다(RSS 25곳 + 중요도 채점 + 사건 병합 + 요약 + 포폴 매칭).
+# 대시보드 AI 요약과 같은 패턴으로 미리 계산해 두고 화면은 읽기만 한다(CLAUDE.md).
 #
 # CLAUDE.md 규칙: 같은 작업을 Vercel과 GitHub Actions 양쪽에 만들지 않는다 —
 # vercel.json의 collect-social에서 헤드라인 관측을 빼고 이 워크플로 하나로 뒀다.
@@ -20,7 +25,7 @@ on:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
@@ -43,6 +48,14 @@ jobs:
           POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
           POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
         run: npx tsx scripts/collect-headlines.ts
+
+      # 헤드라인 관측 다음에 돌려야 방금 관측한 1면이 이번 계산에 반영된다.
+      - name: Precompute digest panel
+        env:
+          POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: npx tsx scripts/precompute-digest.ts
 
       - name: Notify on failure
         if: failure()
