@@ -821,8 +821,13 @@ function HeadlineStats({ headline: h }: { headline: InterMatrix['headline'] }) {
 
       <div className="relative group bg-white border border-spark-border rounded-xl px-4 py-3.5">
         <div className="flex items-center gap-1 text-[12px] text-spark-muted mb-1">
-          {t('가장 급증한 트렌드 조합')}
-          <InfoTip text={t('아래 매트릭스는 "주제"(예: 항암)와 "사건 유형"(예: 투자·딜)을 교차해서 보여줍니다.\n이 칸들은 그중 직전 기간 대비 증가율이 가장 높은 상위 3개 조합이에요 — 최소 3건 이상 쌓인 칸 중에서만 고릅니다.')} />
+          {/* 비교가 불가능한 기간에는 "급증"이라 부르지 않는다. 그때 hottest는 증가율이
+              아니라 건수 기준 1위이므로(buildMatrix의 폴백), 제목이 그대로면 화면이
+              거짓을 말한다. 다이제스트가 쓰는 것과 같은 원칙이다(inter-digest.ts). */}
+          {h.deltaComparable ? t('가장 급증한 트렌드 조합') : t('가장 많이 다뤄진 트렌드 조합')}
+          <InfoTip text={h.deltaComparable
+            ? t('아래 매트릭스는 "주제"(예: 항암)와 "사건 유형"(예: 투자·딜)을 교차해서 보여줍니다.\n이 칸들은 그중 직전 기간 대비 증가율이 가장 높은 상위 3개 조합이에요 — 최소 3건 이상 쌓인 칸 중에서만 고릅니다.')
+            : t('직전 기간이 수집 시작 이전이라 증감률을 계산하지 않습니다.\n그래서 증가율 대신 이 기간에 기사가 가장 많이 쌓인 조합을 보여줍니다.')} />
         </div>
         {h.hottest.length === 0 ? (
           <div className="truncate text-[15px] font-extrabold text-spark-ink">{t('데이터 없음')}</div>
@@ -844,7 +849,11 @@ function HeadlineStats({ headline: h }: { headline: InterMatrix['headline'] }) {
                     )
                   ) : hot.prevCount === 0 ? (
                     <> <span className="font-bold text-emerald-600">{t('신규')}</span></>
-                  ) : null}
+                  ) : (
+                    // 직전 건수는 있는데 증감률이 null이면 "비교 불가"다. 예전에는 아무것도
+                    // 안 찍어서 "153건 · 직전 33건"만 남아 왜 증감이 없는지 알 수 없었다.
+                    <> <span className="font-bold text-spark-muted">{t('비교 불가')}</span></>
+                  )}
                 </span>
               </div>
             ))}
