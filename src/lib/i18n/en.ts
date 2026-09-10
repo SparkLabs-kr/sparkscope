@@ -1321,4 +1321,22 @@ export const EN: Record<string, string> = {
     'Staff accounts cannot be changed here.',
   '접근 해제 권한이 없습니다.':
     'You do not have permission to revoke access.',
+
+  // 기사 질문하기 (2026-09-10)
+  '이 기사에 대해 질문하기':
+    'Ask about this story',
+  '예: 왜 중요한가요? 우리 포트폴리오와 어떤 관련이 있나요?':
+    'e.g. Why does this matter? How does it relate to our portfolio?',
+  '질문':
+    'Ask',
+  '생각 중...':
+    'Thinking...',
+  '이 기사에 수집된 내용만으로 답했습니다.':
+    'Answered only from what we collected for this story.',
+  '수집된 내용만으로는 답하기 어려운 질문입니다 — 원문을 확인해 주세요.':
+    'This question goes beyond what we collected — please check the original article.',
+  '답을 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.':
+    'Could not get an answer. Please try again shortly.',
+  '질문 기능이 아직 설정되지 않았습니다.':
+    'The question feature is not configured yet.',
 };

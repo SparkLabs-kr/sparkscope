@@ -21,6 +21,7 @@ import type { SocialSource, SocialPost, SocialSourceId } from '@/lib/sparkscope/
 import type { TrendKeyword } from '@/lib/sparkscope/news-keywords';
 import type { EntityCard } from '@/lib/sparkscope/entity-cards';
 import { DISPLAY_COUNT } from '@/lib/sparkscope/signal-display';
+import { InterAskBox } from '@/components/InterAskBox';
 
 type DigestResp = {
   items: DigestItem[];
@@ -519,6 +520,7 @@ function StripCard({ item, locale, open, onToggle }: {
             {t('원문이 아니라 이해를 돕는 설명입니다. 전문은 원문에서 확인하세요.')}
             {item.grounding === 'headline' && ` · ${t('이 매체는 제목과 짧은 소개만 공개해, 아래 설명은 일반적인 배경 위주입니다.')}`}
           </p>
+            <InterAskBox item={item} />
         </div>
       ) : (
         <p className="mt-1 text-[11.5px] leading-relaxed text-spark-ink-soft line-clamp-2">
