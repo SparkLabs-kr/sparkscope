@@ -245,6 +245,17 @@ function tokens(title: string): Set<string> {
 const HEADLINE_CONSENSUS = 2;
 
 /**
+ * 한 매체의 최상단 자리만으로는 중요도 바닥을 주지 않는다(2026-09-10에 되돌림).
+ *
+ * 아래 원래 이유는 "최상단 한 자리는 편집국이 오늘 이게 제일 큰일이라고 말한 것"이었다.
+ * 그런데 그 전제가 매체마다 성립하지 않는다 — TechCrunch AI 카테고리 페이지는
+ * 편집 순서가 아니라 최신순이었다(1→3→4→5시간 전으로 실측). 그 결과 "1시간 전에
+ * 올라온 기사"가 머리기사로 인정되어 중요도 5점 바닥을 받고 1위로 올라왔다.
+ *
+ * 이제 바닥은 두 곳 이상이 함께 1면에 걸었을 때만 준다. 한 곳의 자리는 순위의
+ * tiebreak로만 쓴다(byRank의 hrank). 아래 옛 근거는 기록으로 남긴다.
+ *
+ * ── 옛 근거(2026-09-09) ──
  * 합의가 없어도 최상단 머리기사 하나는 그 자체로 충분한 근거로 본다.
  *
  * 처음에는 "두 곳 이상"만 인정했는데, 그러면 매체 한 곳이 막히는 순간 기준이 무너진다.
@@ -258,8 +269,8 @@ const HEADLINE_CONSENSUS = 2;
  * 한 곳이어도 근거로 충분하다. 두 번째 자리까지 넓히면 매체마다 두 건씩 올라와
  * 상위가 헤드라인으로만 채워지므로 1위 자리에서 끊는다.
  */
-const isConsensus = (outlets: number, rank: number | null) =>
-  outlets >= HEADLINE_CONSENSUS || rank === 1;
+const isConsensus = (outlets: number, _rank: number | null) =>
+  outlets >= HEADLINE_CONSENSUS;
 
 /** 같은 사안인가 — 제목의 특징 단어가 충분히 겹치는가. */
 function sameStory(a: Set<string>, b: Set<string>): boolean {
@@ -536,9 +547,16 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
   const byRank = (a: DigestItem, b: DigestItem) =>
     (b.importance ?? 3) - (a.importance ?? 3) ||
     b.headlineOutlets - a.headlineOutlets ||
+    // 몇 매체가 이 사안을 다뤘나. 한 매체 안에서의 자리(hrank)보다 앞이다.
+    //
+    // 순서를 바꾼 이유(2026-09-10): 큰 사건은 여러 매체가 한꺼번에 다룬다 —
+    // 속보가 터지면 KBS·MBC·JTBC가 동시에 보도하는 것과 같다. 반면 한 매체
+    // 목록의 맨 위는 그 매체가 방금 올렸다는 뜻일 수도 있다. 실제로 TechCrunch
+    // AI 카테고리는 편집 순서가 아니라 최신순이었고(1→3→4→5시간 전으로 확인),
+    // 그 페이지 1위를 근거로 "1시간 전 기사"가 1면 톱으로 올라왔다.
+    b.alsoIn.length - a.alsoIn.length ||
     hrank(a) - hrank(b) ||
     rank(a) - rank(b) ||
-    b.alsoIn.length - a.alsoIn.length ||
     // 지표(리포트·벤더 블로그·뉴스레터)는 여기까지 다 같을 때만 본다.
     //
     // 처음에는 인기 등수보다 앞에 뒀는데 그게 틀렸다(2026-09-09). 벤더 블로그는

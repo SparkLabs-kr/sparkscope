@@ -12,6 +12,7 @@ import { collectDigest, type NewsDomain } from '../src/lib/sparkscope/news-diges
 import { ensureSummaries } from '../src/lib/sparkscope/news-summary';
 import { ensurePortfolioHits } from '../src/lib/sparkscope/news-portfolio';
 import { saveDigest } from '../src/lib/sparkscope/digest-store';
+import { DISPLAY_COUNT } from '../src/lib/sparkscope/signal-display';
 import { buildEntityCards, type CommunityPost } from '../src/lib/sparkscope/entity-cards';
 import { readSignals } from '../src/lib/sparkscope/social-store';
 import { DOMAIN_SOURCES, SOURCE_META, type SocialSourceId } from '../src/lib/sparkscope/social-collect';
@@ -57,7 +58,10 @@ async function main() {
         // 원문 발췌는 화면으로 내보내지 않는다 — 라우트가 하던 것과 같게 여기서 지운다.
         const safe = items.map(({ sourceText, ...rest }) => rest);
         // 이름 카드 — 기사와 커뮤니티를 이름으로 잇는다. 실패해도 목록은 나가야 한다.
-        const entities = await buildEntityCards(domain, safe, await communityPosts(domain, days))
+        // 화면에 실제로 깔리는 기사만으로 카드를 만든다 — 카드가 가리키는 기사는
+        // 목록에 있어야 한다(signal-display.ts 주석 참고).
+        const entities = await buildEntityCards(
+          domain, safe.slice(0, DISPLAY_COUNT), await communityPosts(domain, days))
           .catch(e => { console.error('[precompute-digest] 이름 카드 실패(무시):', e); return []; });
         await saveDigest(domain, days, { items: safe, feeds, keywords, entities });
         console.log(`[precompute-digest] ${domain}/${days}일: ${safe.length}건 · 키워드 ${keywords.length}개 · 이름 ${entities.length}개 · ${Date.now() - t}ms`);

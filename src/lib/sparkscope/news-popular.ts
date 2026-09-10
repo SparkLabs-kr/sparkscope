@@ -28,6 +28,8 @@
  * 인기기사를 못 읽었다고 다이제스트 전체가 멈추면 안 된다.
  */
 
+import { DOMAIN_KEYWORDS } from './news-feeds';
+
 /** 브라우저 UA를 쓴다 — 기본 UA로는 홈페이지가 다른 마크업을 주는 경우가 있다. */
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
@@ -86,6 +88,12 @@ interface HeadlineSpec {
   /** 같은 화면의 "많이 본" 구역. 있으면 popularRank로 따로 담는다. */
   popularStart?: string;
   popularWindow?: number;
+  /**
+   * 제목이 이 분야인지 확인한다. 종합 홈페이지를 읽을 때 필요하다 —
+   * 첫 화면에는 소비자 가전·정치 기사가 함께 놓이는데, 그것까지 우리 후보로
+   * 넣으면 분야가 흐려진다. 없으면 확인하지 않는다(전문지 첫 화면).
+   */
+  topic?: RegExp;
 }
 
 const SOURCES: PopularSource[] = [
@@ -187,25 +195,34 @@ const SOURCES: PopularSource[] = [
     },
   },
   {
-    // AI 카테고리 첫 화면. 문서 순서가 곧 편집 순서다(카드가 위에서부터 놓인다).
-    // 자사 행사 홍보(Disrupt·Side Event)가 첫 칸을 차지하는 경우가 있어 걸러낸다 —
-    // 그건 편집 판단이 아니라 광고다.
+    // 홈페이지 첫 화면 — 히어로 → 보조 카드 → Top Headlines 순으로 놓인다.
+    //
+    // 전에는 AI 카테고리 페이지(/category/artificial-intelligence/)를 읽었는데
+    // 그게 틀렸다. 그 페이지는 편집 순서가 아니라 최신순이다 — 시간 표기가
+    // 1→3→4→5→5→6→7시간 전으로 정확히 내려간다(2026-09-10 실측). 그래서 "1시간 전에
+    // 올라온 기사"가 매체의 머리기사로 인정돼 순위 맨 위로 올라왔다.
+    // 홈페이지 첫 화면은 사람이 고른 자리이므로 그쪽을 읽는다.
+    //
+    // 대신 홈페이지에는 AI가 아닌 기사(소비자 가전·정치)가 섞이므로 topic으로 가른다.
     name: 'TechCrunch',
-    url: 'https://techcrunch.com/category/artificial-intelligence/',
+    url: 'https://techcrunch.com/',
     origin: 'https://techcrunch.com',
     domain: 'ai',
     kind: 'headline',
     headline: {
-      start: 'loop-card__title',
+      // 첫 기사 링크부터 읽는다. 히어로가 문서상 가장 먼저 온다.
+      start: 'href="https://techcrunch.com/20',
       window: 45_000,
       article: /^https:\/\/techcrunch\.com\/20\d\d\/\d\d\/\d\d\/[a-z0-9-]{10,}/,
+      // 자사 행사 홍보는 편집 판단이 아니라 광고다.
       skip: /disrupt|\/events?\/|side-event|sponsored/i,
+      topic: DOMAIN_KEYWORDS.ai,
     },
   },
   {
     // AI 태그 첫 화면. 링크가 /story/... 상대경로다.
     name: 'Wired',
-    url: 'https://www.wired.com/tag/artificial-intelligence/',
+    url: 'https://www.wired.com/',
     origin: 'https://www.wired.com',
     domain: 'ai',
     kind: 'headline',
@@ -214,9 +231,11 @@ const SOURCES: PopularSource[] = [
       // 'summary-item__content'가 CSS 블록에 먼저 나와서(본문보다 369KB 앞) 창이
       // 기사에 닿지 못하고 0건이 됐다. 링크 패턴은 그런 오작동이 없다.
       start: 'href="/story/',
-      window: 45_000,
+      window: 60_000,
       article: /^(https:\/\/www\.wired\.com)?\/story\/[a-z0-9-]{10,}/,
       skip: /\/sponsored|\/gear\/(deal|coupon)/i,
+      // TechCrunch와 같은 이유로 태그 페이지가 아니라 홈페이지를 읽고 분야를 가른다.
+      topic: DOMAIN_KEYWORDS.ai,
     },
   },
   {
@@ -230,6 +249,10 @@ const SOURCES: PopularSource[] = [
       start: 'data-testid="main-collection"',
       window: 45_000,
       article: /^(https:\/\/www\.nytimes\.com)?\/20\d\d\/\d\d\/\d\d\/[a-z/]+\/[a-z0-9-]{10,}\.html/,
+      // 기술 섹션 첫 화면은 편집 큐레이션이라 그대로 쓴다(HTML에 시간 표기가 없어
+      // 최신순인지 확인할 방법이 없었지만, 실제 1위가 그날 최대 사안이었다).
+      // 다만 기술 섹션에도 소비자 기기·통신 정책 기사가 있어 분야는 가른다.
+      topic: DOMAIN_KEYWORDS.ai,
     },
   },
   {
@@ -346,6 +369,8 @@ function parseHeadline(html: string, src: PopularSource): PopularItem[] {
       if (spec.stripTitle) title = title.replace(spec.stripTitle, '').trim();
       // 썸네일만 감싼 링크는 텍스트가 비거나 아주 짧다 — 같은 기사를 두 번 잡지 않게.
       if (title.length < 15) continue;
+      // 종합 홈페이지에서는 분야를 가른다(HeadlineSpec.topic 주석 참고).
+      if (spec.topic && !spec.topic.test(title)) continue;
       const url = href.startsWith('http') ? href : src.origin + href;
       if (seen.has(url)) continue;
       seen.add(url);

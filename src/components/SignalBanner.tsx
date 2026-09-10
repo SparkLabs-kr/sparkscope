@@ -20,6 +20,7 @@ import type { DigestItem } from '@/lib/sparkscope/news-digest';
 import type { SocialSource, SocialPost, SocialSourceId } from '@/lib/sparkscope/social-collect';
 import type { TrendKeyword } from '@/lib/sparkscope/news-keywords';
 import type { EntityCard } from '@/lib/sparkscope/entity-cards';
+import { DISPLAY_COUNT } from '@/lib/sparkscope/signal-display';
 
 type DigestResp = {
   items: DigestItem[];
@@ -39,15 +40,11 @@ const RAIL_POSTS = 3;
 /**
  * 히어로를 뺀 나머지 뉴스 중 스트립에 깔 개수.
  *
- * 수집한 12건을 전부 깐다(2026-09-10). 예전에는 6개만 깔아서 8~12번 기사가 화면에
- * 아예 없었는데, 오른쪽 이름 카드는 12건 전부에서 만들어진다 — 그래서 카드에는
- * "TechCrunch · 자기 발전하는 인공지능 경고, Anthropic 연구원 퇴사"가 떠 있는데
- * 왼쪽 목록에서는 찾을 수 없는 일이 생겼다(사용자 지적). 카드가 가리키는 기사는
- * 화면에 있어야 한다.
- *
- * 12건을 3열로 깔면 4줄이 되어 왼쪽 열이 오른쪽 이름 카드와 높이도 비슷해진다.
+ * 총 표시 수는 signal-display.ts의 DISPLAY_COUNT 한 곳에서 정한다 — 이름 카드도
+ * 같은 값을 보고 만들어지므로, 여기서만 바꾸면 카드에는 떠 있는데 목록에는 없는
+ * 기사가 생긴다(그 주석 참고).
  */
-const STRIP = 11;
+const STRIP = DISPLAY_COUNT - 1;
 
 /** 소스별 색. 배지 하나로 "어디서 온 신호인지"가 구분되게 한다. */
 const SRC_STYLE: Record<string, string> = {
@@ -109,8 +106,6 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
   const items = digest?.items ?? [];
   const hero = items[0];
   const strip = items.slice(1, 1 + STRIP);
-  // 이름 카드가 가리키는 기사가 위 목록에 다 있는지는 STRIP 값에 달려 있다 —
-  // collectDigest의 limit(12)보다 작으면 어긋난다.
   const live = (digest?.feeds ?? []).filter(f => f.ok && f.count > 0);
 
 
