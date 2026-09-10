@@ -364,8 +364,9 @@ function Hero({ item, locale }: { item: DigestItem; locale: string }) {
             🧭 {item.indicators.map(i => i.source).filter((v, i, a) => a.indexOf(v) === i).slice(0, 2).join(' · ')}
           </span>
         )}
-        {/* 여러 매체가 동시에 다뤘다는 것 자체가 이 기사를 1위로 만든 근거다. */}
-        {item.headlineOutlets < 2 && item.headlineRank !== 1 && item.alsoIn.length > 0 && (
+        {/* 여러 매체가 동시에 다뤘다는 것 자체가 이 기사를 1위로 만든 근거다.
+            1면 배지와 함께 보여준다 — 둘은 다른 사실이고, 서로를 가리면 안 된다. */}
+        {item.alsoIn.length > 0 && (
           <span className="text-[11.5px] font-bold text-rose-600">
             🔥 {t('{n}개 매체가 함께 보도', { n: item.alsoIn.length + 1 })}
           </span>
@@ -463,14 +464,15 @@ function StripCard({ item, locale, open, onToggle }: {
           <span className="text-[10px] px-1 py-0.5 rounded border border-spark-border">{t('개인·뉴스레터')}</span>
         )}
         <span className="tabular-nums">{item.publishedAt}</span>
+        {/* 1면 배지와 매체 수는 서로 다른 사실이라 각각 보여준다.
+            예전에는 if/else 체인이라 "머리기사"가 붙으면 "+6개 매체"가 밀려났다 —
+            여섯 매체가 다뤘다는 더 강한 근거가 화면에서 사라졌다(2026-09-10 지적). */}
         {item.headlineOutlets >= 2 ? (
           <span className="font-semibold text-rose-600">{t('{n}개 1면', { n: item.headlineOutlets })}</span>
         ) : item.headlineRank === 1 ? (
           <span className="font-semibold text-rose-600">{t('머리기사')}</span>
-        ) : item.alsoIn.length > 0 ? (
-          <span className="font-semibold text-emerald-700">{t('+{n}개 매체', { n: item.alsoIn.length })}</span>
         ) : null}
-        {item.headlineOutlets >= 2 && item.alsoIn.length > 0 && (
+        {item.alsoIn.length > 0 && (
           <span className="font-semibold text-emerald-700">{t('+{n}개 매체', { n: item.alsoIn.length })}</span>
         )}
       </div>
