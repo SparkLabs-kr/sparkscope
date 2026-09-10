@@ -1345,4 +1345,12 @@ export const EN: Record<string, string> = {
     'It can only answer questions about this story.',
   '수집된 요약에 그 내용이 없습니다 — 원문을 확인해 주세요.':
     'The collected summary does not cover that — please check the original article.',
+  '이 기사에 수집된 내용으로 답했습니다.':
+    'Answered from what we collected for this story.',
+  '기사에 없는 내용이라, 일반적인 배경 지식으로 답했습니다.':
+    'Not in the article — answered from general background knowledge.',
+  '기사 내용과 일반적인 배경 지식을 함께 써서 답했습니다.':
+    'Answered using both the article and general background knowledge.',
+  '이 기사는 제목만 수집되어 있습니다.':
+    'Only the headline was collected for this story.',
 };

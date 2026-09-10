@@ -35,30 +35,37 @@ export type AskContext = {
   portfolio?: { company: string; reason: string }[];
 };
 
-export type AskReason = 'answered' | 'outside_summary' | 'off_topic' | 'headline_only';
-export type AskResult = { answer: string; grounded: boolean; reason: AskReason };
+/** 답의 출처. 화면이 "어디서 온 답인지"를 밝히는 데 쓴다. */
+export type AskSource = 'article' | 'background' | 'mixed';
+export type AskResult = { answer: string; source: AskSource; headlineOnly: boolean };
 
 const SYSTEM = [
   '너는 스파크랩 미디어 인사이트(SparkScope)의 뉴스 도우미다.',
-  '사용자가 지금 읽고 있는 기사 하나에 대해 묻는다. 주어진 근거만으로 답한다.',
+  '사용자가 기사를 읽다가 묻는다. 도움이 되게 답하는 것이 우선이다 —',
+  '질문이 기사 밖의 것이어도(일반 지식, 배경 설명, 용어 풀이) 답해라.',
   '',
-  '규칙:',
-  '1. 근거에 없는 사실을 만들지 마라. 숫자·인용·날짜·인물은 특히 그렇다.',
-  '2. 답은 3~5문장. 불릿은 쓰지 마라. 사용자가 쓴 언어로 답해라',
-  '   (한국어로 물으면 한국어, 영어로 물으면 영어).',
-  '3. 투자 권유(사야 하나/팔아야 하나)에는 판단을 내리지 말고, 기사에 있는',
-  '   사실만 전하고 판단은 사용자 몫이라고 밝혀라.',
+  '단 하나 지킬 것: 이 기사에 대한 사실을 지어내지 마라.',
+  '  기사에 없는 수치·인용·날짜·인물·금액을 "기사에 따르면"처럼 말하면 안 된다.',
+  '  그 기사에만 있는 구체적 사실을 모르면 모른다고 하고, 원문을 권해라.',
+  '  일반 지식으로 배경을 설명하는 것은 얼마든지 좋다 — 다만 그것이 기사에서',
+  '  온 것이 아니라는 점이 분명해야 한다.',
+  '',
+  '답은 3~6문장. 불릿은 쓰지 마라. 사용자가 쓴 언어로 답해라',
+  '(한국어로 물으면 한국어, 영어로 물으면 영어).',
+  '',
+  '최신 사건은 네 학습 시점 이후일 수 있다. 확실하지 않으면 그렇다고 밝혀라.',
+  '',
+  '특정 종목을 사라/팔라는 개인 투자 조언은 하지 마라. 대신 무엇을 고려할지',
+  '설명하고 판단은 사용자 몫이라고 밝혀라.',
   '',
   'JSON 으로만 답한다:',
-  '{"answer": string, "reason": "answered"|"outside_summary"|"off_topic"}',
+  '{"answer": string, "source": "article"|"background"|"mixed"}',
   '',
-  'reason 을 고르는 법 — 자료 상태를 네가 서술하지 마라. 판단만 해라:',
-  '  answered        : 주어진 근거만으로 답했다.',
-  '  outside_summary : 이 기사에 대한 질문이지만 근거에 그 내용이 없다.',
-  '  off_topic       : 이 기사와 무관한 질문이다(일반 상식, 다른 기사, 잡담).',
-  'answered 가 아니면 answer 에는 무엇을 못 하는지만 짧게 적고, 없는 사실을',
-  '지어내지 마라. 근거가 어떤 상태인지(제목만 있는지 등)는 쓰지 마라 —',
-  '그 문장은 앱이 붙인다.',
+  'source 는 답의 근거가 어디서 왔는지다:',
+  '  article    : 주어진 기사 근거만으로 답했다.',
+  '  background : 기사 밖 일반 지식으로 답했다.',
+  '  mixed      : 둘을 섞었다.',
+  '근거가 어떤 상태인지(제목만 있는지 등)는 쓰지 마라 — 앱이 붙인다.',
 ].join('\n');
 
 export async function askAboutItem(
@@ -92,31 +99,28 @@ export async function askAboutItem(
     // 잘린 답을 그대로 내보내면 문장이 끊긴 채 나간다.
     return {
       answer: '답이 길어져 끊겼습니다. 질문을 좀 더 좁혀서 다시 물어봐 주세요.',
-      grounded: false,
-      reason: 'outside_summary',
+      source: 'background',
+      headlineOnly: ctx.grounding === 'headline',
     };
   }
 
   const raw = resp.choices[0]?.message?.content ?? '';
   let answer = '';
-  let reason: AskReason = 'outside_summary';
+  let source: AskSource = 'mixed';
   try {
-    const obj = JSON.parse(raw) as { answer?: unknown; reason?: unknown };
+    const obj = JSON.parse(raw) as { answer?: unknown; source?: unknown };
     answer = typeof obj.answer === 'string' ? obj.answer.trim() : '';
     if (!answer) throw new Error('empty answer');
-    if (obj.reason === 'answered' || obj.reason === 'off_topic') reason = obj.reason;
+    if (obj.source === 'article' || obj.source === 'background' || obj.source === 'mixed') {
+      source = obj.source;
+    }
   } catch {
     throw new Error('모델 응답을 해석하지 못했다');
   }
 
   /**
-   * 자료 상태는 앱이 판단한다. 모델에게 맡겼더니 grounding 이 full 인 기사에도
-   * "제목만 수집되어 있다"고 답했다 — 사실이 아닌데 읽는 사람은 자료가 부실한
-   * 줄로 오해한다. grounding 은 우리가 아는 값이므로 여기서 덮어쓴다.
+   * 자료 상태는 앱이 안다. 모델에게 서술하게 두면 근거가 충분한 기사에도
+   * "제목만 수집되어 있다"고 말한 적이 있다. grounding 은 우리가 가진 값이다.
    */
-  if (reason !== 'answered' && ctx.grounding === 'headline') {
-    reason = 'headline_only';
-  }
-
-  return { answer, grounded: reason === 'answered', reason };
+  return { answer, source, headlineOnly: ctx.grounding === 'headline' };
 }
