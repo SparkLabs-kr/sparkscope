@@ -310,9 +310,14 @@ function EntityCardView({ card, locale }: { card: EntityCard; locale: string }) 
                       {r.points.toLocaleString()}▲
                     </span>
                   ) : (
-                    <span className="shrink-0 min-w-[54px] text-center text-[10.5px] font-bold text-spark-muted">{r.source}</span>
+                    <span className="shrink-0 min-w-[54px] text-center text-[10.5px] font-bold text-spark-muted">–</span>
                   )}
-                  <span className="line-clamp-2">{locale === 'ko' && r.titleKo ? r.titleKo : r.title}</span>
+                  <span className="line-clamp-2">
+                    {locale === 'ko' && r.titleKo ? r.titleKo : r.title}
+                    {/* 어디서 온 반응인지 항상 밝힌다 — 업보트 1,600▲가 Hacker News인지
+                        AlphaSignal인지에 따라 무게가 다르다(모집단 크기가 다르다). */}
+                    <span className="ml-1.5 whitespace-nowrap text-[10.5px] font-bold text-spark-muted">{r.source}</span>
+                  </span>
                 </a>
               ))}
             </div>
