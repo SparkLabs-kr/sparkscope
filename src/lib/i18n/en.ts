@@ -419,8 +419,6 @@ export const EN: Record<string, string> = {
   '이 조회 기간에 수집·판정된 관련 기사 총량입니다.\n증감률은 바로 직전 같은 길이의 기간과 비교한 값이에요.':
     'Total relevant articles collected and classified in this period.\nThe change is measured against the immediately preceding period of the same length.',
   '직전 동일 기간 {n}건': '{n} in the previous equivalent period',
-  '가장 많이 다뤄진 트렌드 조합': 'Most-covered trend combinations',
-  '직전 기간이 수집 시작 이전이라 증감률을 계산하지 않습니다.\n그래서 증가율 대신 이 기간에 기사가 가장 많이 쌓인 조합을 보여줍니다.': 'The previous period predates our collection start, so we do not compute change rates. These are the combinations with the most articles in this period instead.',
   '가장 급증한 트렌드 조합': 'Fastest-growing combinations',
   '아래 매트릭스는 "주제"(예: 항암)와 "사건 유형"(예: 투자·딜)을 교차해서 보여줍니다.\n이 칸들은 그중 직전 기간 대비 증가율이 가장 높은 상위 3개 조합이에요 — 최소 3건 이상 쌓인 칸 중에서만 고릅니다.':
     'The matrix below crosses "topic" (e.g. oncology) with "event type" (e.g. funding/deals).\nThese are the 3 cells with the highest growth versus the previous period — chosen only from cells with at least 3 articles.',

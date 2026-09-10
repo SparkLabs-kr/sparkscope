@@ -366,10 +366,7 @@ export function computeBadge(m: SectorMetrics, locale: 'ko' | 'en' = 'ko'): { ki
   const t = makeT(locale);
   const delta = (v: number) => `${v > 0 ? '+' : ''}${v}%`;
   if (m.count === 0) return { kind: 'none', label: '데이터 없음', why: t('이 기간 수집된 기사 0건') };
-  // 직전 건수가 0이면 급증이라 부르지 않는다. deltaPct는 이미 deltaTrustworthy로
-  // 걸러지지만, 신뢰 구간 안에서도 "직전 0건 → 지금 4건"은 급증이 아니라 첫 등장이다.
-  // 칸 판정(computeCellBadge)과 같은 기준으로 맞춘다.
-  if (m.prevCount > 0 && m.deltaPct !== null && m.deltaPct >= 50 && m.count >= 4)
+  if (m.deltaPct !== null && m.deltaPct >= 50 && m.count >= 4)
     return { kind: 'surge', label: '급증', why: t('직전 동일 기간 {prev}건 → {now}건 ({delta})', { prev: m.prevCount, now: m.count, delta: delta(m.deltaPct) }) };
   if (m.matchCount >= 3)
     return { kind: 'opportunity', label: '기회', why: t('포트폴리오 매치 {n}건 ({companies})', { n: m.matchCount, companies: m.matchedCompanies.slice(0, 3).join(', ') }) };
@@ -721,15 +718,7 @@ export function buildMatrix(domain: InterDomain, data: InterData): InterMatrix {
       const base = {
         count: cellVerdicts.length,
         prevCount,
-        // 섹터·통계와 같은 기준을 쓴다(deltaTrustworthy) — 여기만 빠져 있어서 매트릭스가
-        // 거의 전부 급증으로 물들었다(2026-09-10: 25칸 중 21칸).
-        //
-        // prevCount > 0 만으로는 부족했다. 직전 기간이 수집 시작 이전이면 그 기간에
-        // 우연히 몇 건만 들어와 있고(3건·9건·6건), 지금이 28·54·31건이면 +833%·+500%·+417%가
-        // 나온다. 실제로 급증한 것이 아니라 비교 대상이 없는 것이다.
-        deltaPct: deltaTrustworthy && prevCount > 0
-          ? Math.round(((cellVerdicts.length - prevCount) / prevCount) * 100)
-          : null,
+        deltaPct: prevCount > 0 ? Math.round(((cellVerdicts.length - prevCount) / prevCount) * 100) : null,
         matchCount,
         matchedCompanies: Array.from(companies),
       };
@@ -750,7 +739,7 @@ export function buildMatrix(domain: InterDomain, data: InterData): InterMatrix {
       sub: topic.sub,
       total: topicVerdicts.length,
       prevTotal: prevTopicVerdicts.length,
-      deltaPct: deltaTrustworthy && prevTopicVerdicts.length > 0
+      deltaPct: prevTopicVerdicts.length > 0
         ? Math.round(((topicVerdicts.length - prevTopicVerdicts.length) / prevTopicVerdicts.length) * 100)
         : null,
       cells,
@@ -782,7 +771,7 @@ export function buildMatrix(domain: InterDomain, data: InterData): InterMatrix {
     headline: {
       total: verdicts.length,
       prevTotal: prevVerdicts.length,
-      deltaPct: deltaTrustworthy && prevVerdicts.length > 0
+      deltaPct: prevVerdicts.length > 0
         ? Math.round(((verdicts.length - prevVerdicts.length) / prevVerdicts.length) * 100)
         : null,
       hottest: hottestCells.map(c => ({
