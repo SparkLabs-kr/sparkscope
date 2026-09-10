@@ -372,7 +372,8 @@ function DomainTabBig({ icon, label, sub, active, activeCls, onClick }: {
 function DeltaChip({ deltaPct, count, comparable = true }: { deltaPct: number | null; count?: number; comparable?: boolean }) {
   const t = useT();
   if (count === 0) return <span className="text-[11px] text-spark-muted">—</span>;
-  // 직전 기간이 수집 시작(2026-07-31) 이전이면 비교 자체가 성립하지 않는다.
+  // 건수 총량을 수집 경계 너머로 비교할 때만 쓴다(전체 기사 수 카드).
+  // 주제·칸 단위 증감률은 점유율 기준으로 바뀌어서 이 게이트를 지나지 않는다.
   // 이걸 '신규'로 표시하면 "이번에 처음 뜬 흐름"으로 읽혀서 정반대 뜻이 된다(2026-09-07).
   if (!comparable) {
     return (
@@ -429,7 +430,11 @@ function SectorCard({
             <span className="text-[15px] font-bold tabular-nums text-spark-ink">
               {sector.metrics.count}<span className="text-[12px] font-normal text-spark-muted">{t('건')}</span>
             </span>
-            <DeltaChip deltaPct={sector.metrics.deltaPct} count={sector.metrics.count} comparable={sector.metrics.deltaComparable} />
+            {/* comparable을 넘기지 않는다 — 섹터 증감률은 점유율 기준이라 수집량이 기간마다
+                달라도 비교가 성립한다(inter-sample-data.ts의 shareDeltaPct).
+                아래 전체 건수 카드는 원래대로 comparable을 넘긴다: 건수 총량을 수집 경계
+                너머로 비교하는 것은 여전히 의미가 없다. */}
+            <DeltaChip deltaPct={sector.metrics.deltaPct} count={sector.metrics.count} />
           </div>
           <span className={`rounded px-2 py-0.5 text-[11px] font-bold ${BADGE_CLS[sector.badge.kind]}`} title={sector.badge.why}>
             {t(sector.badge.label)}
@@ -822,7 +827,7 @@ function HeadlineStats({ headline: h }: { headline: InterMatrix['headline'] }) {
       <div className="relative group bg-white border border-spark-border rounded-xl px-4 py-3.5">
         <div className="flex items-center gap-1 text-[12px] text-spark-muted mb-1">
           {t('가장 급증한 트렌드 조합')}
-          <InfoTip text={t('아래 매트릭스는 "주제"(예: 항암)와 "사건 유형"(예: 투자·딜)을 교차해서 보여줍니다.\n이 칸들은 그중 직전 기간 대비 증가율이 가장 높은 상위 3개 조합이에요 — 최소 3건 이상 쌓인 칸 중에서만 고릅니다.')} />
+          <InfoTip text={t('아래 매트릭스는 "주제"(예: 항암)와 "사건 유형"(예: 투자·딜)을 교차해서 보여줍니다.\n증감률은 건수가 아니라 "전체 기사 중 차지하는 비중"의 변화입니다 — 수집량 자체가 기간마다 달라서(2026-08 실수집 시작으로 월 200건대 → 1,000건대) 건수로 재면 아무 일 없던 주제도 몇 배씩 늘어 보입니다.\n최소 3건 이상 쌓인 칸 중에서만 고릅니다.')} />
         </div>
         {h.hottest.length === 0 ? (
           <div className="truncate text-[15px] font-extrabold text-spark-ink">{t('데이터 없음')}</div>

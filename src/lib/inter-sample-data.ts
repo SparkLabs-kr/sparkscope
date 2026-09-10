@@ -179,6 +179,40 @@ function isDeltaTrustworthy(prevSince?: Date): boolean {
   return !!prevSince && prevSince.getTime() >= INTER_COLLECTION_START.getTime();
 }
 
+/**
+ * 직전 기간 표본이 이보다 적으면 점유율을 계산하지 않는다.
+ * 분모가 작으면 한두 건 차이로 비중이 크게 흔들려서 증감률이 의미를 잃는다.
+ */
+const MIN_PREV_TOTAL = 30;
+
+/**
+ * 점유율 기준 증감률 — "건수가 몇 배 늘었나"가 아니라 "전체에서 차지하는 비중이 얼마나
+ * 달라졌나"를 본다.
+ *
+ * 왜 이렇게 세나 — 수집량 자체가 크게 변했기 때문이다. 2026-08에 실수집이 시작되면서
+ * 월 170~260건(백필)에서 1,092건으로 뛰었고, 그 결과 같은 3개월 비교에서 전체가
+ * 262건 → 1,003건(+283%)이 됐다. 건수로 비교하면 아무 일 없던 주제도 200~400% 늘어
+ * 보이고, 실제로 매트릭스 25칸 중 21칸이 급증으로 물들었다(2026-09-10).
+ *
+ * 더 나쁜 것은 방향이 뒤집히는 경우다:
+ *   AI버티컬 × 제품·상용화  20건 → 49건 = +145% (급증으로 표시됨)
+ *   같은 칸의 비중          7.6% → 4.9% = -36% (실제로는 줄어듦)
+ * 전체가 283% 늘어난 판에서 145%만 늘었으니 상대적으로 쪼그라든 것인데 화면은
+ * 정반대를 말하고 있었다.
+ *
+ * 점유율로 재면 "전체 증가를 따라간 것"은 0% 근처로, "전체보다 더 늘어난 것"만
+ * 양수로 나온다. 수집량이 앞으로 또 늘어도(크론을 매시간으로 바꿨다) 자동으로 보정된다.
+ *
+ * 건수(count·prevCount)는 그대로 보여준다 — 바꾸는 것은 증감률 계산뿐이다.
+ */
+function shareDeltaPct(count: number, total: number, prevCount: number, prevTotal: number): number | null {
+  if (prevCount <= 0 || prevTotal < MIN_PREV_TOTAL || total <= 0) return null;
+  const now = count / total;
+  const before = prevCount / prevTotal;
+  if (before <= 0) return null;
+  return Math.round(((now - before) / before) * 100);
+}
+
 // 도메인+기간에 대한 verdict/match를 한 번만 조회해서 stats·sectors 양쪽에 재사용.
 // prevVerdicts(직전 동일 기간)는 섹터별 증감률(momentum) 계산용.
 export interface InterData {
@@ -367,7 +401,7 @@ export function computeBadge(m: SectorMetrics, locale: 'ko' | 'en' = 'ko'): { ki
   const delta = (v: number) => `${v > 0 ? '+' : ''}${v}%`;
   if (m.count === 0) return { kind: 'none', label: '데이터 없음', why: t('이 기간 수집된 기사 0건') };
   if (m.deltaPct !== null && m.deltaPct >= 50 && m.count >= 4)
-    return { kind: 'surge', label: '급증', why: t('직전 동일 기간 {prev}건 → {now}건 ({delta})', { prev: m.prevCount, now: m.count, delta: delta(m.deltaPct) }) };
+    return { kind: 'surge', label: '급증', why: t('직전 동일 기간 {prev}건 → {now}건 · 전체 대비 비중 {delta}', { prev: m.prevCount, now: m.count, delta: delta(m.deltaPct) }) };
   if (m.matchCount >= 3)
     return { kind: 'opportunity', label: '기회', why: t('포트폴리오 매치 {n}건 ({companies})', { n: m.matchCount, companies: m.matchedCompanies.slice(0, 3).join(', ') }) };
   if (m.share >= 0.12)
@@ -472,10 +506,10 @@ export function getSectorData(domain: InterDomain, data: InterData): SectorBlock
     const metrics: SectorMetrics = {
       count: sectorVerdicts.length,
       prevCount,
-      // 수집 시작 이전이 분모로 걸리면 비교 자체를 하지 않는다(null = '비교 불가').
-      deltaPct: deltaTrustworthy && prevCount > 0
-        ? Math.round(((sectorVerdicts.length - prevCount) / prevCount) * 100)
-        : null,
+      // 점유율 기준으로 센다(shareDeltaPct 주석 참고). 수집량이 기간마다 달라도
+      // 비중 변화는 그대로 비교되므로 deltaTrustworthy로 막을 필요가 없어졌다 —
+      // 1년 반치 백필(2025-02~, 태그 완료율 91~100%)을 실제로 쓴다.
+      deltaPct: shareDeltaPct(sectorVerdicts.length, total, prevCount, prevVerdicts.length),
       deltaComparable: deltaTrustworthy,
       share: total > 0 ? sectorVerdicts.length / total : 0,
       matchCount,
@@ -658,7 +692,7 @@ function computeCellBadge(m: { count: number; prevCount: number; deltaPct: numbe
   // 직전 기간이 0건인 건 "폭증"이 아니라 "비교할 게 없음"인 경우가 대부분이다 —
   // 수집 백필이 기간마다 고르지 않으면 직전이 0으로 잡혀서 거의 모든 칸이 급증으로 물든다.
   if (m.prevCount > 0 && m.deltaPct !== null && m.deltaPct >= 50 && m.count >= 3)
-    return { kind: 'surge', label: '급증', why: t('직전 동일 기간 {prev}건 → {now}건 ({delta})', { prev: m.prevCount, now: m.count, delta: delta(m.deltaPct!) }) };
+    return { kind: 'surge', label: '급증', why: t('직전 동일 기간 {prev}건 → {now}건 · 전체 대비 비중 {delta}', { prev: m.prevCount, now: m.count, delta: delta(m.deltaPct!) }) };
   if (m.matchCount >= 2)
     return { kind: 'opportunity', label: '기회', why: t('포트폴리오 매치 {n}건 ({companies})', { n: m.matchCount, companies: m.matchedCompanies.slice(0, 3).join(', ') }) };
   if (m.count >= 4)
@@ -718,7 +752,9 @@ export function buildMatrix(domain: InterDomain, data: InterData): InterMatrix {
       const base = {
         count: cellVerdicts.length,
         prevCount,
-        deltaPct: prevCount > 0 ? Math.round(((cellVerdicts.length - prevCount) / prevCount) * 100) : null,
+        // 점유율 기준(shareDeltaPct). 건수로 재던 때는 전체 수집량이 283% 늘어난 것만으로
+        // 25칸 중 21칸이 급증으로 물들었다.
+        deltaPct: shareDeltaPct(cellVerdicts.length, verdicts.length, prevCount, prevVerdicts.length),
         matchCount,
         matchedCompanies: Array.from(companies),
       };
@@ -739,9 +775,7 @@ export function buildMatrix(domain: InterDomain, data: InterData): InterMatrix {
       sub: topic.sub,
       total: topicVerdicts.length,
       prevTotal: prevTopicVerdicts.length,
-      deltaPct: prevTopicVerdicts.length > 0
-        ? Math.round(((topicVerdicts.length - prevTopicVerdicts.length) / prevTopicVerdicts.length) * 100)
-        : null,
+      deltaPct: shareDeltaPct(topicVerdicts.length, verdicts.length, prevTopicVerdicts.length, prevVerdicts.length),
       cells,
     };
   });

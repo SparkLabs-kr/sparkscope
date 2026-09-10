@@ -913,6 +913,7 @@ export const EN: Record<string, string> = {
   '주요 흐름': 'Notable',
   '이 기간 수집된 기사 0건': '0 articles collected in this period',
   '이 조합에 해당하는 기사가 없습니다': 'No articles for this combination',
+  '직전 동일 기간 {prev}건 → {now}건 · 전체 대비 비중 {delta}': '{prev} → {now} articles · share of total {delta}',
   '직전 동일 기간 {prev}건 → {now}건 ({delta})': '{prev} → {now} articles vs the previous equivalent period ({delta})',
   '포트폴리오 매치 {n}건 ({companies})': '{n} portfolio matches ({companies})',
   '이 도메인 기사 전체의 {pct}% ({n}건)': '{pct}% of all articles in this domain ({n})',
