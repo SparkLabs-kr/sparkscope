@@ -189,7 +189,10 @@ export async function buildEntityCards(
     for (const e of postEnts.get(p.url) ?? []) {
       const a = touch(e);
       a.mentions++;
-      if (a.community.length < MAX_COMMUNITY && !a.community.some(x => x.url === p.url)) {
+      // 여기서 상한을 걸면 안 된다. 소스 순서(DOMAIN_SOURCES)대로 채워지므로 앞에 있는
+      // HN이 세 칸을 다 먹고, 뒤에 오는 AlphaSignal이 17,394업보트여도 밀려났다
+      // (2026-09-10 실측: 카드에 alphasignal 0건). 전부 모아 두고 점수로 고른 뒤 자른다.
+      if (!a.community.some(x => x.url === p.url)) {
         a.community.push(p);
         a.points += p.points;
       }
@@ -225,7 +228,8 @@ export async function buildEntityCards(
       outlets: a.outlets.size,
       mentions: a.mentions,
       articles: a.articles,
-      community: a.community.sort((x, y) => y.points - x.points),
+      // 점수 순으로 세운 뒤 상한만큼 남긴다 — 소스 순서가 아니라 반응 크기가 기준이다.
+      community: a.community.sort((x, y) => y.points - x.points).slice(0, MAX_COMMUNITY),
       // 비어 있으면 도메인 기본값을 쓴다 — AI 카드에 "새로 등록된 연구·임상 없음"이
       // 뜨면 엉뚱하다.
       communityKind: a.community.length === 0
