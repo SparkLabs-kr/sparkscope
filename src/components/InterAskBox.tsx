@@ -17,7 +17,7 @@ export function InterAskBox({ item }: { item: DigestItem }) {
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState<string | null>(null);
-  const [grounded, setGrounded] = useState(true);
+  const [reason, setReason] = useState<string>('answered');
   const [err, setErr] = useState<string | null>(null);
 
   const ask = async () => {
@@ -52,7 +52,7 @@ export function InterAskBox({ item }: { item: DigestItem }) {
         return;
       }
       setAnswer(data.answer ?? '');
-      setGrounded(data.grounded !== false);
+      setReason(typeof data.reason === 'string' ? data.reason : 'answered');
     } catch {
       setErr(t('답을 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.'));
     } finally {
@@ -101,10 +101,16 @@ export function InterAskBox({ item }: { item: DigestItem }) {
         <div className="mt-2.5 rounded-lg bg-spark-subtle border border-spark-border px-3 py-2.5">
           <p className="text-[12.5px] leading-[1.75] text-spark-ink whitespace-pre-wrap">{answer}</p>
           {/* 근거 밖이면 그렇다고 표시한다 — 답이 그럴듯해 보일수록 필요하다. */}
+          {/* 자료 상태 문장은 서버가 준 reason 으로 앱이 쓴다 — 모델이 쓰게 두면
+              근거가 충분한 기사에도 "제목만 수집되어 있다"고 말한다. */}
           <p className="mt-2 text-[10.5px] text-spark-muted">
-            {grounded
+            {reason === 'answered'
               ? t('이 기사에 수집된 내용만으로 답했습니다.')
-              : t('수집된 내용만으로는 답하기 어려운 질문입니다 — 원문을 확인해 주세요.')}
+              : reason === 'headline_only'
+                ? t('이 기사는 제목만 수집되어 있어 내용을 답할 수 없습니다 — 원문을 확인해 주세요.')
+                : reason === 'off_topic'
+                  ? t('이 기사와 관련된 질문에만 답할 수 있습니다.')
+                  : t('수집된 요약에 그 내용이 없습니다 — 원문을 확인해 주세요.')}
           </p>
         </div>
       )}

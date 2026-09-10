@@ -35,7 +35,8 @@ export type AskContext = {
   portfolio?: { company: string; reason: string }[];
 };
 
-export type AskResult = { answer: string; grounded: boolean };
+export type AskReason = 'answered' | 'outside_summary' | 'off_topic' | 'headline_only';
+export type AskResult = { answer: string; grounded: boolean; reason: AskReason };
 
 const SYSTEM = [
   '너는 스파크랩 미디어 인사이트(SparkScope)의 뉴스 도우미다.',
@@ -43,21 +44,21 @@ const SYSTEM = [
   '',
   '규칙:',
   '1. 근거에 없는 사실을 만들지 마라. 숫자·인용·날짜·인물은 특히 그렇다.',
-  '2. 답할 수 없을 때는 "왜" 답할 수 없는지를 정확히 말해라. 두 경우는 다르다:',
-  '   (a) grounding 이 "headline" 이면 제목과 매체명밖에 없다 →',
-  '       "이 항목은 제목만 수집되어 있어 내용을 답할 수 없다"고 말해라.',
-  '   (b) 요약은 있는데 질문이 그 범위 밖이면 →',
-  '       "수집된 요약에는 그 내용이 없다"고 말해라. 제목만 있다고',
-  '       하지 마라 — 사실이 아니고, 읽는 사람이 자료 상태를 오해한다.',
-  '   어느 쪽이든 원문 링크를 권하고, 추측해서 채우지 마라.',
-  '3. 사과나 변명은 짧게.',
-  '4. 답은 3~5문장. 불릿은 쓰지 마라. 사용자가 쓴 언어로 답해라',
+  '2. 답은 3~5문장. 불릿은 쓰지 마라. 사용자가 쓴 언어로 답해라',
   '   (한국어로 물으면 한국어, 영어로 물으면 영어).',
-  '5. 기사 밖의 일반 지식은, 그것이 배경 설명으로 분명히 도움이 될 때만',
-  '   덧붙이고 "기사에 나온 내용은 아니다"라고 밝혀라.',
+  '3. 투자 권유(사야 하나/팔아야 하나)에는 판단을 내리지 말고, 기사에 있는',
+  '   사실만 전하고 판단은 사용자 몫이라고 밝혀라.',
   '',
-  'JSON 으로만 답한다: {"answer": string, "grounded": boolean}',
-  'grounded 는 주어진 근거만으로 답했으면 true, 답할 수 없었으면 false.',
+  'JSON 으로만 답한다:',
+  '{"answer": string, "reason": "answered"|"outside_summary"|"off_topic"}',
+  '',
+  'reason 을 고르는 법 — 자료 상태를 네가 서술하지 마라. 판단만 해라:',
+  '  answered        : 주어진 근거만으로 답했다.',
+  '  outside_summary : 이 기사에 대한 질문이지만 근거에 그 내용이 없다.',
+  '  off_topic       : 이 기사와 무관한 질문이다(일반 상식, 다른 기사, 잡담).',
+  'answered 가 아니면 answer 에는 무엇을 못 하는지만 짧게 적고, 없는 사실을',
+  '지어내지 마라. 근거가 어떤 상태인지(제목만 있는지 등)는 쓰지 마라 —',
+  '그 문장은 앱이 붙인다.',
 ].join('\n');
 
 export async function askAboutItem(
@@ -92,16 +93,30 @@ export async function askAboutItem(
     return {
       answer: '답이 길어져 끊겼습니다. 질문을 좀 더 좁혀서 다시 물어봐 주세요.',
       grounded: false,
+      reason: 'outside_summary',
     };
   }
 
   const raw = resp.choices[0]?.message?.content ?? '';
+  let answer = '';
+  let reason: AskReason = 'outside_summary';
   try {
-    const obj = JSON.parse(raw) as { answer?: unknown; grounded?: unknown };
-    const answer = typeof obj.answer === 'string' ? obj.answer.trim() : '';
+    const obj = JSON.parse(raw) as { answer?: unknown; reason?: unknown };
+    answer = typeof obj.answer === 'string' ? obj.answer.trim() : '';
     if (!answer) throw new Error('empty answer');
-    return { answer, grounded: obj.grounded === true };
+    if (obj.reason === 'answered' || obj.reason === 'off_topic') reason = obj.reason;
   } catch {
     throw new Error('모델 응답을 해석하지 못했다');
   }
+
+  /**
+   * 자료 상태는 앱이 판단한다. 모델에게 맡겼더니 grounding 이 full 인 기사에도
+   * "제목만 수집되어 있다"고 답했다 — 사실이 아닌데 읽는 사람은 자료가 부실한
+   * 줄로 오해한다. grounding 은 우리가 아는 값이므로 여기서 덮어쓴다.
+   */
+  if (reason !== 'answered' && ctx.grounding === 'headline') {
+    reason = 'headline_only';
+  }
+
+  return { answer, grounded: reason === 'answered', reason };
 }

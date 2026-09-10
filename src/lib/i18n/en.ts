@@ -1339,4 +1339,10 @@ export const EN: Record<string, string> = {
     'Could not get an answer. Please try again shortly.',
   '질문 기능이 아직 설정되지 않았습니다.':
     'The question feature is not configured yet.',
+  '이 기사는 제목만 수집되어 있어 내용을 답할 수 없습니다 — 원문을 확인해 주세요.':
+    'Only the headline was collected for this story, so it cannot be answered here — please check the original.',
+  '이 기사와 관련된 질문에만 답할 수 있습니다.':
+    'It can only answer questions about this story.',
+  '수집된 요약에 그 내용이 없습니다 — 원문을 확인해 주세요.':
+    'The collected summary does not cover that — please check the original article.',
 };
