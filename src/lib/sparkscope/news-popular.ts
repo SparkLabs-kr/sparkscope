@@ -61,7 +61,7 @@ interface PopularSource {
    * 'bioin'    정부 집계판(표 형식, 조회수 있음)
    * 'headline' 매체 첫 화면의 헤드라인 영역(편집자 판단) — headline 스펙을 함께 준다
    */
-  kind: 'cms' | 'bioin' | 'headline';
+  kind: 'cms' | 'bioin' | 'headline' | 'alphasignal';
   headline?: HeadlineSpec;
   domestic?: boolean;
 }
@@ -193,6 +193,19 @@ const SOURCES: PopularSource[] = [
       popularStart: 'card-item slider most-read',
       popularWindow: 9_000,
     },
+  },
+  {
+    // AlphaSignal — AI 소식을 모아 업보트로 줄 세우는 곳. RSS가 없어(/feed 404)
+    // 첫 화면을 읽고 업보트로 등수를 매긴다(parseAlphaSignal).
+    //
+    // 소셜 시그널에도 같은 곳을 넣었다(social-collect의 'alphasignal') — 업보트 자체는
+    // 커뮤니티 반응이고, 여기서는 그 반응이 붙은 기사를 뉴스 후보로 쓴다. 같은 URL이
+    // 양쪽에 뜨는 것은 이름 카드에서 걸러낸다(entity-cards).
+    name: 'AlphaSignal',
+    url: 'https://alphasignal.ai/',
+    origin: 'https://alphasignal.ai',
+    domain: 'ai',
+    kind: 'alphasignal',
   },
   {
     // 홈페이지 첫 화면 — 히어로 → 보조 카드 → Top Headlines 순으로 놓인다.
@@ -402,6 +415,41 @@ function parseHeadline(html: string, src: PopularSource): PopularItem[] {
   return merged;
 }
 
+/**
+ * AlphaSignal 첫 화면 — 항목마다 업보트가 붙어 있어 그것으로 등수를 매긴다.
+ *
+ * 마크업이 <article class="feed-item"> 안에 업보트(.feed-vote-n)와 제목(.feed-title > a)이
+ * 같이 있는 구조다. 화면의 UPVOTES 정렬 탭은 자바스크립트라 URL로 부를 수 없어서,
+ * 기본(최신) 화면을 읽고 업보트로 우리가 정렬한다 — 숫자가 같이 오므로 결과는 같다.
+ */
+function parseAlphaSignal(html: string, src: PopularSource): PopularItem[] {
+  const rows: (PopularItem & { votes: number })[] = [];
+
+  for (const block of html.match(/<article class="feed-item">[\s\S]{0,3000}?<\/article>/g) ?? []) {
+    const votes = Number(block.match(/class="feed-vote-n">([\d,]+)</)?.[1]?.replace(/,/g, '') ?? '');
+    const href = block.match(/class="feed-title"[^>]*>\s*<a[^>]*href="(\/news\/[a-z0-9-]+)"/)?.[1];
+    const raw = block.match(/class="feed-title"[^>]*>\s*<a[^>]*>([\s\S]*?)<\/a>/)?.[1];
+    if (!href || !raw) continue;
+    // Next.js가 낱말 사이에 <!-- --> 주석을 넣는다 — 먼저 떼어야 제목이 붙는다.
+    const title = decode(raw.replace(/<!--[\s\S]*?-->/g, ''));
+    if (title.length < 12) continue;
+    rows.push({
+      title,
+      url: src.origin + href,
+      source: src.name,
+      rank: 0,
+      // 업보트를 views 자리에 담는다 — "매체가 공개한 실측 반응 수"라는 뜻이 같다.
+      views: Number.isFinite(votes) ? votes : undefined,
+      votes: Number.isFinite(votes) ? votes : 0,
+    });
+  }
+
+  rows.sort((a, b) => b.votes - a.votes);
+  const out = rows.slice(0, MAX_RANK).map(({ votes: _v, ...r }, i) => ({ ...r, rank: i + 1 }));
+  if (out.length === 0) console.error(`[news-popular] ${src.name} 0건 — 마크업이 바뀐 것 같습니다`);
+  return out;
+}
+
 async function fetchOne(src: PopularSource): Promise<PopularItem[]> {
   try {
     let url = src.url;
@@ -416,6 +464,7 @@ async function fetchOne(src: PopularSource): Promise<PopularItem[]> {
 
     if (src.kind === 'bioin') return parseBioin(html, src);
     if (src.kind === 'headline') return parseHeadline(html, src);
+    if (src.kind === 'alphasignal') return parseAlphaSignal(html, src);
 
     // 목록 페이지는 기사 링크가 순위 순으로 나열된다. 제목은 링크 안쪽 텍스트다.
     const seen = new Set<string>();

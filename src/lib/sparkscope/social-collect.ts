@@ -24,7 +24,8 @@
 export type SocialDomain = 'ai' | 'bio';
 export type SocialSourceId =
   | 'hf' | 'hf_new' | 'hn' | 'reddit' | 'lobsters' | 'arxiv'
-  | 'biorxiv' | 'pubmed' | 'trials';
+  | 'biorxiv' | 'pubmed' | 'trials'
+  | 'alphasignal' | 'importai';
 
 export interface SocialPost {
   /** 소스가 주는 고유 id — DB 식별키(source, externalId)의 뒷부분.
@@ -74,6 +75,8 @@ const WHY: Record<SocialSourceId, string> = {
   biorxiv: '바이오 프리프린트 원본',
   pubmed: '심사를 통과해 정식 게재된 논문',
   trials: '임상 단계 변경과 FDA 리콜 — 회사 발표보다 앞선다',
+  alphasignal: 'AI 실무자들이 업보트로 고르는 그날의 소식',
+  importai: '앤트로픽 정책 담당자가 쓰는 주간 정리 — 해석이 붙는다',
 };
 
 /** 소스별 캐시(초) — 원본이 갱신되는 속도에 맞춘다. 조사 결과(2026-09-08) 기준. */
@@ -98,6 +101,10 @@ export const COLLECT_INTERVAL_SEC: Record<SocialSourceId, number> = {
   biorxiv: REVALIDATE.daily,
   pubmed: REVALIDATE.daily,
   trials: REVALIDATE.daily,
+  // 업보트가 쌓이는 데 시간이 걸리므로 커뮤니티(2시간)보다 느리게, 논문(24시간)보다 빠르게.
+  alphasignal: REVALIDATE.medium,
+  // 주간 뉴스레터다 — 하루에 한 번이면 충분하다.
+  importai: REVALIDATE.daily,
 };
 
 /** 도메인별로 화면에 세울 소스 순서. 배열 순서가 곧 화면 순서다. */
@@ -105,7 +112,7 @@ export const COLLECT_INTERVAL_SEC: Record<SocialSourceId, number> = {
 // 최신순 목록은 "지금 뭐가 뜨나"에 답하지 못해 위에 둘 값이 없다.
 // REDDIT_CLIENT_ID/SECRET을 넣어 주간 업보트 순으로 정렬되면 위로 올린다.
 export const DOMAIN_SOURCES: Record<SocialDomain, SocialSourceId[]> = {
-  ai: ['hf', 'hf_new', 'hn', 'lobsters', 'arxiv', 'reddit'],
+  ai: ['hf', 'hf_new', 'hn', 'alphasignal', 'lobsters', 'arxiv', 'importai', 'reddit'],
   bio: ['hn', 'biorxiv', 'trials', 'pubmed', 'reddit'],
 };
 
@@ -120,6 +127,10 @@ export const SOURCE_META: Record<SocialSourceId, { label: string; ranked: boolea
   biorxiv:  { label: 'bioRxiv · medRxiv',        ranked: false },
   pubmed:   { label: 'PubMed',                   ranked: false },
   trials:   { label: 'ClinicalTrials · FDA',     ranked: false },
+  // 업보트가 있어 인기순으로 세울 수 있다 — HN 다음으로 순위가 의미 있는 소스다.
+  alphasignal: { label: 'AlphaSignal',            ranked: true },
+  // 주간 뉴스레터라 점수가 없다. 최신순으로만 세운다.
+  importai: { label: 'Import AI (Jack Clark)',    ranked: false },
 };
 
 /** 제목이 고유명사라 번역하면 안 되는 소스 — HF 모델 id는 이름 그 자체다. */
@@ -182,9 +193,25 @@ async function getJson<T>(url: string, revalidate: number): Promise<T> {
   return JSON.parse(await getText(url, revalidate)) as T;
 }
 
+/**
+ * 피드 텍스트를 사람이 읽는 문자열로 되돌린다.
+ *
+ * CDATA 벗기기와 숫자 엔티티 해제를 2026-09-10에 추가했다. 없을 때 이렇게 나왔다:
+ *   Import AI  → "<![CDATA[Import AI 472: DeepMind's cheating math agents"
+ *   AlphaSignal → "OpenAI&#x27;s Defense Factory Deploys AI Agents"
+ * 둘 다 화면과 LLM 입력에 그대로 들어간다.
+ *
+ * 순서가 중요하다 — &amp;를 마지막에 푼다. 먼저 풀면 "&amp;lt;"처럼 이중 인코딩된
+ * 것이 "<"로 바뀌어 태그처럼 보인다.
+ */
 function decodeXml(s: string): string {
-  return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+  return s
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+    .replace(/&#0?39;|&apos;/g, "'").replace(/&nbsp;/g, ' ')
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&amp;/g, '&');
 }
 
 const tag = (xml: string, name: string) =>
@@ -262,6 +289,89 @@ async function fetchHfNew(): Promise<SocialPost[]> {
 // ──────────────────────────────────────────────────────────────
 // 커뮤니티
 // ──────────────────────────────────────────────────────────────
+
+/**
+ * AlphaSignal — AI 소식을 모아 업보트로 줄 세우는 곳.
+ *
+ * RSS가 없다(/feed 는 404). 첫 화면이 서버 렌더라 그것을 읽는다. 항목 하나가
+ *   <article class="feed-item">
+ *     <button class="feed-vote">…<span class="feed-vote-n">916</span></button>
+ *     <h2 class="feed-title"><a href="/news/…">제목</a></h2>
+ * 모양이라 업보트와 제목이 한 블록에 같이 있다.
+ *
+ * 화면의 UPVOTES 정렬 탭은 자바스크립트라 URL로 부를 수 없다. 대신 기본(최신) 화면을
+ * 읽고 업보트로 우리가 정렬한다 — 어차피 숫자가 같이 오므로 결과는 같다.
+ *
+ * 제목에 Next.js가 넣는 <!-- --> 주석이 낱말 사이에 박혀 있어 떼어낸다.
+ */
+async function fetchAlphaSignal(): Promise<SocialPost[]> {
+  const html = await getText('https://alphasignal.ai/', REVALIDATE.medium);
+  const out: SocialPost[] = [];
+
+  for (const block of html.match(/<article class="feed-item">[\s\S]{0,3000}?<\/article>/g) ?? []) {
+    const votes = Number(block.match(/class="feed-vote-n">([\d,]+)</)?.[1]?.replace(/,/g, '') ?? '');
+    const link = block.match(/class="feed-title"[^>]*>\s*<a[^>]*href="(\/news\/[a-z0-9-]+)"/)?.[1];
+    const rawTitle = block.match(/class="feed-title"[^>]*>\s*<a[^>]*>([\s\S]*?)<\/a>/)?.[1];
+    if (!link || !rawTitle) continue;
+
+    const title = decodeXml(
+      rawTitle
+        .replace(/<!--[\s\S]*?-->/g, '')  // Next.js가 낱말 사이에 넣는 주석
+        .replace(/<[^>]+>/g, ''),
+    ).replace(/\s+/g, ' ').trim();
+    if (title.length < 10) continue;
+
+    out.push({
+      externalId: link.replace('/news/', ''),
+      title,
+      url: `https://alphasignal.ai${link}`,
+      points: Number.isFinite(votes) ? votes : 0,
+      pointsLabel: '업보트',
+      comments: 0,
+      // 첫 화면에 항목별 발행일이 없다(datetime·<time>·"N hours ago" 모두 없음).
+      // 지금 첫 화면에 올라와 있다는 것 자체가 최근이라는 뜻이므로 수집일로 둔다 —
+      // social-store가 firstSeenAt을 따로 기록하므로 기간 조회는 그것으로도 걸러진다.
+      date: ymd(Date.now()),
+    });
+  }
+
+  // 업보트 순으로 세운다(화면은 최신순으로 준다).
+  out.sort((a, b) => (b.points ?? 0) - (a.points ?? 0));
+  if (out.length === 0) console.error('[social] AlphaSignal 0건 — 마크업이 바뀐 것 같습니다');
+  return out.slice(0, 12);
+}
+
+/**
+ * Import AI — 앤트로픽 정책 담당자(Jack Clark)의 주간 정리.
+ *
+ * 매체 목록(news-feeds)에서 이곳으로 옮겼다(2026-09-10 요청). importai.substack.com 과
+ * jack-clark.net 은 같은 뉴스레터의 두 주소이고 글도 같아서(Import AI 472·471·470이
+ * 양쪽에 동일) 둘을 다 두면 같은 글이 두 번 세어진다. 그래서 매체 쪽에서 뺐다.
+ *
+ * 점수가 없다 — Substack은 RSS에 좋아요 수를 주지 않는다. 최신순으로만 세운다.
+ */
+async function fetchImportAi(): Promise<SocialPost[]> {
+  const xml = await getText('https://importai.substack.com/feed', REVALIDATE.daily);
+  const out: SocialPost[] = [];
+
+  for (const item of xml.match(/<item>[\s\S]*?<\/item>/g) ?? []) {
+    const title = decodeXml(item.match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? '');
+    const link = decodeXml(item.match(/<link>([\s\S]*?)<\/link>/)?.[1] ?? '').trim();
+    const date = item.match(/<pubDate>([^<]*)<\/pubDate>/)?.[1];
+    if (!title || !link) continue;
+    const ms = date ? Date.parse(date) : NaN;
+    out.push({
+      externalId: link.split('/').pop() ?? link,
+      title,
+      url: link,
+      points: 0,
+      comments: 0,
+      date: Number.isNaN(ms) ? ymd(Date.now()) : ymd(ms),
+    });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
 
 /** Hacker News — 무료·무인증, 점수 있음. 정렬: 업보트 + 댓글×2. */
 async function fetchHackerNews(domain: SocialDomain, sinceMs: number): Promise<SocialPost[]> {
@@ -559,7 +669,7 @@ const empty = <T,>(v: T) => () => v;
 export async function collectSocialSignals(domain: SocialDomain, sinceMs: number): Promise<SocialSource[]> {
   const isAi = domain === 'ai';
 
-  const [hfTrend, hfNew, hn, reddit, lobsters, arxiv, biorxiv, pubmed, trials] = await Promise.all([
+  const [hfTrend, hfNew, hn, reddit, lobsters, arxiv, biorxiv, pubmed, trials, alphasignal, importai] = await Promise.all([
     isAi ? fetchHfTrending().catch(empty([] as SocialPost[])) : [],
     isAi ? fetchHfNew().catch(empty([] as SocialPost[])) : [],
     fetchHackerNews(domain, sinceMs).catch(empty([] as SocialPost[])),
@@ -569,6 +679,8 @@ export async function collectSocialSignals(domain: SocialDomain, sinceMs: number
     isAi ? [] : fetchBiorxiv().catch(empty([] as SocialPost[])),
     isAi ? [] : fetchPubmed().catch(empty([] as SocialPost[])),
     isAi ? [] : fetchTrials().catch(empty([] as SocialPost[])),
+    isAi ? fetchAlphaSignal().catch(empty([] as SocialPost[])) : [],
+    isAi ? fetchImportAi().catch(empty([] as SocialPost[])) : [],
   ]);
 
   // 화면에 쓰는 label·ranked는 SOURCE_META가 단일 소스다(라우트가 DB에서 되살릴 때도 그걸 쓴다).
@@ -583,8 +695,12 @@ export async function collectSocialSignals(domain: SocialDomain, sinceMs: number
         src('hf', hfTrend),
         src('hf_new', hfNew),
         src('hn', hn),
+        // 업보트가 있어 순위가 의미 있다 — HN 다음에 둔다.
+        src('alphasignal', alphasignal),
         src('lobsters', lobsters),
         src('arxiv', arxiv),
+        // 점수가 없는 주간 뉴스레터라 아래쪽에 둔다.
+        src('importai', importai),
         src('reddit', reddit.posts),
       ]
     : [

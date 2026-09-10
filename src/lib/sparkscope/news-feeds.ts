@@ -57,8 +57,8 @@ export interface Feed {
  *     'general'로 두어 AI 키워드가 있는 것만 통과시킨다.
  */
 export const INDICATOR_FEEDS: Feed[] = [
-  // 그날 AI 업계의 최대 사건을 골라 머리기사로 쓴다 — 편집 판단이 가장 선명하다.
-  { name: 'The Rundown AI', url: 'https://www.therundown.ai/feed', domain: 'ai', tier: 2, independent: true },
+  // The Rundown AI는 매체로 옮겼다(2026-09-10 결정). 지표로만 두면 화면에 뜨지 않는데,
+  // 그날 AI 업계의 최대 사건을 골라 머리기사로 쓰는 곳이라 기사 자체를 보여줄 값어치가 있다.
   // 모델 공개의 1차 출처. "제미나이 3.8 플래시 공개"가 실제 발표인지 확인해 준다.
   { name: 'Google DeepMind Blog', url: 'https://deepmind.google/blog/rss.xml', domain: 'ai', tier: 2 },
   // 컨설팅 리포트 — 사건 속보는 아니지만 어떤 주제가 의사결정 의제에 올랐나를 본다.
@@ -118,6 +118,10 @@ export const FEEDS: Feed[] = [
   { name: 'ITmedia AI+', url: 'https://rss.itmedia.co.jp/rss/2.0/aiplus.xml', domain: 'ai', tier: 3 },
   { name: 'AnswersNews', url: 'https://answers.and-pro.jp/pharmanews/feed/', domain: 'bio', tier: 3 },
 
+  // The Rundown AI — 지표에서 매체로 옮겼다(2026-09-10). 그날의 최대 사건을 골라
+  // 머리기사로 쓰는 큐레이션 뉴스레터다.
+  { name: 'The Rundown AI', url: 'https://www.therundown.ai/feed', domain: 'ai', tier: 2, independent: true },
+
   // ── 한국 AI 전문지 ──
   //
   // ⚠️ domain을 'general'로 두면 안 된다. 종합지는 글마다 DOMAIN_KEYWORDS로 분야를
@@ -171,7 +175,12 @@ export const FEEDS: Feed[] = [
 
   // ── AI 독립 분석가·뉴스레터 ──
   { name: 'Simon Willison', url: 'https://simonwillison.net/atom/everything/', domain: 'ai', tier: 2, independent: true },
-  { name: 'Import AI (Jack Clark)', url: 'https://jack-clark.net/feed/', domain: 'ai', tier: 2, independent: true },
+  // Import AI는 커뮤니티 소스로 옮겼다(2026-09-10 요청).
+  //
+  // ⚠️ 여기서 뺀 이유가 중요하다: importai.substack.com 과 jack-clark.net 은 같은
+  //    뉴스레터의 두 주소이고 글도 같다(실측: Import AI 472·471·470이 양쪽에 동일).
+  //    양쪽을 다 두면 같은 글이 "매체"와 "커뮤니티"로 두 번 세어져서 "여러 매체가
+  //    함께 보도"가 부풀려지고 이름 카드에도 두 번 뜬다. 그래서 한 곳만 남긴다.
   { name: 'Interconnects (Nathan Lambert)', url: 'https://www.interconnects.ai/feed', domain: 'ai', tier: 2, independent: true },
   { name: 'Ahead of AI (Sebastian Raschka)', url: 'https://magazine.sebastianraschka.com/feed', domain: 'ai', tier: 3, independent: true },
   { name: 'One Useful Thing (Ethan Mollick)', url: 'https://www.oneusefulthing.org/feed', domain: 'ai', tier: 3, independent: true },

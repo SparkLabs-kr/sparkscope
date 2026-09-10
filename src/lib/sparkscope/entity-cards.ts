@@ -196,6 +196,16 @@ export async function buildEntityCards(
     }
   }
 
+  // AlphaSignal은 매체(뉴스 후보)와 커뮤니티 양쪽에 들어 있다 — 업보트는 반응이고
+  // 그 반응이 붙은 기사는 뉴스다. 그래서 같은 URL이 한 카드에 "기사"와 "반응"으로
+  // 두 번 뜰 수 있다. 기사 쪽을 남기고 반응 쪽을 뺀다(기사 줄이 제목·요약을 더
+  // 많이 보여주고, 업보트 수는 어차피 기사 줄에 인기 등수로 반영된다).
+  for (const a of agg.values()) {
+    if (a.articles.length === 0) continue;
+    const urls = new Set(a.articles.map(x => x.url));
+    a.community = a.community.filter(c => !urls.has(c.url));
+  }
+
   const cards: EntityCard[] = [];
   for (const [key, a] of agg) {
     const hasNews = a.articles.length > 0 && a.outlets.size >= 2;
