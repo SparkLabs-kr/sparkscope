@@ -11,7 +11,7 @@
 import { collectDigest, type NewsDomain } from '../src/lib/sparkscope/news-digest';
 import { ensureSummaries } from '../src/lib/sparkscope/news-summary';
 import { ensurePortfolioHits } from '../src/lib/sparkscope/news-portfolio';
-import { saveDigest } from '../src/lib/sparkscope/digest-store';
+import { saveDigest, digestAge } from '../src/lib/sparkscope/digest-store';
 import { DISPLAY_COUNT } from '../src/lib/sparkscope/signal-display';
 import { buildEntityCards, type CommunityPost } from '../src/lib/sparkscope/entity-cards';
 import { readSignals } from '../src/lib/sparkscope/social-store';
@@ -44,6 +44,23 @@ async function communityPosts(domain: NewsDomain, days: number): Promise<Communi
 /** 화면이 고를 수 있는 기간. 라우트의 허용값과 같아야 한다. */
 const WINDOWS = [1, 7, 30];
 
+/**
+ * 창마다 다시 계산할 최소 간격.
+ *
+ * 이 스크립트는 매시간 돌지만 창 전부를 매시간 다시 만들 이유는 없다.
+ * "이번 달" 상위 12건은 한 시간에 바뀌지 않는다 — 30일 분모에 한 시간이 더해질 뿐이다.
+ * 반면 "오늘"과 "이번 주"는 새 기사가 바로 순위를 바꾼다.
+ *
+ * 사건 병합(groundSameStory)은 URL 캐시가 없어 실행마다 새로 과금되는 유일한 호출이고
+ * 창 하나가 월 $1.13이다(2026-09-10 산정). 30일 창을 6시간마다로 내리면 결과는
+ * 사실상 같으면서 월 $1.88이 줄어든다.
+ */
+const MIN_INTERVAL_MS: Record<number, number> = {
+  1: 0,                 // 오늘 — 매시간
+  7: 0,                 // 이번 주 — 매시간
+  30: 6 * 3600_000,     // 이번 달 — 6시간마다
+};
+
 async function main() {
   let ok = 0;
   let failed = 0;
@@ -51,6 +68,17 @@ async function main() {
   for (const domain of ['ai', 'bio'] as NewsDomain[]) {
     for (const days of WINDOWS) {
       const t = Date.now();
+
+      // 아직 다시 만들 때가 아니면 건너뛴다. 저장된 것이 그대로 쓰이므로 화면은 그대로다.
+      const minGap = MIN_INTERVAL_MS[days] ?? 0;
+      if (minGap > 0) {
+        const age = await digestAge(domain, days).catch(() => null);
+        if (age !== null && age < minGap) {
+          console.log(`[precompute-digest] ${domain}/${days}일 건너뜀 — ${(age / 3600_000).toFixed(1)}시간 전 계산 (주기 ${minGap / 3600_000}시간)`);
+          continue;
+        }
+      }
+
       try {
         const { items, feeds, keywords } = await collectDigest(domain, days, 12);
         await ensureSummaries(items);

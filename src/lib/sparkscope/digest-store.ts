@@ -34,6 +34,18 @@ export interface DigestPayload {
   computedAt: string;
 }
 
+/**
+ * 이 창의 사전계산이 얼마나 최근인지(밀리초). 없으면 null.
+ * 창마다 갱신 주기를 다르게 두려고 쓴다 — precompute-digest.ts 참고.
+ */
+export async function digestAge(domain: NewsDomain, days: number): Promise<number | null> {
+  const row = await prisma.dashboardInsight.findUnique({
+    where: { kind_key: { kind: KIND, key: keyOf(domain, days) } },
+    select: { updatedAt: true },
+  });
+  return row ? Date.now() - row.updatedAt.getTime() : null;
+}
+
 export async function saveDigest(
   domain: NewsDomain, days: number,
   payload: Omit<DigestPayload, 'computedAt'>,

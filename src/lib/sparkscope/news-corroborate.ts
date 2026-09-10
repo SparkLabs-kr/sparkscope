@@ -138,7 +138,19 @@ const decode = (s: string) =>
    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
    .replace(/&amp;/g, '&');
 
+/**
+ * 같은 기사를 한 프로세스 안에서 다시 검색하지 않는다.
+ *
+ * 사전계산은 창 6개로 돌고, 상위 기사는 대체로 세 창(오늘·이번주·이번달)에 함께
+ * 들어온다. 그래서 같은 제목으로 구글 뉴스를 세 번 검색했다(2026-09-10 실측:
+ * 검색 4건이 각각 3회씩 반복). 결과가 달라질 이유가 없으니 한 번만 묻는다.
+ */
+const CORROBORATE_MEMO_MS = 10 * 60_000;
+const memo = new Map<string, { at: number; found: { source: string; url: string }[] }>();
+
 async function findOthers(item: DigestItem): Promise<{ source: string; url: string }[]> {
+  const cached = memo.get(item.url);
+  if (cached && Date.now() - cached.at < CORROBORATE_MEMO_MS) return cached.found;
   const url = 'https://news.google.com/rss/search?' + new URLSearchParams({
     q: queryFor(item.title), ...localeFor(item.title),
   });
@@ -172,6 +184,7 @@ async function findOthers(item: DigestItem): Promise<{ source: string; url: stri
   } catch (e) {
     console.error('[news-corroborate] 실패(무시):', item.source, e instanceof Error ? e.message : e);
   }
+  memo.set(item.url, { at: Date.now(), found: out });
   return out;
 }
 

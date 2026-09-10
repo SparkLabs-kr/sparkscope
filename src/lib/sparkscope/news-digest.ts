@@ -129,12 +129,64 @@ const UA = 'Mozilla/5.0 (compatible; SparkScope/1.0; +https://sparkscope.sparkla
  */
 const FEED_MAX_BYTES = 1_500_000;
 
+/**
+ * 한 프로세스 안에서 같은 피드를 다시 긁지 않게 잠깐 들고 있는다.
+ *
+ * 왜 필요한가 — collectDigest는 사전계산 한 번에 창 6개(도메인 2 × 기간 3)로 불리고,
+ * 그때마다 피드 40곳을 처음부터 다시 긁었다. 매시간 도니까 하루 40×6×24 = 5,760번
+ * 매체를 때린 셈이다(2026-09-10 확인). 돈이 드는 건 아니지만 남의 서버를 축내고,
+ * 우리가 이미 Cloudflare 차단·429를 겪고 있는 상황에서 스스로 위험을 키우는 일이다.
+ *
+ * 같은 실행 안에서는 창이 달라도 피드 내용이 같아야 맞으므로, 캐시가 오히려 창 간
+ * 일관성을 높인다.
+ *
+ * Next의 데이터 캐시(next: { revalidate })를 쓰지 않는 이유는 그대로다 — 그쪽은 본문을
+ * 전부 버퍼에 담아서 아래 스트림 절단이 무의미해지고 2MB 제한에 걸린다. 여기서는
+ * 이미 잘라 낸 문자열만 들고 있는다.
+ */
+const FEED_MEMO_MS = 10 * 60_000;
+/**
+ * 크기 제한은 두지 않는다 — 본문은 이미 FEED_MAX_BYTES에서 잘려 들어오므로
+ * 한 항목이 커질 수 있는 한계가 정해져 있고, 항목 수도 아래에서 제한한다.
+ * 40곳 전부 담아도 메모리는 약 7MB다(중위 46KB, 큰 것은 1.5MB에서 절단).
+ *
+ * 크기 조건을 두었다가 두 번 헛돌았다:
+ *  · 500KB로 잡으니 큰 피드 5곳(TechNode 11MB·Ahead of AI 2.8MB 등)이 빠져 절감이
+ *    절반에 그쳤다(144→68건).
+ *  · FEED_MAX_BYTES와 같게 올려도 여전히 빠졌다. 읽기 루프가 상한을 넘길 때까지
+ *    청크를 통째로 붙이므로 total이 1,500,000을 조금 넘기고, 그래서 조건에서 탈락했다.
+ *    경계를 맞추는 대신 조건 자체를 없앴다.
+ */
+const FEED_MEMO_MAX_ENTRIES = 60;
+const feedMemo = new Map<string, { at: number; body: string }>();
+
+/**
+ * 실패도 잠깐 기억한다.
+ *
+ * 성공만 기억했더니 실패한 피드는 창마다 다시 시도돼서 절감이 62건에서 멈췄다
+ * (2026-09-10 실측: 창당 7곳이 재시도됐다). 그 7곳은 Fierce 403·BioCentury 503처럼
+ * 지금 막혀 있거나 죽은 곳이다 — 같은 실행 안에서 여섯 번 더 두드려도 결과는 같고,
+ * 차단된 호스트를 더 두드리는 것은 상황을 나쁘게만 만든다.
+ *
+ * 성공보다 짧게 잡는다. 일시적 오류(503)라면 다음 실행에서 다시 시도하는 편이 낫다.
+ */
+const FEED_FAIL_MEMO_MS = 3 * 60_000;
+const feedFailMemo = new Map<string, { at: number; err: string }>();
+
 async function getFeed(url: string): Promise<string> {
+  const hit = feedMemo.get(url);
+  if (hit && Date.now() - hit.at < FEED_MEMO_MS) return hit.body;
+  const failed = feedFailMemo.get(url);
+  if (failed && Date.now() - failed.at < FEED_FAIL_MEMO_MS) throw new Error(failed.err);
+
   const res = await fetch(url, {
     headers: { 'User-Agent': UA, Accept: 'application/rss+xml,application/atom+xml,application/xml;q=0.9,*/*;q=0.8' },
     cache: 'no-store',
   });
-  if (!res.ok) throw new Error(`${res.status}`);
+  if (!res.ok) {
+    feedFailMemo.set(url, { at: Date.now(), err: String(res.status) });
+    throw new Error(`${res.status}`);
+  }
 
   // Content-Length가 있으면 그것만 보고 판단할 수도 있지만, 없는 피드가 많아
   // 실제로 읽으면서 센다.
@@ -155,7 +207,15 @@ async function getFeed(url: string): Promise<string> {
   const buf = new Uint8Array(total);
   let at = 0;
   for (const c of chunks) { buf.set(c, at); at += c.length; }
-  return new TextDecoder('utf-8').decode(buf);
+  const body = new TextDecoder('utf-8').decode(buf);
+
+  // 오래된 항목부터 지운다 — Map은 삽입 순서를 지키므로 첫 키가 가장 오래된 것이다.
+  if (feedMemo.size >= FEED_MEMO_MAX_ENTRIES) {
+    const oldest = feedMemo.keys().next().value;
+    if (oldest) feedMemo.delete(oldest);
+  }
+  feedMemo.set(url, { at: Date.now(), body });
+  return body;
 }
 
 function unescapeXml(s: string): string {
