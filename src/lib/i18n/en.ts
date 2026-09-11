@@ -1355,4 +1355,5 @@ export const EN: Record<string, string> = {
     'Only the headline was collected for this story.',
   '이어서 물어보세요': 'Ask a follow-up',
   '찾는 중...': 'Searching...',
+  'SparkScope AI에게 물어보기': 'Ask SparkScope AI',
 };

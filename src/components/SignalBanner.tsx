@@ -21,7 +21,6 @@ import type { SocialSource, SocialPost, SocialSourceId } from '@/lib/sparkscope/
 import type { TrendKeyword } from '@/lib/sparkscope/news-keywords';
 import type { EntityCard } from '@/lib/sparkscope/entity-cards';
 import { DISPLAY_COUNT } from '@/lib/sparkscope/signal-display';
-import { InterAskBox } from '@/components/InterAskBox';
 
 type DigestResp = {
   items: DigestItem[];
@@ -520,7 +519,15 @@ function StripCard({ item, locale, open, onToggle }: {
             {t('원문이 아니라 이해를 돕는 설명입니다. 전문은 원문에서 확인하세요.')}
             {item.grounding === 'headline' && ` · ${t('이 매체는 제목과 짧은 소개만 공개해, 아래 설명은 일반적인 배경 위주입니다.')}`}
           </p>
-            <InterAskBox item={item} />
+            {/* 별도의 질문 UI를 만들지 않는다 — 사내 챗봇(ChatWelcome)이 이미
+                대화 목록·도구·근거 표시를 다 갖고 있다. 여기서는 그 기사를
+                물고 챗봇으로 넘겨주기만 한다. */}
+            <a
+              href={`/chat?q=${encodeURIComponent(`"${item.title}" 기사에 대해 알려줘`)}`}
+              className="mt-3 inline-block text-[11.5px] font-semibold text-spark-purple hover:underline"
+            >
+              💬 {t('SparkScope AI에게 물어보기')}
+            </a>
         </div>
       ) : (
         <p className="mt-1 text-[11.5px] leading-relaxed text-spark-ink-soft line-clamp-2">

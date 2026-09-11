@@ -392,6 +392,15 @@ export function ChatWelcome({ userEmail }: { userEmail?: string }) {
   const tr = useT();
   const locale = useLocale();
   const [input, setInput] = useState('');
+  /**
+   * 다른 화면(시그널 배너 등)에서 ?q= 로 질문을 들고 올 수 있다.
+   * 바로 보내지 않고 입력창에 채워만 둔다 — 넘어오자마자 조회가 돌면
+   * 사용자가 질문을 고칠 기회가 없다.
+   */
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('q');
+    if (q) setInput(q.slice(0, 500));
+  }, []);
   // 기본값은 아무것도 안 켠 상태. 예전 기본값 'sources'는 서버에서 읽지도 않는 값이라
   // 실제로는 지금과 똑같이 동작했다(2026-08-18에 토글 자체를 없앰).
   const [activeModes, setActiveModes] = useState<string[]>([]);
