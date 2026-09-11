@@ -105,17 +105,23 @@ export const FEEDS: Feed[] = [
   //    쏟아진다. 영어 키워드 판정('general')으로는 일본어가 전부 걸러지므로 방법이 없다.
   { name: 'TechCrunch', url: 'https://techcrunch.com/feed/', domain: 'general', tier: 2 },
   { name: 'Wired', url: 'https://www.wired.com/feed/rss', domain: 'general', tier: 2 },
-  // feeds.bloomberg.com은 301로 www로 넘긴다. 옛 주소를 그대로 두면 본문 없이
-  // 리다이렉트 안내만 받아 0건이 된다 — 2026-09-11에 블룸버그 1면 톱 두 건
-  // (Sam Altman 발언, Moonshot의 Claude 우회)이 우리 화면에 없던 이유다.
-  // 또 markets 피드에는 AI 기사가 거의 없어 technology 피드로 바꿨다.
+  // markets가 아니라 technology 피드를 쓴다.
+  //
+  // markets 피드는 살아 있고 20건을 주지만 AI 기사가 0건이다(2026-09-11 실측:
+  // 제목 21개 중 AI 키워드 0개). 'general' 피드는 제목이 DOMAIN_KEYWORDS를
+  // 통과해야 들어오므로 전량 버려졌고, 그래서 블룸버그가 오랫동안 한 건도
+  // 안 들어왔다 — 그날 1면 톱이던 Sam Altman 발언·Moonshot의 Claude 우회도
+  // 우리 화면에 없었다. technology 피드는 20건 중 11건이 AI다.
+  //
+  // feeds.bloomberg.com 주소도 301로 www로 넘어가지만, 그건 문제가 아니었다
+  // (fetch가 따라간다). 원인은 리다이렉트가 아니라 피드 선택이었다.
   { name: 'Bloomberg', url: 'https://www.bloomberg.com/feeds/technology/news.rss', domain: 'general', tier: 1 },
   { name: 'New York Times Tech', url: 'https://feeds.nytimes.com/nyt/rss/technology', domain: 'general', tier: 1 },
   { name: 'CB Insights', url: 'https://www.cbinsights.com/research/feed/', domain: 'general', tier: 3 },
 
   // 아시아·중동 — 영어 매체라 종합지와 같은 키워드 판정을 받는다.
   { name: 'TechNode', url: 'https://technode.com/feed/', domain: 'general', tier: 2 },
-  { name: 'SCMP Tech', url: 'https://www.scmp.com/rss/36/feed', domain: 'general', tier: 2 },
+  { name: 'SCMP Tech', url: 'https://www.scmp.com/rss/36/feed/', domain: 'general', tier: 2 },
   { name: 'Wamda', url: 'https://www.wamda.com/feed', domain: 'general', tier: 3 },
   // 일본어 피드는 영어 키워드 판정을 통과할 수 없으므로 전용 도메인으로 둔다.
   // 두 곳 다 주제가 좁아서(AI 전문·제약 전문) 그렇게 둬도 엉뚱한 기사가 들어오지 않는다.
@@ -169,7 +175,7 @@ export const FEEDS: Feed[] = [
   { name: 'Science', url: 'https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=science', domain: 'general', tier: 2 },
   // Cell은 세포생물학 전문지라 들어오는 글이 전부 바이오다.
   { name: 'Cell', url: 'https://www.cell.com/action/showFeed?ui=0&mi=0&ai=n2h&jc=cell&type=etoc&feed=rss', domain: 'bio', tier: 2 },
-  { name: 'Endpoints News', url: 'https://endpts.com/feed/', domain: 'bio', tier: 1 },
+  { name: 'Endpoints News', url: 'https://endpoints.news/feed/', domain: 'bio', tier: 1 },
   // Fierce Biotech RSS는 뺐다(2026-09-09). Cloudflare 봇 차단으로 Vercel에서 403이고,
   // GitHub Actions로 옮길 수도 있었지만 "막히는 매체는 그냥 뺀다"로 정했다.
   // 1면 헤드라인 스크랩은 GitHub Actions에서 계속 돌아가므로 Fierce 기사는 그 경로로 들어온다
