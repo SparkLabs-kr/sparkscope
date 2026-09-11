@@ -82,7 +82,9 @@ type SocialCard =
 export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
   const t = useT();
   const locale = useLocale();
-  const [days, setDays] = useState<number>(7);
+  // 기본은 '오늘'이다. 7일로 두면 며칠 전 기사가 히어로 자리를 차지해서, 오늘 터진
+  // 사건을 보려고 들어온 사람이 한 번 더 눌러야 했다(2026-09-11).
+  const [days, setDays] = useState<number>(1);
   const [digest, setDigest] = useState<DigestResp | null>(null);
   const [open, setOpen] = useState<string | null>(null);
 
