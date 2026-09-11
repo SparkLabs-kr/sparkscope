@@ -17,9 +17,9 @@ export function InterAskBox({ item }: { item: DigestItem }) {
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   /** 주고받은 대화 — 이어지는 질문이 통하려면 화면이 들고 있어야 한다. */
-  const [turns, setTurns] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const [turns, setTurns] = useState<{ role: 'user' | 'assistant'; text: string }[]>([]);
   const [answer, setAnswer] = useState<string | null>(null);
-  const [src, setSrc] = useState<string>('article');
+  const [followUps, setFollowUps] = useState<string[]>([]);
   const [headlineOnly, setHeadlineOnly] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -56,13 +56,13 @@ export function InterAskBox({ item }: { item: DigestItem }) {
         return;
       }
       setAnswer(data.answer ?? '');
-      setSrc(typeof data.source === 'string' ? data.source : 'mixed');
       setHeadlineOnly(data.headlineOnly === true);
       setTurns(prev => [
         ...prev,
-        { role: 'user' as const, content: question },
-        { role: 'assistant' as const, content: String(data.answer ?? '') },
+        { role: 'user' as const, text: question },
+        { role: 'assistant' as const, text: String(data.answer ?? '') },
       ]);
+      setFollowUps(Array.isArray(data.followUps) ? data.followUps.slice(0, 3) : []);
       setQ('');
     } catch {
       setErr(t('답을 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.'));
@@ -106,7 +106,7 @@ export function InterAskBox({ item }: { item: DigestItem }) {
           disabled={busy || q.trim().length < 2}
           className="px-3 py-1.5 rounded-lg bg-spark-purple text-white text-[12.5px] font-semibold disabled:opacity-40 whitespace-nowrap"
         >
-          {busy ? t('생각 중...') : t('질문')}
+          {busy ? t('찾는 중...') : t('질문')}
         </button>
       </div>
 
@@ -116,16 +116,26 @@ export function InterAskBox({ item }: { item: DigestItem }) {
         <div className="mt-2.5 rounded-lg bg-spark-subtle border border-spark-border px-3 py-2.5">
           <p className="text-[12.5px] leading-[1.75] text-spark-ink whitespace-pre-wrap">{answer}</p>
           {/* 근거 밖이면 그렇다고 표시한다 — 답이 그럴듯해 보일수록 필요하다. */}
-          {/* 답의 출처를 밝힌다. 기사에서 온 말과 모델의 배경 지식은 읽는
-              사람에게 무게가 다르다 — 섞여 보이면 배경까지 기사로 읽힌다. */}
-          <p className="mt-2 text-[10.5px] text-spark-muted">
-            {src === 'article'
-              ? t('이 기사에 수집된 내용으로 답했습니다.')
-              : src === 'background'
-                ? t('기사에 없는 내용이라, 일반적인 배경 지식으로 답했습니다.')
-                : t('기사 내용과 일반적인 배경 지식을 함께 써서 답했습니다.')}
-            {headlineOnly && ` · ${t('이 기사는 제목만 수집되어 있습니다.')}`}
-          </p>
+          {/* 챗봇과 같은 엔진이라 후속 질문 제안도 그대로 온다. */}
+          {followUps.length > 0 && (
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              {followUps.map(f => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => { setQ(f); }}
+                  className="rounded-full bg-spark-light-purple text-spark-purple px-2.5 py-1 text-[11px] font-medium hover:opacity-80"
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+          )}
+          {headlineOnly && (
+            <p className="mt-2 text-[10.5px] text-spark-muted">
+              {t('이 기사는 제목만 수집되어 있습니다.')}
+            </p>
+          )}
         </div>
       )}
 

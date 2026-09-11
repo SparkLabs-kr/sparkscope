@@ -1354,4 +1354,5 @@ export const EN: Record<string, string> = {
   '이 기사는 제목만 수집되어 있습니다.':
     'Only the headline was collected for this story.',
   '이어서 물어보세요': 'Ask a follow-up',
+  '찾는 중...': 'Searching...',
 };
