@@ -96,7 +96,7 @@ interface HeadlineSpec {
   topic?: RegExp;
 }
 
-const SOURCES: PopularSource[] = [
+export const SOURCES: PopularSource[] = [
   {
     name: 'AI타임스',
     url: 'https://www.aitimes.com/news/articleList.html?view_type=sm&box_idxno=20',

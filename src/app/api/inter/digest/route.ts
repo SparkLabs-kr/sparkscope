@@ -14,7 +14,11 @@ import { requireUser } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 export const preferredRegion = 'icn1';
-export const revalidate = 1800;
+// 5분. 예전엔 30분이었다 — 그때는 이 라우트가 피드 조회와 LLM 요약을 직접 했으니
+// 오래 쥐고 있을 이유가 있었다. 지금은 사전계산을 읽기만 하고(아래), 수집은 매시간
+// 돌므로 30분 캐시가 갱신을 그만큼 늦출 뿐이다 — 2026-09-11, DB는 새 데이터인데
+// 화면이 안 바뀐다는 문의가 여기서 나왔다.
+export const revalidate = 300;
 
 export async function GET(req: NextRequest) {
   // 로그인 확인은 여기서 한다 — middleware는 Edge라 쿠키 유무만 본다.
