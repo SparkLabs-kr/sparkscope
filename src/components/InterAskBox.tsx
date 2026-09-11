@@ -16,6 +16,8 @@ export function InterAskBox({ item }: { item: DigestItem }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
+  /** 주고받은 대화 — 이어지는 질문이 통하려면 화면이 들고 있어야 한다. */
+  const [turns, setTurns] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
   const [answer, setAnswer] = useState<string | null>(null);
   const [src, setSrc] = useState<string>('article');
   const [headlineOnly, setHeadlineOnly] = useState(false);
@@ -41,6 +43,7 @@ export function InterAskBox({ item }: { item: DigestItem }) {
           alsoIn: item.alsoIn.map(a => a.source),
           grounding: item.grounding,
           portfolio: item.portfolio ?? undefined,
+          history: turns.slice(-8),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -55,6 +58,12 @@ export function InterAskBox({ item }: { item: DigestItem }) {
       setAnswer(data.answer ?? '');
       setSrc(typeof data.source === 'string' ? data.source : 'mixed');
       setHeadlineOnly(data.headlineOnly === true);
+      setTurns(prev => [
+        ...prev,
+        { role: 'user' as const, content: question },
+        { role: 'assistant' as const, content: String(data.answer ?? '') },
+      ]);
+      setQ('');
     } catch {
       setErr(t('답을 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.'));
     } finally {
@@ -84,7 +93,11 @@ export function InterAskBox({ item }: { item: DigestItem }) {
           maxLength={500}
           onChange={e => setQ(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); ask(); } }}
-          placeholder={t('예: 왜 중요한가요? 우리 포트폴리오와 어떤 관련이 있나요?')}
+          placeholder={
+            turns.length > 0
+              ? t('이어서 물어보세요')
+              : t('예: 왜 중요한가요? 우리 포트폴리오와 어떤 관련이 있나요?')
+          }
           className="flex-1 min-w-0 px-3 py-1.5 rounded-lg border border-spark-border text-[12.5px] focus:outline-none focus:border-spark-purple"
         />
         <button

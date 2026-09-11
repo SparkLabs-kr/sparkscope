@@ -39,6 +39,9 @@ export type AskContext = {
 export type AskSource = 'article' | 'background' | 'mixed';
 export type AskResult = { answer: string; source: AskSource; headlineOnly: boolean };
 
+/** 이어지는 질문을 위한 직전 대화. 오래된 것부터 순서대로. */
+export type AskTurn = { role: 'user' | 'assistant'; content: string };
+
 const SYSTEM = [
   '너는 스파크랩 미디어 인사이트(SparkScope)의 뉴스 도우미다.',
   '사용자가 기사를 읽다가 묻는다. 도움이 되게 답하는 것이 우선이다 —',
@@ -50,8 +53,9 @@ const SYSTEM = [
   '  일반 지식으로 배경을 설명하는 것은 얼마든지 좋다 — 다만 그것이 기사에서',
   '  온 것이 아니라는 점이 분명해야 한다.',
   '',
-  '답은 3~6문장. 불릿은 쓰지 마라. 사용자가 쓴 언어로 답해라',
-  '(한국어로 물으면 한국어, 영어로 물으면 영어).',
+  '길이는 질문에 맞춘다. 짧은 질문에는 짧게, 설명이나 코드가 필요하면',
+  '필요한 만큼 길게 써라. 코드는 코드블록으로.',
+  '사용자가 쓴 언어로 답해라(한국어로 물으면 한국어, 영어면 영어).',
   '',
   '최신 사건은 네 학습 시점 이후일 수 있다. 확실하지 않으면 그렇다고 밝혀라.',
   '',
@@ -71,9 +75,9 @@ const SYSTEM = [
 export async function askAboutItem(
   ctx: AskContext,
   question: string,
+  history: AskTurn[] = [],
 ): Promise<AskResult> {
   const payload = {
-    question,
     article: {
       title: ctx.title,
       source: ctx.source,
@@ -87,11 +91,15 @@ export async function askAboutItem(
 
   const resp = await client().chat.completions.create({
     model: MODEL,
-    max_tokens: 700,
+    max_tokens: 2000,
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: SYSTEM },
+      // 기사 맥락은 맨 앞에 한 번. 이후로는 주고받은 대화가 이어진다 —
+      // 이게 없으면 "그럼 그건 왜?" 같은 이어지는 질문이 통하지 않는다.
       { role: 'user', content: JSON.stringify(payload) },
+      ...history.map(h => ({ role: h.role, content: h.content })),
+      { role: 'user', content: question },
     ],
   });
 

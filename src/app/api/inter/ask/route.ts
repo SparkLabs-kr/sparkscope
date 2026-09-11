@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireUser } from '@/lib/authz';
-import { askAboutItem } from '@/lib/sparkscope/inter-ask';
+import { askAboutItem, type AskTurn } from '@/lib/sparkscope/inter-ask';
 
 export const runtime = 'nodejs';
 
@@ -21,6 +21,14 @@ const Body = z.object({
   summary: z.array(z.string().max(2000)).max(12).default([]),
   alsoIn: z.array(z.string().max(120)).max(30).default([]),
   grounding: z.enum(['full', 'partial', 'headline']).default('headline'),
+  // 이어지는 질문을 위한 직전 대화. 길어지면 비용과 지연이 늘어 최근 것만 받는다.
+  history: z
+    .array(z.object({
+      role: z.enum(['user', 'assistant']),
+      content: z.string().max(4000),
+    }))
+    .max(12)
+    .default([]),
   portfolio: z
     .array(z.object({ company: z.string().max(120), reason: z.string().max(500) }))
     .max(10)
@@ -35,14 +43,14 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'invalid' }, { status: 400 });
   }
-  const { question, ...ctx } = parsed.data;
+  const { question, history, ...ctx } = parsed.data;
 
   if (!process.env.OPENAI_API_KEY) {
     return NextResponse.json({ error: 'not_configured' }, { status: 503 });
   }
 
   try {
-    const result = await askAboutItem(ctx, question);
+    const result = await askAboutItem(ctx, question, history as AskTurn[]);
     return NextResponse.json(result);
   } catch (e) {
     console.error('[inter/ask] 실패:', e);
