@@ -33,6 +33,20 @@ import { DOMAIN_KEYWORDS } from './news-feeds';
 /** 브라우저 UA를 쓴다 — 기본 UA로는 홈페이지가 다른 마크업을 주는 경우가 있다. */
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
+/**
+ * 브라우저가 보내는 머리글을 같이 보낸다 — User-Agent 하나만으로는 막는 곳이 있다.
+ * 다른 소스에는 영향이 없다(2026-09-11 확인: 전부 200 그대로).
+ */
+const BROWSER_HEADERS: Record<string, string> = {
+  'User-Agent': UA,
+  accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'accept-language': 'en-US,en;q=0.9',
+  'sec-fetch-dest': 'document',
+  'sec-fetch-mode': 'navigate',
+  'sec-fetch-site': 'none',
+  'upgrade-insecure-requests': '1',
+};
+
 export interface PopularItem {
   title: string;
   url: string;
@@ -467,6 +481,25 @@ function parseAlphaSignal(html: string, src: PopularSource): PopularItem[] {
   return out;
 }
 
+/**
+ * 블룸버그는 1면 스크랩 대상에 넣을 수 없다 — 2026-09-11 실측 기록.
+ *
+ * 넣으려 한 이유: 단독 스쿠프가 많은 곳인데 단독은 정의상 '함께 보도'가 0이라,
+ * 1면 신호가 없으면 목록에 올라올 길이 없다(그날 EXCLUSIVE로 걸린
+ * "OpenAI Is Open to Slowing Cutting-Edge AI"가 우리 목록에 없었다).
+ *
+ * 왜 못 하나:
+ *   · Node(undici) fetch는 머리글과 무관하게 403이다. UA를 Chrome 124/128로 바꿔도,
+ *     accept·accept-language·sec-fetch-*를 다 붙여도 마찬가지다. TLS 지문을 본다.
+ *   · curl로는 처음 몇 번은 200이었다(975KB, 기사 링크 67개). 그런데 여덟 번쯤
+ *     요청한 뒤부터 curl도 403이 됐다 — 지문이 아니라 요청 빈도·행동으로 막는다.
+ *     즉 "몇 번은 되다가 막히는" 소스이고, 시간당 도는 수집에는 쓸 수 없다.
+ *
+ * robots.txt는 `/`와 `/news/articles/*`를 허용하므로 규칙 문제는 아니다. 기술적으로
+ * 안정적으로 읽을 방법이 없을 뿐이다. 블룸버그 기사 자체는 RSS(news-feeds.ts)로
+ * 정상 수집되며, 그 피드 순서는 발행순도 편집순도 아니라 1면 신호로 쓸 수 없다.
+ * 다시 시도하려면 이 세 가지(403 조건·curl 차단 시점·피드 순서)를 먼저 재확인할 것.
+ */
 async function fetchOne(src: PopularSource): Promise<PopularItem[]> {
   try {
     let url = src.url;
@@ -475,7 +508,7 @@ async function fetchOne(src: PopularSource): Promise<PopularItem[]> {
       const from = new Date(now.getTime() - BIOIN_DAYS * 86400_000);
       url += `&sdate=${ymdSlash(from)}&edate=${ymdSlash(now)}`;
     }
-    const res = await fetch(url, { headers: { 'User-Agent': UA }, cache: 'no-store' });
+    const res = await fetch(url, { headers: BROWSER_HEADERS, cache: 'no-store' });
     if (!res.ok) throw new Error(String(res.status));
     const html = await res.text();
 
