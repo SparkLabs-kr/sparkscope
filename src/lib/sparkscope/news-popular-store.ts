@@ -10,7 +10,7 @@
  * 관측된 것을 읽는다. 그러면 "이번주 동안 1면을 차지했던 것"을 물어볼 수 있다.
  */
 import { prisma } from '@/lib/prisma';
-import { collectPopular, type PopularItem } from './news-popular';
+import { collectPopular, urlDate, type PopularItem } from './news-popular';
 
 /** 한 번 headline으로 본 것은 popular로 내리지 않는다 — 더 강한 근거다. */
 const strongerKind = (a: string, b: string) => (a === 'headline' || b === 'headline' ? 'headline' : 'popular');
@@ -70,6 +70,10 @@ export async function readPopular(domain: 'ai' | 'bio', sinceMs: number): Promis
     title: r.title,
     url: r.url,
     source: r.source,
+    // 발행일은 URL에서 뽑고, 없으면 우리가 처음 1면에서 본 시각으로 대신한다.
+    // 목록 페이지가 날짜를 주지 않아서인데, 둘 다 없다고 '오늘'로 적으면
+    // 9월 8일 기사가 오늘 기사로 화면에 뜬다(2026-09-11에 실제로 그랬다).
+    date: urlDate(r.url) ?? r.firstSeenAt,
     rank: r.bestRank,
     views: r.views ?? undefined,
     domestic: r.domestic,

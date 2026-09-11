@@ -105,7 +105,11 @@ export const FEEDS: Feed[] = [
   //    쏟아진다. 영어 키워드 판정('general')으로는 일본어가 전부 걸러지므로 방법이 없다.
   { name: 'TechCrunch', url: 'https://techcrunch.com/feed/', domain: 'general', tier: 2 },
   { name: 'Wired', url: 'https://www.wired.com/feed/rss', domain: 'general', tier: 2 },
-  { name: 'Bloomberg', url: 'https://feeds.bloomberg.com/markets/news.rss', domain: 'general', tier: 1 },
+  // feeds.bloomberg.com은 301로 www로 넘긴다. 옛 주소를 그대로 두면 본문 없이
+  // 리다이렉트 안내만 받아 0건이 된다 — 2026-09-11에 블룸버그 1면 톱 두 건
+  // (Sam Altman 발언, Moonshot의 Claude 우회)이 우리 화면에 없던 이유다.
+  // 또 markets 피드에는 AI 기사가 거의 없어 technology 피드로 바꿨다.
+  { name: 'Bloomberg', url: 'https://www.bloomberg.com/feeds/technology/news.rss', domain: 'general', tier: 1 },
   { name: 'New York Times Tech', url: 'https://feeds.nytimes.com/nyt/rss/technology', domain: 'general', tier: 1 },
   { name: 'CB Insights', url: 'https://www.cbinsights.com/research/feed/', domain: 'general', tier: 3 },
 

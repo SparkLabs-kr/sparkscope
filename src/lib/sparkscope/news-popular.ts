@@ -48,6 +48,12 @@ export interface PopularItem {
   headlineRank?: number;
   /** 국내 매체 기사인가. 국내 뉴스는 "엄청 큰 이슈만" 다루기로 해서 별도 기준을 적용한다. */
   domestic?: boolean;
+  /**
+   * 기사 발행일. 목록 페이지는 날짜를 주지 않으므로 URL에 박힌 날짜에서 뽑는다
+   * (NYT·TechCrunch·CNBC 등 `/2026/09/08/` 형식). 못 뽑으면 undefined —
+   * 그때는 저장소가 "우리가 처음 1면에서 본 시각"으로 대신한다.
+   */
+  date?: Date;
 }
 
 interface PopularSource {
@@ -502,6 +508,21 @@ async function fetchOne(src: PopularSource): Promise<PopularItem[]> {
 }
 
 /** 도메인의 인기기사 목록. 한 곳이 실패해도 나머지는 돌아온다. */
+/**
+ * URL에 박힌 발행일을 읽는다 — `/2026/09/08/`, `/2026-09-08/` 둘 다.
+ *
+ * 목록 페이지에는 날짜가 없어서 예전엔 1면에서 새로 발견한 기사를 전부 '오늘'로
+ * 적었다. 그래서 9월 8일 NYT 기사가 화면에 2026-09-11로 떴고, '오늘' 탭이
+ * 오늘 기사만 걸러내지도 못했다(2026-09-11).
+ */
+export function urlDate(url: string): Date | undefined {
+  const m = url.match(/\/(20\d\d)[/-](0[1-9]|1[0-2])[/-](0[1-9]|[12]\d|3[01])(?=[/-])/);
+  if (!m) return undefined;
+  const d = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`);
+  // 미래 날짜는 URL이 날짜가 아닌 숫자였다는 뜻이다.
+  return isNaN(+d) || d.getTime() > Date.now() + 86_400_000 ? undefined : d;
+}
+
 export async function collectPopular(domain: 'ai' | 'bio'): Promise<PopularItem[]> {
   const targets = SOURCES.filter(s => s.domain === domain);
   if (targets.length === 0) return [];
@@ -511,5 +532,5 @@ export async function collectPopular(domain: 'ai' | 'bio'): Promise<PopularItem[
   // 왜 다른지 알 수 없다. 실패는 fetchOne이 따로 남기므로 여기서는 성공 건수만 센다.
   console.log('[news-popular]', domain,
     targets.map((t, i) => `${t.name}=${results[i].length}`).join(' '));
-  return results.flat();
+  return results.flat().map(it => ({ ...it, date: it.date ?? urlDate(it.url) }));
 }

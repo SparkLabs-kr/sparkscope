@@ -501,6 +501,8 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
   // DB에 쌓아 둔 관측을 읽는다 — 매체 홈페이지는 "지금 이 순간" 1면만 보여주므로
   // 조회할 때마다 긁으면 어제 1면을 휩쓴 사안이 오늘은 신호 0이 된다(실제로 노바티스
   // Phase 3 실패가 하루 만에 사라졌다). 2시간마다 도는 크론이 채운다.
+  // 1면 기사의 날짜는 하루 단위라 같은 단위로 견줘야 한다(아래 필터 주석 참고).
+  const cutoffDay = new Date(cutoff).toISOString().slice(0, 10);
   const popular = await readPopular(domain, cutoff).then(async rows => {
     if (rows.length > 0) return rows;
     // 첫 채움 — 크론이 아직 안 돌았거나 소스를 새로 추가한 직후. 화면이 비는 것보다 낫다.
@@ -518,6 +520,15 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
     // 제목으로도 찾는다 — 목록 페이지 URL에 view_type 같은 파라미터가 붙어 RSS와 다를 수 있다.
     const byTitle = new Map(items.map(i => [i.title.trim(), i] as const));
     for (const p of popular) {
+      // 기간 밖 기사는 1면에 걸려 있어도 넣지 않는다.
+      //
+      // 예전에는 발행일을 몰라 전부 '오늘'로 적었고, 그래서 '오늘' 탭에 9월 8일
+      // NYT 기사가 2026-09-11로 떴다(2026-09-11 지적).
+      //
+      // 날짜'만' 비교한다(시각이 아니라). 1면 기사의 날짜는 URL에서 뽑은 것이라
+      // 그 날 자정으로 잡히는데, 시각까지 비교하면 어제 저녁 기사가 24시간 창을
+      // 40시간 벗어난 것으로 계산돼 1면 신호가 통째로 사라진다(실측: 12건 전부 1면0).
+      if (p.date && p.date.toISOString().slice(0, 10) < cutoffDay) continue;
       const hit = byUrl.get(p.url) ?? byTitle.get(p.title.trim());
       if (hit) {
         if (p.headlineRank != null) {
@@ -538,9 +549,7 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
         url: p.url,
         source: p.source,
         independent: false,
-        // 인기 목록은 발행일을 주지 않는다. 날짜 필터는 이미 지난 단계이므로
-        // 오늘로 두되, 이 값이 순위의 마지막 tiebreak에만 쓰인다는 점을 감안한 것이다.
-        publishedAt: new Date().toISOString().slice(0, 10),
+        publishedAt: (p.date ?? new Date()).toISOString().slice(0, 10),
         tier: 2,
         alsoIn: [],
         blurb: null,
