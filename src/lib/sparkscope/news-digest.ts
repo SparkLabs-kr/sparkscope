@@ -102,7 +102,9 @@ export interface DigestItem {
    * null은 "아직 판정 전", 빈 배열은 "판정했고 해당 없음" — 둘을 구분해야
    * 판정이 실패한 건지 정말 관계가 없는 건지 화면에서 구분할 수 있다.
    */
-  portfolio?: { company: string; reason: string }[] | null;
+  // companyEn/reasonEn 은 EN 화면용 — news-portfolio.ensurePortfolioHitsEn 이 채운다.
+  // (여기에 인라인으로 두는 건 news-portfolio 와의 순환 import 를 피하기 위해서다.)
+  portfolio?: { company: string; reason: string; companyEn?: string | null; reasonEn?: string | null }[] | null;
   /** 쉬운 말 요약(짧게/길게 × 한국어/영어). 채우기 전에는 null — 지어내지 않는다. */
   summary: { titleKo: string; ko: string; en: string; koLong: string[]; enLong: string[] } | null;
 }

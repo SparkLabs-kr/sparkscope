@@ -11,6 +11,7 @@
  * 기사 URL 단위라 같은 기사에 두 번 과금되지 않는다.
  */
 import OpenAI from 'openai';
+import { translateBatch } from './translate-content';
 import { prisma } from '@/lib/prisma';
 import { buildSystemPrompt, analyzeBatch } from './inter-portfolio-match';
 import type { DigestItem } from './news-digest';
@@ -25,7 +26,13 @@ const MAX_NEW = 12;
 /** 한 호출에 넣을 기사 수 — 기존 매처와 같은 값. */
 const BATCH = 10;
 
-export type PortfolioHit = { company: string; reason: string };
+export type PortfolioHit = {
+  company: string;
+  reason: string;
+  /** EN 화면용. 같은 캐시 행에 함께 저장해 기사당 한 번만 번역한다. */
+  companyEn?: string | null;
+  reasonEn?: string | null;
+};
 
 /** 회사 목록. 한국·대만 포트폴리오사를 함께 본다 — 해외 뉴스는 어느 쪽에도 영향을 준다. */
 async function loadCompanies() {
@@ -97,4 +104,72 @@ export async function ensurePortfolioHits(items: DigestItem[]): Promise<DigestIt
   }
 
   return items;
+}
+
+/**
+ * EN 화면에서 쓸 영문 회사명·사유를 채운다.
+ *
+ * 왜 별도 함수인가: 매칭 자체(ensurePortfolioHits)는 한국어로 판정하는 편이
+ * 낫다 — 회사 설명과 감시 키워드가 한국어라 영어로 돌리면 매칭이 나빠진다.
+ * 번역은 화면에 EN으로 뜰 때만, 그리고 기사당 한 번만 한다.
+ *
+ * 회사명은 번역하지 않고 MonitoringTarget.englishName 을 쓴다 — 고유명사를
+ * 모델에 맡기면 음역(스플랩 -> "Splab"이 아니라 "Seuplaep")이 나온다.
+ */
+export async function ensurePortfolioHitsEn(items: DigestItem[]): Promise<void> {
+  const pending = items.filter(
+    it => it.portfolio?.some(h => !h.reasonEn && needsEnglish(h.reason)),
+  );
+  if (pending.length === 0) {
+    // 영문명만 비어 있을 수 있으니 그것만 채우고 끝낸다.
+    await fillEnglishNames(items);
+    return;
+  }
+
+  await fillEnglishNames(items);
+
+  const texts = [...new Set(
+    pending.flatMap(it => (it.portfolio ?? []).filter(h => !h.reasonEn).map(h => h.reason)),
+  )];
+  if (texts.length === 0) return;
+
+  try {
+    const translated = await translateBatch(texts);
+    const byText = new Map(texts.map((t, i) => [t, translated[i]]));
+    await Promise.all(pending.map(async it => {
+      for (const h of it.portfolio ?? []) {
+        const v = byText.get(h.reason);
+        if (v && v !== h.reason) h.reasonEn = v;
+      }
+      // 번역 결과를 같은 캐시 행에 되돌려 저장한다.
+      await prisma.dashboardInsight.update({
+        where: { kind_key: { kind: KIND, key: it.url } },
+        data: { value: JSON.stringify(it.portfolio) },
+      }).catch(() => { /* 캐시 갱신 실패는 화면을 막지 않는다 */ });
+    }));
+  } catch (e) {
+    console.error('[news-portfolio] 사유 번역 실패 — 한국어로 내보낸다:', e);
+  }
+}
+
+/** 회사명의 영문 표기를 MonitoringTarget 에서 가져와 채운다. */
+async function fillEnglishNames(items: DigestItem[]): Promise<void> {
+  const names = [...new Set(items.flatMap(it => (it.portfolio ?? []).map(h => h.company)))];
+  if (names.length === 0) return;
+  const rows = await prisma.monitoringTarget.findMany({
+    where: { name: { in: names } },
+    select: { name: true, englishName: true },
+  }).catch(() => []);
+  const byName = new Map(rows.map(r => [r.name, r.englishName]));
+  for (const it of items) {
+    for (const h of it.portfolio ?? []) {
+      const en = byName.get(h.company);
+      if (en && en.trim()) h.companyEn = en.trim();
+    }
+  }
+}
+
+/** 한글이 섞여 있으면 번역이 필요하다고 본다. */
+function needsEnglish(text: string): boolean {
+  return /[가-힣]/.test(text ?? '');
 }

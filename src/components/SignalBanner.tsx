@@ -509,9 +509,9 @@ function StripCard({ item, locale, open, onToggle }: {
               {item.portfolio.map(h => (
                 <div key={h.company} className="text-[11.5px] leading-relaxed">
                   <span className="inline-block rounded bg-spark-light-purple text-spark-purple font-bold px-1.5 py-0.5 mr-1.5">
-                    {h.company}
+                    {locale === 'en' ? h.companyEn || h.company : h.company}
                   </span>
-                  <span className="text-spark-ink-soft">{h.reason}</span>
+                  <span className="text-spark-ink-soft">{locale === 'en' ? h.reasonEn || h.reason : h.reason}</span>
                 </div>
               ))}
             </div>
