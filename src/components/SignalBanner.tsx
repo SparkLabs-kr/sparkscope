@@ -399,14 +399,18 @@ function Hero({ item, locale }: { item: DigestItem; locale: string }) {
           {item.portfolio.slice(0, 3).map(h => (
             <div key={h.company} className="flex items-baseline flex-wrap gap-x-1.5 gap-y-0.5 text-[11.5px]">
               <span className="shrink-0 font-bold rounded bg-spark-light-purple text-spark-purple px-1.5 py-0.5">
-                {h.company}
+                {locale === 'en' ? h.companyEn || h.company : h.company}
               </span>
-              <span className="text-spark-ink-soft leading-relaxed">{h.reason}</span>
+              <span className="text-spark-ink-soft leading-relaxed">
+                {locale === 'en' ? h.reasonEn || h.reason : h.reason}
+              </span>
             </div>
           ))}
         </div>
       )}
 
+        {/* 리드 기사에도 같은 질문 상자를 둔다 — 가장 많이 읽히는 카드다. */}
+        <InterAskBox item={item} />
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px]">
         <a href={item.url} target="_blank" rel="noopener noreferrer"
            className="font-semibold text-spark-purple hover:underline">
