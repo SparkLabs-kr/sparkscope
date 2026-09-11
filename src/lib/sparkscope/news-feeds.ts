@@ -120,6 +120,13 @@ export const FEEDS: Feed[] = [
   { name: 'CB Insights', url: 'https://www.cbinsights.com/research/feed/', domain: 'general', tier: 3 },
 
   // 아시아·중동 — 영어 매체라 종합지와 같은 키워드 판정을 받는다.
+  // 이 피드는 2,000건·11.5MB를 한 번에 준다(posts_per_rss가 사이트 설정이라 줄일 수 없고,
+  // AI 카테고리 피드는 404, Google News 우회는 주소가 리다이렉트 링크로 바뀐다).
+  // 그래도 그대로 둔다 — news-digest의 FEED_MAX_BYTES(1.5MB)가 읽기를 중간에 끊으므로
+  // 실제로 받는 건 1.5MB다. 2026-09-11 실측 커버리지:
+  //   300KB → 51건(9/03까지) · 600KB → 113건(8/25) · 1.5MB → 286건(7/24)
+  // '이번 달' 탭이 30일을 보므로 1.5MB가 하한이다. 더 내리면 그 탭에서 중국 AI 기사가
+  // 조용히 사라진다. 기여도는 7일에 22건으로 적지 않다(알리바바·딥시크·문샷).
   { name: 'TechNode', url: 'https://technode.com/feed/', domain: 'general', tier: 2 },
   { name: 'SCMP Tech', url: 'https://www.scmp.com/rss/36/feed/', domain: 'general', tier: 2 },
   { name: 'Wamda', url: 'https://www.wamda.com/feed', domain: 'general', tier: 3 },

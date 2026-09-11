@@ -80,10 +80,15 @@ export interface Scorable { url: string; title: string }
 
 async function readCache(urls: string[]): Promise<Map<string, Verdict>> {
   if (urls.length === 0) return new Map();
-  const rows = await prisma.dashboardInsight.findMany({
-    where: { kind: KIND, key: { in: urls } },
-    select: { key: true, value: true },
-  });
+  // 기간이 긴 탭은 후보가 1,000건을 넘는다 — IN 목록을 나눠 던진다.
+  const CHUNK = 500;
+  const rows: { key: string; value: string }[] = [];
+  for (let i = 0; i < urls.length; i += CHUNK) {
+    rows.push(...await prisma.dashboardInsight.findMany({
+      where: { kind: KIND, key: { in: urls.slice(i, i + CHUNK) } },
+      select: { key: true, value: true },
+    }));
+  }
   const out = new Map<string, Verdict>();
   for (const r of rows) {
     try {
@@ -136,10 +141,20 @@ async function scoreBatch(batch: Scorable[]): Promise<Map<string, Verdict>> {
 export async function scoreImportance(items: Scorable[]): Promise<Map<string, Verdict>> {
   const uniq = new Map<string, Scorable>();
   for (const it of items) if (it.url && it.title) uniq.set(it.url, it);
-  const all = [...uniq.values()].slice(0, MAX_CANDIDATES);
+  const every = [...uniq.values()];
 
-  const cached = await readCache(all.map(a => a.url)).catch(() => new Map<string, Verdict>());
-  const todo = all.filter(a => !cached.has(a.url));
+  // 캐시는 후보 전체에서 읽고, LLM에는 상한만큼만 보낸다.
+  //
+  // 예전에는 상한(MAX_CANDIDATES)으로 먼저 자르고 그 안에서만 캐시를 봤다. 그러면
+  // 이미 점수가 있는 기사도 상한 밖이면 점수를 못 받아 기본값 3점으로 가라앉는다.
+  // 2026-09-11 실측: 같은 사건이 '오늘' 탭에서는 CNBC판(5점) 대표로 2위였는데
+  // '이번주' 탭에서는 CNBC판이 상한 밖이라 3점으로 밀리고 TechCrunch판(4점)만
+  // 남아 10위에 떴다 — 탭에 따라 같은 사건의 등급이 달라졌다.
+  //
+  // 캐시 조회는 DB 한 번이고 LLM 비용이 없다. 기간이 길수록(7일·30일) 후보 대부분이
+  // 이미 채점돼 있으므로, 전체를 읽는 편이 정확하고 값도 같다.
+  const cached = await readCache(every.map(a => a.url)).catch(() => new Map<string, Verdict>());
+  const todo = every.filter(a => !cached.has(a.url)).slice(0, MAX_CANDIDATES);
   if (todo.length === 0) return cached;
 
   const batches: Scorable[][] = [];
@@ -151,6 +166,6 @@ export async function scoreImportance(items: Scorable[]): Promise<Map<string, Ve
   for (const m of results) for (const [url, verdict] of m) { cached.set(url, verdict); fresh.push({ url, verdict }); }
   if (fresh.length > 0) await writeCache(fresh);
 
-  console.log(`[news-importance] ${fresh.length}건 새로 산정 (캐시 ${all.length - todo.length}건)`);
+  console.log(`[news-importance] ${fresh.length}건 새로 산정 (캐시 ${cached.size - fresh.length}건 / 후보 ${every.length}건)`);
   return cached;
 }
