@@ -28,6 +28,8 @@ export type NewsDomain = 'ai' | 'bio';
 
 export interface DigestItem {
   title: string;
+  /** EN 화면용 제목. 원문이 한국어일 때만 채운다(news-summary.ensureTitleEn). */
+  titleEn?: string | null;
   url: string;
   source: string;
   independent: boolean;

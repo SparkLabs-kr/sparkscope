@@ -37,6 +37,11 @@ export interface CommunityPost {
 export interface EntityCard {
   key: string;
   label: string;
+  /**
+   * EN 화면용 이름. 같은 카드에 함께 담아 둔다 — 캐시가 한국어로 구워지면
+   * 영어 화면에서 '오픈AI·앤트로픽·애플'처럼 음역만 남는다.
+   */
+  labelEn?: string | null;
   /** 이 이름을 다룬 서로 다른 매체 수. 카드 순위의 1순위 기준이다. */
   outlets: number;
   /**
@@ -149,6 +154,7 @@ export async function buildEntityCards(
 
   type Agg = {
     label: string;
+    labelEn: string;
     outlets: Set<string>;
     articles: EntityCard['articles'];
     community: CommunityPost[];
@@ -162,7 +168,12 @@ export async function buildEntityCards(
     const k = keyOf(e.org || e.en);
     let cur = agg.get(k);
     if (!cur) {
-      cur = { label: e.orgKo || e.org || e.ko || e.en, outlets: new Set(), articles: [], community: [], points: 0, mentions: 0 };
+        cur = {
+          label: e.orgKo || e.org || e.ko || e.en,
+          // 영어 쪽은 번역이 아니라 선택이다 — 원문 표기를 그대로 쓴다.
+          labelEn: e.org || e.en || e.orgKo || e.ko,
+          outlets: new Set(), articles: [], community: [], points: 0, mentions: 0,
+        };
       agg.set(k, cur);
     }
     return cur;
@@ -225,6 +236,7 @@ export async function buildEntityCards(
     cards.push({
       key,
       label: a.label,
+      labelEn: a.labelEn,
       outlets: a.outlets.size,
       mentions: a.mentions,
       articles: a.articles,
@@ -253,4 +265,38 @@ export async function buildEntityCards(
       return c.community.some(x => !shown.has(x.url));
     })
     .slice(0, limit);
+}
+
+/**
+ * 캐시에 구워진 카드의 영문 이름을 뒤늦게 채운다.
+ *
+ * 카드는 크론이 미리 계산해 두므로, labelEn 이 생기기 전에 만들어진 캐시에는
+ * 한국어 이름만 있다. 그 경우 EN 화면에 '오픈AI·앤트로픽·애플'이 그대로 뜬다.
+ *
+ * 엔티티 추출 결과는 기사 URL 단위로 DB에 캐시돼 있어(news-keywords) 다시
+ * 불러도 LLM 호출이 아니라 조회 한 번이다. 거기서 ko->en 대응을 만들어 채운다.
+ * 번역이 아니라 대응이라는 점이 중요하다 — 고유명사를 번역하면 음역이 된다.
+ */
+export async function backfillEntityLabelsEn(
+  cards: EntityCard[],
+  items: { url: string; title: string; source: string }[],
+): Promise<void> {
+  const missing = cards.filter(c => !c.labelEn);
+  if (missing.length === 0 || items.length === 0) return;
+  try {
+    const byUrl = await extractEntities(items);
+    const koToEn = new Map<string, string>();
+    for (const ents of byUrl.values()) {
+      for (const e of ents) {
+        if (e.orgKo && e.org) koToEn.set(e.orgKo, e.org);
+        if (e.ko && e.en) koToEn.set(e.ko, e.en);
+      }
+    }
+    for (const c of missing) {
+      const en = koToEn.get(c.label);
+      if (en && en !== c.label) c.labelEn = en;
+    }
+  } catch (e) {
+    console.error('[entity-cards] 영문 이름 보충 실패:', e);
+  }
 }

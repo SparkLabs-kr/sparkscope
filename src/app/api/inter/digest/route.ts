@@ -9,6 +9,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { collectDigest, type NewsDomain } from '@/lib/sparkscope/news-digest';
 import { ensureSummaries } from '@/lib/sparkscope/news-summary';
 import { ensurePortfolioHits, ensurePortfolioHitsEn } from '@/lib/sparkscope/news-portfolio';
+import { ensureTitleEn } from '@/lib/sparkscope/news-summary';
+import { backfillEntityLabelsEn } from '@/lib/sparkscope/entity-cards';
 import { getLocale } from '@/lib/i18n/server';
 import { readDigest, saveDigest } from '@/lib/sparkscope/digest-store';
 import { requireUser } from '@/lib/authz';
@@ -38,7 +40,12 @@ export async function GET(req: NextRequest) {
     const cached = await readDigest(domain, days).catch(() => null);
     if (cached) {
       // 사전계산본은 한국어로 저장돼 있다. EN 화면이면 영문 사유를 채워 내보낸다
-      if (locale === 'en') await ensurePortfolioHitsEn(cached.items).catch(() => {});
+      if (locale === 'en') {
+          await ensurePortfolioHitsEn(cached.items).catch(() => {});
+          await ensureTitleEn(cached.items).catch(() => {});
+          // 카드는 크론이 미리 구워 둔다 — labelEn 이 없는 오래된 캐시를 여기서 채운다.
+          await backfillEntityLabelsEn(cached.entities ?? [], cached.items).catch(() => {});
+        }
       return NextResponse.json({
         domain, days, items: cached.items, feeds: cached.feeds,
         keywords: cached.keywords ?? [], entities: cached.entities ?? [],
@@ -52,7 +59,10 @@ export async function GET(req: NextRequest) {
     await ensureSummaries(items);
     // 요약이 있어야 매칭 근거가 좋아지므로 요약 뒤에 부른다.
     await ensurePortfolioHits(items);
-    if (locale === 'en') await ensurePortfolioHitsEn(items).catch(() => {});
+    if (locale === 'en') {
+      await ensurePortfolioHitsEn(items).catch(() => {});
+      await ensureTitleEn(items).catch(() => {});
+    }
     // 원문 발췌는 요약을 만드는 데만 쓴다. 화면으로 내보내지 않는다 —
     // 매체 본문을 그대로 싣지 않기 위해서고, 페이로드도 불필요하게 커진다.
     const safe = items.map(({ sourceText, ...rest }) => rest);

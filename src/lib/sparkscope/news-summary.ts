@@ -183,3 +183,29 @@ export async function ensureSummaries(items: DigestItem[]): Promise<DigestItem[]
 
   return items;
 }
+
+/**
+ * EN 화면용 제목을 채운다 — 원문이 한국어인 기사만.
+ *
+ * 해외 기사는 원문 제목이 이미 영어라 건드리지 않는다. 국내 매체(AI타임스 등)
+ * 기사만 번역 대상이고, 기사당 한 번 번역해 요약 캐시와 같은 행에 저장한다.
+ *
+ * 제목을 번역하지 않으면 EN 화면에서 요약만 영어이고 제목은 한국어로 남아,
+ * 토글을 켠 의미가 없어진다.
+ */
+export async function ensureTitleEn(items: DigestItem[]): Promise<void> {
+  const todo = items.filter(i => !i.titleEn && /[가-힣]/.test(i.title));
+  if (todo.length === 0) return;
+  try {
+    const { translateBatch } = await import('./translate-content');
+    const texts = [...new Set(todo.map(i => i.title))];
+    const translated = await translateBatch(texts);
+    const byText = new Map(texts.map((t, k) => [t, translated[k]]));
+    for (const it of todo) {
+      const v = byText.get(it.title);
+      if (v && v !== it.title) it.titleEn = v;
+    }
+  } catch (e) {
+    console.error('[news-summary] 제목 번역 실패 — 원문 제목으로 내보낸다:', e);
+  }
+}

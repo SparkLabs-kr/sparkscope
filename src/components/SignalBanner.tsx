@@ -243,7 +243,7 @@ function EntityCardView({ card, locale }: { card: EntityCard; locale: string }) 
         aria-expanded={open}
         className="w-full flex items-center gap-2 px-3.5 py-2.5 text-left bg-spark-subtle hover:bg-spark-light-purple/40 transition-colors"
       >
-        <span className="text-[15px] font-extrabold tracking-tight">{card.label}</span>
+        <span className="text-[15px] font-extrabold tracking-tight">{locale === 'en' ? card.labelEn || card.label : card.label}</span>
         {/* 접힌 상태에서도 근거의 크기는 보여준다 — 숫자가 없으면 왜 이 이름이
             여기 있는지 알 수 없다. */}
         <span className="flex items-center gap-1.5 text-[10.5px] font-bold tabular-nums">
@@ -334,7 +334,11 @@ function EntityCardView({ card, locale }: { card: EntityCard; locale: string }) 
 /** 가장 중요한 한 건. 요약 첫 문단까지 펼쳐 두고, 포트폴리오 영향은 이유까지 보여준다. */
 function Hero({ item, locale }: { item: DigestItem; locale: string }) {
   const t = useT();
-  const title = locale === 'ko' && item.summary?.titleKo ? item.summary.titleKo : item.title;
+  const title =
+    locale === 'ko'
+      ? item.summary?.titleKo || item.title
+      // 국내 매체 기사는 원문 제목이 한국어다 — 번역본이 있으면 그것을 쓴다.
+      : item.titleEn || item.title;
   const body = item.summary
     ? (locale === 'en' ? item.summary.enLong?.[0] ?? item.summary.en : item.summary.koLong?.[0] ?? item.summary.ko)
     : null;
@@ -460,7 +464,11 @@ function StripCard({ item, locale, open, onToggle }: {
   item: DigestItem; locale: string; open: boolean; onToggle: () => void;
 }) {
   const t = useT();
-  const title = locale === 'ko' && item.summary?.titleKo ? item.summary.titleKo : item.title;
+  const title =
+    locale === 'ko'
+      ? item.summary?.titleKo || item.title
+      // 국내 매체 기사는 원문 제목이 한국어다 — 번역본이 있으면 그것을 쓴다.
+      : item.titleEn || item.title;
 
   return (
     <li className={`rounded-xl border bg-white px-3.5 py-3 transition-colors ${
