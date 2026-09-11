@@ -70,7 +70,8 @@ async function main() {
       const t = Date.now();
 
       // 아직 다시 만들 때가 아니면 건너뛴다. 저장된 것이 그대로 쓰이므로 화면은 그대로다.
-      const minGap = MIN_INTERVAL_MS[days] ?? 0;
+      // --force는 주기를 무시한다 — 랭킹 로직을 바꾼 직후 바로 다시 만들 때 쓴다.
+      const minGap = process.argv.includes('--force') ? 0 : (MIN_INTERVAL_MS[days] ?? 0);
       if (minGap > 0) {
         const age = await digestAge(domain, days).catch(() => null);
         if (age !== null && age < minGap) {

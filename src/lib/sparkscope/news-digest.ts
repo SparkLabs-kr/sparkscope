@@ -23,6 +23,7 @@ import { collectPopular } from './news-popular';
 import { readPopular, savePopular } from './news-popular-store';
 import { extractTrendKeywords, type TrendKeyword } from './news-keywords';
 import { corroborate } from './news-corroborate';
+import { prisma } from '@/lib/prisma';
 
 export type NewsDomain = 'ai' | 'bio';
 
@@ -442,6 +443,50 @@ function sharesProperNoun(
   return false;
 }
 
+/**
+ * 이미 수집해 둔 기사를 DB에서 읽어 후보에 더한다 — 기간이 긴 탭을 위해서다.
+ *
+ * 왜 필요한가: 다이제스트는 RSS를 그 자리에서 받는데, RSS는 최근 몇십 건만 담는다.
+ * 그래서 '이번 달'을 물어도 실제로는 닷새치밖에 못 본다 — 2026-09-11 실측:
+ * 30일 탭의 기사가 9/05~9/10에만 몰려 있고 9/01~9/04가 통째로 없었다. 그런데
+ * 같은 기사들이 InterNews 테이블에는 다 있다(9/01 116건 · 9/02 113건 · 9/03 113건).
+ * Inter 수집 크론이 매일 저장해 둔 것이다. 읽지 않을 이유가 없다.
+ *
+ * '오늘' 탭에는 쓰지 않는다 — RSS가 이미 그 범위를 다 덮고, 본문·발췌도 더 좋다.
+ *
+ * 분야는 제목 키워드로 가른다(이 테이블에는 도메인 칸이 없다). 그래서 일본어 제목
+ * (ITmedia·Impress)은 영어 키워드 판정을 통과하지 못해 빠진다 — 종합지 피드와 같은
+ * 한계이고, 그쪽은 전용 피드로 따로 들어온다.
+ */
+const STORED_LIMIT: Record<number, number> = { 7: 800, 30: 2000 };
+async function readStoredArticles(
+  domain: NewsDomain, cutoff: number, days: number,
+): Promise<{ title: string; url: string; date: Date | null; blurb: string | null; sourceText: string | null; source: string }[]> {
+  const take = STORED_LIMIT[days];
+  if (!take) return [];
+  try {
+    const rows = await prisma.interNews.findMany({
+      where: { publishedAt: { gte: new Date(cutoff) } },
+      orderBy: { publishedAt: 'desc' },
+      select: { source: true, title: true, url: true, publishedAt: true, rawText: true },
+      take,
+    });
+    const kept = rows.filter(r => DOMAIN_KEYWORDS[domain].test(r.title));
+    console.log(`[news-digest] 저장된 기사 ${kept.length}건 (조회 ${rows.length}건, ${days}일)`);
+    return kept.map(r => ({
+      title: r.title,
+      url: r.url,
+      date: r.publishedAt,
+      blurb: null,
+      sourceText: r.rawText ? r.rawText.slice(0, 4000) : null,
+      source: r.source,
+    }));
+  } catch (e) {
+    console.error('[news-digest] 저장된 기사 조회 실패(무시):', e);
+    return [];
+  }
+}
+
 export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): Promise<{
   items: DigestItem[];
   feeds: { name: string; ok: boolean; count: number }[];
@@ -468,6 +513,21 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
 
   // 평평하게 펴고 최신순으로 — 뒤에서 클러스터의 대표를 고를 때 최신이 앞에 오게.
   const flat = results.flatMap(r => r.entries.map(e => ({ ...e, feed: r.feed })));
+
+  // 기간이 긴 탭은 DB에 쌓인 기사로 뒤쪽을 채운다(readStoredArticles 주석 참고).
+  // 같은 URL이 이미 RSS로 들어왔으면 그쪽을 남긴다 — 발췌와 매체 정보가 더 정확하다.
+  const seenUrls = new Set(flat.map(f => f.url));
+  const byName = new Map(FEEDS.map(f => [f.name, f] as const));
+  for (const r of await readStoredArticles(domain, cutoff, days)) {
+    if (seenUrls.has(r.url)) continue;
+    seenUrls.add(r.url);
+    // 매체 이름이 우리 목록에 있으면 그 등급·한국 매체 여부를 그대로 쓴다.
+    // 없는 이름(Impress Watch 등)은 중간 등급으로 둔다 — 모르는 곳을 tier 1로
+    // 올리면 대표 기사 선정을 가져가 버린다.
+    const feed = byName.get(r.source) ?? { name: r.source, url: '', domain: 'general' as const, tier: 2 as const };
+    flat.push({ ...r, feed });
+  }
+
   flat.sort((a, b) => (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0));
 
   // 같은 사안끼리 묶는다. 대표는 등급이 높은 쪽, 같으면 최신.
@@ -861,13 +921,26 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
   //
   // 정렬을 건드리지 않고 순서대로 담으면서 매체별 개수만 제한한다 — 상한에 걸린
   // 매체의 다음 기사는 밀리고, 그 자리에 다른 매체의 다음 순위가 들어온다.
+  //
+  // 같은 이유로 하루가 목록을 독점하지 못하게도 막는다 — 기간이 긴 탭에서만이다.
+  // '이번 달'을 열었는데 최근 나흘 기사만 12칸을 채우면 한 달을 본 것이 아니다
+  // (2026-09-11 지적: 30일 탭에 9/01~9/07 기사가 한 건도 없었다). 점수가 같을 때
+  // 마지막 tiebreak이 최신순이라, 같은 5점이면 항상 새 기사가 이긴 결과였다.
+  // 9/01에 5점 3건, 9/03에 2건, 9/04에 2건이 있었는데 전부 밀렸다.
   const perOutlet = Math.max(2, Math.ceil(limit / 3));
+  const perDay = days >= 30 ? 2 : days >= 7 ? 3 : limit;
   const used = new Map<string, number>();
+  const usedDay = new Map<string, number>();
   const ranked: DigestItem[] = [];
   const overflow: DigestItem[] = [];
   for (const it of ordered) {
     const n = used.get(it.source) ?? 0;
-    if (n < perOutlet) { used.set(it.source, n + 1); ranked.push(it); }
+    const d = usedDay.get(it.publishedAt) ?? 0;
+    if (n < perOutlet && d < perDay) {
+      used.set(it.source, n + 1);
+      usedDay.set(it.publishedAt, d + 1);
+      ranked.push(it);
+    }
     else overflow.push(it);
     if (ranked.length >= limit) break;
   }
