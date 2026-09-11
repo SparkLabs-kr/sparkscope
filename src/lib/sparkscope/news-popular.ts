@@ -358,8 +358,19 @@ function parseBioin(html: string, src: PopularSource): PopularItem[] {
 function parseHeadline(html: string, src: PopularSource): PopularItem[] {
   const spec = src.headline!;
   const cut = (start: string, end?: string, window = 30_000) => {
-    const i = html.indexOf(start);
+    let i = html.indexOf(start);
     if (i < 0) return '';
+    // 시작점이 링크 패턴이면 그 링크를 감싼 <a까지 되돌아간다.
+    //
+    // 안 그러면 첫 기사가 통째로 사라진다: 자른 지점이 <a 태그 안쪽(href= 앞)이라
+    // 아래 read()의 정규식이 여는 <a를 못 찾고, 그 기사를 건너뛴 다음 기사부터 1위로
+    // 센다. 2026-09-11 실측 — TechCrunch 첫 화면 1면이 알리바바·딥시크 디스틸레이션
+    // 기사였는데 우리가 읽은 1위는 그 다음 카드였다. 클래스 이름을 시작점으로 쓰는
+    // 소스는 여는 태그 앞에서 잘리므로 이 문제가 없다.
+    if (start.startsWith('href="')) {
+      const open = html.lastIndexOf('<a', i);
+      if (open >= 0 && i - open < 300) i = open;
+    }
     let seg = html.slice(i, i + window);
     if (end) {
       // 마커 직후부터 찾는다 — 구역 시작 태그 자체에 끝 문자열이 들어 있을 수 있다.

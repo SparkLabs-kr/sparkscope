@@ -674,15 +674,32 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
   // 발췌를 함께 넘긴다 — 제목이 서로 완전히 다른 같은 사건을 묶으려면 필요하다
   // (news-cluster.ts의 나비에–스토크스 사례). sourceText가 없는 항목은 매체 설명으로
   // 대신하고, 그것도 없으면 제목만 넘어간다.
-  const buckets = await groupSameStory(
-    shortlist.map(it => ({ title: it.title, hint: it.sourceText ?? it.blurb ?? null })),
-  ).catch(e => {
-    console.error('[news-digest] 사건 병합 실패 — 병합 없이 진행합니다:', e);
-    return shortlist.map((_, i) => [i]);
-  });
+  const ask = (list: { title: string; hint: string | null }[]) =>
+    groupSameStory(list).catch(e => {
+      console.error('[news-digest] 사건 병합 실패 — 병합 없이 진행합니다:', e);
+      return list.map((_, i) => [i]);
+    });
+  const brief = (it: DigestItem) => ({ title: it.title, hint: it.sourceText ?? it.blurb ?? null });
 
-  const merged: DigestItem[] = buckets.flatMap(idx => {
-    const all = idx.map(i => shortlist[i]);
+  // 두 번 묻는다. 한 번으로는 놓친다.
+  //
+  // 목록이 30건을 넘으면 어휘가 거의 겹치지 않는 같은 사건 쌍을 빠뜨린다 — 2026-09-11
+  // 실측: "Chinese AI labs secretly used millions of Claude exchanges"(CNBC)와
+  // "Anthropic details distillation campaigns from Alibaba, Moonshot AI, and DeepSeek"
+  // (TechCrunch)가 안 묶여 같은 사건이 10위와 12위에 따로 올랐다. 둘만 떼어 물으면
+  // 정확히 묶는다. 그래서 1차 묶음의 대표만 모아 한 번 더 묻는다 — 목록이 짧아져
+  // 놓친 쌍이 드러난다. 호출 한 번(gpt-4o-mini, 20건 내외)이 더 들 뿐이다.
+  let groups = (await ask(shortlist.map(brief))).map(idx => idx.map(i => shortlist[i]));
+  if (groups.length > 1) {
+    const second = await ask(groups.map(g => brief(g[0])));
+    if (second.length < groups.length) {
+      const before = groups;
+      groups = second.map(idx => idx.flatMap(i => before[i]));
+      console.log(`[news-digest] 2차 병합에서 ${before.length - groups.length}건을 더 묶었습니다`);
+    }
+  }
+
+  const merged: DigestItem[] = groups.flatMap(all => {
     // 지표는 대표가 될 수 없고 "함께 보도"에도 세지 않는다 — 기사가 아니니까.
     const group = all.filter(g => !g.indicator);
     const ind = all.filter(g => g.indicator);
