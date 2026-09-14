@@ -56,12 +56,25 @@ const SYSTEM = [
   '  예: "구글이 모델을 냈다" 와 "구글이 데이터센터를 짓는다" → 다른 사건',
   '  예: "구글, 제미나이 3.8 플래시 공개" 와 "구글, 웨더넥스트 3 공개" → 다른 사건',
   '      (같은 회사가 같은 날 낸 발표라도 제품이 다르면 다른 사건입니다)',
+  '- 같은 제품·모델 이름이 양쪽에 나와도, 벌어진 일이 다르면 다른 사건입니다.',
+  '  제품 이름은 사건이 아니라 등장인물입니다. 이걸 특히 조심하세요.',
+  '  예: "오픈AI, GPT-6 아스트라 공개" 와',
+  '      "오픈AI, 개발자에게 GPT-6 아스트라용 Codex 프롬프트를 줄이라고 안내" 와',
+  '      "GPT-6 아스트라 Max, 코드 아레나 웹개발 1위" 와',
+  '      "오픈AI, GPT-6 기반 금융 특화 챗GPT 공개" → 넷 다 다른 사건',
+  '      (모델 공개 · 사용법 안내 · 벤치마크 순위 · 그 모델로 만든 신제품)',
+  '  예: "구글, 제미나이 3.8 플래시 공개" 와 "구글, 제미나이 옴니 1.1 플래시 공개"',
+  '      → 다른 사건 (이름이 비슷한 다른 모델입니다)',
   '- 같은 분야의 다른 회사 이야기는 다른 사건입니다.',
   '- 비슷한 종류의 성과라도 주인공이나 대상이 다르면 다른 사건입니다. 이걸 특히 조심하세요.',
   '  예: "오픈AI가 나비에-스토크스 난제를 풀었다" 와',
   '      "앤트로픽 클로드가 페르마의 마지막 정리를 검증했다" → 다른 사건',
   '      (둘 다 "AI가 수학 난제를 해결"이지만 회사도 문제도 다릅니다)',
   '- 애매하면 묶지 않습니다. 잘못 묶으면 서로 다른 소식이 하나로 사라집니다.',
+  '',
+  '묶기 전에 스스로 확인하세요: 이 묶음을 한 문장으로 "누가 무엇을 했다"라고 말할 수',
+  '있습니까? 두 문장이 필요하면 두 사건입니다. 회사 이름이나 모델 이름이 같다는 것은',
+  '확인이 되지 않습니다 — 같은 회사가 하루에 여러 발표를 합니다.',
   '',
   '출력은 JSON 객체 하나입니다: {"groups":[[0,4],[1],[2,7,9], ...]}',
   '- 각 배열이 하나의 사건이고, 숫자는 입력에 준 번호입니다.',
@@ -148,9 +161,79 @@ export async function groupSameStory(
     }
     // 빠뜨린 번호는 홀로 추가한다.
     for (let i = 0; i < items.length; i++) if (!seen.has(i)) out.push([i]);
-    return out;
+    return verifyGroups(out, items);
   } catch (e) {
     console.error('[news-cluster] 사건 묶기 실패 — 병합 없이 진행합니다:', e);
     return alone();
   }
+}
+
+/**
+ * 묶음을 하나씩 다시 물어 확인한다 — 긴 목록에서 생기는 과병합을 잡는다.
+ *
+ * 왜 필요한가: 같은 프롬프트라도 30~40건을 한꺼번에 주면 같은 회사 소식을 뭉친다.
+ * 2026-09-14 실측 — "GPT-6 아스트라 공개" · "개발자에게 Codex 프롬프트를 줄이라고
+ * 안내" · "아스트라 Max 코드 아레나 1위" · "금융 특화 챗GPT 공개"가 한 묶음이 됐고,
+ * 그 결과 1위 카드에 남의 기사 '원문 보기' 링크가 달려 나갔다. 그런데 **그 네 건만
+ * 따로 물으면 넷으로 정확히 갈라낸다.** 짧은 목록에서는 모델이 틀리지 않는다.
+ *
+ * 그래서 1차 결과의 각 묶음을 그 묶음만 떼어 다시 묻는다. 호출은 작고(보통 2~4건)
+ * 묶음 수만큼만 늘며, 방향이 한쪽이다 — 쪼개기만 하고 새로 붙이지 않는다. 반대로
+ * "더 붙일 것이 없는지" 다시 묻는 방식은 2026-09-11에 넣었다가 엉뚱한 기사를 붙여서
+ * 뺐다(news-digest.ts 주석 참고). 놓치면 두 줄로 보일 뿐이지만 잘못 붙이면 거짓이 된다.
+ */
+async function verifyGroups(
+  groups: number[][], items: { title: string; hint?: string | null }[],
+): Promise<number[][]> {
+  const multi = groups.filter(g => g.length > 1);
+  if (multi.length === 0) return groups;
+
+  const split = await Promise.all(multi.map(async g => {
+    // 확인 단계에는 발췌를 넣지 않는다 — 제목만 준다.
+    //
+    // 발췌는 묶을 때 필요하다(표현이 다른 같은 사건을 찾아낸다). 그런데 쪼갤 때는
+    // 오히려 방해가 된다. 같은 회사 기사의 본문은 서로 같은 제품·같은 배경을 길게
+    // 설명해서 "같은 얘기"처럼 보이게 만든다. 2026-09-14 실측 — 발췌를 함께 주면
+    // 'Codex 프롬프트 안내'·'금융 특화 챗GPT'·'코드 아레나 1위'가 한 묶음으로
+    // 남았고, 제목만 주면 셋으로 갈라졌다. 제미나이 3.8 vs 제미나이 옴니 1.1도 같다.
+    // 순서를 바꿔 두 번 묻고 더 잘게 쪼갠 쪽을 택한다.
+    //
+    // 온도가 0이어도 항목 순서가 바뀌면 판정이 달라진다 — 앞에 놓인 것을 기준으로
+    // 나머지를 견주기 때문이다. 방향이 한쪽으로만 틀리는 문제(과병합)이므로 둘 중
+    // 더 쪼갠 쪽을 믿는다. 틀려서 더 쪼개면 같은 사건이 두 줄로 보일 뿐이고,
+    // 덜 쪼개면 1위 카드에 남의 기사 링크가 달린다.
+    const ask = async (order: number[]) => {
+      const listing = order.map((n, k) => `${k}. ${items[n].title}`).join('\n');
+      const res = await client().chat.completions.create({
+        model: MODEL,
+        messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: listing }],
+        temperature: 0,
+        response_format: { type: 'json_object' },
+      });
+      const parsed = JSON.parse(res.choices[0]?.message?.content ?? '{}') as { groups?: number[][] };
+      if (!Array.isArray(parsed.groups)) return [order];
+      const seen = new Set<number>();
+      const out: number[][] = [];
+      for (const sub of parsed.groups) {
+        const clean = (Array.isArray(sub) ? sub : [])
+          .filter(k => Number.isInteger(k) && k >= 0 && k < order.length && !seen.has(k));
+        clean.forEach(k => seen.add(k));
+        if (clean.length > 0) out.push(clean.map(k => order[k]));
+      }
+      for (let k = 0; k < order.length; k++) if (!seen.has(k)) out.push([order[k]]);
+      return out;
+    };
+    try {
+      const [a, b] = await Promise.all([ask(g), ask([...g].reverse())]);
+      return b.length > a.length ? b : a;
+    } catch (e) {
+      console.error('[news-cluster] 묶음 확인 실패(1차 결과 유지):', e);
+      return [g];
+    }
+  }));
+
+  const before = multi.length;
+  const after = split.flat().length;
+  if (after > before) console.log(`[news-cluster] 확인 단계에서 ${after - before}개 묶음을 쪼갰습니다`);
+  return [...groups.filter(g => g.length === 1), ...split.flat()];
 }

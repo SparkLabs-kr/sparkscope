@@ -412,38 +412,6 @@ async function collectIndicators(domain: NewsDomain, cutoff: number): Promise<Di
 }
 
 /**
- * 두 항목이 같은 고유명사를 말하는가 — 2차 병합의 확인 절차다.
- *
- * 회사·제품·인물 이름이 하나도 겹치지 않으면 같은 사건일 수 없다고 본다. 흔한 업계
- * 용어(ai·openai 같은 것)는 거의 모든 제목에 들어 있어 확인이 되지 않으므로 뺀다 —
- * 남는 것은 alibaba·moonshot·deepseek·positron처럼 사건을 특정하는 이름이다.
- */
-const COMMON_WORDS = new Set([
-  'ai', 'a.i.', 'the', 'and', 'for', 'with', 'from', 'that', 'this', 'says', 'said',
-  'new', 'more', 'over', 'into', 'about', 'after', 'first', 'model', 'models', 'data',
-  'startup', 'company', 'chief', 'report', 'launch', 'launches', 'plans', 'billion',
-  'million', 'valuation', 'funding', 'round', 'raises', 'deal', 'chip', 'chips',
-  'agent', 'agents', 'tech', 'technology', 'industry', 'business', 'users', 'user',
-]);
-function nounSet(x: { title: string; hint: string | null }): Set<string> {
-  const text = `${x.title} ${x.hint ?? ''}`;
-  const out = new Set<string>();
-  // 영문 고유명사(대문자로 시작하거나 전부 대문자) + 한글 두 글자 이상 덩어리.
-  for (const w of text.match(/\b[A-Z][A-Za-z0-9.'-]{2,}\b|[가-힣]{2,}/g) ?? []) {
-    const k = w.toLowerCase().replace(/[.'-]+$/, '');
-    if (k.length >= 3 && !COMMON_WORDS.has(k)) out.add(k);
-  }
-  return out;
-}
-function sharesProperNoun(
-  a: { title: string; hint: string | null }, b: { title: string; hint: string | null },
-): boolean {
-  const bs = nounSet(b);
-  for (const k of nounSet(a)) if (bs.has(k)) return true;
-  return false;
-}
-
-/**
  * 이미 수집해 둔 기사를 DB에서 읽어 후보에 더한다 — 기간이 긴 탭을 위해서다.
  *
  * 왜 필요한가: 다이제스트는 RSS를 그 자리에서 받는데, RSS는 최근 몇십 건만 담는다.
@@ -786,43 +754,18 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
     });
   const brief = (it: DigestItem) => ({ title: it.title, hint: it.sourceText ?? it.blurb ?? null });
 
-  // 두 번 묻는다. 한 번으로는 놓친다.
+  // 한 번만 묻는다. 2차 병합은 넣었다가 뺐다(2026-09-11~14).
   //
-  // 목록이 30건을 넘으면 어휘가 거의 겹치지 않는 같은 사건 쌍을 빠뜨린다 — 2026-09-11
-  // 실측: "Chinese AI labs secretly used millions of Claude exchanges"(CNBC)와
-  // "Anthropic details distillation campaigns from Alibaba, Moonshot AI, and DeepSeek"
-  // (TechCrunch)가 안 묶여 같은 사건이 10위와 12위에 따로 올랐다. 둘만 떼어 물으면
-  // 정확히 묶는다. 그래서 1차 묶음의 대표만 모아 한 번 더 묻는다 — 목록이 짧아져
-  // 놓친 쌍이 드러난다. 호출 한 번(gpt-4o-mini, 20건 내외)이 더 들 뿐이다.
-  let groups = (await ask(shortlist.map(brief))).map(idx => idx.map(i => shortlist[i]));
-  if (groups.length > 1) {
-    const before = groups;
-    const second = await ask(groups.map(g => brief(g[0])));
-    let joined = 0;
-    groups = second.flatMap(idx => {
-      if (idx.length < 2) return [before[idx[0]]];
-      // 2차 병합은 고유명사가 겹칠 때만 받아들인다.
-      //
-      // 목록을 짧게 줄여서 다시 물으면 놓친 쌍을 찾아내지만, 맥락이 줄어든 만큼
-      // 엉뚱한 것도 붙인다 — 2026-09-11 실측: "AI chip startup Positron's valuation
-      // skyrockets"와 "Anthropic details distillation campaigns"를 같은 사건으로
-      // 묶었다. 제목과 요약이 서로 다른 사건을 말하는 건 병합을 놓치는 것보다 나쁘다.
-      // 그래서 1차 판정은 그대로 믿고, 2차는 이 확인을 통과한 것만 받는다.
-      const anchor = before[idx[0]];
-      const ok: DigestItem[] = [...anchor];
-      const rejected: DigestItem[][] = [];
-      for (const i of idx.slice(1)) {
-        if (sharesProperNoun(brief(anchor[0]), brief(before[i][0]))) {
-          ok.push(...before[i]);
-          joined++;
-        } else {
-          rejected.push(before[i]);
-        }
-      }
-      return [ok, ...rejected];
-    });
-    if (joined > 0) console.log(`[news-digest] 2차 병합에서 ${joined}건을 더 묶었습니다`);
-  }
+  // 1차에서 놓친 쌍이 있어서(같은 사건이 10위·12위에 따로 올랐다) 1차 묶음의 대표만
+  // 모아 한 번 더 물었다. 그런데 목록이 짧아지면 맥락이 사라져 엉뚱한 것을 붙였다:
+  //   · 'Positron 투자 유치' + 'Anthropic 디스틸레이션 공개'
+  //   · 'OpenAI 밀레니엄 문제 해결' + 'OpenAI, Codex 프롬프트 줄이라고 안내'
+  // 고유명사가 겹칠 때만 받도록 막아봤지만 소용없었다 — 같은 회사 소식은 openai·
+  // gpt-6·astra를 늘 공유해서 확인이 되지 않는다.
+  //
+  // 대가가 비대칭이다. 놓치면 같은 사건이 두 줄로 보일 뿐이지만, 잘못 붙이면 1위 카드에
+  // 남의 기사 '원문 보기' 링크가 달린다(실제로 그렇게 나갔다). 1차만 쓴다.
+  const groups = (await ask(shortlist.map(brief))).map(idx => idx.map(i => shortlist[i]));
 
   const merged: DigestItem[] = groups.flatMap(all => {
     // 지표는 대표가 될 수 없고 "함께 보도"에도 세지 않는다 — 기사가 아니니까.
