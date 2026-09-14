@@ -18,7 +18,7 @@
  */
 import { FEEDS, INDICATOR_FEEDS, DOMAIN_KEYWORDS, type Feed } from './news-feeds';
 import { scoreImportance, type Importance, type Verdict } from './news-importance';
-import { groupSameStory } from './news-cluster';
+import { groupSameStory, differentVersions } from './news-cluster';
 import { collectPopular } from './news-popular';
 import { readPopular, savePopular } from './news-popular-store';
 import { extractTrendKeywords, type TrendKeyword } from './news-keywords';
@@ -503,7 +503,10 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
   const clusters: Cluster[] = [];
   for (const a of flat) {
     const t = tokens(a.title);
-    const hit = clusters.find(c => sameStory(c.repToks, t));
+    // 단어가 겹쳐도 버전 번호가 다르면 다른 발표다. 이 단계에서 묶이면 LLM은 두 기사를
+    // 하나로 보게 되므로 뒤에서 바로잡을 기회가 없다 — 2026-09-14 실측: '제미나이 3.8
+    // 플래시'와 'Gemini Omni 1.1 Flash'가 google·gemini·flash 세 단어로 묶였다.
+    const hit = clusters.find(c => sameStory(c.repToks, t) && !differentVersions(c.rep.title, a.title));
     if (hit) {
       hit.members.push(a);
       if (a.feed.tier < hit.rep.feed.tier) { hit.rep = a; hit.repToks = t; }

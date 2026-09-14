@@ -13,6 +13,7 @@
  * 요약 때문에 테이블이나 컬럼을 새로 만들지 않았다. 같은 기사에 두 번 과금되지 않는다.
  */
 import OpenAI from 'openai';
+import { createHash } from 'node:crypto';
 import { prisma } from '@/lib/prisma';
 import type { DigestItem } from './news-digest';
 
@@ -103,11 +104,30 @@ async function readCache(urls: string[]): Promise<Map<string, Summary>> {
   return out;
 }
 
+/**
+ * 캐시 열쇠 — 기사 URL에 "어떤 기사들을 근거로 요약했는가"를 붙인다.
+ *
+ * URL만으로 키를 잡으면 병합이 바뀌어도 옛 요약이 그대로 나온다. 2026-09-14 실측:
+ * AlphaSignal의 "OpenAI Tells Developers to Slim Down Codex Prompts"가 한때 금융
+ * 특화 챗GPT 기사와 잘못 묶였고, 그때 만들어진 요약이 캐시에 남아 병합을 바로잡은
+ * 뒤에도 제목이 "오픈AI, 금융 서비스 전용 AI 출시"로 떴다. 제목과 본문이 서로 다른
+ * 기사를 말하는 상태가 캐시 때문에 굳어버린 것이다.
+ *
+ * 함께 묶인 URL들을 열쇠에 넣으면 묶음이 달라지는 순간 자동으로 다시 만든다.
+ * 묶음이 그대로면 열쇠도 그대로라 비용은 늘지 않는다.
+ */
+function cacheKey(it: DigestItem): string {
+  if (it.alsoIn.length === 0) return it.url;
+  const basis = it.alsoIn.map(a => a.url).sort().join('\n');
+  const hash = createHash('sha1').update(basis).digest('hex').slice(0, 8);
+  return `${it.url}#${hash}`;
+}
+
 export async function ensureSummaries(items: DigestItem[]): Promise<DigestItem[]> {
   if (items.length === 0) return items;
 
-  const cached = await readCache(items.map(i => i.url)).catch(() => new Map<string, Summary>());
-  for (const it of items) it.summary = cached.get(it.url) ?? null;
+  const cached = await readCache(items.map(cacheKey)).catch(() => new Map<string, Summary>());
+  for (const it of items) it.summary = cached.get(cacheKey(it)) ?? null;
 
   const todo = items.filter(i => !i.summary).slice(0, MAX_NEW);
   if (todo.length === 0) return items;
@@ -155,8 +175,8 @@ export async function ensureSummaries(items: DigestItem[]): Promise<DigestItem[]
         if (!valid(v)) return;
         it.summary = v;
         await prisma.dashboardInsight.upsert({
-          where: { kind_key: { kind: KIND, key: it.url } },
-          create: { kind: KIND, key: it.url, value: JSON.stringify(v) },
+          where: { kind_key: { kind: KIND, key: cacheKey(it) } },
+          create: { kind: KIND, key: cacheKey(it), value: JSON.stringify(v) },
           update: { value: JSON.stringify(v) },
         }).catch(e => console.error('[news-summary] 캐시 저장 실패:', it.url, e));
       }));

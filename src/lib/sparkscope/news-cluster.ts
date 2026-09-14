@@ -225,7 +225,7 @@ async function verifyGroups(
     };
     try {
       const [a, b] = await Promise.all([ask(g), ask([...g].reverse())]);
-      return b.length > a.length ? b : a;
+      return (b.length > a.length ? b : a).flatMap(sub => splitByVersion(sub, items));
     } catch (e) {
       console.error('[news-cluster] 묶음 확인 실패(1차 결과 유지):', e);
       return [g];
@@ -236,4 +236,51 @@ async function verifyGroups(
   const after = split.flat().length;
   if (after > before) console.log(`[news-cluster] 확인 단계에서 ${after - before}개 묶음을 쪼갰습니다`);
   return [...groups.filter(g => g.length === 1), ...split.flat()];
+}
+
+/**
+ * 버전 번호가 서로 다르면 다른 발표로 본다 — 모델이 끝내 못 가르는 한 가지를 기계가 맡는다.
+ *
+ * 2026-09-14 실측: "구글, 제미나이 3.8 플래시 공개"와 "Google、動画生成AI「Gemini Omni
+ * 1.1 Flash」公開"가 확인 단계를 두 번 거쳐도 한 묶음으로 남았다. 한국어와 일본어라
+ * 겹치는 글자가 없고 모델에게는 둘 다 "구글이 플래시 모델을 공개했다"로 보인다.
+ * 그런데 사람 눈에는 3.8과 1.1이 다르다는 것이 곧바로 보인다.
+ *
+ * 그래서 좁게 적용한다 — 양쪽 제목에 버전 번호(1.1·3.8 같은 소수점 숫자)가 **둘 다**
+ * 있고 서로 하나도 겹치지 않을 때만 가른다. 한쪽에만 있으면 건드리지 않는다
+ * (예: Verge "up to 45 percent cheaper"에는 없고 ITmedia "Claude Fable 5.1"에는
+ * 있는데, 둘은 같은 발표다). 금액·지분율은 소수점을 잘 쓰지 않아 걸리지 않는다
+ * (Mistral "$24 billion" ↔ "€3bn"은 그대로 묶인다 — 확인함).
+ */
+export function versionSet(title: string): Set<string> {
+  const out = new Set<string>();
+  // 'N.N' 형태만 보되 돈·비율은 뺀다 — 금액에도 소수점이 흔하다.
+  // ("Nvidia Buys Hugging Face in $12.9 Billion Deal"과 "約1.9兆円"을 버전으로
+  //  읽고 같은 인수 기사를 갈라 버린 적이 있다. 2026-09-14)
+  const re = /(?<![\d.])(?<![$€£¥₩])\d{1,2}\.\d{1,2}(?![\d.])(?!\s*(?:%|percent|퍼센트|billion|million|trillion|bn|배|점|조|억|兆|億|원|달러))/gi;
+  for (const m of title.match(re) ?? []) out.add(m);
+  return out;
+}
+function splitByVersion(group: number[], items: { title: string }[]): number[][] {
+  if (group.length < 2) return [group];
+  const sets = group.map(n => versionSet(items[n].title));
+  const buckets: { key: string; members: number[] }[] = [];
+  for (const [k, n] of group.entries()) {
+    const v = [...sets[k]].sort().join(',');
+    // 버전이 없는 항목은 가르는 근거가 되지 못한다 — 첫 묶음에 딸려 둔다.
+    const target = v === ''
+      ? buckets[0] ?? null
+      : buckets.find(b => b.key === '' || b.key === v || [...sets[k]].some(x => b.key.split(',').includes(x))) ?? null;
+    if (target) { target.members.push(n); if (target.key === '' && v !== '') target.key = v; }
+    else buckets.push({ key: v, members: [n] });
+  }
+  return buckets.length > 1 ? buckets.map(b => b.members) : [group];
+}
+
+/** 두 제목이 서로 다른 버전 번호를 달고 있는가 — 양쪽에 다 있고 하나도 안 겹칠 때만 true. */
+export function differentVersions(a: string, b: string): boolean {
+  const va = versionSet(a), vb = versionSet(b);
+  if (va.size === 0 || vb.size === 0) return false;
+  for (const x of va) if (vb.has(x)) return false;
+  return true;
 }
