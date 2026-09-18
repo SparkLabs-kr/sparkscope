@@ -52,7 +52,7 @@ export async function POST(req: Request) {
       select: {
         email: true, active: true,
         sparklabs: true, portfolio: true, inter: true,
-        aiSignals: true, competitor: true, industry: true,
+        aiSignals: true, bioSignals: true, competitor: true, industry: true,
       },
     });
     return NextResponse.json({ ok: true, subscriber });

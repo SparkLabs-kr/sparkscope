@@ -67,15 +67,36 @@ function renderRow(it: FeedItem): string {
   </div>`;
 }
 
+/**
+ * 도메인별 겉모습. 고르는 규칙은 AI·바이오가 완전히 같아서(여러 매체가 함께 다뤘는지,
+ * 1면에 걸렸는지) 섹션도 같은 틀을 쓰고 제목과 색만 바꾼다.
+ *
+ * 색을 나누는 이유는 Inter 섹션 때와 같다 — 두 TOP 5가 연달아 나오는데 같은 보라면
+ * 열 장이 한 덩어리로 뭉개져서 어디서 AI가 끝나고 바이오가 시작하는지 안 보인다.
+ */
+const DOMAIN_STYLE: Record<SignalFeed['domain'], { cls: string; title: string; sub: string }> = {
+  ai: {
+    cls: 'ss-ai',
+    title: '🤖 이번 주 AI 트렌드',
+    sub: '대시보드 Inter 탭 AI 도메인과 같은 기준입니다.',
+  },
+  bio: {
+    cls: 'ss-bio',
+    title: '🧬 이번 주 바이오 트렌드',
+    sub: '대시보드 Inter 탭 바이오 도메인과 같은 기준입니다.',
+  },
+};
+
 /** 항목이 하나도 없으면 섹션 자체를 그리지 않는다 — 빈 제목만 남는 것보다 낫다. */
 export function renderSignalSection(feed: SignalFeed | null): string {
   if (!feed || feed.items.length === 0) return '';
+  const style = DOMAIN_STYLE[feed.domain] ?? DOMAIN_STYLE.ai;
   return `
-  <div class="signal-sec">
-    <div class="s-head-big">🤖 이번 주 AI 트렌드 TOP ${feed.items.length}</div>
+  <div class="signal-sec ${style.cls}">
+    <div class="s-head-big">${style.title} TOP ${feed.items.length}</div>
     <div class="s-sub">
       여러 매체가 함께 다룬 사안과 1면 헤드라인을 기준으로 세운 순위입니다.
-      대시보드 Inter 탭 AI 도메인과 같은 기준입니다.
+      ${style.sub}
     </div>
     ${feed.items.map(renderRow).join('\n')}
   </div>`;
@@ -121,19 +142,45 @@ export const SIGNAL_EMAIL_CSS = `
 .s-pt{font-size:11.5px;font-weight:800;color:#C2410C}
 
 .s-desc{font-size:12.5px;color:#4B5563;line-height:1.68}
+
+/* 바이오 — 위 기본값(AI 보라)에서 색만 갈아끼운다. 구조·크기는 그대로라 두 섹션이
+   형제로 읽히고, 색만으로 "여기부터 바이오"가 구분된다. Inter(초록)·AI(보라)와
+   겹치지 않게 파랑 계열을 쓴다. */
+.signal-sec.ss-bio{background:#F5FAFF;border-top-color:#0369A1;border-bottom-color:#D6E8F5}
+.ss-bio .s-head-big{color:#0C4A6E}
+.ss-bio .signal-card.sc-news{background:#EFF6FF;border-left-color:#0369A1}
+.ss-bio .signal-card.sc-hero{border:1px solid #7DD3FC;border-left:10px solid #0369A1;background:#E0F2FE}
+.ss-bio .sc-hero .s-desc{color:#1E3A5F}
+.ss-bio .s-t-news{background:#E0F2FE;color:#075985}
+.ss-bio .s-auth{color:#0369A1}
 `;
 
 /**
- * 다이제스트 데이터에 AI 시그널 TOP 5를 붙인다.
- * attachInterDigest와 같은 모양 — 실패해도 그 섹션만 빠지고 메일은 나간다.
+ * 다이제스트 데이터에 AI·바이오 트렌드 TOP 5를 붙인다.
+ * attachInterDigest와 같은 모양 — 한쪽이 실패해도 그 섹션만 빠지고 나머지는 나간다.
+ *
+ * 두 도메인을 따로 붙이는 이유: 사람마다 관심 분야가 갈려서 구독도 따로 끄고 켠다
+ * (subscription.ts의 aiSignals·bioSignals). 하나로 합쳐 10건을 만들면 AI만 보고 싶은
+ * 사람에게 바이오가 섞여 나간다.
+ *
+ * 파트너(블루사이트)로 나가는 것은 AI뿐이다 — runner.ts가 aiSignals만 publishSignalFeed에
+ * 넘긴다. 바이오는 메일 전용이다.
  */
-export async function attachAiSignals<T extends { aiSignals?: SignalFeed | null }>(data: T): Promise<T> {
-  try {
-    const { buildSignalFeed } = await import('./signal-feed');
-    data.aiSignals = await buildSignalFeed();
-  } catch (e: any) {
-    console.error(`[Signal] AI 트렌드 블록 생성 실패 — 그 섹션 없이 발송합니다: ${e?.message}`);
-    data.aiSignals = null;
-  }
+export async function attachAiSignals<T extends {
+  aiSignals?: SignalFeed | null;
+  bioSignals?: SignalFeed | null;
+}>(data: T): Promise<T> {
+  const { buildSignalFeed } = await import('./signal-feed');
+  const load = async (domain: 'ai' | 'bio') => {
+    try {
+      return await buildSignalFeed(domain);
+    } catch (e: any) {
+      console.error(`[Signal] ${domain} 트렌드 블록 생성 실패 — 그 섹션 없이 발송합니다: ${e?.message}`);
+      return null;
+    }
+  };
+  const [ai, bio] = await Promise.all([load('ai'), load('bio')]);
+  data.aiSignals = ai;
+  data.bioSignals = bio;
   return data;
 }

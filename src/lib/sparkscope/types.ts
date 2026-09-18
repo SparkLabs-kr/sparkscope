@@ -68,6 +68,9 @@ export interface DigestData {
   // 파트너(블루사이트)로 나가는 것과 같은 목록이다(signal-feed.ts).
   // inter와 같은 이유로 호출부에서 채운다 — 출처가 DB의 SocialSignal이라 buildDigestData 밖이다.
   aiSignals?: import('./signal-feed').SignalFeed | null;
+  // 바이오 트렌드 TOP 5 — aiSignals와 같은 구조·같은 선정 규칙이고 도메인만 다르다.
+  // 관심 분야가 갈려서 구독도 따로 끄고 켠다(subscription.ts).
+  bioSignals?: import('./signal-feed').SignalFeed | null;
   // 검수 콘솔에서 편집자가 카테고리별로 붙이는 한 줄 요약 (있으면 섹션 상단에 렌더)
   categorySummaries?: {
     sparklabs_self?: string;

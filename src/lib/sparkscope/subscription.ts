@@ -13,6 +13,7 @@ export type SectionKey =
   | 'portfolio'
   | 'inter'
   | 'aiSignals'
+  | 'bioSignals'
   | 'competitor'
   | 'industry';
 
@@ -24,6 +25,7 @@ export const SECTIONS: { key: SectionKey; label: string; desc: string }[] = [
   { key: 'portfolio', label: '💼 포트폴리오 하이라이트', desc: '포트폴리오사 소식 · 피칭 기회' },
   { key: 'inter', label: '🔭 해외 트렌드', desc: '해외 매체·논문 주요 토픽과 포트폴리오 연결점' },
   { key: 'aiSignals', label: '🤖 AI 트렌드 TOP 5', desc: '여러 매체가 함께 다룬 이번 주 AI 이슈' },
+  { key: 'bioSignals', label: '🧬 바이오 트렌드 TOP 5', desc: '여러 매체가 함께 다룬 이번 주 바이오 이슈' },
   { key: 'competitor', label: '🤝 AC·VC 업계 동향', desc: '타 액셀러레이터·벤처캐피탈 움직임' },
   { key: 'industry', label: '🚀 스타트업계 뉴스', desc: '투자·정책 등 업계 전반 흐름' },
 ];
@@ -94,5 +96,6 @@ export function applySubscription(data: DigestData, prefs: SectionPrefs): Digest
     industryArticles: keep(data.industryArticles, prefs.industry),
     inter: prefs.inter ? data.inter : null,
     aiSignals: prefs.aiSignals ? data.aiSignals : null,
+    bioSignals: prefs.bioSignals ? data.bioSignals : null,
   };
 }

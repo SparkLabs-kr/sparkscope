@@ -15,7 +15,7 @@
  * 소스가 다시 늘어날 때 규모가 다른 점수를 섞는 문제가 되돌아온다 — 예전에 HF
  * 다운로드 60,343과 Lobsters 업보트 13을 한 줄로 세우려다 겪은 문제다.
  */
-import { collectDigest, type DigestItem } from './news-digest';
+import { collectDigest, type DigestItem, type NewsDomain } from './news-digest';
 import { ensureSummaries } from './news-summary';
 import { readDigest } from './digest-store';
 
@@ -71,7 +71,7 @@ export interface FeedItem {
 }
 
 export interface SignalFeed {
-  domain: 'ai';
+  domain: NewsDomain;
   generatedAt: string;
   items: FeedItem[];
 }
@@ -95,16 +95,16 @@ type Candidate = Omit<FeedItem, 'rank'> & { score: number };
  */
 const MAIL_MAX_AGE_MS = 36 * 3600_000;
 
-async function newsItems(): Promise<DigestItem[]> {
-  const cached = await readDigest('ai', NEWS_DAYS, MAIL_MAX_AGE_MS).catch(() => null);
+async function newsItems(domain: NewsDomain): Promise<DigestItem[]> {
+  const cached = await readDigest(domain, NEWS_DAYS, MAIL_MAX_AGE_MS).catch(() => null);
   if (cached?.items.length) return cached.items as DigestItem[];
-  console.log('[signal-feed] 사전계산 없음 — 즉석 계산');
-  const { items } = await collectDigest('ai', NEWS_DAYS, TOP_N * 2);
+  console.log(`[signal-feed] ${domain} 사전계산 없음 — 즉석 계산`);
+  const { items } = await collectDigest(domain, NEWS_DAYS, TOP_N * 2);
   return items;
 }
 
-async function newsCandidates(): Promise<Candidate[]> {
-  const items = await newsItems();
+async function newsCandidates(domain: NewsDomain): Promise<Candidate[]> {
+  const items = await newsItems(domain);
   // 커뮤니티를 빼면서 다섯 칸을 전부 뉴스로 채운다 — 예전에는 절반이 커뮤니티라
   // 뉴스 후보를 TOP_N까지만 만들면 됐다.
   const top = items.slice(0, TOP_N);
@@ -144,9 +144,9 @@ async function newsCandidates(): Promise<Candidate[]> {
  *    창업자 관련 비공개 정보라 파트너 배너에 나가면 안 된다. 메일에서도 포트폴리오
  *    연결은 바로 위 '글로벌 트렌드 × 포트폴리오' 섹션의 몫이다.
  */
-export async function buildSignalFeed(): Promise<SignalFeed> {
-  const news = await newsCandidates()
-    .catch(e => { console.error('[signal-feed] 뉴스 실패:', e); return [] as Candidate[]; });
+export async function buildSignalFeed(domain: NewsDomain = 'ai'): Promise<SignalFeed> {
+  const news = await newsCandidates(domain)
+    .catch(e => { console.error(`[signal-feed] ${domain} 뉴스 실패:`, e); return [] as Candidate[]; });
 
   // 대시보드 순서를 그대로 쓴다. 점수로 다시 정렬하지 않는다.
   //
@@ -161,5 +161,5 @@ export async function buildSignalFeed(): Promise<SignalFeed> {
     .slice(0, TOP_N)
     .map(({ score, ...rest }, i) => ({ rank: i + 1, ...rest }));
 
-  return { domain: 'ai', generatedAt: new Date().toISOString(), items };
+  return { domain, generatedAt: new Date().toISOString(), items };
 }

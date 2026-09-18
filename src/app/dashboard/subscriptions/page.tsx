@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
 const SELECT = {
   email: true, active: true,
   sparklabs: true, portfolio: true, inter: true,
-  aiSignals: true, competitor: true, industry: true,
+  aiSignals: true, bioSignals: true, competitor: true, industry: true,
 } as const;
 
 export default async function SubscriptionsPage() {

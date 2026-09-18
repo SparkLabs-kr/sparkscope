@@ -544,6 +544,7 @@ model DigestSubscriber {
   portfolio  Boolean @default(true) // 💼 포트폴리오 하이라이트
   inter      Boolean @default(true) // 🔭 해외 트렌드(요약 띠 + 포트폴리오 매치)
   aiSignals  Boolean @default(true) // 🤖 이번 주 AI 트렌드 TOP 5
+  bioSignals Boolean @default(true) // 🧬 이번 주 바이오 트렌드 TOP 5
   competitor Boolean @default(true) // 🤝 AC·VC 업계 동향
   industry   Boolean @default(true) // 🚀 스타트업계 뉴스
 

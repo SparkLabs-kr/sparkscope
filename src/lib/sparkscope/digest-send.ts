@@ -60,7 +60,7 @@ export async function sendDigestToSubscribers(params: {
     select: {
       email: true, token: true,
       sparklabs: true, portfolio: true, inter: true,
-      aiSignals: true, competitor: true, industry: true,
+      aiSignals: true, bioSignals: true, competitor: true, industry: true,
     },
   });
   if (subscribers.length === 0) return null;

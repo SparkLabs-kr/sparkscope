@@ -259,6 +259,8 @@ ${SIGNAL_EMAIL_CSS}
 
   ${renderSignalSection(data.aiSignals ?? null)}
 
+  ${renderSignalSection(data.bioSignals ?? null)}
+
   ${data.competitorArticles.length > 0 ? `
   <div class="section">
     <div class="section-label">🤝 AC·VC 업계 동향</div>
