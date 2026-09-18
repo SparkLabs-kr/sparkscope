@@ -19,6 +19,7 @@ import { attachAiSignals } from './signal-digest';
 import { publishSignalFeed } from './signal-publish';
 import { buildDigestKeyMap, buildDigestContextMap, passesDigestGuard } from './review';
 import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } from './mailer';
+import { sendDigestToSubscribers } from './digest-send';
 import { collectInterNews } from './inter-collect';
 import { filterInterNewsWithGemini } from './inter-filter';
 import { matchInterNewsWithPortfolio } from './inter-portfolio-match';
@@ -414,10 +415,36 @@ export async function runDailyDigest(opts: RunOptions = {}) {
         await prisma.digest.update({ where: { id: digestRecord.id }, data: { errorMsg: `발송 스킵: 도메인 미인증(${domain.status}) / 알림 ${notified ? '성공' : '실패'}` } });
         console.warn(`[runner] 발신 도메인 미인증(${domain.status}) — 전원 발송 스킵, 알림 ${notified ? 'OK' : 'FAIL'}`);
       } else {
-        const to = opts.testRecipient ?? process.env.DIGEST_TO_GROUP; // cron: 전사 그룹
         try {
-          mailResult = await sendDigestEmail({ subject, html, to, bcc });
-          await prisma.digest.update({ where: { id: digestRecord.id }, data: { sentAt: new Date(), recipients: 1 } });
+          // 구독자별 발송으로 넘어가는 스위치. 기본은 꺼져 있고, 명단 시드를 끝내고
+          // 수를 확인한 뒤에만 켠다(DIGEST_USE_SUBSCRIBERS=true).
+          //
+          // 표가 비었는지로만 판단하면 위험하다 — 테스트로 한 줄 넣어두거나 명단을 절반만
+          // 시드한 상태에서 크론이 돌면, 그룹 발송이 조용히 멈추고 그 몇 명에게만 나간다.
+          // 나머지 전원은 "오늘 메일이 안 왔네" 외에는 아무 신호도 못 받는다.
+          // 스위치가 꺼져 있거나 구독자가 0명이면 예전처럼 전사 그룹으로 1통 보낸다.
+          const useSubscribers = process.env.DIGEST_USE_SUBSCRIBERS === 'true';
+          const perSubscriber = opts.testRecipient || !useSubscribers
+            ? null
+            : await sendDigestToSubscribers({ data, subject, baseUrl: opts.baseUrl });
+
+          if (perSubscriber) {
+            mailResult = perSubscriber;
+            await prisma.digest.update({
+              where: { id: digestRecord.id },
+              data: {
+                sentAt: new Date(),
+                recipients: perSubscriber.sent,
+                errorMsg: perSubscriber.failed.length
+                  ? `일부 발송 실패 ${perSubscriber.failed.length}건: ${perSubscriber.failed.slice(0, 5).map(f => f.email).join(', ')}`
+                  : null,
+              },
+            });
+          } else {
+            const to = opts.testRecipient ?? process.env.DIGEST_TO_GROUP; // cron: 전사 그룹
+            mailResult = await sendDigestEmail({ subject, html, to, bcc });
+            await prisma.digest.update({ where: { id: digestRecord.id }, data: { sentAt: new Date(), recipients: 1 } });
+          }
         } catch (e: any) {
           await prisma.digest.update({ where: { id: digestRecord.id }, data: { errorMsg: String(e?.message ?? e) } });
           throw e;

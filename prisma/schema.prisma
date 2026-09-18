@@ -523,3 +523,38 @@ model NewsHeadline {
   @@index([domain, lastSeenAt])
   @@index([domain, kind, bestRank])
 }
+
+// 다이제스트 메일 구독자 — 사람마다 받고 싶은 섹션만 골라 받는다.
+// 예전엔 전사 구글 그룹(DIGEST_TO_GROUP) 한 곳으로 같은 메일이 1통 나갔다. 관심사가
+// 서로 달라서 섹션별로 끄고 켤 수 있게 하려면 "누가 받는지"를 우리가 알아야 해서 만든 표다.
+// 구글 그룹 명단을 한 번 시드한 뒤(scripts/seed-subscribers.ts) 그룹 발송은 중단한다.
+//
+// User(로그인 계정)와 따로 두는 이유: 로그인 계정은 지금 5개뿐인데 그룹 수신자는 훨씬 많다.
+// 계정이 없어도 메일은 받아야 하므로 이메일을 키로 쓰고, 로그인한 사람은 자기 이메일로
+// 이 행을 찾아 설정을 바꾼다(계정이 없으면 메일 속 token 링크로 바꾼다).
+model DigestSubscriber {
+  id    String  @id @default(cuid())
+  email String  @unique
+  name  String?
+
+  // 섹션별 수신 여부 — 전부 기본 true라서 시드 직후엔 지금 나가는 메일과 내용이 같다.
+  // 나중에 섹션이 늘어도 default(true)면 기존 구독자에게 자동으로 보이므로,
+  // "새 섹션이 아무에게도 안 보이는" 사고가 나지 않는다.
+  sparklabs  Boolean @default(true) // 🏢 스파크랩 직접 언급
+  portfolio  Boolean @default(true) // 💼 포트폴리오 하이라이트
+  inter      Boolean @default(true) // 🔭 해외 트렌드(요약 띠 + 포트폴리오 매치)
+  aiSignals  Boolean @default(true) // 🤖 이번 주 AI 트렌드 TOP 5
+  competitor Boolean @default(true) // 🤝 AC·VC 업계 동향
+  industry   Boolean @default(true) // 🚀 스타트업계 뉴스
+
+  // 전체 수신 거부. 행을 지우지 않는 이유는 시드를 다시 돌렸을 때 되살아나면 안 되기 때문.
+  active Boolean @default(true)
+
+  // 로그인 없이 설정 페이지를 열기 위한 값. 메일 푸터 링크에 붙는다.
+  token String @unique @default(cuid())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active])
+}

@@ -105,6 +105,7 @@ export const EN: Record<string, string> = {
   '원문 링크를 찾지 못해 검색 결과로 연결합니다.':
     'The original link could not be found, so this opens a search result instead.',
   '내 북마크': 'My bookmarks',
+  '구독 설정': 'Email preferences',
   '내 북마크에 추가': 'Add to my bookmarks',
   '북마크 해제': 'Remove bookmark',
   '스크랩': 'Save',

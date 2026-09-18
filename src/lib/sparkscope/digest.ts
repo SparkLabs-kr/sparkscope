@@ -13,6 +13,7 @@ import { clusterArticles } from './cluster';
 import { INTER_EMAIL_CSS, renderInterSection, renderInterStat, renderInterStrip } from './inter-digest';
 import { renderSignalSection, SIGNAL_EMAIL_CSS } from './signal-digest';
 import type { SignalFeed } from './signal-feed';
+import { ALL_SECTIONS, type SectionPrefs } from './subscription';
 
 const TOP_3_LIMIT = 3;
 const PORTFOLIO_LIMIT = 8;
@@ -180,8 +181,26 @@ function mergeResidualDuplicates(list: AnalyzedArticle[]): AnalyzedArticle[] {
   }));
 }
 
-export function renderDigestHtml(data: DigestData, baseUrl?: string): string {
+/**
+ * 구독 설정에 맞춰 메일을 그린다.
+ *
+ * prefs를 안 넘기면 전 섹션 수신(ALL_SECTIONS) — 검수 콘솔 미리보기처럼 "완성본"을 봐야 하는
+ * 자리는 예전과 똑같이 동작한다. 내용 자체를 깎는 건 applySubscription(subscription.ts)의 몫이고,
+ * 여기서는 "구독 안 해서 없는 것"과 "구독했는데 오늘 0건인 것"을 구분해야 하는 자리만 prefs를 본다
+ * (포트폴리오 섹션의 '보도 없음' 문구, 헤더 통계 칸).
+ *
+ * subscriberToken은 푸터의 구독 설정 링크에 붙는다. 조합이 같으면 본문이 같아야 캐시가 사는데
+ * 토큰만 사람마다 달라서, 발송 쪽에서는 SUBSCRIBER_TOKEN_PLACEHOLDER로 한 번 그린 뒤 사람별로
+ * 문자열만 바꿔 끼운다(digest-send.ts).
+ */
+export function renderDigestHtml(
+  data: DigestData,
+  baseUrl?: string,
+  opts: { prefs?: SectionPrefs; subscriberToken?: string } = {},
+): string {
   const pStat = data.stats;
+  const prefs = opts.prefs ?? ALL_SECTIONS;
+  const base = baseUrl ?? DEFAULT_BASE_URL;
 
   return `<!DOCTYPE html>
 <html lang="ko">
@@ -201,9 +220,9 @@ ${SIGNAL_EMAIL_CSS}
     <div class="brand">SparkScope · 미디어 다이제스트</div>
     <div class="date">${escape(data.dateLabel)}</div>
     <div class="stats">
-      ${pStat.sparklabsSelf > 0 ? `<div class="stat"><div class="stat-value">${pStat.sparklabsSelf}</div><div class="stat-label">스파크랩 직접 언급</div></div>` : ''}
-      <div class="stat"><div class="stat-value">${pStat.portfolio}</div><div class="stat-label">포트폴리오사 노출</div>${pStat.portfolioTrend ? `<div class="stat-trend">${escape(pStat.portfolioTrend)}</div>` : ''}</div>
-      <div class="stat"><div class="stat-value">${pStat.competitor}</div><div class="stat-label">AC·VC 동향</div></div>
+      ${prefs.sparklabs && pStat.sparklabsSelf > 0 ? `<div class="stat"><div class="stat-value">${pStat.sparklabsSelf}</div><div class="stat-label">스파크랩 직접 언급</div></div>` : ''}
+      ${prefs.portfolio ? `<div class="stat"><div class="stat-value">${pStat.portfolio}</div><div class="stat-label">포트폴리오사 노출</div>${pStat.portfolioTrend ? `<div class="stat-trend">${escape(pStat.portfolioTrend)}</div>` : ''}</div>` : ''}
+      ${prefs.competitor ? `<div class="stat"><div class="stat-value">${pStat.competitor}</div><div class="stat-label">AC·VC 동향</div></div>` : ''}
       ${data.inter ? renderInterStat(data.inter) : ''}
     </div>
   </div>
@@ -214,10 +233,11 @@ ${SIGNAL_EMAIL_CSS}
     <div class="weekly-text">${data.weeklyFlow}</div>
   </div>` : ''}
 
+  ${data.top3.length > 0 ? `
   <div class="section">
-    <div class="section-label">⭐ 오늘의 핵심 TOP 3</div>
+    <div class="section-label">⭐ 오늘의 핵심${data.top3.length >= TOP_3_LIMIT ? ` TOP ${TOP_3_LIMIT}` : ''}</div>
     ${data.top3.map((a, i) => renderTopCard(a, i + 1)).join('\n')}
-  </div>
+  </div>` : ''}
 
   ${data.sparklabsArticles.length > 0 ? `
   <div class="section">
@@ -226,11 +246,12 @@ ${SIGNAL_EMAIL_CSS}
     ${data.sparklabsArticles.map(a => renderArticle(a, { citation: true, tone: true })).join('\n')}
   </div>` : ''}
 
+  ${prefs.portfolio ? `
   <div class="section">
     <div class="section-label">💼 포트폴리오 하이라이트 (${data.portfolioArticles.length}건)</div>
     ${catSummary(data.categorySummaries?.portfolio_company)}
     ${data.portfolioArticles.length > 0 ? data.portfolioArticles.map(a => renderArticle(a, { keyword: true, tone: true })).join('\n') : '<div style="color:#6B7280; font-size:13px;">최근 영업일 내 포트폴리오 보도 없음</div>'}
-  </div>
+  </div>` : ''}
 
   ${data.inter ? renderInterStrip(data.inter) : ''}
 
@@ -254,7 +275,12 @@ ${SIGNAL_EMAIL_CSS}
 
   <div class="footer">
     <div class="footer-cta-text">INTRA(스파크랩 내부 생태계)부터 INTER(글로벌 시장)까지, 아래 대시보드에서 확인하실 수 있습니다.</div>
-    <a href="${baseUrl ?? DEFAULT_BASE_URL}/dashboard" class="footer-cta-button">SparkScope 대시보드 바로가기</a>
+    <a href="${base}/dashboard" class="footer-cta-button">SparkScope 대시보드 바로가기</a>
+    ${opts.subscriberToken ? `
+    <div class="footer-meta">
+      받고 싶은 항목만 골라 받을 수 있습니다 —
+      <a href="${base}/subscribe?token=${escape(opts.subscriberToken)}" class="footer-link">구독 설정 바꾸기</a>
+    </div>` : ''}
   </div>
 </div>
 </body>
