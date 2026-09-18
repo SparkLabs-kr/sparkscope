@@ -3863,13 +3863,14 @@
     "name": "노리",
     "englishName": "KnowRe",
     "category": "portfolio_company",
-    "status": "ACTIVE",
+    "status": "PAUSED",
     "portfolioStatus": "Exit",
     "tier": "C",
     "primaryKeyword": "노리",
     "helperKeywords": "김용재, 수학교육",
-    "contextWords": "KnowRe, 김용재, 수학, 교육, 이러닝, 에듀테크, 학습",
-    "notes": "에듀테크 스타트업. 수학 교육 콘텐츠·이러닝 서비스 (現 매각/폐업)"
+    "excludeWords": "놀유니버스, NOL, 야놀자, 인터파크, 갤러리 노리",
+    "contextWords": "KnowRe, 노리스쿨, 김용재, 수학, 이러닝, 에듀테크",
+    "notes": "에듀테크 스타트업. 수학 교육 콘텐츠·이러닝 서비스 (現 매각/폐업). 2026-09-16 PAUSED — 폐업으로 신규 기사가 나올 여지가 없는데, 놀유니버스의 대화형 추천 서비스명이 'AI 노리'라 본문에 '노리'가 독립 토큰으로 등장해 9/01~9/15 수집분 21건이 전부 오탐이었다(제주 '갤러리 노리'도 포함). 문맥어 '교육'·'학습'은 기업 AI 기사 아무데나 걸려 필터 구실을 못 해 제거함. 되살릴 일이 있으면 excludeWords를 그대로 둔 채 status만 ACTIVE로."
   },
   {
     "name": "코코지",
@@ -5405,8 +5406,8 @@
     "primaryKeyword": "스테이즈",
     "helperKeywords": "이병현 부동산",
     "excludeWords": null,
-    "contextWords": null,
-    "notes": "외국인 대상 한국 내 부동산 중개(주거 O2O) 서비스"
+    "contextWords": "Stayes, 이병현, 부동산, 임대, 전월세, 월세, 주거, 중개, 외국인, 프롭테크, 셰어하우스, 원룸, 임차인, 집주인",
+    "notes": "외국인 대상 한국 내 부동산 중개(주거 O2O) 서비스. 2026-09-16 문맥어 추가 — 비어 있던 탓에 '라스트 스테이즈'(연예 서바이벌 프로그램 라운드명) 기사가 통과했다."
   },
   {
     "name": "스티팝",
