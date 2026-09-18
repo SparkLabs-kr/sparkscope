@@ -28,7 +28,7 @@ export type SocialDomain = 'ai' | 'bio';
 export type SocialSourceId =
   | 'hf' | 'hf_new' | 'hn' | 'reddit' | 'lobsters' | 'arxiv'
   | 'biorxiv' | 'pubmed' | 'trials'
-  | 'alphasignal' | 'importai' | 'threads';
+  | 'alphasignal' | 'importai' | 'threads' | 'bluesky';
 
 export interface SocialPost {
   /** 소스가 주는 고유 id — DB 식별키(source, externalId)의 뒷부분.
@@ -81,6 +81,7 @@ const WHY: Record<SocialSourceId, string> = {
   alphasignal: 'AI 실무자들이 업보트로 고르는 그날의 소식',
   importai: '앤트로픽 정책 담당자가 쓰는 주간 정리 — 해석이 붙는다',
   threads: '국내 이용자가 많은 소셜. 업계 종사자 반응이 한국어로 먼저 나온다',
+  bluesky: '의학·바이오 연구자들이 모인 곳. 좋아요 수가 학계 반응이다',
 };
 
 /** 소스별 캐시(초) — 원본이 갱신되는 속도에 맞춘다. 조사 결과(2026-09-08) 기준. */
@@ -111,6 +112,7 @@ export const COLLECT_INTERVAL_SEC: Record<SocialSourceId, number> = {
   importai: REVALIDATE.daily,
   // 하루 2,200회 한도를 도메인 2 × 키워드 5 = 10회로 쓰므로 여유가 크다.
   threads: REVALIDATE.fast,
+  bluesky: REVALIDATE.fast,
 };
 
 /** 도메인별로 화면에 세울 소스 순서. 배열 순서가 곧 화면 순서다. */
@@ -121,7 +123,9 @@ export const DOMAIN_SOURCES: Record<SocialDomain, SocialSourceId[]> = {
   // Threads는 Reddit 바로 앞에 둔다 — 둘 다 점수가 없어 최신순이지만, Threads는
   // 한국어 반응이 섞여 들어와 국내 분위기를 먼저 보여준다.
   ai: ['hf', 'hf_new', 'hn', 'alphasignal', 'lobsters', 'arxiv', 'importai', 'threads', 'reddit'],
-  bio: ['hn', 'biorxiv', 'trials', 'pubmed', 'threads', 'reddit'],
+  // Bluesky는 hn 다음이다 — 바이오에서 점수가 붙는 소스가 이 둘뿐이고,
+  // 실측 반응 크기는 Bluesky가 더 크다(fetchBluesky 주석).
+  bio: ['hn', 'bluesky', 'biorxiv', 'trials', 'pubmed', 'threads', 'reddit'],
 };
 
 /** 소스 표시 이름·정렬 방식 — DB에서 읽어 화면 모양으로 되살릴 때 쓴다. */
@@ -141,6 +145,7 @@ export const SOURCE_META: Record<SocialSourceId, { label: string; ranked: boolea
   importai: { label: 'Import AI (Jack Clark)',    ranked: false },
   // 남의 글의 좋아요 수를 주지 않는다(fetchThreads 주석) — 최신순 전용이다.
   threads: { label: 'Threads',                    ranked: false },
+  bluesky: { label: 'Bluesky',                    ranked: true },
 };
 
 /** 제목이 고유명사라 번역하면 안 되는 소스 — HF 모델 id는 이름 그 자체다. */
@@ -536,6 +541,93 @@ async function fetchThreads(domain: SocialDomain, sinceMs: number): Promise<Soci
   return [...seen.values()].slice(0, 10);
 }
 
+/**
+ * Bluesky — 바이오 쪽에서 반응 크기가 가장 큰 커뮤니티다.
+ *
+ * 왜 계정 목록인가 (2026-09-18 전부 실측):
+ *  · 키워드 검색(app.bsky.feed.searchPosts)은 무인증 403이다. 공개 AppView
+ *    (public.api.bsky.app)에서 프로필·getPosts·getFeed·getAuthorFeed는 200인데
+ *    검색만 관리자 차단이다. 2026-09-08에 확인한 것과 같다.
+ *  · 주제 피드(app.bsky.feed.getFeed)는 무인증으로 열리고 좋아요 수도 준다.
+ *    그런데 내용이 값을 못 한다 — 'Science' 피드(좋아요 29,452)는 시간순 원본
+ *    스트림이라 글당 좋아요가 0~8이고, 'Biotechfeed'는 RRID 자동 게시 봇이
+ *    목록의 대부분이다(좋아요 0~1).
+ *  · 결국 숫자가 붙는 곳은 사람 계정이었다. getAuthorFeed는 무인증 200이고
+ *    likeCount·repostCount·replyCount를 함께 준다.
+ *
+ * 2주 실측(2026-09-04~18, 바이오 판정 통과 글 40건):
+ *    Eric Topol      좋아요 중위 129 · 최고 161   (팔로워 19.3만)
+ *    Kai Kupferschmidt           296 · 296       (3.7만)
+ *    Science Magazine             25 ·  50       (13.6만)
+ *    Nature                       24 ·  37       (9.4만)
+ *    STAT                         13 ·  55       (3.3만)
+ *  같은 기간 바이오 Hacker News는 30일에 10건·4~34점이었다. 자리를 hn 다음에
+ *  두는 근거다.
+ *
+ * 넣지 않은 계정: adamfeuerstein(2025-07-01이 마지막 글), jacobplieth(2024-11),
+ * edyong·trvrb·loncar(같은 이름의 빈 계정 — 팔로워 1~76). 핸들이 유명해도
+ * 실제로 쓰지 않으면 요청만 낭비한다.
+ *
+ * AI는 비워 둔다. 이미 HN·AlphaSignal·HF가 1,000점대를 주는데 여기에 수십 점짜리를
+ * 섞으면 순위만 흐려진다. 필요해지면 목록만 채우면 된다.
+ */
+const BLUESKY_ACCOUNTS: Record<SocialDomain, string[]> = {
+  ai: [],
+  bio: [
+    'erictopol.bsky.social',      // 스크립스. 임상·논문 해설이 가장 크게 퍼진다
+    'kakape.bsky.social',         // Science 기자. 감염병·백신
+    'science.org',
+    'nature.com',
+    'statnews.com',
+    'hildabast.bsky.social',      // 연구방법·근거 비판
+    'matthewherper.bsky.social',  // STAT 바이오파마
+  ],
+};
+
+async function fetchBluesky(domain: SocialDomain, sinceMs: number): Promise<SocialPost[]> {
+  const accounts = BLUESKY_ACCOUNTS[domain];
+  if (accounts.length === 0) return [];
+  const sinceIso = new Date(sinceMs).toISOString();
+
+  const pages = await Promise.all(accounts.map(async actor => {
+    const url = 'https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?' + new URLSearchParams({
+      actor, limit: '30', filter: 'posts_no_replies',
+    });
+    try {
+      return (await getJson<{ feed?: any[] }>(url, REVALIDATE.fast)).feed ?? [];
+    } catch (e) {
+      console.error('[social] Bluesky 조회 실패:', actor, e);
+      return [];
+    }
+  }));
+
+  const seen = new Map<string, SocialPost>();
+  for (const it of pages.flat()) {
+    const post = it?.post;
+    const text = String(post?.record?.text ?? '').trim();
+    const uri = String(post?.uri ?? '');
+    if (!text || !uri || seen.has(uri)) continue;
+    if (String(post.record.createdAt ?? '') < sinceIso) continue;
+    // 매체·연구자 계정도 분야 밖 글을 쓴다(Nature는 고고학·천문도 올린다).
+    if (!DOMAIN_KEYWORDS[domain].test(text)) continue;
+    // at://did:plc:xxx/app.bsky.feed.post/RKEY → 사람이 열 수 있는 주소로 바꾼다.
+    const rkey = uri.split('/').pop() ?? '';
+    const handle = post.author?.handle;
+    seen.set(uri, {
+      externalId: uri,
+      // 소셜 글은 제목이 없다 — 앞부분만 잘라 제목처럼 쓴다.
+      title: text.replace(/\s+/g, ' ').slice(0, 180),
+      url: handle && rkey ? `https://bsky.app/profile/${handle}/post/${rkey}` : uri,
+      date: String(post.record.createdAt ?? '').slice(0, 10),
+      author: handle ? `@${handle}` : undefined,
+      points: post.likeCount ?? 0,
+      pointsLabel: '좋아요',
+      comments: post.replyCount ?? 0,
+    });
+  }
+  return [...seen.values()].sort(byHeat).slice(0, 10);
+}
+
 const byHeat = (a: SocialPost, b: SocialPost) =>
   ((b.points ?? 0) + (b.comments ?? 0) * 2) - ((a.points ?? 0) + (a.comments ?? 0) * 2);
 
@@ -793,7 +885,7 @@ const empty = <T,>(v: T) => () => v;
 export async function collectSocialSignals(domain: SocialDomain, sinceMs: number): Promise<SocialSource[]> {
   const isAi = domain === 'ai';
 
-  const [hfTrend, hfNew, hn, reddit, lobsters, arxiv, biorxiv, pubmed, trials, alphasignal, importai, threads] = await Promise.all([
+  const [hfTrend, hfNew, hn, reddit, lobsters, arxiv, biorxiv, pubmed, trials, alphasignal, importai, threads, bluesky] = await Promise.all([
     isAi ? fetchHfTrending().catch(empty([] as SocialPost[])) : [],
     isAi ? fetchHfNew().catch(empty([] as SocialPost[])) : [],
     fetchHackerNews(domain, sinceMs).catch(empty([] as SocialPost[])),
@@ -807,6 +899,8 @@ export async function collectSocialSignals(domain: SocialDomain, sinceMs: number
     isAi ? fetchImportAi().catch(empty([] as SocialPost[])) : [],
     // 두 도메인 공통이다 — 검색어만 다르다(THREADS_QUERIES).
     fetchThreads(domain, sinceMs).catch(empty([] as SocialPost[])),
+    // 계정 목록이 빈 도메인(AI)은 요청 없이 바로 0건이다.
+    fetchBluesky(domain, sinceMs).catch(empty([] as SocialPost[])),
   ]);
 
   // 화면에 쓰는 label·ranked는 SOURCE_META가 단일 소스다(라우트가 DB에서 되살릴 때도 그걸 쓴다).
@@ -834,6 +928,8 @@ export async function collectSocialSignals(domain: SocialDomain, sinceMs: number
       ]
     : [
         src('hn', hn),
+        // 점수가 붙는 소스를 위에 모은다 — 바이오에서는 이 둘뿐이다.
+        src('bluesky', bluesky),
         src('biorxiv', biorxiv),
         src('trials', trials),
         src('pubmed', pubmed),
