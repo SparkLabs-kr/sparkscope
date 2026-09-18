@@ -28,7 +28,7 @@ export type SocialDomain = 'ai' | 'bio';
 export type SocialSourceId =
   | 'hf' | 'hf_new' | 'hn' | 'reddit' | 'lobsters' | 'arxiv'
   | 'biorxiv' | 'pubmed' | 'trials'
-  | 'alphasignal' | 'importai';
+  | 'alphasignal' | 'importai' | 'threads';
 
 export interface SocialPost {
   /** 소스가 주는 고유 id — DB 식별키(source, externalId)의 뒷부분.
@@ -80,6 +80,7 @@ const WHY: Record<SocialSourceId, string> = {
   trials: '임상 단계 변경과 FDA 리콜 — 회사 발표보다 앞선다',
   alphasignal: 'AI 실무자들이 업보트로 고르는 그날의 소식',
   importai: '앤트로픽 정책 담당자가 쓰는 주간 정리 — 해석이 붙는다',
+  threads: '국내 이용자가 많은 소셜. 업계 종사자 반응이 한국어로 먼저 나온다',
 };
 
 /** 소스별 캐시(초) — 원본이 갱신되는 속도에 맞춘다. 조사 결과(2026-09-08) 기준. */
@@ -108,6 +109,8 @@ export const COLLECT_INTERVAL_SEC: Record<SocialSourceId, number> = {
   alphasignal: REVALIDATE.medium,
   // 주간 뉴스레터다 — 하루에 한 번이면 충분하다.
   importai: REVALIDATE.daily,
+  // 하루 2,200회 한도를 도메인 2 × 키워드 5 = 10회로 쓰므로 여유가 크다.
+  threads: REVALIDATE.fast,
 };
 
 /** 도메인별로 화면에 세울 소스 순서. 배열 순서가 곧 화면 순서다. */
@@ -115,8 +118,10 @@ export const COLLECT_INTERVAL_SEC: Record<SocialSourceId, number> = {
 // 최신순 목록은 "지금 뭐가 뜨나"에 답하지 못해 위에 둘 값이 없다.
 // REDDIT_CLIENT_ID/SECRET을 넣어 주간 업보트 순으로 정렬되면 위로 올린다.
 export const DOMAIN_SOURCES: Record<SocialDomain, SocialSourceId[]> = {
-  ai: ['hf', 'hf_new', 'hn', 'alphasignal', 'lobsters', 'arxiv', 'importai', 'reddit'],
-  bio: ['hn', 'biorxiv', 'trials', 'pubmed', 'reddit'],
+  // Threads는 Reddit 바로 앞에 둔다 — 둘 다 점수가 없어 최신순이지만, Threads는
+  // 한국어 반응이 섞여 들어와 국내 분위기를 먼저 보여준다.
+  ai: ['hf', 'hf_new', 'hn', 'alphasignal', 'lobsters', 'arxiv', 'importai', 'threads', 'reddit'],
+  bio: ['hn', 'biorxiv', 'trials', 'pubmed', 'threads', 'reddit'],
 };
 
 /** 소스 표시 이름·정렬 방식 — DB에서 읽어 화면 모양으로 되살릴 때 쓴다. */
@@ -134,6 +139,8 @@ export const SOURCE_META: Record<SocialSourceId, { label: string; ranked: boolea
   alphasignal: { label: 'AlphaSignal',            ranked: true },
   // 주간 뉴스레터라 점수가 없다. 최신순으로만 세운다.
   importai: { label: 'Import AI (Jack Clark)',    ranked: false },
+  // 남의 글의 좋아요 수를 주지 않는다(fetchThreads 주석) — 최신순 전용이다.
+  threads: { label: 'Threads',                    ranked: false },
 };
 
 /** 제목이 고유명사라 번역하면 안 되는 소스 — HF 모델 id는 이름 그 자체다. */
@@ -458,6 +465,77 @@ async function fetchHackerNews(domain: SocialDomain, sinceMs: number): Promise<S
   return [...seen.values()].sort(byHeat).slice(0, 10);
 }
 
+/**
+ * Threads(Meta) 키워드 검색.
+ *
+ * 무엇을 줄 수 있고 줄 수 없나 (2026-09-18 실측·문서 확인):
+ *  · 엔드포인트는 실재한다 — graph.threads.net/v1.0/keyword_search. 토큰 없이 부르면
+ *    404가 아니라 OAuthException(code 190)이 온다.
+ *  · 웹페이지 긁기는 불가능하다. threads.com/@openai 는 275KB를 주지만 글 본문이
+ *    한 글자도 없는 껍데기다(전부 클라이언트 렌더).
+ *  · **남의 글의 좋아요·답글 수를 주지 않는다.** 반환 필드는 id·text·media_type·
+ *    permalink·timestamp·username·has_replies·is_quote_post·is_reply뿐이고, 수치는
+ *    insights 엔드포인트에만 있는데 그건 본인 글에만 열린다. 그래서 이 소스는
+ *    bioRxiv·PubMed와 같은 '점수 없는 최신순' 칸이다(SOURCE_META.ranked = false).
+ *    "업보트 순"을 기대하고 위로 올리면 안 된다.
+ *
+ * 토큰이 필요하다 — THREADS_ACCESS_TOKEN. 없으면 조용히 0건을 돌려주고,
+ * social-refresh가 0건 소스를 지우지 않으므로 화면 칸도 사라지지 않는다.
+ * 넣는 순서: Meta 앱 생성 → Threads API 추가 → threads_basic 과
+ * threads_keyword_search 권한(후자는 앱 심사 대상) → 장기 토큰 발급.
+ * 권한 심사가 통과되기 전에는 "본인 글 안에서만" 검색되므로 결과가 0건이다.
+ * 한도는 24시간 rolling 2,200회이고, 결과 0건인 질의는 한도를 소모하지 않는다.
+ */
+const THREADS_QUERIES: Record<SocialDomain, string[]> = {
+  ai: ['AI', '인공지능', 'LLM', 'OpenAI', 'GPT'],
+  bio: ['바이오', '제약', '임상', '신약', 'FDA'],
+};
+
+async function fetchThreads(domain: SocialDomain, sinceMs: number): Promise<SocialPost[]> {
+  const token = process.env.THREADS_ACCESS_TOKEN;
+  if (!token) return [];
+
+  const fields = 'id,text,permalink,timestamp,username,media_type';
+  const pages = await Promise.all(THREADS_QUERIES[domain].map(async q => {
+    const url = 'https://graph.threads.net/v1.0/keyword_search?' + new URLSearchParams({
+      q, search_type: 'TOP', media_type: 'TEXT', fields,
+      since: String(Math.floor(sinceMs / 1000)),
+      limit: '25', access_token: token,
+    });
+    try {
+      const body = await getJson<{ data?: any[]; error?: { message?: string } }>(url, REVALIDATE.fast);
+      if (body.error) throw new Error(body.error.message ?? 'unknown');
+      return body.data ?? [];
+    } catch (e) {
+      console.error('[social] Threads 조회 실패:', q, e);
+      return [];
+    }
+  }));
+
+  const seen = new Map<string, SocialPost>();
+  for (const r of pages.flat()) {
+    const text = String(r?.text ?? '').trim();
+    if (!text || !r?.id || seen.has(r.id)) continue;
+    // 분야 확인을 건다 — 'AI'·'바이오'는 일상어라 검색만으로는 엉뚱한 글이 섞인다.
+    // 한국어 글은 영어 정규식에 걸리지 않으므로 검색어 자체가 제목에 있으면 통과시킨다.
+    const onTopic = DOMAIN_KEYWORDS[domain].test(text)
+      || THREADS_QUERIES[domain].some(q => text.includes(q));
+    if (!onTopic) continue;
+    seen.set(r.id, {
+      externalId: String(r.id),
+      // 소셜 글은 제목이 없다 — 첫 두 줄만 잘라 제목처럼 쓴다.
+      title: text.replace(/\s+/g, ' ').slice(0, 180),
+      url: r.permalink || `https://www.threads.com/t/${r.id}`,
+      date: r.timestamp ? String(r.timestamp).slice(0, 10) : '',
+      author: r.username ? `@${r.username}` : undefined,
+      // 점수가 없다. 0으로 두면 화면이 최신순으로 세운다(social-store.ts).
+      points: 0,
+      comments: 0,
+    });
+  }
+  return [...seen.values()].slice(0, 10);
+}
+
 const byHeat = (a: SocialPost, b: SocialPost) =>
   ((b.points ?? 0) + (b.comments ?? 0) * 2) - ((a.points ?? 0) + (a.comments ?? 0) * 2);
 
@@ -715,7 +793,7 @@ const empty = <T,>(v: T) => () => v;
 export async function collectSocialSignals(domain: SocialDomain, sinceMs: number): Promise<SocialSource[]> {
   const isAi = domain === 'ai';
 
-  const [hfTrend, hfNew, hn, reddit, lobsters, arxiv, biorxiv, pubmed, trials, alphasignal, importai] = await Promise.all([
+  const [hfTrend, hfNew, hn, reddit, lobsters, arxiv, biorxiv, pubmed, trials, alphasignal, importai, threads] = await Promise.all([
     isAi ? fetchHfTrending().catch(empty([] as SocialPost[])) : [],
     isAi ? fetchHfNew().catch(empty([] as SocialPost[])) : [],
     fetchHackerNews(domain, sinceMs).catch(empty([] as SocialPost[])),
@@ -727,6 +805,8 @@ export async function collectSocialSignals(domain: SocialDomain, sinceMs: number
     isAi ? [] : fetchTrials().catch(empty([] as SocialPost[])),
     isAi ? fetchAlphaSignal().catch(empty([] as SocialPost[])) : [],
     isAi ? fetchImportAi().catch(empty([] as SocialPost[])) : [],
+    // 두 도메인 공통이다 — 검색어만 다르다(THREADS_QUERIES).
+    fetchThreads(domain, sinceMs).catch(empty([] as SocialPost[])),
   ]);
 
   // 화면에 쓰는 label·ranked는 SOURCE_META가 단일 소스다(라우트가 DB에서 되살릴 때도 그걸 쓴다).
@@ -747,6 +827,9 @@ export async function collectSocialSignals(domain: SocialDomain, sinceMs: number
         src('arxiv', arxiv),
         // 점수가 없는 주간 뉴스레터라 아래쪽에 둔다.
         src('importai', importai),
+        // 점수가 없는 소스끼리 아래쪽에 모은다. Threads는 한국어 반응이 섞여
+        // 들어와 Reddit보다는 값이 있어 한 칸 위다.
+        src('threads', threads),
         src('reddit', reddit.posts),
       ]
     : [
@@ -754,6 +837,7 @@ export async function collectSocialSignals(domain: SocialDomain, sinceMs: number
         src('biorxiv', biorxiv),
         src('trials', trials),
         src('pubmed', pubmed),
+        src('threads', threads),
         src('reddit', reddit.posts),
       ];
 
