@@ -183,14 +183,26 @@ export async function readSignals(
   return new Map(entries.filter(([, list]) => list.length > 0));
 }
 
-/** 소스별 마지막 수집 시각 — 크론이 "지금 돌 차례인 소스"를 고를 때 쓴다. */
+/**
+ * 마지막 수집 시각 — 크론이 "지금 돌 차례인 소스"를 고를 때 쓴다.
+ * 열쇠는 `도메인:소스`다.
+ *
+ * 예전엔 소스만으로 묶었다. 그런데 Hacker News와 Reddit은 두 도메인이 같은 소스 id를
+ * 공유하고, 크론은 AI를 먼저 돈다(social-refresh.ts의 refreshAllSocialSignals). 그래서
+ * AI가 'hn'을 저장하는 순간 'hn'의 마지막 수집 시각이 지금으로 갱신되고, 곧이어 도는
+ * 바이오는 자기 몫을 한 건도 안 받았는데도 "방금 긁었다"고 판단해 건너뛰었다.
+ *
+ * 실측(2026-09-18): 바이오 hn이 2026-09-08에 멈춰 열흘간 0건이었다(AI hn은 같은 날
+ * 04:00에도 정상 수집). 바이오 커뮤니티에서 업보트가 붙는 소스는 hn 하나뿐이라
+ * (bioRxiv·PubMed·임상등록은 점수가 없다) 바이오 탭의 7일 반응 점수 합이 0이 됐다.
+ */
 export async function lastCollectedAt(): Promise<Map<string, Date>> {
   const rows = await prisma.socialSignal.groupBy({
-    by: ['source'],
+    by: ['source', 'domain'],
     _max: { lastSeenAt: true },
   });
   const out = new Map<string, Date>();
-  for (const r of rows) if (r._max.lastSeenAt) out.set(r.source, r._max.lastSeenAt);
+  for (const r of rows) if (r._max.lastSeenAt) out.set(`${r.domain}:${r.source}`, r._max.lastSeenAt);
   return out;
 }
 

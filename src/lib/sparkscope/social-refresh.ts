@@ -50,7 +50,9 @@ export async function refreshSocialSignals(
   const skipped: string[] = [];
 
   for (const id of wanted) {
-    const last = lastAt.get(id);
+    // 열쇠에 도메인이 들어간다 — hn·reddit은 두 도메인이 같은 소스 id를 쓰므로,
+    // 소스 이름만으로 보면 먼저 도는 AI가 바이오 차례까지 먹어 버린다(social-store.ts 주석).
+    const last = lastAt.get(`${domain}:${id}`);
     const intervalMs = (COLLECT_INTERVAL_SEC[id] ?? 6 * 3600) * 1000;
     // 한 번도 안 긁었으면 무조건 대상이다.
     if (opts.force || !last || now - last.getTime() >= intervalMs) due.add(id);

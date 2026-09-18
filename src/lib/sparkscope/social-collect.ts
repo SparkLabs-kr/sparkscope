@@ -21,6 +21,9 @@
  * 외부가 일시적으로 죽어도 칸이 사라지지 않는다.
  */
 
+// 분야 판정에 쓰는 정규식은 뉴스 쪽과 같은 것을 쓴다 — 두 벌을 두면 갈라진다.
+import { DOMAIN_KEYWORDS } from './news-feeds';
+
 export type SocialDomain = 'ai' | 'bio';
 export type SocialSourceId =
   | 'hf' | 'hf_new' | 'hn' | 'reddit' | 'lobsters' | 'arxiv'
@@ -161,6 +164,22 @@ const HN_QUERIES: Record<SocialDomain, string[]> = {
  * 문턱을 높게 잡는 이유는 HN 상위권 전체를 끌어오면 개발자 잡담이 섞이기 때문이다.
  */
 const HN_TOP_MIN_POINTS = 500;
+
+/**
+ * 키워드 질의의 점수 문턱 — 도메인마다 다르다.
+ *
+ * 20점은 AI 기준으로 잡힌 값이었고, HN에서 두 분야의 규모가 다르다는 것을 놓쳤다.
+ * 실측(2026-09-18, 30일 · 키워드 7개 중복 제거):
+ *
+ *   points>20 → AI 84건 / 바이오  1건
+ *   points> 3 → AI 94건 / 바이오  9건  (분야 판정 통과 6건)
+ *
+ * 같은 절대 문턱을 쓰면 AI는 후보가 넘치고 바이오는 칸이 빈다. HN은 개발자
+ * 커뮤니티라 바이오 글에 업보트가 적게 붙을 뿐, 글이 없는 게 아니다.
+ * 그래서 바이오만 문턱을 내리고, 대신 분야 판정을 걸어 헐거운 검색 결과를 막는다
+ * (Algolia 전문검색은 느슨해서 'protein folding'에 터미널 도구가 걸려 온다).
+ */
+const HN_KEYWORD_MIN_POINTS: Record<SocialDomain, number> = { ai: 20, bio: 3 };
 
 /**
  * 서브레딧 — 2026-09-07에 도메인당 3개 → 7개로 확장.
@@ -380,12 +399,11 @@ async function fetchHackerNews(domain: SocialDomain, sinceMs: number): Promise<S
 
   // 검색어 7개를 순차로 돌면 왕복이 7번이다 — 서로 독립이라 한꺼번에 던진다.
   // 마지막 빈 문자열은 키워드 없는 상위권 조회다(HN_TOP_MIN_POINTS 주석 참고).
-  const queries = [...HN_QUERIES[domain], ''];
-  const pages = await Promise.all(queries.map(async q => {
+  const ask = async (q: string) => {
     const url = 'https://hn.algolia.com/api/v1/search?' + new URLSearchParams({
       query: q, tags: 'story',
       numericFilters: q
-        ? `created_at_i>${since},points>20`
+        ? `created_at_i>${since},points>${HN_KEYWORD_MIN_POINTS[domain]}`
         : `created_at_i>${since},points>${HN_TOP_MIN_POINTS}`,
       hitsPerPage: '20',
     });
@@ -395,8 +413,36 @@ async function fetchHackerNews(domain: SocialDomain, sinceMs: number): Promise<S
       console.error('[social] HN 조회 실패:', q, e);
       return [];
     }
-  }));
-  for (const h of pages.flat()) {
+  };
+
+  const [keyworded, top] = await Promise.all([
+    Promise.all(HN_QUERIES[domain].map(ask)).then(p => p.flat()),
+    ask(''),
+  ]);
+
+  /**
+   * 점수 무관 상위권(위 HN_TOP_MIN_POINTS 주석)은 주제를 묻지 않고 받는 그물이다.
+   * 그 그물이 바이오 쪽을 통째로 덮어써 왔다.
+   *
+   * 실측(2026-09-18, 30일 · points>500 상위 20건): AI 판정 4건, **바이오 판정 0건**,
+   * 나머지 16건은 어느 쪽도 아니었다(돌리 파튼 부고·qBittorrent·Shopify의 Swift 회귀).
+   * HN은 개발자 커뮤니티라 상위권에 바이오가 올라오는 일이 거의 없는데, 정렬이
+   * 업보트 순이라 1,000점대 AI·잡담 글이 바이오 몫 10칸을 전부 차지했다. 그래서
+   * 바이오 탭 커뮤니티에 'iPhone Duo'·'GPT-6 Astra'가 올라왔고, 같은 objectID가
+   * 이미 AI 행으로 저장돼 있어(@@unique([source, externalId])) 바이오 행은 갱신조차
+   * 되지 않고 2026-09-08에 멈춰 있었다.
+   *
+   * 그래서 바이오에서는 이 그물에 분야 확인을 걸고, AI는 그대로 둔다 — AI 쪽에서는
+   * 이 그물이 실제로 값을 했다(제목에 AI 단어가 없던 나비에–스토크스 건).
+   * 어느 쪽이든 키워드 질의 결과를 먼저 채운다. 그쪽은 분야가 확실한 글이라,
+   * 점수만 높은 잡담에 칸을 빼앗기면 안 된다.
+   */
+  // 바이오는 문턱이 낮아 헐거운 검색 결과가 섞이므로 키워드 쪽에도 분야 판정을 건다
+  // (HN_KEYWORD_MIN_POINTS 주석). AI는 문턱이 20점이라 그 자체로 걸러진다.
+  const gate = (hits: any[]) =>
+    domain === 'bio' ? hits.filter(h => h?.title && DOMAIN_KEYWORDS[domain].test(h.title)) : hits;
+
+  for (const h of [...gate(keyworded), ...gate(top)]) {
     if (!h?.title || seen.has(h.objectID)) continue;
     if (isChrome(h.title)) continue;
     seen.set(h.objectID, {
