@@ -196,6 +196,51 @@ export const SOURCES: PopularSource[] = [
     },
   },
   {
+    // 딜·임상 속보를 가장 많이 싣는 곳. 첫 화면 목록(PageListStandardC)이 서버 렌더라
+    // 문서 순서가 곧 편집 순서다(실측: 히어로가 Fed 금리, 그 아래 노보 1.4조 계약·
+    // 노바티스 1,250억 인수·로슈 1.3조 이중항체가 차례로 온다).
+    //
+    // 채용·행사 구역이 같은 목록에 섞여 있어(job-trends 20건·career-advice 12건·
+    // events 7건) 그건 걸러낸다 — "이번 주 채용 많은 직군"은 업계 사건이 아니다.
+    //
+    // 2026-09-18에 추가. 바이오 1면 소스가 해외 4곳(FierceBiotech·Endpoints·
+    // BioPharma Dive·STAT)뿐이라 AI 쪽(6곳)보다 얇았다.
+    name: 'BioSpace',
+    url: 'https://www.biospace.com/',
+    origin: 'https://www.biospace.com',
+    domain: 'bio',
+    kind: 'headline',
+    headline: {
+      start: 'PageListStandardC',
+      // 45,000자면 9~12건이 들어온다(20,000→5건, 80,000→12건에서 포화).
+      window: 45_000,
+      article: /^(https:\/\/www\.biospace\.com)?\/(business|deals|drug-development|fda|policy|cancer|cell-and-gene-therapy|clinical-trials|drug-delivery)\/[a-z0-9-]{15,}/,
+      skip: /\/(job-trends|career-advice|events|employer-resources|podcasts|latest-news-press-releases)\//,
+    },
+  },
+  {
+    // FierceBiotech의 자매지. 같은 CMS라 featured-hero 구역을 똑같이 쓴다.
+    //
+    // 두 곳을 같이 넣어도 겹치지 않는다(2026-09-18 실측: 1면 슬러그 겹침 0건).
+    // 갈라 보는 축이 다르다 — biotech는 연구·임상, pharma는 승인·상업화·인사다
+    // (그날 1면: 울트라제닉스 유전자치료제 FDA 승인, 바이엘 케렌디아 3번째 적응증,
+    // 로슈 룬수미오 확증시험 성공, FDA 항암국장 첫 인터뷰).
+    //
+    // /marketing/ 구역은 남긴다 — 광고 캠페인 기사가 섞이지만 제품 출시·적응증
+    // 확대를 가장 먼저 쓰는 곳이기도 해서, 버리면 상업화 소식을 놓친다.
+    name: 'FiercePharma',
+    url: 'https://www.fiercepharma.com/',
+    origin: 'https://www.fiercepharma.com',
+    domain: 'bio',
+    kind: 'headline',
+    headline: {
+      start: 'featured-hero',
+      window: 30_000,
+      article: /^(https:\/\/www\.fiercepharma\.com)?\/(pharma|marketing|manufacturing|vaccines|asia|regulatory)\/[a-z0-9-]{12,}/,
+      skip: /\/sponsored\/|\/special-report|\/book\//,
+    },
+  },
+  {
     // 보건·바이오 전반. 헤드라인(TOP STORIES)과 많이 본(Most Read)을 한 화면에서
     // 같이 주므로 두 신호를 동시에 얻는다. 'STAT Plus:' 접두어는 유료 표시일 뿐이라
     // 떼어낸다 — 붙여두면 다른 매체 제목과 대조가 안 된다.
