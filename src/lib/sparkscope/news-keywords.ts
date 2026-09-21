@@ -181,6 +181,122 @@ export async function extractEntities(items: Keywordable[]): Promise<Map<string,
   return new Map([...cached, ...fresh]);
 }
 
+/**
+ * ── 바이오 주제어 ──
+ *
+ * 바이오에서는 회사 이름만으로 기사와 커뮤니티가 이어지지 않는다. 실측으로 확인한
+ * 어긋남이다(2026-09-18): 바이오 이름 카드 11개 중 8개가 반응 0건이었고, Bluesky를
+ * 붙여 반응 자체를 늘린 뒤에도 카드는 3개 그대로였다. 연구자들이 회사 이름을
+ * 쓰지 않기 때문이다 — Eric Topol은 "머크"가 아니라 "암 면역요법"이라고 쓰고,
+ * bioRxiv 논문 제목에 제약사 이름이 나오는 일은 거의 없다.
+ *
+ * 그래서 바이오는 집계 단위를 하나 더 둔다. 회사가 아니라 **약물 계열·치료 방식·
+ * 적응증**이다 — GLP-1, CAR-T, 이중항체, ADC, 알츠하이머, 비만. 기사 쪽에서는
+ * "노보, 경구 GLP-1 계약", 커뮤니티 쪽에서는 "GLP-1이 심혈관에 주는 이점"으로
+ * 나오므로 이 단위에서는 둘이 만난다.
+ *
+ * 회사 추출(extractEntities)을 대체하지 않고 더한다. 회사 카드도 신호가 붙으면
+ * 그대로 남는다. 캐시는 kind를 갈라 두어 AI 쪽 추출과 섞이지 않는다.
+ */
+const TOPIC_KIND = 'news_topics';
+
+const TOPIC_SYSTEM = [
+  '당신은 바이오·제약 산업을 추적하는 벤처투자사의 리서치 담당입니다.',
+  '기사·게시글 제목에서 "무엇에 대한 이야기인가"를 나타내는 주제어를 뽑습니다.',
+  '',
+  '뽑을 것 — 아래 세 가지뿐입니다.',
+  '  · 약물 계열·기전: GLP-1, CAR-T, ADC, 이중항체, mRNA, siRNA, CRISPR, 유전자치료,',
+  '    세포치료, 항체약물접합체, 마이크로바이옴, 방사성의약품',
+  '  · 치료 영역·적응증: 비만, 알츠하이머, 췌장암, 유방암, 자가면역, 심혈관, 희귀질환,',
+  '    당뇨, 우울증, 파킨슨, 코로나',
+  '  · 산업 사건의 종류가 아니라 대상이 되는 기술: 단백질 구조예측, 신약 AI 설계',
+  '',
+  '뽑지 않을 것:',
+  '  · 회사·기관·인물 이름 (그건 따로 뽑습니다)',
+  '  · 너무 넓은 말 — 바이오, 제약, 신약, 임상, 의료, 헬스케어, 治療, 연구, 데이터',
+  '    이건 거의 모든 제목에 나와서 "지금 무엇이 화제인가"를 말해 주지 않습니다.',
+  '  · 임상 단계·규제 절차 — 1상, 3상, 승인, 허가, FDA, 특허',
+  '  · 나라·도시, 숫자·금액',
+  '',
+  '같은 대상은 표기가 달라도 하나로 통일합니다. en에는 업계에서 쓰는 영문 표기를',
+  '(GLP-1, CAR-T, Alzheimer, Obesity), ko에는 한국어 표기를 넣습니다.',
+  '"비만치료제"와 "obesity drug"는 둘 다 {"en":"Obesity","ko":"비만"}입니다.',
+  '"GLP-1 수용체 작용제"와 "GLP-1"은 둘 다 {"en":"GLP-1","ko":"GLP-1"}입니다 —',
+  '수식어를 떼고 핵심어만 남깁니다. 갈라지면 매체 수가 나뉘어 둘 다 밀립니다.',
+  '',
+  '제목당 최대 2개, 해당 없으면 빈 배열입니다. 억지로 채우지 않습니다.',
+  '바이오와 무관한 제목(일반 IT·정치·연예)은 반드시 빈 배열입니다.',
+  '출력은 JSON 객체 하나입니다:',
+  '{"items":[{"i":0,"e":[{"en":"GLP-1","ko":"GLP-1"}]},{"i":1,"e":[]}]}',
+  'i는 입력에 준 번호입니다. 모든 항목에 빠짐없이 답합니다.',
+].join('\n');
+
+async function readTopicCache(urls: string[]): Promise<Map<string, Entity[]>> {
+  if (urls.length === 0) return new Map();
+  const rows = await prisma.dashboardInsight.findMany({
+    where: { kind: TOPIC_KIND, key: { in: urls } },
+    select: { key: true, value: true },
+  });
+  const out = new Map<string, Entity[]>();
+  for (const r of rows) {
+    try {
+      const v = JSON.parse(r.value);
+      if (Array.isArray(v)) out.set(r.key, v);
+    } catch { /* 깨진 캐시는 다시 만든다 */ }
+  }
+  return out;
+}
+
+async function extractTopicBatch(batch: Keywordable[]): Promise<Map<string, Entity[]>> {
+  const listing = batch.map((b, i) => `${i}. ${b.title}`).join('\n');
+  const out = new Map<string, Entity[]>();
+  try {
+    const res = await client().chat.completions.create({
+      model: MODEL,
+      messages: [{ role: 'system', content: TOPIC_SYSTEM }, { role: 'user', content: listing }],
+      temperature: 0,
+      response_format: { type: 'json_object' },
+    });
+    const parsed = JSON.parse(res.choices[0]?.message?.content ?? '{}') as
+      { items?: { i: number; e?: { en?: string; ko?: string }[] }[] };
+    for (const { i, e } of parsed.items ?? []) {
+      const item = batch[i];
+      if (!item) continue;
+      out.set(item.url, (e ?? [])
+        .filter(x => x?.en && x.en.trim().length > 1)
+        .map(x => ({ en: x.en!.trim(), ko: (x.ko || x.en)!.trim() }))
+        .slice(0, 2));
+    }
+  } catch (e) {
+    console.error('[news-keywords] 주제어 추출 실패(무시):', e);
+  }
+  return out;
+}
+
+/** 바이오 주제어를 URL → 목록으로 돌려준다. 캐시·배치는 회사 추출과 같은 방식이다. */
+export async function extractTopics(items: Keywordable[]): Promise<Map<string, Entity[]>> {
+  const pool = items.slice(0, MAX_ARTICLES);
+  if (pool.length === 0) return new Map();
+
+  const cached = await readTopicCache(pool.map(i => i.url)).catch(() => new Map<string, Entity[]>());
+  const missing = pool.filter(i => !cached.has(i.url));
+
+  const fresh = new Map<string, Entity[]>();
+  for (let i = 0; i < missing.length; i += BATCH) {
+    for (const [url, ents] of await extractTopicBatch(missing.slice(i, i + BATCH))) fresh.set(url, ents);
+  }
+  if (fresh.size > 0) {
+    console.log(`[news-keywords] 주제어 ${fresh.size}건 새로 추출 (캐시 ${cached.size}건)`);
+    await Promise.all([...fresh.entries()].map(([url, entities]) =>
+      prisma.dashboardInsight.upsert({
+        where: { kind_key: { kind: TOPIC_KIND, key: url } },
+        create: { kind: TOPIC_KIND, key: url, value: JSON.stringify(entities) },
+        update: { value: JSON.stringify(entities) },
+      }).catch(e => console.error('[news-keywords] 주제어 캐시 저장 실패:', url, e))));
+  }
+  return new Map([...cached, ...fresh]);
+}
+
 /** 집계 키 — 대소문자·공백 차이로 갈라지지 않게 정규화한다. */
 export const keyOf = (en: string) => en.toLowerCase().replace(/[\s.,'’-]+/g, '');
 export type { Entity };

@@ -18,7 +18,7 @@
  *           나올 일이 거의 없어서 실제로 상위 6건 중 0건이 붙었다. 그래서 "반응"이라고
  *           부르지 않고 "새로 등록된 연구·임상"으로 말한다.
  */
-import { extractEntities, keyOf, type Entity } from './news-keywords';
+import { extractEntities, extractTopics, keyOf, type Entity } from './news-keywords';
 import { DOMAIN_KEYWORDS } from './news-feeds';
 import type { DigestItem, NewsDomain } from './news-digest';
 
@@ -146,11 +146,26 @@ export async function buildEntityCards(
 ): Promise<EntityCard[]> {
   if (items.length === 0 && posts.length === 0) return [];
 
+  const newsIn = items.map(i => ({ url: i.url, title: i.title, source: i.source }));
+  const postIn = posts.map(p => ({ url: p.url, title: p.titleKo ?? p.title, source: p.source }));
+
   // 기사와 커뮤니티 글에 같은 추출기를 쓴다 — 그래야 같은 키로 묶인다.
-  const [newsEnts, postEnts] = await Promise.all([
-    extractEntities(items.map(i => ({ url: i.url, title: i.title, source: i.source }))),
-    extractEntities(posts.map(p => ({ url: p.url, title: p.titleKo ?? p.title, source: p.source }))),
-  ]);
+  //
+  // 바이오는 여기에 주제어를 더한다. 회사 이름만으로는 양쪽이 만나지 않기 때문이다
+  // (news-keywords.ts의 TOPIC_SYSTEM 주석에 근거를 적어 두었다). 회사 추출을
+  // 대체하지 않고 더하는 것이라, 신호가 붙은 회사 카드는 그대로 남는다.
+  const withTopics = async (input: { url: string; title: string; source: string }[]) => {
+    const [ents, topics] = await Promise.all([
+      extractEntities(input),
+      domain === 'bio' ? extractTopics(input) : Promise.resolve(new Map<string, Entity[]>()),
+    ]);
+    if (topics.size === 0) return ents;
+    const merged = new Map<string, Entity[]>(ents);
+    for (const [url, list] of topics) merged.set(url, [...(merged.get(url) ?? []), ...list]);
+    return merged;
+  };
+
+  const [newsEnts, postEnts] = await Promise.all([withTopics(newsIn), withTopics(postIn)]);
 
   type Agg = {
     label: string;
