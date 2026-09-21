@@ -3,7 +3,7 @@
  * /api/cron/daily-digest 와 /scripts/run-digest.ts 양쪽에서 호출.
  */
 import { prisma } from '@/lib/prisma';
-import type { RawArticle, AnalyzedArticle } from './types';
+import type { RawArticle, AnalyzedArticle, DigestData } from './types';
 import { collectAllArticles, CATEGORY_PRIORITY } from './collector';
 import { normalizeTitleKey, matchesAsToken } from './relevance';
 import { normalizeSource } from './media';
@@ -81,6 +81,96 @@ function pickBestPerStory(list: AnalyzedArticle[]): AnalyzedArticle[] {
   return out;
 }
 
+/**
+ * 발송 전용 모드가 쓰는 기사 — 최근 3일치 분석 완료분.
+ *
+ * runDailyDigest 안에 있던 것을 그대로 꺼냈다. 미리보기가 발송과 같은 재료를 쓰게
+ * 하려는 것이다 — 예전 미리보기 스크립트는 검수 콘솔 경로(loadDigestCandidates)를
+ * 써서 머리기사가 실제 메일과 달랐다(2026-09-21). 재료와 조립을 양쪽이 공유하지
+ * 않으면 미리보기는 언제든 다시 갈라진다.
+ */
+export async function loadSendArticles(): Promise<RawArticle[]> {
+    // 기존 DB의 최근 3일 분석된 기사 사용 (수집 생략)
+    const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+    const threeDaysAgo = new Date(kstNow.getTime() - 3 * 24 * 60 * 60 * 1000);
+    const existing = await prisma.article.findMany({
+      where: {
+        pubDate: { gte: threeDaysAgo },
+        isNoise: false,
+        category: { not: 'unrelated' },
+        analyzedAt: { not: null },
+      },
+      select: {
+        id: true,
+        title: true,
+        link: true,
+        source: true,
+        pubDate: true,
+        matchedKeyword: true,
+        category: true,
+        importance: true,
+        tone: true,
+        oneLiner: true,
+        ourTake: true,
+        relatedCompanies: true,
+        pitchScore: true,
+        pitchTopic: true,
+        riskFlag: true,
+        isNoise: true,
+        noiseReason: true,
+        priorityScore: true,
+      },
+      orderBy: { priorityScore: 'desc' },
+      take: 500,
+    });
+  return existing as any;
+}
+
+/**
+ * 발송 메일의 내용을 만든다 — 가드 재검증 → TOP3 AI 검증 → 섹션 조립.
+ *
+ * runDailyDigest 안에 있던 것을 그대로 꺼냈다(동작 변경 없음). 꺼낸 이유는
+ * 미리보기가 이 경로를 그대로 쓰게 하기 위해서다. 예전 미리보기는 검수 콘솔
+ * 경로로 만들어져서 가드 재검증·TOP3 AI 검증·링크 해석이 빠졌고, 그래서 실제
+ * 메일과 머리기사가 달랐다(2026-09-21 발송분에서 확인).
+ *
+ * 파트너 피드 발행(publishSignalFeed)은 여기 넣지 않는다 — 그건 DB에 쓰는
+ * 부수효과라 미리보기가 따라 하면 안 된다. 호출하는 쪽에 남겨 둔다.
+ */
+export async function buildDigestForSend(analyzed: AnalyzedArticle[]): Promise<DigestData> {
+  // 4.7 다이제스트 발송 가드 재검증 — isNoise:false는 수집 당일 AI가 한 번 판단하고 끝이라
+  // 나중에 노이즈 규칙이 강화돼도 이미 저장된 기사엔 소급 적용이 안 된다. 대시보드는 렌더할 때마다
+  // isBlockedNoise를 실시간 재검사하는데 발송 경로는 이 재검사가 빠져있어 대시보드보다 메일에
+  // 오탐이 더 많이 남는 원인이었다(검수 콘솔 loadDigestCandidates에만 있던 가드를 여기서도 적용,
+  // 2026-08-06).
+  const guardTargets = await prisma.monitoringTarget.findMany({
+    where: { category: { in: ['portfolio_company', 'sparklabs_self'] }, status: 'ACTIVE' },
+    select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true, contextWords: true },
+  });
+  const guardKeyMap = buildDigestKeyMap(guardTargets);
+  const guardContextMap = buildDigestContextMap(guardTargets);
+  const digestReady = analyzed.filter(a => passesDigestGuard(a, guardKeyMap, guardContextMap));
+  console.log(`[runner] digest guard: ${analyzed.length} -> ${digestReady.length} (노이즈/관련성 재검증 후)`);
+
+  // 5. TOP3 후보 AI 최종 검증 — TOP3는 발송 메일에서 가장 눈에 띄는 자리라, 규칙 기반
+  // 필터를 다 통과해도 놓칠 수 있는 "제목엔 회사명 있지만 실제로는 무관"한 경우까지 저비용
+  // 모델로 한 번 더 확인한다. 실패해도 규칙 기반 순위로 조용히 폴백해 발송을 막지 않는다
+  // (2026-08-06). 편집자 인사말(generateEditorIntro)은 메일에서 더 이상 표시하지 않아
+  // 호출을 뺐다 — 안 쓰는 AI 호출로 비용만 나가던 부분(2026-08-06).
+  const scrapped = await prisma.article.findMany({ where: { isScrapped: true }, select: { link: true } });
+  const scrappedLinks = new Set(scrapped.map(s => s.link));
+  const top3Pool = rankTop3Pool(buildClusteredPool(digestReady), scrappedLinks);
+  const verifiedTop3 = await pickVerifiedTop3(top3Pool, 3);
+
+  // 6. 다이제스트 데이터 + HTML (검증된 TOP3 + 본부 스크랩 기사 + Inter 섹션 반영)
+  const data = await attachAiSignals(await attachInterDigest(
+    await attachResolvedLinks(
+      buildDigestData(digestReady, '', undefined, scrappedLinks, verifiedTop3),
+    ),
+  ));
+  return data;
+}
+
 export async function runDailyDigest(opts: RunOptions = {}) {
   await cleanupStaleRunLogs();
   // 대시보드가 "실제로 수집이 돈 시각"만 보여줘야 하므로, 수집을 건너뛴 발송 전용
@@ -93,40 +183,7 @@ export async function runDailyDigest(opts: RunOptions = {}) {
     // 1. 수집 (skipCollect=true면 건너뛰고 기존 데이터 사용 — 발송 전용 모드)
     let raw: RawArticle[];
     if (opts.skipCollect) {
-      // 기존 DB의 최근 3일 분석된 기사 사용 (수집 생략)
-      const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-      const threeDaysAgo = new Date(kstNow.getTime() - 3 * 24 * 60 * 60 * 1000);
-      const existing = await prisma.article.findMany({
-        where: {
-          pubDate: { gte: threeDaysAgo },
-          isNoise: false,
-          category: { not: 'unrelated' },
-          analyzedAt: { not: null },
-        },
-        select: {
-          id: true,
-          title: true,
-          link: true,
-          source: true,
-          pubDate: true,
-          matchedKeyword: true,
-          category: true,
-          importance: true,
-          tone: true,
-          oneLiner: true,
-          ourTake: true,
-          relatedCompanies: true,
-          pitchScore: true,
-          pitchTopic: true,
-          riskFlag: true,
-          isNoise: true,
-          noiseReason: true,
-          priorityScore: true,
-        },
-        orderBy: { priorityScore: 'desc' },
-        take: 500,
-      });
-      raw = existing as any;
+      raw = await loadSendArticles();
       console.log(`[runner] skip collect mode: using ${raw.length} existing articles`);
     } else {
       // 일반 수집 모드
@@ -354,36 +411,7 @@ export async function runDailyDigest(opts: RunOptions = {}) {
       }
     }
 
-    // 4.7 다이제스트 발송 가드 재검증 — isNoise:false는 수집 당일 AI가 한 번 판단하고 끝이라
-    // 나중에 노이즈 규칙이 강화돼도 이미 저장된 기사엔 소급 적용이 안 된다. 대시보드는 렌더할 때마다
-    // isBlockedNoise를 실시간 재검사하는데 발송 경로는 이 재검사가 빠져있어 대시보드보다 메일에
-    // 오탐이 더 많이 남는 원인이었다(검수 콘솔 loadDigestCandidates에만 있던 가드를 여기서도 적용,
-    // 2026-08-06).
-    const guardTargets = await prisma.monitoringTarget.findMany({
-      where: { category: { in: ['portfolio_company', 'sparklabs_self'] }, status: 'ACTIVE' },
-      select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true, contextWords: true },
-    });
-    const guardKeyMap = buildDigestKeyMap(guardTargets);
-    const guardContextMap = buildDigestContextMap(guardTargets);
-    const digestReady = analyzed.filter(a => passesDigestGuard(a, guardKeyMap, guardContextMap));
-    console.log(`[runner] digest guard: ${analyzed.length} -> ${digestReady.length} (노이즈/관련성 재검증 후)`);
-
-    // 5. TOP3 후보 AI 최종 검증 — TOP3는 발송 메일에서 가장 눈에 띄는 자리라, 규칙 기반
-    // 필터를 다 통과해도 놓칠 수 있는 "제목엔 회사명 있지만 실제로는 무관"한 경우까지 저비용
-    // 모델로 한 번 더 확인한다. 실패해도 규칙 기반 순위로 조용히 폴백해 발송을 막지 않는다
-    // (2026-08-06). 편집자 인사말(generateEditorIntro)은 메일에서 더 이상 표시하지 않아
-    // 호출을 뺐다 — 안 쓰는 AI 호출로 비용만 나가던 부분(2026-08-06).
-    const scrapped = await prisma.article.findMany({ where: { isScrapped: true }, select: { link: true } });
-    const scrappedLinks = new Set(scrapped.map(s => s.link));
-    const top3Pool = rankTop3Pool(buildClusteredPool(digestReady), scrappedLinks);
-    const verifiedTop3 = await pickVerifiedTop3(top3Pool, 3);
-
-    // 6. 다이제스트 데이터 + HTML (검증된 TOP3 + 본부 스크랩 기사 + Inter 섹션 반영)
-    const data = await attachAiSignals(await attachInterDigest(
-      await attachResolvedLinks(
-        buildDigestData(digestReady, '', undefined, scrappedLinks, verifiedTop3),
-      ),
-    ));
+    const data = await buildDigestForSend(analyzed);
     // 파트너(블루사이트)가 읽어 갈 수 있게 같은 TOP 5를 DB에 물질화한다.
     // 메일에 들어간 것과 같은 객체라 둘이 갈리지 않는다. 실패해도 발송은 계속한다.
     await publishSignalFeed(data.aiSignals).catch(e =>
