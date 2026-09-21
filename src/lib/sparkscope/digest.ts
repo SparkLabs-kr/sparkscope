@@ -13,7 +13,7 @@ import { clusterArticles } from './cluster';
 import { INTER_EMAIL_CSS, renderInterSection, renderInterStat, renderInterStrip } from './inter-digest';
 import { renderSignalSection, SIGNAL_EMAIL_CSS } from './signal-digest';
 import type { SignalFeed } from './signal-feed';
-import { ALL_SECTIONS, type SectionPrefs } from './subscription';
+import { ALL_SECTIONS, SECTIONS, type SectionPrefs } from './subscription';
 
 const TOP_3_LIMIT = 3;
 const PORTFOLIO_LIMIT = 8;
@@ -275,18 +275,52 @@ ${SIGNAL_EMAIL_CSS}
     ${data.industryArticles.map(a => renderArticle(a, {})).join('\n')}
   </div>` : ''}
 
+  ${opts.subscriberToken ? renderSubscriptionSection(prefs, base, opts.subscriberToken) : ''}
+
   <div class="footer">
     <div class="footer-cta-text">INTRA(스파크랩 내부 생태계)부터 INTER(글로벌 시장)까지, 아래 대시보드에서 확인하실 수 있습니다.</div>
     <a href="${base}/dashboard" class="footer-cta-button">SparkScope 대시보드 바로가기</a>
-    ${opts.subscriberToken ? `
-    <div class="footer-meta">
-      받고 싶은 항목만 골라 받을 수 있습니다 —
-      <a href="${base}/subscribe?token=${escape(opts.subscriberToken)}" class="footer-link">구독 설정 바꾸기</a>
-    </div>` : ''}
   </div>
 </div>
 </body>
 </html>`;
+}
+
+/**
+ * 마지막 섹션 — 지금 무엇을 받고 있는지 보여주고 설정 화면으로 보낸다.
+ *
+ * 설정 화면(/subscribe)의 토글을 메일에 그대로 옮기지 않는다. 메일 HTML에는
+ * 자바스크립트가 없어서 토글이 눌리지 않고(Gmail은 script를 통째로 지운다),
+ * 7줄짜리 스위치 목록을 그리면 본문 아래에 설정 화면만 한 덩어리가 더 붙는다.
+ *
+ * 그래서 "상태를 읽는 것"만 메일에 두고 "바꾸는 것"은 링크로 넘긴다. 줄마다
+ * 켜짐/꺼짐을 글자로 보여주므로 지금 무엇이 빠져 있는지 메일 안에서 바로 안다.
+ * 2열 표로 그려 일곱 줄이 네 줄 높이에 들어간다(추가 용량 약 1KB).
+ *
+ * 표를 쓰는 이유는 Outlook이 flex·grid를 지원하지 않아서다. 칸 너비는 퍼센트로
+ * 두어 좁은 화면에서도 두 열이 유지된다.
+ */
+function renderSubscriptionSection(prefs: SectionPrefs, base: string, token: string): string {
+  const url = `${base}/subscribe?token=${escape(token)}`;
+  const cell = (s: (typeof SECTIONS)[number]) => {
+    const on = prefs[s.key];
+    return `<td class="sub-cell" width="50%">
+      <span class="sub-state ${on ? 'sub-on' : 'sub-off'}">${on ? '받는 중' : '끔'}</span>
+      <span class="${on ? 'sub-label' : 'sub-label sub-muted'}">${s.label}</span>
+    </td>`;
+  };
+  const rows: string[] = [];
+  for (let i = 0; i < SECTIONS.length; i += 2) {
+    rows.push(`<tr>${cell(SECTIONS[i]!)}${SECTIONS[i + 1] ? cell(SECTIONS[i + 1]!) : '<td width="50%"></td>'}</tr>`);
+  }
+  return `
+  <div class="section sub-section">
+    <div class="section-title">⚙️ 구독 설정</div>
+    <div class="sub-desc">받고 싶은 항목만 골라 받을 수 있습니다. 바꾸면 다음 발송분부터 적용됩니다.</div>
+    <table class="sub-table" cellpadding="0" cellspacing="0" width="100%">${rows.join('')}</table>
+    <a href="${url}" class="sub-button">항목 고르기</a>
+    <div class="sub-foot"><a href="${url}" class="sub-foot-link">다이제스트 전체 수신 거부</a></div>
+  </div>`;
 }
 
 // 카테고리 섹션 상단 편집자 요약 한 줄 (검수 콘솔에서 입력)
@@ -424,4 +458,15 @@ body{margin:0;padding:0;background:#F5F3EF;font-family:-apple-system,BlinkMacSys
 .footer-cta-button{display:block;width:100%;box-sizing:border-box;padding:15px 20px;background:#5046E5;color:#FFF !important;text-decoration:none;border-radius:8px;font-size:14px;font-weight:700;text-align:center}
 .footer-link{font-size:12px;color:#5046E5;text-decoration:none;font-weight:600}
 .footer-meta{margin-top:12px;font-size:11px;color:#9CA3AF;line-height:1.6}
+.sub-desc{font-size:12px;color:#6B7280;margin:-4px 0 12px}
+.sub-table{border-collapse:separate;border-spacing:0 8px}
+.sub-cell{vertical-align:middle;padding-right:8px}
+.sub-state{display:inline-block;min-width:44px;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;text-align:center;margin-right:6px}
+.sub-on{background:#EEF0FE;color:#5046E5}
+.sub-off{background:#F1F1F0;color:#9CA3AF}
+.sub-label{font-size:12px;color:#374151;font-weight:600}
+.sub-muted{color:#9CA3AF;font-weight:500}
+.sub-button{display:block;margin-top:10px;padding:12px 20px;background:#FFF;border:1px solid #5046E5;color:#5046E5 !important;text-decoration:none;border-radius:8px;font-size:13px;font-weight:700;text-align:center}
+.sub-foot{margin-top:10px;text-align:center}
+.sub-foot-link{font-size:11px;color:#9CA3AF;text-decoration:underline}
 `;
