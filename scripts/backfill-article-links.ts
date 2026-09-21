@@ -11,6 +11,13 @@
  *
  * --days 없으면 14일. --limit으로 건수 제한. 중간에 끊겨도 이미 바꾼 건 건너뛰므로
  * 그냥 다시 실행하면 이어서 진행된다.
+ *
+ * 구글이 100건 남짓부터 막기 때문에(2026-09-21 실측) 한 번에 다 못 고친다.
+ * --rounds를 주면 한 회차에 --limit건씩 고치고 --cooldown초 쉬었다가 다음 회차를 돈다.
+ * 차단이 감지되면 그 회차는 일찍 끝나고, 쉬는 동안 차단이 풀리므로 결국 다 채워진다.
+ *
+ *   npx tsx --env-file=.env.local scripts/backfill-article-links.ts \
+ *     --days 7 --limit 70 --rounds 20 --cooldown 900
  */
 import './_env';
 import { prisma } from '../src/lib/prisma';
@@ -25,21 +32,27 @@ function arg(name: string, fallback: number): number {
   return Number.isFinite(v) ? v : fallback;
 }
 
-async function main() {
-  const days = arg('days', 14);
-  const limit = arg('limit', 100000);
-  const dry = process.argv.includes('--dry');
-
+/** 한 회차: 남아 있는 프록시 링크를 limit건까지 고치고 결과를 돌려준다. */
+async function runRound(days: number, limit: number, dry: boolean, priorityOnly: boolean) {
   const since = new Date(Date.now() - days * 86400000);
+  // 스파크랩·포트폴리오를 먼저 고친다. 구글 차단 때문에 한 번에 다 못 고치는데(아래 참고),
+  // 사람이 실제로 누르는 건 대부분 이쪽이라 여기부터 채우는 게 맞다. AC·VC·업계동향은
+  // 메일에서도 아래쪽 섹션이고 양이 훨씬 많아서(2026-09-22 기준 787/859건) 뒤로 민다.
+  const PRIORITY_CATEGORIES = ['sparklabs_self', 'portfolio_company', 'portfolio_company_tw'];
+  const where = {
+    pubDate: { gte: since },
+    link: { contains: 'news.google.com' },
+    ...(priorityOnly ? { category: { in: PRIORITY_CATEGORIES } } : {}),
+  };
   const rows = await prisma.article.findMany({
-    where: { pubDate: { gte: since }, link: { contains: 'news.google.com' } },
+    where,
     select: { id: true, link: true, title: true, source: true },
     orderBy: { pubDate: 'desc' },
     take: limit,
   });
 
-  console.log(`[backfill-links] 최근 ${days}일 · 프록시 링크 ${rows.length}건${dry ? ' (dry-run)' : ''}`);
-  if (rows.length === 0) return;
+  console.log(`[backfill-links] 최근 ${days}일 · 남은 프록시 링크 ${rows.length}건${dry ? ' (dry-run)' : ''}`);
+  if (rows.length === 0) return { ok: 0, failed: 0, conflict: 0, remaining: 0 };
 
   let ok = 0, failed = 0, conflict = 0;
   for (let i = 0; i < rows.length; i += CHUNK) {
@@ -62,15 +75,50 @@ async function main() {
     console.log(`  ${Math.min(i + CHUNK, rows.length)}/${rows.length} — 성공 ${ok} · 해석실패 ${failed} · 중복 ${conflict}`);
   }
 
-  console.log(`[backfill-links] 완료 — 성공 ${ok} · 해석실패 ${failed} · 중복충돌 ${conflict}`);
-  if (failed > 0) {
-    console.log('  해석실패는 원본 링크를 그대로 뒀다 — 예전처럼 제목 검색으로 열린다(기사가 사라지지는 않는다).');
+  const remaining = await prisma.article.count({ where });
+  console.log(`[backfill-links] 회차 완료 — 성공 ${ok} · 해석실패 ${failed} · 중복 ${conflict} · 남음 ${remaining}`);
+  return { ok, failed, conflict, remaining };
+}
+
+async function main() {
+  const days = arg('days', 14);
+  const limit = arg('limit', 100000);
+  const rounds = arg('rounds', 1);
+  const cooldown = arg('cooldown', 900);
+  const dry = process.argv.includes('--dry');
+
+  const priorityOnly = process.argv.includes('--priority');
+  if (priorityOnly) console.log('[backfill-links] 스파크랩·포트폴리오 기사만 대상으로 돈다(--priority).');
+
+  let totalOk = 0;
+  for (let n = 1; n <= rounds; n++) {
+    if (rounds > 1) console.log(`\n===== ${n}/${rounds} 회차 =====`);
+
+    // DB가 잠깐 끊겨도(P1001) 이번 회차만 건너뛰고 계속한다. 예전엔 여기서 예외가 그대로
+    // 올라가 16회차 중간에 스크립트가 통째로 죽었다(2026-09-22).
+    let r;
+    try {
+      r = await runRound(days, limit, dry, priorityOnly);
+    } catch (e: any) {
+      console.error(`  회차 실패(건너뜀): ${e?.message ?? e}`);
+      await new Promise(res => setTimeout(res, cooldown * 1000));
+      continue;
+    }
+    totalOk += r.ok;
+
+    if (r.remaining === 0) { console.log('[backfill-links] 남은 게 없다 — 끝.'); break; }
+    if (dry || n === rounds) break;
+
+    // 차단은 15분으로 안 풀린다 — 실측으로 약 3시간이었다(2026-09-22: 20회차를 15분
+    // 간격으로 돌렸더니 1회차와 13회차만 성공했다). 헛도는 회차가 곧 호출 낭비이자
+    // 차단 연장이라, 막힌 것 같으면 훨씬 길게 쉰다.
+    const blocked = r.ok === 0 && r.failed > 0;
+    const wait = blocked ? Math.max(cooldown, 3 * 3600) : cooldown;
+    if (blocked) console.log(`  (구글 차단으로 보인다 — ${(wait / 3600).toFixed(1)}시간 쉬었다가 다시 시도한다)`);
+    await new Promise(res => setTimeout(res, wait * 1000));
   }
-  if (failed > ok) {
-    console.log('');
-    console.log('  ⚠️  실패가 성공보다 많다 — 구글이 막았을 가능성이 높다(100건 남짓이 한계).');
-    console.log('     몇 시간 뒤 같은 명령을 다시 돌리면 이미 고친 건 건너뛰고 이어서 진행한다.');
-  }
+
+  console.log(`\n[backfill-links] 전체 완료 — 이번 실행에서 ${totalOk}건 고침`);
 }
 
 main().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); });
