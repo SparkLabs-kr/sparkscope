@@ -297,6 +297,66 @@ export async function extractTopics(items: Keywordable[]): Promise<Map<string, E
   return new Map([...cached, ...fresh]);
 }
 
+/**
+ * 같은 회사가 긴 이름과 짧은 이름으로 갈라진 것을 하나로 합친다.
+ *
+ * 실제로 갈라졌다: '브리스톨 마이어스'(5건)와 '브리스톨 마이어스 스퀴브'(4건)가
+ * 30일 카드에 나란히 떴다. 기사 집합이 겹치지 않아 foldSubEntities(기사 포함관계로
+ * 접는 쪽)로는 잡히지 않는다.
+ *
+ * 그런데 "앞부분이 같으면 합친다"를 그냥 걸면 안 된다. 캐시 3,452건의 회사명 826개를
+ * 훑어보니 그렇게 하면 안 되는 쌍이 더 많았다:
+ *   Samsung ⊂ Samsung Electronics · Samsung Biologics · Samsung Life · Samsung SDS …
+ *   SK      ⊂ SK Hynix · SK Biopharm · SK Square …
+ *   LG      ⊂ LG CNS · LG AI Research · LG Uplus
+ *   Universal ⊂ Universal Music · Universal Robots
+ * 삼성바이오로직스와 삼성전자는 다른 회사다. 합치면 "삼성"이라는 쓸모없는 카드가 된다.
+ *
+ * 가르는 기준은 **긴 이름이 몇 개인가**다. 짧은 이름 뒤에 붙는 변형이 하나뿐이면
+ * 표기 차이로 보고 합치고(Bristol Myers / Novo / Ionis / Vertex / Mistral),
+ * 둘 이상이면 그룹사 이름으로 보고 손대지 않는다(Samsung / SK / LG / Universal).
+ * 짧은 쪽이 3자 이하면(SK, LG) 애초에 제외한다 — 약어는 변형이 하나여도 위험하다.
+ *
+ * 남길 표기는 길이가 아니라 **언급이 많은 쪽**이다. 'Novo'(10건)와
+ * 'Novo Nordisk'(16건)에서는 정식 명칭이, 'Bristol Myers'(5건)와
+ * 'Bristol Myers Squibb'(4건)에서는 짧은 쪽이 남는다 — 사람들이 실제로 더 많이
+ * 쓰는 표기가 화면에 나오는 편이 낫다.
+ */
+export function foldNameVariants(
+  entries: { key: string; en: string; mentions: number }[],
+): Map<string, string> {
+  const remap = new Map<string, string>();
+  if (entries.length < 2) return remap;
+
+  // 구분자를 공백 하나로 맞춘 뒤에 비교한다. 같은 회사가 하이픈과 공백 양쪽으로
+  // 오기 때문이다 — 실제 캐시에 'Bristol Myers Squibb'와 'Bristol-Myers Squibb'가
+  // 함께 있었고, 원문 그대로 비교하면 'Bristol Myers'가 후자의 앞부분과 안 맞는다.
+  const norm = (s: string) => s.trim().toLowerCase().replace(/[\s.,'’·-]+/g, ' ');
+  // 짧은 이름 → 그것으로 시작하는 긴 이름들
+  const variants = new Map<string, typeof entries>();
+  for (const a of entries) {
+    if (a.en.trim().length <= 3) continue;
+    const pa = norm(a.en);
+    const longer = entries.filter(b => {
+      if (b.key === a.key) return false;
+      const pb = norm(b.en);
+      // 단어 경계에서 갈려야 한다 — 'Bio'와 'Biogen'은 같은 이름이 아니다.
+      return pb.length > pa.length && pb.startsWith(pa) && /[\s&]/.test(pb[pa.length] ?? '');
+    });
+    if (longer.length === 1) variants.set(a.key, longer);
+  }
+
+  for (const [shortKey, [long]] of variants) {
+    const short = entries.find(e => e.key === shortKey)!;
+    // 이미 다른 이름으로 접힌 쪽은 건드리지 않는다 — 사슬로 엮이면 엉뚱한 곳에 붙는다.
+    if (remap.has(shortKey) || remap.has(long!.key)) continue;
+    const winner = long!.mentions > short.mentions ? long! : short;
+    const loser = winner.key === shortKey ? long! : short;
+    remap.set(loser.key, winner.key);
+  }
+  return remap;
+}
+
 /** 집계 키 — 대소문자·공백 차이로 갈라지지 않게 정규화한다. */
 export const keyOf = (en: string) => en.toLowerCase().replace(/[\s.,'’-]+/g, '');
 export type { Entity };
@@ -311,7 +371,7 @@ export async function extractTrendKeywords(items: Keywordable[], limit = 8): Pro
   const byUrl = await extractEntities(pool);
 
   // 매체 수로 센다 — 한 매체가 같은 이름을 여러 번 쓰는 건 편집 성향이지 동향이 아니다.
-  type Agg = { label: string; outlets: Set<string>; articles: number; top: number; url: string; rank: number };
+  type Agg = { label: string; en: string; outlets: Set<string>; articles: number; top: number; url: string; rank: number };
   const agg = new Map<string, Agg>();
   pool.forEach((it, idx) => {
     for (const ent of byUrl.get(it.url) ?? []) {
@@ -328,6 +388,7 @@ export async function extractTrendKeywords(items: Keywordable[], limit = 8): Pro
       } else {
         agg.set(k, {
           label: ent.orgKo || ent.org || ent.ko || ent.en,
+          en: ent.org || ent.en,
           outlets: new Set([it.source]),
           articles: 1,
           top: it.importance ?? 0,
@@ -337,6 +398,20 @@ export async function extractTrendKeywords(items: Keywordable[], limit = 8): Pro
       }
     }
   });
+
+  // 긴 이름·짧은 이름으로 갈라진 같은 회사를 합친다(foldNameVariants 주석 참고).
+  for (const [from, to] of foldNameVariants(
+    [...agg].map(([key, a]) => ({ key, en: a.en, mentions: a.articles })),
+  )) {
+    const src = agg.get(from);
+    const dst = agg.get(to);
+    if (!src || !dst) continue;
+    for (const o of src.outlets) dst.outlets.add(o);
+    dst.articles += src.articles;
+    dst.top = Math.max(dst.top, src.top);
+    if (src.rank < dst.rank) { dst.rank = src.rank; dst.url = src.url; }
+    agg.delete(from);
+  }
 
   return [...agg.entries()]
     .map(([key, a]) => ({

@@ -18,7 +18,7 @@
  *           나올 일이 거의 없어서 실제로 상위 6건 중 0건이 붙었다. 그래서 "반응"이라고
  *           부르지 않고 "새로 등록된 연구·임상"으로 말한다.
  */
-import { extractEntities, extractTopics, keyOf, type Entity } from './news-keywords';
+import { extractEntities, extractTopics, foldNameVariants, keyOf, type Entity } from './news-keywords';
 import { DOMAIN_KEYWORDS } from './news-feeds';
 import type { DigestItem, NewsDomain } from './news-digest';
 
@@ -223,6 +223,22 @@ export async function buildEntityCards(
         a.points += p.points;
       }
     }
+  }
+
+  // 같은 회사가 긴 이름·짧은 이름으로 갈라진 것을 먼저 합친다(foldNameVariants).
+  // foldSubEntities는 기사 포함관계로 접는 쪽이라 기사가 겹치지 않으면 못 잡는다 —
+  // '브리스톨 마이어스'와 '브리스톨 마이어스 스퀴브'가 그 경우였다.
+  for (const [from, to] of foldNameVariants(
+    [...agg].map(([key, a]) => ({ key, en: a.labelEn, mentions: a.mentions })),
+  )) {
+    const src = agg.get(from);
+    const dst = agg.get(to);
+    if (!src || !dst) continue;
+    dst.mentions += src.mentions;
+    for (const o of src.outlets) dst.outlets.add(o);
+    for (const x of src.articles) if (!dst.articles.some(y => y.url === x.url)) dst.articles.push(x);
+    for (const c of src.community) if (!dst.community.some(y => y.url === c.url)) { dst.community.push(c); dst.points += c.points; }
+    agg.delete(from);
   }
 
   // AlphaSignal은 매체(뉴스 후보)와 커뮤니티 양쪽에 들어 있다 — 업보트는 반응이고
