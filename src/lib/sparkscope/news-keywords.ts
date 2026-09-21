@@ -162,6 +162,45 @@ async function extractBatch(batch: Keywordable[]): Promise<Map<string, Entity[]>
  * 묶여서 "이 회사에 대한 기사와 반응"을 한 카드에 모을 수 있다(entity-cards.ts).
  * URL 단위 캐시라 같은 항목에 두 번 과금되지 않는다.
  */
+/**
+ * 이름으로 쓰면 안 되는 말 — 나라·지역.
+ *
+ * 프롬프트에서 이미 "나라·도시 이름은 뽑지 않는다"고 막아 두었는데도 새어 나온다.
+ * 실측(2026-09-21, 캐시 3,452건): 'China'가 회사 이름 자리에 4건 들어와 있었다.
+ * 중국 회사 기사가 많다 보니 모회사(org)를 모를 때 'China'로 채운 것으로 보인다.
+ *
+ * 나라 이름은 거의 모든 기사에 나와서 "지금 무엇이 화제인가"를 말해 주지 않고,
+ * 이름 합치기(foldNameVariants)에서도 'China Mobile'을 'China'로 끌어당기는
+ * 엉뚱한 부모가 된다. 그래서 프롬프트에만 맡기지 않고 여기서 한 번 더 막는다.
+ *
+ * 캐시에 이미 들어간 것도 걸러야 하므로 추출 직후가 아니라 **돌려주기 직전**에 건다.
+ * 그래야 지난 캐시를 지우지 않고도 화면에서 사라진다.
+ *
+ * 나라 이름이 그 자체로 주인공인 기사(예: 중국 정부의 규제)는 이 카드가 다룰 단위가
+ * 아니다 — 그건 기사 목록에서 읽는다.
+ */
+const DROP_NAMES: ReadonlySet<string> = new Set([
+  'china', 'korea', 'southkorea', 'northkorea', 'usa', 'us', 'unitedstates', 'america',
+  'japan', 'taiwan', 'india', 'europe', 'eu', 'uk', 'unitedkingdom', 'britain',
+  'germany', 'france', 'israel', 'canada', 'australia', 'singapore', 'russia',
+  '한국', '중국', '미국', '일본', '대만', '유럽', '영국', '독일', '프랑스', '인도',
+  '서울', '베이징', '도쿄', '실리콘밸리',
+]);
+
+/** 나라·지역 이름을 걸러낸다. 모회사만 나라면 그 이름 자체를 버린다. */
+function dropPlaces(map: Map<string, Entity[]>): Map<string, Entity[]> {
+  const out = new Map<string, Entity[]>();
+  for (const [url, ents] of map) {
+    out.set(url, ents.flatMap(e => {
+      if (DROP_NAMES.has(keyOf(e.en))) return [];
+      // 이름은 멀쩡한데 모회사만 나라인 경우 — 집계가 나라로 묶이지 않게 org만 비운다.
+      if (e.org && DROP_NAMES.has(keyOf(e.org))) return [{ ...e, org: undefined, orgKo: undefined }];
+      return [e];
+    }));
+  }
+  return out;
+}
+
 export async function extractEntities(items: Keywordable[]): Promise<Map<string, Entity[]>> {
   const pool = items.slice(0, MAX_ARTICLES);
   if (pool.length === 0) return new Map();
@@ -178,7 +217,7 @@ export async function extractEntities(items: Keywordable[]): Promise<Map<string,
     console.log(`[news-keywords] ${fresh.size}건 새로 추출 (캐시 ${cached.size}건)`);
     await writeCache([...fresh.entries()].map(([url, entities]) => ({ url, entities })));
   }
-  return new Map([...cached, ...fresh]);
+  return dropPlaces(new Map([...cached, ...fresh]));
 }
 
 /**

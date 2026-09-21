@@ -275,7 +275,7 @@ ${SIGNAL_EMAIL_CSS}
     ${data.industryArticles.map(a => renderArticle(a, {})).join('\n')}
   </div>` : ''}
 
-  ${opts.subscriberToken ? renderSubscriptionSection(prefs, base, opts.subscriberToken) : ''}
+  ${renderSubscriptionSection(prefs, base, opts.subscriberToken)}
 
   <div class="footer">
     <div class="footer-cta-text">INTRA(스파크랩 내부 생태계)부터 INTER(글로벌 시장)까지, 아래 대시보드에서 확인하실 수 있습니다.</div>
@@ -300,8 +300,20 @@ ${SIGNAL_EMAIL_CSS}
  * 표를 쓰는 이유는 Outlook이 flex·grid를 지원하지 않아서다. 칸 너비는 퍼센트로
  * 두어 좁은 화면에서도 두 열이 유지된다.
  */
-function renderSubscriptionSection(prefs: SectionPrefs, base: string, token: string): string {
-  const url = `${base}/subscribe?token=${escape(token)}`;
+function renderSubscriptionSection(prefs: SectionPrefs, base: string, token?: string): string {
+  // 토큰이 없으면 로그인해서 바꾸는 화면으로 보낸다.
+  //
+  // 토큰은 구독자별 발송 경로에서만 생긴다(digest-send.ts). 그런데 그 경로는
+  // DIGEST_USE_SUBSCRIBERS 스위치 뒤에 있고 그 스위치는 켜져 있지 않아서, 지금
+  // 실제로 나가는 메일은 전사 그룹 1통이다(runner.ts). 2026-09-21 발송분에
+  // 이 섹션이 통째로 빠진 이유다 — 토큰이 없으면 섹션을 아예 안 그렸다.
+  //
+  // 그래서 토큰 유무로 섹션을 켜고 끄지 않고, 링크만 바꾼다. 전사 그룹 메일에서는
+  // 사내 로그인 화면(/dashboard/subscriptions)으로 보내면 된다 — 그쪽은 세션
+  // 이메일로 자기 행만 찾으므로 그룹 메일을 여럿이 받아도 서로의 설정을 못 건드린다.
+  // 스위치를 켜는 것과 무관하게 동작해야 한다: 그 스위치는 "누구에게 보내는가"를
+  // 바꾸는 것이지 "무엇을 보여주는가"를 정하는 값이 아니다.
+  const url = token ? `${base}/subscribe?token=${escape(token)}` : `${base}/dashboard/subscriptions`;
   const cell = (s: (typeof SECTIONS)[number]) => {
     const on = prefs[s.key];
     return `<td class="sub-cell" width="50%">
