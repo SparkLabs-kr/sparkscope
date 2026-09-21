@@ -112,3 +112,42 @@ async function decodeRealUrl(params: DecodingParams): Promise<string | null> {
     clearTimeout(timer);
   }
 }
+
+/**
+ * 여러 구글 뉴스 링크를 제한된 동시성으로 한 번에 해석한다.
+ *
+ * 반환 맵에는 성공한 것만 담긴다 — 실패한 링크는 키 자체가 없으므로 호출부가
+ * 원본을 그대로 두면 된다(지금까지와 똑같이 제목 검색 폴백으로 열린다).
+ *
+ * 동시성을 4로 잡은 이유는 scrapeBodiesFor와 같다. 구글이 429를 주기 시작하면
+ * 그 뒤가 전부 실패하므로, 빠르게 훑는 것보다 끝까지 성공하는 쪽이 낫다.
+ */
+export async function resolveGoogleNewsUrls(
+  links: string[],
+  concurrency = 4,
+): Promise<Map<string, string>> {
+  const targets = [...new Set(links.filter(l => l.includes('news.google.com')))];
+  const out = new Map<string, string>();
+  let consecutiveFailedBatches = 0;
+
+  for (let i = 0; i < targets.length; i += concurrency) {
+    const batch = targets.slice(i, i + concurrency);
+    const resolved = await Promise.all(batch.map(l => resolveGoogleNewsUrl(l)));
+    batch.forEach((l, idx) => {
+      const r = resolved[idx];
+      if (r) out.set(l, r);
+    });
+
+    // 구글은 100건 남짓부터 막는다(2026-09-21 실측: 1,303건을 돌렸더니 약 80건 성공 뒤
+    // 나머지가 전부 실패). 한 번 막히면 그 실행에서는 다시 열리지 않으므로, 연달아
+    // 헛도는 게 보이면 멈춘다 — 계속 두드려봐야 차단만 길어지고 얻는 것이 없다.
+    consecutiveFailedBatches = resolved.some(Boolean) ? 0 : consecutiveFailedBatches + 1;
+    if (consecutiveFailedBatches >= 3) {
+      console.warn(
+        `[google-news-resolver] 연속 실패 — 차단으로 보고 중단합니다 (${out.size}/${targets.length}건 해석).`,
+      );
+      break;
+    }
+  }
+  return out;
+}

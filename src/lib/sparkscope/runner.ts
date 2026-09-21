@@ -16,6 +16,7 @@ import { checkConfigDrift, formatDriftReport } from './config-drift';
 import { buildDigestData, renderDigestHtml, buildClusteredPool, rankTop3Pool } from './digest';
 import { attachInterDigest } from './inter-digest';
 import { attachAiSignals } from './signal-digest';
+import { attachResolvedLinks } from './digest-links';
 import { publishSignalFeed } from './signal-publish';
 import { buildDigestKeyMap, buildDigestContextMap, passesDigestGuard } from './review';
 import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } from './mailer';
@@ -273,6 +274,20 @@ export async function runDailyDigest(opts: RunOptions = {}) {
               analyzedAt: new Date(),
             },
           });
+
+          // 이미 있던 행이 구글 프록시 링크를 들고 있고 이번에 진짜 주소를 알아냈으면 바꿔 끼운다.
+          // upsert는 link(unique)를 기존 값으로 찾기 때문에 update에 link를 넣지 않는 한
+          // 프록시 주소가 영원히 남는다 — 그 기사는 계속 구글 검색으로 열린다.
+          // 업그레이드(프록시 → 진짜)만 하고 반대 방향은 절대 하지 않는다.
+          // 같은 주소를 가진 행이 이미 있으면 unique 충돌이 나는데, 그건 같은 기사가 이미
+          // 제대로 저장돼 있다는 뜻이라 그냥 둔다(본 저장은 위에서 이미 끝났다).
+          if (existing && existing.link.includes('news.google.com') && !a.link.includes('news.google.com')) {
+            try {
+              await prisma.article.update({ where: { link: existing.link }, data: { link: a.link } });
+            } catch {
+              // 충돌·경합 — 링크만 못 바꾼 것이라 기사 자체는 멀쩡하다.
+            }
+          }
         } catch (e: any) {
           saveFailures++;
           console.error(`[runner] article save failed, skipping "${a.title}" (${a.link}):`, e?.message ?? e);
@@ -365,7 +380,9 @@ export async function runDailyDigest(opts: RunOptions = {}) {
 
     // 6. 다이제스트 데이터 + HTML (검증된 TOP3 + 본부 스크랩 기사 + Inter 섹션 반영)
     const data = await attachAiSignals(await attachInterDigest(
-      buildDigestData(digestReady, '', undefined, scrappedLinks, verifiedTop3),
+      await attachResolvedLinks(
+        buildDigestData(digestReady, '', undefined, scrappedLinks, verifiedTop3),
+      ),
     ));
     // 파트너(블루사이트)가 읽어 갈 수 있게 같은 TOP 5를 DB에 물질화한다.
     // 메일에 들어간 것과 같은 객체라 둘이 갈리지 않는다. 실패해도 발송은 계속한다.

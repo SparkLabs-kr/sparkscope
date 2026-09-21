@@ -6,6 +6,10 @@ import { BookmarkIcon } from '@/components/BookmarkIcon';
 import { NoiseReportButton } from '@/components/NoiseReportButton';
 import { NoiseReportRequestButton } from '@/components/NoiseReportRequestButton';
 import { clusterArticles } from '@/lib/sparkscope/cluster';
+// 예전엔 이 파일에 hasRealLink/searchFallbackUrl 복사본이 있었는데, 구글 뉴스 프록시 링크를
+// 거르는 규칙이 article-link.ts에만 추가돼 여기만 낡은 채로 남아 있었다(2026-09-21).
+// 같은 판단이 두 벌이면 또 갈라지므로 공용 것을 쓴다.
+import { hasRealLink, searchFallbackUrl } from '@/lib/sparkscope/article-link';
 import { useT, type Translate, useLocale } from '@/lib/i18n/client';
 
 interface Article {
@@ -51,15 +55,6 @@ const STATUS_BADGE: Record<string, string> = {
   Exit: 'bg-amber-50 text-amber-700 border border-amber-200',
 };
 
-// 백필 기사는 원문 링크가 없고 backfill://해시 형태의 더미 값만 있음 — 그대로 열면 빈 화면만 뜬다.
-function hasRealLink(link: string): boolean {
-  return !link.startsWith('backfill://');
-}
-
-// 원문 링크를 못 찾은 백필 기사는 제목+매체로 구글 검색 결과라도 열어준다 (그냥 "링크 없음"보다 낫다).
-function searchFallbackUrl(title: string, source: string): string {
-  return `https://www.google.com/search?q=${encodeURIComponent(`${title} ${source}`)}`;
-}
 
 function ToneDot({ tone }: { tone: string | null }) {
   const cls = TONE_DOT[tone ?? 'NEUTRAL'] ?? TONE_DOT.NEUTRAL;

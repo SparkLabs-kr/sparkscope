@@ -10,7 +10,7 @@ import { isRelevant, normalizeTitleKey, matchesAsToken, resolveMainKeys } from '
 import { isKnownMedia, normalizeSource } from './media';
 import { NEGATIVE_KEYWORDS_DATA, CRISIS_KEYWORDS_DATA } from './keywords-data';
 import { scrapeArticleBody, type ScrapedBody } from './scraper';
-import { resolveGoogleNewsUrl } from './google-news-resolver';
+import { resolveGoogleNewsUrl, resolveGoogleNewsUrls } from './google-news-resolver';
 import { PINNED_COMPETITORS } from './insights';
 
 // C 티어 폴백: 문맥어 없어도 이 키워드가 제목에 있으면 수집 (이벤트·부정 기사 누락 방지)
@@ -280,7 +280,53 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
   console.log(`[collector] raw (relevant) collected: ${allArticles.length}`);
   const filtered = filterAndDedupe(allArticles, opts.daysBack ?? MAX_DAYS_AGO);
   console.log(`[collector] after dedupe: ${filtered.length}`);
+
+  // 구글 뉴스로 들어온 기사는 링크가 news.google.com/rss/articles/… 프록시라 그대로 열면
+  // 기사가 아니라 빈 구글 페이지가 뜬다. 그래서 화면·메일은 그런 링크를 제목 검색으로
+  // 돌려보내는데(article-link.ts), 그러면 읽는 사람이 구글 검색 결과를 한 번 더 거쳐야 한다.
+  //
+  // 해석기는 예전부터 있었지만 본문 스크래핑에만 쓰고 결과를 버려서, 정작 저장되는 link은
+  // 계속 프록시 주소였다(2026-09-21 발견 — 최근 7일 기사의 42%가 이 상태였다).
+  // 여기서 한 번 해석해 두면 메일·대시보드·백필이 전부 진짜 기사 주소를 쓴다.
+  //
+  // 걸러낸 뒤에 도는 이유는 비용 때문이다. 해석 한 건이 0.9초쯤 걸려서, 버려질 기사까지
+  // 다 돌리면 수집이 눈에 띄게 늘어난다. 실패해도 원본 링크를 그대로 두므로 예전 동작
+  // (제목 검색 폴백)으로 돌아갈 뿐, 기사가 사라지지는 않는다.
+  await resolveLinksInPlace(filtered);
   return filtered;
+}
+
+/**
+ * 한 번의 수집에서 해석을 시도할 최대 건수.
+ *
+ * 구글은 100건 남짓부터 막는다(2026-09-21 실측). 하루 수집분의 프록시 링크는 200건이
+ * 넘어서 전부 돌리면 중간에 막히고, 그 뒤로는 헛돌기만 한다. 한도를 넉넉히 밑돌게 잡아
+ * 매일 조금씩 확실하게 고친다 — 새 기사는 어차피 매일 들어오므로 밀리지 않는다.
+ *
+ * 여기서 못 고친 기사라도, 메일에 실제로 들어갈 때 발송 직전에 다시 시도한다
+ * (digest-links.ts). 사람이 누르는 링크는 그쪽에서 보장된다.
+ */
+const MAX_LINK_RESOLVES = 60;
+
+// 구글 프록시 링크를 진짜 언론사 주소로 바꿔 끼운다. 실패한 건 손대지 않는다.
+async function resolveLinksInPlace(articles: RawArticle[]): Promise<void> {
+  const proxied = articles
+    .filter(a => a.link.includes('news.google.com'))
+    // 카테고리 우선순위가 높은 것부터 — 한도에 걸려 일부만 고칠 때 스파크랩·포트폴리오
+    // 기사가 먼저 제대로 된 링크를 갖게 한다.
+    .sort((a, b) => (b.basePriority ?? 0) - (a.basePriority ?? 0))
+    .slice(0, MAX_LINK_RESOLVES);
+  if (proxied.length === 0) return;
+
+  const t = Date.now();
+  const map = await resolveGoogleNewsUrls(proxied.map(a => a.link));
+  for (const a of proxied) {
+    const real = map.get(a.link);
+    if (real) a.link = real;
+  }
+  console.log(
+    `[collector] 구글 링크 해석: ${map.size}/${proxied.length}건 성공 (${((Date.now() - t) / 1000).toFixed(1)}초)`,
+  );
 }
 
 // 기사 목록의 본문을 스크래핑 (제한된 동시성).
