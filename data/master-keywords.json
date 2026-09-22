@@ -7477,7 +7477,7 @@
     "region": "gv",
     "primaryKeyword": "Andela",
     "helperKeywords": "Andela developers, Jeremy Johnson Andela, Christina Sass",
-    "excludeWords": null,
+    "excludeWords": "Gwen Andela, Andela Fish",
     "contextWords": null,
     "notes": "글로벌 개발자 인재 액셀러레이터. 아프리카 인재를 훈련·멘토링해 전 세계 기업의 원격 개발자로 연결. 뉴욕·라고스 소재."
   },
@@ -7911,8 +7911,8 @@
     "region": "gv",
     "primaryKeyword": "Timecast",
     "helperKeywords": "타임캐스트, timecast.co.kr, Monster Squad, Shadow move",
-    "excludeWords": "time cast of, timecast forecast",
-    "contextWords": null,
+    "excludeWords": "time cast of, timecast forecast, Storm Timecast, WFAA, weather timecast",
+    "contextWords": "타임캐스트, mobile content, mobile entertainment, mobile app, e-book, toy app, mobile game, Monster Squad, Shadow move, 모바일 콘텐츠, 모바일 게임",
     "notes": "[한글명: 타임캐스트] 모바일 콘텐츠 개발·서비스사. e북·토이앱·모바일앱 등 다양한 장르. 'Monster Squad', 'Shadow move' 등. 서울 소재."
   },
   {
