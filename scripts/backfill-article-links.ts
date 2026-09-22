@@ -9,7 +9,8 @@
  *   npx tsx --env-file=.env.local scripts/backfill-article-links.ts --days 14 --dry
  *   npx tsx --env-file=.env.local scripts/backfill-article-links.ts --days 14
  *
- * --days 없으면 14일. --limit으로 건수 제한. 중간에 끊겨도 이미 바꾼 건 건너뛰므로
+ * --days 없으면 14일. --limit으로 건수 제한. --category로 분류를 좁힌다
+ * (예: --category portfolio_company_tw,portfolio_company_gv). 중간에 끊겨도 이미 바꾼 건 건너뛰므로
  * 그냥 다시 실행하면 이어서 진행된다.
  *
  * 구글이 100건 남짓부터 막기 때문에(2026-09-21 실측) 한 번에 다 못 고친다.
@@ -33,16 +34,19 @@ function arg(name: string, fallback: number): number {
 }
 
 /** 한 회차: 남아 있는 프록시 링크를 limit건까지 고치고 결과를 돌려준다. */
-async function runRound(days: number, limit: number, dry: boolean, priorityOnly: boolean) {
+async function runRound(days: number, limit: number, dry: boolean, priorityOnly: boolean, only: string[] | null) {
   const since = new Date(Date.now() - days * 86400000);
   // 스파크랩·포트폴리오를 먼저 고친다. 구글 차단 때문에 한 번에 다 못 고치는데(아래 참고),
   // 사람이 실제로 누르는 건 대부분 이쪽이라 여기부터 채우는 게 맞다. AC·VC·업계동향은
   // 메일에서도 아래쪽 섹션이고 양이 훨씬 많아서(2026-09-22 기준 787/859건) 뒤로 민다.
-  const PRIORITY_CATEGORIES = ['sparklabs_self', 'portfolio_company', 'portfolio_company_tw'];
+  const PRIORITY_CATEGORIES = ['sparklabs_self', 'portfolio_company', 'portfolio_company_tw', 'portfolio_company_gv'];
+  // --category로 특정 분류만 좁힐 수 있다. 구글이 100건 남짓부터 막아서 한 실행이 고칠 수
+  // 있는 양이 정해져 있는데, --priority만으로는 건수가 압도적인 한국 포트폴리오(2026-09-22
+  // 기준 1,047건)가 그 몫을 다 가져가 대만·GV는 순서가 영영 안 온다. 그쪽만 먼저 채울 때 쓴다.
   const where = {
     pubDate: { gte: since },
     link: { contains: 'news.google.com' },
-    ...(priorityOnly ? { category: { in: PRIORITY_CATEGORIES } } : {}),
+    ...(only ? { category: { in: only } } : priorityOnly ? { category: { in: PRIORITY_CATEGORIES } } : {}),
   };
   const rows = await prisma.article.findMany({
     where,
@@ -90,6 +94,10 @@ async function main() {
   const priorityOnly = process.argv.includes('--priority');
   if (priorityOnly) console.log('[backfill-links] 스파크랩·포트폴리오 기사만 대상으로 돈다(--priority).');
 
+  const ci = process.argv.indexOf('--category');
+  const only = ci !== -1 && process.argv[ci + 1] ? process.argv[ci + 1].split(',').map(v => v.trim()).filter(Boolean) : null;
+  if (only) console.log(`[backfill-links] 분류 ${only.join(', ')}만 대상으로 돈다(--category).`);
+
   let totalOk = 0;
   for (let n = 1; n <= rounds; n++) {
     if (rounds > 1) console.log(`\n===== ${n}/${rounds} 회차 =====`);
@@ -98,7 +106,7 @@ async function main() {
     // 올라가 16회차 중간에 스크립트가 통째로 죽었다(2026-09-22).
     let r;
     try {
-      r = await runRound(days, limit, dry, priorityOnly);
+      r = await runRound(days, limit, dry, priorityOnly, only);
     } catch (e: any) {
       console.error(`  회차 실패(건너뜀): ${e?.message ?? e}`);
       await new Promise(res => setTimeout(res, cooldown * 1000));
