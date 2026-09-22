@@ -34,6 +34,10 @@ export async function seedKeywords(): Promise<SeedKeywordsResult> {
         portfolioStatus: t.portfolioStatus ?? null,
         tier: t.tier ?? null,
         notes: t.notes,
+        // region은 ?? null로 쓰면 안 된다 — 대만·사우디·호주 행은 JSON에 region이 없고
+        // 2026-09-08 마이그레이션 SQL로 채워졌으므로, null을 넣으면 그게 지워진다.
+        // undefined는 Prisma가 "변경하지 않음"으로 흘려보낸다.
+        region: t.region,
       },
     });
 

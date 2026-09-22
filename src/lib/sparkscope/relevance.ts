@@ -96,26 +96,42 @@ function isWordChar(ch: string): boolean {
   return false;
 }
 
-/** 회사명(name)이 텍스트 안에서 독립 토큰(주어 위치)으로 등장하는 시작 인덱스 전부. */
+/**
+ * 회사명(name)이 텍스트 안에서 독립 토큰(주어 위치)으로 등장하는 시작 인덱스 전부.
+ *
+ * 대소문자를 구분하지 않는다. 한국어·중문에서는 차이가 없지만 영문에서는 이게 없으면
+ * 매칭이 사실상 깨진다 — 영문 헤드라인은 Title Case를 쓰므로 문맥어 "retail analytics"가
+ * "...Retail Analytics Startup..."을 놓친다(2026-09-22 GV 키워드 실측: 42 Technologies의
+ * Forbes 기사가 이 이유로 탈락). 영문 사명·문맥어를 원문 표기대로 적어 맞추는 건
+ * 불가능하다(같은 단어가 Title Case·소문자·전부 대문자로 다 나온다).
+ */
 function findTokenIndices(text: string, name: string): number[] {
   if (!text || !name) return [];
+  // 인덱스를 원문과 정렬된 상태로 유지해야 한다(isListMentionAt이 원문 인덱스를 쓴다).
+  // toLowerCase가 길이를 바꾸는 문자('İ' → 2자)가 섞이면 접기를 포기하고 원문으로 간다.
+  const lowerText = text.toLowerCase();
+  const lowerName = name.toLowerCase();
+  const canFold = lowerText.length === text.length && lowerName.length === name.length;
+  const t = canFold ? lowerText : text;
+  const n = canFold ? lowerName : name;
+
   const out: number[] = [];
   let from = 0;
   for (;;) {
-    const idx = text.indexOf(name, from);
+    const idx = t.indexOf(n, from);
     if (idx === -1) break;
-    const end = idx + name.length;
-    const leftOk = idx === 0 || !isWordChar(text[idx - 1]);
+    const end = idx + n.length;
+    const leftOk = idx === 0 || !isWordChar(t[idx - 1]);
     if (leftOk) {
-      const next = end < text.length ? text[end] : '';
-      if (end >= text.length || !isWordChar(next)) {
+      const next = end < t.length ? t[end] : '';
+      if (end >= t.length || !isWordChar(next)) {
         out.push(idx); // 오른쪽 깔끔한 경계
       } else {
         // 오른쪽이 단어문자면 "조사 + 경계"일 때만 허용
         for (const j of JOSA) {
-          if (text.startsWith(j, end)) {
+          if (t.startsWith(j, end)) {
             const after = end + j.length;
-            if (after >= text.length || !isWordChar(text[after])) { out.push(idx); break; }
+            if (after >= t.length || !isWordChar(t[after])) { out.push(idx); break; }
           }
         }
       }
@@ -169,9 +185,11 @@ export function matchesAsDirectMention(body: string, name: string, opts?: { skip
 // 많다"는 이유로 뺐었는데, 그건 본문까지 직접언급 검사(matchesAsDirectMention)로 커버되므로
 // 이름매칭 자체를 빼는 대신 26개 확정매체 제한을 풀기 위해 여기 포함시켰다.
 // 이 카테고리들만 "사명이 제목/본문에 실제로 등장하는가"를 강제한다.
-// 대만(portfolio_company_tw)을 빼먹으면 사명 매칭이 통째로 건너뛰어져, 문맥어 하나만
-// 걸린 무관한 기사까지 전부 통과한다 — 대만은 제목만으로 판정하므로 특히 위험하다.
-export const NAME_MATCH_CATEGORIES = new Set(['portfolio_company', 'portfolio_company_tw', 'sparklabs_self', 'competitor']);
+// 대만(portfolio_company_tw)·글로벌벤처스(portfolio_company_gv)를 빼먹으면 사명 매칭이
+// 통째로 건너뛰어져, 문맥어 하나만 걸린 무관한 기사까지 전부 통과한다 — 이 둘은 구글
+// 뉴스 RSS라 제목만으로 판정하므로 특히 위험하다. GV는 Woo·42·Castle처럼 흔한 영어
+// 단어가 사명이라 더 위험하다.
+export const NAME_MATCH_CATEGORIES = new Set(['portfolio_company', 'portfolio_company_tw', 'portfolio_company_gv', 'sparklabs_self', 'competitor']);
 
 export interface RelevanceInput {
   title: string;

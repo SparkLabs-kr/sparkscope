@@ -57,10 +57,14 @@ function resolveTab(v?: string): TabId {
 
 // 지역(한국/대만) — 지금은 나라가 분류명 안에 들어 있다.
 // 2.3의 국가 필드 분리가 끝나면 REGION_CATEGORY 대신 country 조건으로 바뀐다.
-export type PortfolioCategory = 'portfolio_company' | 'portfolio_company_tw';
+export type PortfolioCategory = 'portfolio_company' | 'portfolio_company_tw' | 'portfolio_company_gv';
 const REGIONS = [
   { id: 'kr', label: '한국', category: 'portfolio_company' },
   { id: 'tw', label: '대만', category: 'portfolio_company_tw' },
+  // 글로벌벤처스는 나라가 아니라 펀드다 — 포트폴리오 54개사가 미국·영국·싱가포르 등
+  // 10개국에 걸쳐 있어 국기를 붙일 수 없다. 1단 탭의 좌표계가 "국가"가 아니라
+  // "지사"라서 같은 줄에 놓는다(감시대상 region도 'gv').
+  { id: 'gv', label: '글로벌벤처스', category: 'portfolio_company_gv' },
 ] as const;
 type RegionId = (typeof REGIONS)[number]['id'];
 function resolveRegion(v?: string): RegionId {
@@ -80,14 +84,24 @@ function categoryOfRegion(r: RegionId): PortfolioCategory {
 const REGION_LABEL: Record<RegionId, string> = {
   kr: '🇰🇷 스파크랩 한국',
   tw: '🇹🇼 스파크랩 대만',
+  gv: '🌐 스파크랩 글로벌벤처스',
 };
 const REGION_VIEWS: Record<RegionId, readonly TabId[]> = {
   kr: ['sparklabs', 'portfolio', 'competitor'],
   tw: ['sparklabs', 'portfolio'],
+  // 대만과 같은 이유로 업계 모니터링 탭을 만들지 않는다 — competitor 감시대상이
+  // 전부 한국 AC·VC라 영구 0건 탭이 된다.
+  gv: ['sparklabs', 'portfolio'],
 };
-// 대만 자사 언급을 가려내는 감시 대상 이름 — sparklabs_self는 카테고리가 하나뿐이라
-// 국가를 이 키로 가른다(taiwan-collect.ts의 TW_SELF_NAME과 반드시 같은 값이어야 한다).
+// 지사별 자사 언급을 가려내는 감시 대상 이름 — sparklabs_self는 카테고리가 하나뿐이라
+// 지사를 이 키로 가른다(taiwan-collect.ts의 TW_SELF_NAME과 반드시 같은 값이어야 한다).
 const TW_SELF_KEYWORD = '스파크랩 타이완';
+// 글로벌벤처스는 감시 대상이 두 개로 등록돼 있다('스파크랩 글로벌벤처스', '스파크랩 글로벌').
+// 둘 다 englishName이 SparkLabs Global Ventures라 어느 쪽에 걸려도 GV 언급이다 —
+// 하나만 쓰면 나머지에 걸린 기사가 GV 탭에서 빠지고 한국 탭에 남는다.
+const GV_SELF_KEYWORDS = ['스파크랩 글로벌벤처스', '스파크랩 글로벌'];
+// 한국 탭에서 빼야 하는 해외 지사 키워드 전체.
+const OVERSEAS_SELF_KEYWORDS = [TW_SELF_KEYWORD, ...GV_SELF_KEYWORDS];
 // 2단 탭 문구 — 같은 tab이라도 국가에 따라 라벨이 달라진다(예: '한국 업계 모니터링').
 const VIEW_LABEL: Record<RegionId, Partial<Record<TabId, string>>> = {
   kr: {
@@ -96,6 +110,10 @@ const VIEW_LABEL: Record<RegionId, Partial<Record<TabId, string>>> = {
     competitor: '🏁 한국 업계 모니터링',
   },
   tw: {
+    sparklabs: '🏢 스파크랩 직접 언급',
+    portfolio: '📊 포트폴리오사',
+  },
+  gv: {
     sparklabs: '🏢 스파크랩 직접 언급',
     portfolio: '📊 포트폴리오사',
   },
@@ -288,16 +306,19 @@ async function loadDashboardData(
   const portfolioWhere = { ...where, category: pfCategory };
   // 스파크랩 기사: 자체 카테고리 + 제목에 '스파크랩' 언급 (매체·톤 분석용).
   //
-  // 국가별로 갈라야 한다 — sparklabs_self는 카테고리가 하나뿐이므로 감시 대상 이름으로 가른다.
-  // 대만 탭은 '스파크랩 타이완'에 걸린 기사만, 한국 탭은 그 나머지만 본다. 안 가르면 두 탭이
-  // 같은 기사를 중복해서 세고, "대만 자사 언급"에 한국 기사가 그대로 뜬다.
-  const sparklabsWhere = region === 'tw'
-    ? { ...where, category: 'sparklabs_self' as string, matchedKeyword: TW_SELF_KEYWORD }
-    : {
-        ...where,
-        OR: [{ category: 'sparklabs_self' as string }, { title: { contains: '스파크랩' } }],
-        NOT: { matchedKeyword: TW_SELF_KEYWORD },
-      };
+  // 지사별로 갈라야 한다 — sparklabs_self는 카테고리가 하나뿐이므로 감시 대상 이름으로 가른다.
+  // 대만 탭은 '스파크랩 타이완', GV 탭은 GV 감시대상에 걸린 기사만, 한국 탭은 그 나머지만
+  // 본다. 안 가르면 탭들이 같은 기사를 중복해서 세고, "대만 자사 언급"에 한국 기사가 뜬다.
+  const sparklabsWhere =
+    region === 'tw'
+      ? { ...where, category: 'sparklabs_self' as string, matchedKeyword: TW_SELF_KEYWORD }
+      : region === 'gv'
+        ? { ...where, category: 'sparklabs_self' as string, matchedKeyword: { in: GV_SELF_KEYWORDS } }
+        : {
+            ...where,
+            OR: [{ category: 'sparklabs_self' as string }, { title: { contains: '스파크랩' } }],
+            NOT: { matchedKeyword: { in: OVERSEAS_SELF_KEYWORDS } },
+          };
   const negOr = [{ tone: 'NEGATIVE' as string | null }, ...NEGATIVE_KEYWORDS.map(k => ({ title: { contains: k } }))];
   // 긍정 하이라이트용 — AI 긍정 톤 + 명확한 호재 키워드
   const POSITIVE_KEYWORDS = ['투자 유치', '시리즈', '상장', '수상', '선정', 'MOU', '파트너십', '업무협약', '출시', '런칭', '흑자', '수출', '돌파', '체결'];
@@ -571,9 +592,14 @@ async function loadDashboardData(
     sparklabsKeyMap.set(t.primaryKeyword, Array.from(new Set(keys)));
   }
   // 회사/조직명이 제목에 토큰으로 등장해야 통과 (포트폴리오 + 스파크랩 자사). 그 외 카테고리는 통과.
+  //
+  // GV(portfolio_company_gv)도 포함한다 — 영문 제목은 한국어처럼 단어 경계가 뚜렷해
+  // 토큰 매칭이 제대로 듣고, Woo·42·Castle·Origin처럼 흔한 영어 단어가 사명이라 이 가드가
+  // 특히 필요하다. 대만만 빠져 있는 건 중문이 띄어쓰기가 없어 토큰 매칭이 성립하지 않기 때문.
+  const PF_NAME_GUARD = new Set(['portfolio_company', 'portfolio_company_gv']);
   const passesName = (a: { category: string; matchedKeyword: string; title: string }) => {
-    if (a.category !== 'portfolio_company' && a.category !== 'sparklabs_self') return true;
-    const map = a.category === 'portfolio_company' ? portfolioKeyMap : sparklabsKeyMap;
+    if (!PF_NAME_GUARD.has(a.category) && a.category !== 'sparklabs_self') return true;
+    const map = PF_NAME_GUARD.has(a.category) ? portfolioKeyMap : sparklabsKeyMap;
     const keys = map.get(a.matchedKeyword) ?? [a.matchedKeyword];
     return keys.some(k => matchesAsToken(a.title, k));
   };

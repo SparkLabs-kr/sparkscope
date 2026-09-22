@@ -13,7 +13,7 @@
  */
 import OpenAI from 'openai';
 import { prisma } from '@/lib/prisma';
-import { PACKS, needsTranslationAnyLocale, detectLocale } from './locale';
+import { PACKS, needsTranslationAnyLocale, detectSourceLocale } from './locale';
 
 // 지연 생성: 모듈을 import 하는 것만으로 키를 요구하면, 이 모듈이 딸려 들어간 곳
 // (클라이언트 번들 등)에서 "Missing credentials"로 화면이 죽는다. 실제로 번역할 때만 만든다.
@@ -290,7 +290,7 @@ export async function ensureArticleEn<T extends TranslatableArticle>(
  * 한국어 화면에 뜰 기사들의 titleKo를 채운다 — ensureArticleEn의 거울상.
  *
  * 원문이 한국어인 기사는 건드리지 않는다(titleKo는 null로 남고 화면은 title로 떨어진다).
- * 그래서 국내 4만여 건에는 LLM 호출이 한 번도 일어나지 않고, 실제 대상은 대만 기사뿐이다.
+ * 그래서 국내 4만여 건에는 LLM 호출이 한 번도 일어나지 않고, 실제 대상은 대만·영문 기사뿐이다.
  *
  * oneLiner·pitchTopic은 여기서 다루지 않는다 — 분석기가 원문 언어와 무관하게 한국어로
  * 쓰기 때문에(prompts.ts의 SONNET_DEEP_ROLE) 이미 한국어다. 제목만 원문이 남는다.
@@ -301,12 +301,21 @@ export async function ensureArticleKo<T extends { id: string; title: string; tit
 ): Promise<T[]> {
   const max = opts.max ?? MAX_PER_REQUEST;
 
-  // 원문이 한국어가 아닌 것만 대상. detectLocale은 한자를 먼저 보므로 중문 제목이 여기 걸린다.
-  const pending = articles.filter(a => a.title && !a.titleKo && detectLocale(a.title) !== 'ko-KR' && needsTranslation(a.title));
+  // 원문이 한국어가 아닌 것만 대상.
+  //
+  // detectSourceLocale을 쓴다(detectLocale이 아니라) — detectLocale은 라틴 문자를
+  // 일부러 null로 남기므로, 그걸 쓰면 GV 영문 제목이 전부 "번역할 것 없음"으로 빠져
+  // 한국어 화면에 영문 원문이 그대로 나간다. 대만 기사가 같은 이유로 중국어 원문을
+  // 노출했던 것과 같은 함정이다(2026-08-31).
+  const pending = articles.filter(a => {
+    if (!a.title || a.titleKo) return false;
+    const src = detectSourceLocale(a.title);
+    return src !== null && src !== 'ko-KR';
+  });
 
   // 원문이 이미 한국어라 번역할 것이 없는 행은 titleKo를 채우지 않는다.
   // titleEn 쪽과 달리 "처리 완료" 표시를 위해 원문을 복사할 필요가 없다 —
-  // 백필이 detectLocale로 대상을 좁히므로 같은 행을 다시 집어오지 않는다.
+  // 백필이 원문 언어로 대상을 좁히므로 같은 행을 다시 집어오지 않는다.
   if (pending.length === 0) return articles;
 
   const uniq = new Map<string, T>();

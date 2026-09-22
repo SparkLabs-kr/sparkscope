@@ -10,6 +10,7 @@
 import type { Category } from '../types';
 import { koKR } from './ko-KR';
 import { zhTW } from './zh-TW';
+import { enUS } from './en-US';
 import { localeOfCategory, type Locale, type LanguagePack } from './types';
 
 export type { Locale, LanguagePack, LocaleMedia } from './types';
@@ -18,6 +19,7 @@ export { localeOfCategory } from './types';
 export const PACKS: Record<Locale, LanguagePack> = {
   'ko-KR': koKR,
   'zh-TW': zhTW,
+  'en-US': enUS,
 };
 
 export const DEFAULT_LOCALE: Locale = 'ko-KR';
@@ -38,12 +40,30 @@ export function packForCategory(category: Category | string): LanguagePack {
  *
  * 한자를 먼저 보는 이유 — 한국 기사 제목에 한자가 섞이는 경우는 드물지만
  * 대만 기사에 한글이 섞이는 경우는 사실상 없다. 오판 방향을 대만 쪽으로 둔다.
+ *
+ * 영문(en-US)은 여기서 일부러 null로 남긴다. 이 함수는 "영문 화면에 내보내려면
+ * 번역이 필요한가"를 묻는 자리이고, 영문 원문은 그 답이 "아니오"다. 라틴 문자를
+ * en-US로 잡으면 영문 제목이 영→영 번역 큐에 들어가 LLM을 낭비하고 제목이 변형된다
+ * (translate-content.ts:230이 지금은 원문을 titleEn에 그대로 복사해 처리를 끝낸다).
+ * 한국어 화면용 원문 판정은 detectSourceLocale을 쓴다.
  */
 export function detectLocale(text: string | null | undefined): Locale | null {
   if (!text) return null;
   if (zhTW.hasScript(text)) return 'zh-TW';
   if (koKR.hasScript(text)) return 'ko-KR';
   return null;
+}
+
+/**
+ * 원문이 무슨 언어인가 — detectLocale과 달리 영문까지 답한다.
+ *
+ * 비대칭이라 함수를 둘로 나눴다: 영문 원문은 영문 화면엔 번역이 필요 없지만
+ * 한국어 화면(titleKo)엔 필요하다. 한글·한자가 없고 라틴 문자가 있으면 영문으로 본다.
+ */
+export function detectSourceLocale(text: string | null | undefined): Locale | null {
+  const detected = detectLocale(text);
+  if (detected) return detected;
+  return enUS.hasScript(text) ? 'en-US' : null;
 }
 
 /** 번역이 필요한가 — 어느 팩이든 자기 문자를 가지고 있으면 대상이다. */

@@ -34,10 +34,13 @@ export type PortfolioHit = {
   reasonEn?: string | null;
 };
 
-/** 회사 목록. 한국·대만 포트폴리오사를 함께 본다 — 해외 뉴스는 어느 쪽에도 영향을 준다. */
+/** 회사 목록. 한국·대만·글로벌벤처스 포트폴리오사를 함께 본다 — 해외 뉴스는 어느 쪽에도 영향을 준다. */
 async function loadCompanies() {
   const rows = await prisma.monitoringTarget.findMany({
-    where: { category: { in: ['portfolio_company', 'portfolio_company_tw'] }, status: 'ACTIVE' },
+    where: {
+      category: { in: ['portfolio_company', 'portfolio_company_tw', 'portfolio_company_gv'] },
+      status: 'ACTIVE',
+    },
     select: { name: true, englishName: true, notes: true },
   });
   return rows.map(c => {

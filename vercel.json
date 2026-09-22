@@ -8,6 +8,10 @@
       "schedule": "30 1 * * 1,3,5"
     },
     {
+      "path": "/api/cron/gv-collect",
+      "schedule": "20 0 * * 1"
+    },
+    {
       "path": "/api/cron/taiwan-collect",
       "schedule": "0 1 * * 1"
     },

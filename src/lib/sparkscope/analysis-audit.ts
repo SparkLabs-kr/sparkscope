@@ -80,7 +80,7 @@ export async function runAnalysisAudit(): Promise<AuditResult> {
     where: {
       pubDate: { gte: since },
       isNoise: false,
-      category: { in: ['portfolio_company', 'portfolio_company_tw', 'sparklabs_self'] },
+      category: { in: ['portfolio_company', 'portfolio_company_tw', 'portfolio_company_gv', 'sparklabs_self'] },
       OR: [{ tone: 'NEGATIVE' }, { riskFlag: { not: null } }],
     },
     select: { id: true, title: true, link: true, oneLiner: true, tone: true, riskFlag: true },

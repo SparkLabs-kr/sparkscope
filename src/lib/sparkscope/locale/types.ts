@@ -13,7 +13,7 @@
 import type { Category } from '../types';
 
 /** BCP 47. DB에 locale 컬럼이 생기면 이 값이 그대로 들어간다. */
-export type Locale = 'ko-KR' | 'zh-TW';
+export type Locale = 'ko-KR' | 'zh-TW' | 'en-US';
 
 export interface LocaleMedia {
   /** 표기 편차 → 표준 매체명. 같은 매체가 두 이름으로 오면 집계가 갈라진다. */
@@ -63,5 +63,7 @@ export interface LanguagePack {
  * 분기가 여기 한 곳에만 있는 게 이 구조의 목적이다.
  */
 export function localeOfCategory(category: Category | string): Locale {
-  return category === 'portfolio_company_tw' ? 'zh-TW' : 'ko-KR';
+  if (category === 'portfolio_company_tw') return 'zh-TW';
+  if (category === 'portfolio_company_gv') return 'en-US';
+  return 'ko-KR';
 }
