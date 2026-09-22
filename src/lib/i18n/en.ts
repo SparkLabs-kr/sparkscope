@@ -226,13 +226,13 @@ export const EN: Record<string, string> = {
   '키워드 관리': 'Keyword settings',
   '노이즈 제안': 'Noise suggestions',
   '총 수집 기사': 'Articles collected',
-  '선택한 기간 내 수집된 모든 기사 수 (노이즈 제외)': 'All articles collected in the selected period (noise excluded)',
+  '선택한 기간 내 이 지사에서 수집된 기사 수 (노이즈 제외)': 'Articles collected for this office in the selected period (noise excluded)',
   '스파크랩 직접 언급': 'Direct SparkLabs mentions',
   "기사 제목에 '스파크랩'이 언급된 건수": "Articles whose headline mentions 'SparkLabs'",
   '포트폴리오사 노출': 'Portfolio coverage',
   '스파크랩이 투자한 포트폴리오사가 언급된 기사 건수': 'Articles mentioning a SparkLabs portfolio company',
   '피칭 기회': 'Pitch opportunities',
-  'AI가 기획기사 피칭 가능성을 75점 이상으로 평가한 건수': 'Articles the AI scored 75+ for feature-pitch potential',
+  '이 지사 기사 중 AI가 기획기사 피칭 가능성을 75점 이상으로 평가한 건수': "Articles from this office the AI scored 75+ for feature-pitch potential",
   '(최근 3일 {n}건)': '({n} in the last 3 days)',
 
   // ── 스파크랩 섹션 ─────────────────────────────────────────────────

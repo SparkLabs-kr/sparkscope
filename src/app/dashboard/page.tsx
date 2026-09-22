@@ -319,6 +319,32 @@ async function loadDashboardData(
             OR: [{ category: 'sparklabs_self' as string }, { title: { contains: '스파크랩' } }],
             NOT: { matchedKeyword: { in: OVERSEAS_SELF_KEYWORDS } },
           };
+  // 그 지사 탭에서 볼 수 있는 기사 전체 — 상단 KPI('총 수집 기사'·'피칭 기회')의 범위다.
+  //
+  // 이 둘은 원래 where만 써서 카테고리를 안 가렸고, 그래서 한국·대만·GV 탭이 전부 같은
+  // 숫자(전체 건수)를 보여줬다(2026-09-22 소윤 지적). 나머지 KPI 두 개는 이미 갈려 있었다
+  // (포트폴리오사 노출=portfolioWhere, 스파크랩 직접 언급=sparklabsWhere).
+  //
+  // 한국만 competitor·industry_trend를 포함한다 — 그 두 카테고리의 감시대상이 전부 한국
+  // AC·VC·업계라서다. REGION_VIEWS에서 업계 모니터링 탭이 한국에만 있는 것과 같은 이유.
+  // 'unrelated'는 어디에도 넣지 않는다(분석기가 무관하다고 판정한 것).
+  const regionSelfCond =
+    region === 'tw'
+      ? { category: 'sparklabs_self' as string, matchedKeyword: TW_SELF_KEYWORD }
+      : region === 'gv'
+        ? { category: 'sparklabs_self' as string, matchedKeyword: { in: GV_SELF_KEYWORDS } }
+        : { category: 'sparklabs_self' as string, matchedKeyword: { notIn: OVERSEAS_SELF_KEYWORDS } };
+  const regionWhere = {
+    ...where,
+    OR: region === 'kr'
+      ? [
+          { category: 'portfolio_company' as string },
+          { category: 'competitor' as string },
+          { category: 'industry_trend' as string },
+          regionSelfCond,
+        ]
+      : [{ category: pfCategory as string }, regionSelfCond],
+  };
   const negOr = [{ tone: 'NEGATIVE' as string | null }, ...NEGATIVE_KEYWORDS.map(k => ({ title: { contains: k } }))];
   // 긍정 하이라이트용 — AI 긍정 톤 + 명확한 호재 키워드
   const POSITIVE_KEYWORDS = ['투자 유치', '시리즈', '상장', '수상', '선정', 'MOU', '파트너십', '업무협약', '출시', '런칭', '흑자', '수출', '돌파', '체결'];
@@ -356,10 +382,10 @@ async function loadDashboardData(
     spikeRecent, spikeBaseline, crisisNeg, portfolioTargets, competitorTop,
     competitorArticles, sparklabsMentions, portfolioTop15, portfolioNeg, sparklabsArticles, portfolioPos,
   ] = await Promise.all([
-    prisma.article.count({ where }),
+    prisma.article.count({ where: regionWhere }),
     prisma.article.count({ where: { ...where, category: 'sparklabs_self' } }),
     prisma.article.count({ where: portfolioWhere }),
-    prisma.article.count({ where: { ...where, pitchScore: { gte: 75 } } }),
+    prisma.article.count({ where: { ...regionWhere, pitchScore: { gte: 75 } } }),
     prisma.article.count({ where: { ...portfolioWhere, title: { contains: '스파크랩' } } }),
     prisma.article.count({ where: prevPortfolioWhere }),
     prisma.article.count({ where: { ...prevPortfolioWhere, title: { contains: '스파크랩' } } }),
@@ -386,7 +412,10 @@ async function loadDashboardData(
     // (2026-09-07 실사용: 스카이랩스 IPO 기사 11건이 20건을 다 채워 다른 회사 20여 건이
     // 다양성 필터 이전에 잘려나갔고, 화면엔 카드 1개만 남았다). 200으로 넉넉히 가져와
     // 다양성 필터가 실제로 고를 재료를 준다 — 화면 표시는 어차피 상위 5개로 자른다.
-    prisma.article.findMany({ where: { ...where, pitchScore: { gte: 60 } }, orderBy: { pitchScore: 'desc' }, take: 200 }),
+    // regionWhere로 지사를 가른다 — 원래 where만 써서 카테고리를 안 가렸고, 그래서 GV 탭
+    // 피칭 카드에 한국 기사가 떴다(2026-09-22). 바로 위 '피칭 기회' KPI는 이미 regionWhere로
+    // 갈려 있어서 숫자(GV 9건)와 아래 목록(한국 기사)이 서로 다른 것을 가리키고 있었다.
+    prisma.article.findMany({ where: { ...regionWhere, pitchScore: { gte: 60 } }, orderBy: { pitchScore: 'desc' }, take: 200 }),
     prisma.article.findMany({ where: portfolioWhere, select: { matchedKeyword: true, pubDate: true }, take: 20000 }),
     prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: pfCategory }, select: { id: true, title: true, titleEn: true, titleKo: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true } }),
     prisma.article.findMany({ where: { pubDate: { gte: bl, lt: rc }, isNoise: false, category: pfCategory }, select: { matchedKeyword: true } }),
@@ -1174,10 +1203,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             </div>
           )}
           <div data-tour="kpi" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <KpiCard label={tr('총 수집 기사')} value={data.kpi.total} hint={tr('선택한 기간 내 수집된 모든 기사 수 (노이즈 제외)')} />
+            <KpiCard label={tr('총 수집 기사')} value={data.kpi.total} hint={tr('선택한 기간 내 이 지사에서 수집된 기사 수 (노이즈 제외)')} />
             <KpiCard label={tr('스파크랩 직접 언급')} value={data.kpi.sparklabsCount} hint={tr("기사 제목에 '스파크랩'이 언급된 건수")} />
             <KpiCard label={tr('포트폴리오사 노출')} value={data.kpi.portfolioCount} hint={tr('스파크랩이 투자한 포트폴리오사가 언급된 기사 건수')} />
-            <KpiCard label={tr('피칭 기회')} value={data.kpi.pitchCount} hint={tr('AI가 기획기사 피칭 가능성을 75점 이상으로 평가한 건수')} highlight />
+            <KpiCard label={tr('피칭 기회')} value={data.kpi.pitchCount} hint={tr('이 지사 기사 중 AI가 기획기사 피칭 가능성을 75점 이상으로 평가한 건수')} highlight />
           </div>
         </>
       )}
@@ -1195,9 +1224,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           <ToneBreakdown articles={data.toneArticles as any} />
         </div>
 
-        {/* 스파크랩 펀드 현황 — 대만은 제외한다. 펀드 데이터가 한국 법인 기준이라
-            대만 탭에 그리면 한국 펀드를 대만 것처럼 보여주게 된다. */}
-        {region !== 'tw' && data.sparkLabsFundSummary && (
+        {/* 스파크랩 펀드 현황 — 한국 탭에만 그린다. 펀드 데이터가 한국 법인 기준이라
+            대만·글로벌벤처스 탭에 그리면 한국 펀드를 그쪽 펀드인 것처럼 보여주게 된다.
+            (글로벌벤처스는 그 자체가 별도 펀드라 더더욱 한국 펀드를 붙이면 안 된다.) */}
+        {region === 'kr' && data.sparkLabsFundSummary && (
           <div data-tour="fund-panel" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
             <div className="font-bold mb-4">🏦 {tr('스파크랩 펀드 현황')}</div>
             <div className="flex flex-wrap gap-4 mb-4">
