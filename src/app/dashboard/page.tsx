@@ -1304,15 +1304,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       </div>
 
       {/* 포트폴리오 TOP15 → 기획기사 피칭 (위아래 배치)
-          기획기사 피칭은 대만에서는 안 보여준다 — pitchScore는 국내 기사 분석 파이프라인
-          기준이라 대만 포트폴리오사에는 사실상 안 붙는 값이고, 화면에 카드만 비어 있는
-          채로 남아 혼란을 준다(2026-09-07). */}
+          2026-09-07엔 대만에서 이 카드를 숨겼다 — pitchScore가 국내 기사 분석 파이프라인
+          기준이라 대만 기사엔 사실상 안 붙어 빈 카드만 남았기 때문. 지금은 그 전제가
+          깨졌다: 대만 포트폴리오 기사 143건 전부 pitchScore가 붙어 있고 75점 이상만
+          112건이다(2026-09-22 실측). 분석 파이프라인이 그사이 대만까지 커버하게 됐다.
+          카테고리를 안 가르던 쿼리도 같이 고쳤으므로 이제 대만 탭엔 대만 기사가 뜬다. */}
       <div className="grid grid-cols-1 gap-4 mb-8">
         <div data-tour="top15" className="relative">
           <div className="absolute right-5 top-5 z-10"><DbLink href={dbHref()} label="전체 기사" /></div>
           <PortfolioTopList items={data.portfolioTop} rangeLabel={range.label} prevRangeLabel={data.portfolioTopPrevRangeLabel} showChange={data.portfolioTopHasEnoughPrevData} />
         </div>
-        {region !== 'tw' && (
         <div data-tour="pitch" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
           <div className="font-bold mb-3">🎯 {tr('기획기사 피칭')} <InfoTip text={tr("AI가 각 기사를 0~100점으로 평가한 '기획기사 피칭 점수'입니다.\n이 주제로 우리 포트폴리오사를 엮어 기획기사를 제안하면 성사 가능성이 높은 기사를 뜻합니다.\n· 60점 이상: 아래 목록에 표시\n· 75점 이상: 상단 '피칭 기회' 지표에 집계")} /></div>
           {data.pitches.length > 0 ? (
@@ -1331,7 +1332,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             <p className="text-sm text-gray-400">{tr('{range} 내 피칭 기회 (60점 이상) 없음', { range: range.label })}</p>
           )}
         </div>
-        )}
       </div>
       </>}
 
