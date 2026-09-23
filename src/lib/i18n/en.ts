@@ -8,6 +8,8 @@
  * 기사 제목·AI 요약 문장·회사명처럼 DB/AI에서 오는 값은 번역 대상이 아니다(원문 그대로 노출).
  */
 export const EN: Record<string, string> = {
+  '지금은 로그인할 수 없습니다. 담당자에게 문의해 주세요.':
+    'Sign-in is unavailable right now. Please contact your SparkLabs contact.',
   // ── 포트폴리오사 화면 · 업계 동향 (2026-09-23) ────────────────────
   '업계 동향': 'Across the portfolio',
   '다른 포트폴리오사 · 최근 30일': 'Other portfolio companies · last 30 days',

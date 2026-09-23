@@ -42,6 +42,8 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
 function LoginFormInner({ googleEnabled }: { googleEnabled: boolean }) {
   const t = useT();
   const params = useSearchParams();
+  // 화면에는 버튼이 없지만, /login?mode=company 로 들어오면 포트폴리오사 폼이 열린다.
+  // 지원할 때 링크 하나로 안내할 수 있게 남겨 둔 통로다.
   const [mode, setMode] = useState<Mode>(null);
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -104,7 +106,7 @@ function LoginFormInner({ googleEnabled }: { googleEnabled: boolean }) {
   ) : null;
 
   // ── 포트폴리오사: 메일 입력 화면 ───────────────────────────────
-  if (mode === 'company') {
+  if (mode === 'company' || params.get('mode') === 'company') {
     return (
       <form
         onSubmit={async e => {
@@ -147,13 +149,13 @@ function LoginFormInner({ googleEnabled }: { googleEnabled: boolean }) {
           </a>
         </p>
 
-        <button
-          type="button"
-          onClick={() => { setMode(null); setEmail(''); }}
-          className="mt-5 w-full text-center text-[12.5px] text-gray-400 hover:text-spark-purple"
+        {/* 쿼리(?mode=company)까지 지워야 한다 — state 만 되돌리면 같은 폼이 다시 열린다. */}
+        <a
+          href="/login"
+          className="mt-5 block w-full text-center text-[12.5px] text-gray-400 hover:text-spark-purple"
         >
           ← {t('다른 방법으로 로그인')}
-        </button>
+        </a>
       </form>
     );
   }
@@ -223,30 +225,15 @@ function LoginFormInner({ googleEnabled }: { googleEnabled: boolean }) {
           </>
         )}
 
-        <button
-          type="button"
-          onClick={() => setMode('company')}
-          className="w-full text-left px-4 py-3.5 rounded-xl border border-gray-200 bg-white hover:border-spark-purple transition group"
-        >
-          <div className="font-semibold text-[15px] group-hover:text-spark-purple">
-            {t('포트폴리오사 로그인')}
-          </div>
-          <div className="text-[12.5px] text-gray-500 mt-0.5">
-            {t('승인받은 회사 계정으로 로그인합니다')}
-          </div>
-        </button>
-
-        <a
-          href="/request-access"
-          className="block w-full text-left px-4 py-3.5 rounded-xl border border-dashed border-gray-300 bg-transparent hover:border-spark-purple transition group"
-        >
-          <div className="font-semibold text-[15px] group-hover:text-spark-purple">
-            {t('접근 요청하기')}
-          </div>
-          <div className="text-[12.5px] text-gray-500 mt-0.5">
-            {t('아직 계정이 없는 포트폴리오사 — 마케팅팀 승인 후 로그인할 수 있습니다')}
-          </div>
-        </a>
+        {/* 포트폴리오사 입구와 접근 요청 버튼은 2026-09-23에 화면에서 뺐다.
+            그쪽 로그인 방식을 다시 정하기로 해서, 정해지기 전까지 안내하지 않는다.
+            기능 자체는 살아 있다 — /login?mode=company 와 /request-access 로
+            여전히 닿을 수 있어서, 이미 계정을 받은 대표가 완전히 막히지는 않는다. */}
+        {!googleEnabled && (
+          <p className="rounded-xl border border-dashed border-gray-300 px-4 py-5 text-center text-[13px] text-gray-500">
+            {t('지금은 로그인할 수 없습니다. 담당자에게 문의해 주세요.')}
+          </p>
+        )}
       </div>
 
       {/* 죽은 세션 쿠키에 걸리면 사용자가 스스로 빠져나올 방법이 없다.
