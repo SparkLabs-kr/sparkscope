@@ -14,6 +14,7 @@
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { OPEN_ACCESS } from '@/lib/flags';
+import { adminEmails } from '@/lib/roles';
 
 const KIND = 'access_request';
 
@@ -149,15 +150,16 @@ export async function countPending(): Promise<{ pending: number; unnotified: num
  * 전 직원이 외부 회사에 포트폴리오 자료 접근을 줄 수 있다. 그래서 승인은
  * 키워드 관리(SCRAP_ALLOWED_EMAILS)처럼 지정된 사람만 한다.
  */
+/**
+ * 접근요청 승인자 = 관리자 명단(ADMIN_EMAILS).
+ *
+ * 2026-09-22 이전에는 ACCESS_REQUEST_APPROVERS 라는 별도 명단이었다. 관리자 등급이
+ * 생기면서 명단이 두 개가 되면 반드시 어긋나고 — "승인은 되는데 계정 발급은 막히는"
+ * 사람이 생긴다 — 하나로 합쳤다. adminEmails() 가 옛 환경변수 이름도 계속 읽으므로
+ * ADMIN_EMAILS 를 설정하기 전에도 동작은 그대로다.
+ */
 export function accessApprovers(): string[] {
-  const raw =
-    process.env.ACCESS_REQUEST_APPROVERS ??
-    process.env.ACCESS_REQUEST_REVIEWERS ??
-    'marketing@sparklabs.co.kr,sparkai@sparklabs.co.kr';
-  return raw
-    .split(',')
-    .map(s => s.trim().toLowerCase())
-    .filter(Boolean);
+  return adminEmails();
 }
 
 /** 이 사람이 승인·거절을 할 수 있는가. */

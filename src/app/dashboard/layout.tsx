@@ -1,13 +1,14 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSessionUser } from '@/lib/authz';
+import { ROLE_BADGE } from '@/lib/roles';
 import { hasStaleSession } from '@/lib/session-cookie';
 import { countPending, canApproveAccess } from '@/lib/sparkscope/access-request';
 import { SignOutButton } from '@/components/SignOutButton';
 import { ScrollTopButton } from '@/components/ScrollTopButton';
 import { DashboardTutorial } from '@/components/DashboardTutorial';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
-import { getT } from '@/lib/i18n/server';
+import { getT, getLocale } from '@/lib/i18n/server';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   // 이 레이아웃이 /dashboard/* 6개 화면의 유일한 관문이다.
@@ -26,9 +27,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // (그 화면 자체가 requireAdmin + canApproveAccess 로 막고 있다.)
 
   const initial = user.email[0].toUpperCase();
+  const badge = ROLE_BADGE[user.role];
+  const badgeLabel = getLocale() === 'en' ? badge.labelEn : badge.label;
   // 접근 요청은 메일로 알리지만, 메일은 실패할 수 있다. 본부가 매일 보는
   // 화면에 대기 건수를 띄워 두면 알림이 실패해도 요청이 묻히지 않는다.
-  // 배지는 승인할 수 있는 사람에게만 — 다른 직원에게 보여도 눌러 들어갈 수 없다.
+  // 배지는 승인할 수 있는 사람에게만 — 임직원에게 보여도 눌러 들어갈 수 없다.
+  // canApproveAccess 는 이제 관리자 명단(ADMIN_EMAILS)과 같은 목록을 본다.
   const mayApprove = canApproveAccess(user.email);
   const { pending, unnotified } = mayApprove
     ? await countPending().catch(() => ({ pending: 0, unnotified: 0 }))
@@ -64,7 +68,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
         <div className="flex items-center gap-3 text-sm text-spark-muted">
           <LanguageSwitcher />
-          <span className="hidden md:inline px-2 py-0.5 rounded-md bg-spark-subtle border border-spark-border text-[11px] font-semibold tracking-wide text-spark-ink-soft">{user.role === 'ADMIN' ? '🔒 INTERNAL' : `👁 ${t('열람 전용')}`}</span>
+          {/* 지금 내가 무엇을 할 수 있는 상태인지 한눈에 보이게 한다.
+              예전에는 사내 계정이면 전부 '🔒 INTERNAL' 하나로 나와 관리자와 임직원이
+              구분되지 않았다. 권한이 바뀌면(ADMIN_EMAILS 에서 빠지면) 이 배지가 먼저 바뀐다. */}
+          <span
+            className={`hidden md:inline px-2 py-0.5 rounded-md border text-[11px] font-semibold tracking-wide ${badge.tone}`}
+            title={t('계정 등급')}
+          >
+            {badge.icon} {badgeLabel}
+          </span>
           <span className="hidden md:inline text-[13px]">{user.email}</span>
           <div className="w-7 h-7 rounded-full bg-spark-purple text-white grid place-items-center text-xs font-bold">{initial}</div>
           <SignOutButton />

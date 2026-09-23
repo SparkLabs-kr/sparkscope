@@ -1,32 +1,13 @@
-// NextAuth 설정 — 이메일 매직 링크, 도메인 화이트리스트
+// NextAuth 설정 — 사내는 Google 1탭, 포트폴리오사는 메일 매직 링크.
 import type { NextAuthOptions } from 'next-auth';
 import EmailProvider from 'next-auth/providers/email';
+import GoogleProvider from 'next-auth/providers/google';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import { prisma } from '@/lib/prisma';
+import { isStaffEmail, primaryStaffDomain } from '@/lib/roles';
 
-/**
- * 사내 도메인 목록. 여러 오피스를 쉼표로 넣는다(예전 단수형 이름도 계속 읽는다).
- *
- * ⚠️ 이 목록에 도메인을 넣는 것은 "그 도메인 메일이면 누구나 관리자"라는 뜻이다.
- * 우리가 실제로 통제하는 회사 도메인만 넣는다. gmail.com 같은 공용 도메인은 절대 안 된다.
- */
-const STAFF_EMAIL_DOMAINS: string[] = (
-  process.env.ALLOWED_EMAIL_DOMAINS ??
-  process.env.ALLOWED_EMAIL_DOMAIN ??
-  'sparklabs.co.kr'
-)
-  .split(',')
-  .map(d => d.trim().toLowerCase().replace(/^@/, ''))
-  .filter(Boolean);
-
-/**
- * 사내 계정인가 — 도메인만으로 판단한다.
- * '@'를 붙여 비교하는 것이 중요하다. 빼면 notsparklabs.co.kr 같은 남의 도메인이 통과한다.
- */
-export function isStaffEmail(email: string): boolean {
-  const addr = email.trim().toLowerCase();
-  return STAFF_EMAIL_DOMAINS.some(d => addr.endsWith(`@${d}`));
-}
+// 도메인 판정은 roles.ts 한 곳에 있다. 예전 import 경로를 쓰는 곳이 있어 다시 내보낸다.
+export { isStaffEmail };
 
 /**
  * 로그인할 수 있는가.
@@ -103,12 +84,53 @@ emailProvider.sendVerificationRequest = async params => {
   await defaultSendVerification(params);
 };
 
+/**
+ * Google 로그인은 환경변수가 있을 때만 켠다.
+ *
+ * 무조건 등록하면 키가 없는 환경(로컬·프리뷰)에서 버튼은 보이는데 누르면 설정 오류로
+ * 떨어진다. 없으면 아예 없는 편이 낫다 — 로그인 화면도 이 값을 보고 버튼을 감춘다.
+ */
+export const GOOGLE_ENABLED = Boolean(
+  process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
+);
+
+const googleProvider = GOOGLE_ENABLED
+  ? [
+      GoogleProvider({
+        clientId: process.env.GOOGLE_CLIENT_ID!,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+        authorization: {
+          params: {
+            /**
+             * hd 는 계정 선택 화면에 회사 계정을 먼저 보여 주는 힌트일 뿐,
+             * 보안 경계가 아니다. 개인 지메일로도 콜백까지는 올 수 있으므로
+             * 아래 signIn 콜백에서 도메인을 반드시 다시 검사한다.
+             */
+            hd: primaryStaffDomain(),
+            // 계정이 여러 개인 사람이 엉뚱한 계정으로 자동 로그인되는 것을 막는다.
+            prompt: 'select_account',
+          },
+        },
+        /**
+         * 이미 메일 로그인으로 만들어진 User 행에 구글 계정을 이어 붙인다.
+         * 켜지 않으면 기존 사내 계정이 전부 OAuthAccountNotLinked 로 튕긴다.
+         * 구글이 이메일 소유를 검증해 주고 우리는 사내 도메인만 받으므로,
+         * 이 연결로 계정이 탈취되는 경로는 없다.
+         */
+        allowDangerousEmailAccountLinking: true,
+      }),
+    ]
+  : [];
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
-  providers: [emailProvider],
+  providers: [...googleProvider, emailProvider],
   callbacks: {
-    async signIn({ user }) {
+    async signIn({ user, account }) {
       if (!user.email) return false;
+      // 구글로 들어오는 길은 사내 계정 전용이다. hd 는 힌트라 개인 지메일도
+      // 여기까지 올 수 있으므로 도메인을 실제로 확인한다.
+      if (account?.provider === 'google' && !isStaffEmail(user.email)) return false;
       return canSignIn(user.email);
     },
     async session({ session, user }) {
@@ -124,5 +146,16 @@ export const authOptions: NextAuthOptions = {
     // 알 수 없다. 매직 링크는 한 번 쓰면 소진되므로 이 화면을 제일 자주 만난다.
     error: '/login',
   },
-  session: { strategy: 'database' },
+  session: {
+    strategy: 'database',
+    /**
+     * 90일 유지, 하루 한 번 연장(sliding).
+     *
+     * 기본값은 30일 고정이라 한 달마다 전원이 다시 로그인해야 했다. updateAge 를 두면
+     * 방문할 때마다 만료가 미뤄져 상시 사용자는 사실상 재로그인이 없다.
+     * 매 요청마다 갱신하지 않는 것은 Session 행에 쓰기가 몰리는 것을 피하기 위해서다.
+     */
+    maxAge: 90 * 24 * 60 * 60,
+    updateAge: 24 * 60 * 60,
+  },
 };

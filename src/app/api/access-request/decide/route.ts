@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/authz';
+import { isStaffEmail } from '@/lib/roles';
 import { getRequest, markDecided, canApproveAccess, accessApprovers } from '@/lib/sparkscope/access-request';
 import { sendNotice } from '@/lib/sparkscope/mailer';
 
@@ -72,12 +73,10 @@ export async function POST(req: NextRequest) {
   });
   if (!company) return NextResponse.json({ error: 'unknown_company' }, { status: 400 });
 
-  const existing = await prisma.user.findUnique({
-    where: { email: request.email },
-    select: { id: true, role: true },
-  });
   // 사내 계정으로 이미 있는 주소를 포트폴리오사로 덮어쓰지 않는다.
-  if (existing?.role === 'ADMIN') {
+  // role 이 아니라 메일 도메인으로 본다 — 사내 계정의 role 은 이제 ADMIN 일 수도
+  // STAFF 일 수도 있고, 옛 데이터에는 전부 ADMIN 으로 적혀 있다.
+  if (isStaffEmail(request.email)) {
     return NextResponse.json({ error: 'already_staff' }, { status: 409 });
   }
 

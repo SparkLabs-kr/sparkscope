@@ -8,6 +8,22 @@
  * 기사 제목·AI 요약 문장·회사명처럼 DB/AI에서 오는 값은 번역 대상이 아니다(원문 그대로 노출).
  */
 export const EN: Record<string, string> = {
+  // ── 포트폴리오사 화면 · 업계 동향 (2026-09-23) ────────────────────
+  '업계 동향': 'Across the portfolio',
+  '다른 포트폴리오사 · 최근 30일': 'Other portfolio companies · last 30 days',
+  '스파크랩 포트폴리오사 보도입니다. 기사 원문으로 연결됩니다.':
+    'Coverage of SparkLabs portfolio companies. Links open the original article.',
+  '최근 30일 동안 수집된 보도가 없습니다.': 'No coverage collected in the last 30 days.',
+  // ── 로그인 · 계정 등급 (2026-09-22 재설계) ────────────────────────
+  '관리자 로그인': 'Admin sign-in',
+  'Google 계정으로 로그인합니다': 'Sign in with your Google account',
+  '계정 등급': 'Account role',
+  '관리자 권한이 없는 계정입니다': 'This account does not have admin access',
+  '임직원으로는 로그인할 수 있습니다. 권한이 필요하면 커뮤니케이션본부에 요청하세요.':
+    'You can still sign in as staff. Ask the communications team if you need admin access.',
+  '이 메일 주소로는 로그인할 수 없습니다. 스파크랩 계정이거나, 승인된 포트폴리오사 계정이어야 합니다.':
+    'This email cannot sign in. Use a SparkLabs account, or an approved portfolio company account.',
+  '로그인에 실패했습니다. 다시 시도해 주세요.': 'Sign-in failed. Please try again.',
   // ── 공통 / 레이아웃 ────────────────────────────────────────────────
   'SparkScope · 스파크랩 미디어 인사이트': 'SparkScope · SparkLabs Media Intelligence',
   '스파크랩 커뮤니케이션 본부 전용 뉴스 모니터링 시스템': 'News monitoring system for the SparkLabs communications team',

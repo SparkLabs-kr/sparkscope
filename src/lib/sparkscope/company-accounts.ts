@@ -11,6 +11,7 @@
  *    때도 승인 이력이 남아 있는 편이 낫다.
  */
 import { prisma } from '@/lib/prisma';
+import { isStaffEmail } from '@/lib/roles';
 
 export type CompanyAccount = {
   id: string;
@@ -64,7 +65,9 @@ export async function deactivateCompanyAccount(
   });
   if (!user) return { ok: false, reason: 'not_found' };
   // 사내 계정을 여기서 끄면 대시보드에서 스스로를 잠글 수 있다.
-  if (user.role === 'ADMIN') return { ok: false, reason: 'is_staff' };
+  // DB 의 role 이 아니라 메일 도메인으로 판정한다 — 옛 데이터에는 모든 사내 계정이
+  // ADMIN 으로 적혀 있고, 앞으로는 STAFF 도 생기므로 role 만 봐서는 사내인지 알 수 없다.
+  if (isStaffEmail(user.email)) return { ok: false, reason: 'is_staff' };
 
   await prisma.session.deleteMany({ where: { userId: user.id } });
   await prisma.verificationToken.deleteMany({ where: { identifier: user.email } });
@@ -84,7 +87,7 @@ export async function reactivateCompanyAccount(
     select: { id: true, email: true, role: true },
   });
   if (!user) return { ok: false, reason: 'not_found' };
-  if (user.role === 'ADMIN') return { ok: false, reason: 'is_staff' };
+  if (isStaffEmail(user.email)) return { ok: false, reason: 'is_staff' };
   await prisma.user.update({
     where: { id: user.id },
     data: { active: true, deactivatedAt: null },

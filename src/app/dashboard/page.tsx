@@ -911,9 +911,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     ? await prisma.noiseReportRequest.count({ where: { status: 'PENDING' } }).catch(() => 0)
     : 0;
   const userId = (session?.user as any)?.id as string | undefined;
-  // 포트폴리오사 계정은 열람 전용 — 북마크·노이즈 신고 요청 모두 쓰기다.
-  // (해당 API 도 requireAdmin 으로 막혀 있어, 버튼만 보이면 눌러도 실패한다.)
-  const isStaffAccount = (await getSessionUser())?.role === 'ADMIN';
+  const sessionUser = await getSessionUser();
+  // 사내 계정(관리자·임직원)인가 — 북마크·노이즈 신고 요청은 쓰기라 사내만 한다.
+  // (해당 API 도 requireInternal 로 막혀 있어, 버튼만 보이면 눌러도 실패한다.)
+  const isStaffAccount = sessionUser?.role !== 'PORTFOLIO';
+  // 관리 화면 링크는 관리자에게만. 임직원에게 보여 줘도 들어가면 403 이라
+  // "보이는데 안 되는" 상태가 되고, 그게 아예 안 보이는 것보다 나쁘다.
+  const isAdmin = sessionUser?.role === 'ADMIN';
   const canBookmark = !!userId && isStaffAccount;
   // 관리자는 즉시 처리(NoiseReportButton)가 있으니, 신고 "요청" 버튼은 로그인한 비관리자에게만.
   const canRequestReport = canBookmark && !canScrap;
@@ -1056,8 +1060,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           {canScrap && <Link href="/dashboard/scraps" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⭐ {tr('스크랩함')}</Link>}
           {canBookmark && <Link href="/dashboard/bookmarks" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔖 {tr('내 북마크')}</Link>}
           <Link href="/dashboard/subscriptions" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">✉️ {tr('구독 설정')}</Link>
-          {canScrap && <Link href="/dashboard/keywords" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⚙️ {tr('키워드 관리')}</Link>}
-          {canScrap && <Link href="/dashboard/noise-suggestions" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔍 {tr('노이즈 제안')}{(pendingSuggestionCount + pendingReportCount) > 0 ? ` (${pendingSuggestionCount + pendingReportCount})` : ''}</Link>}
+          {isAdmin && <Link href="/dashboard/keywords" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⚙️ {tr('키워드 관리')}</Link>}
+          {isAdmin && <Link href="/dashboard/noise-suggestions" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔍 {tr('노이즈 제안')}{(pendingSuggestionCount + pendingReportCount) > 0 ? ` (${pendingSuggestionCount + pendingReportCount})` : ''}</Link>}
         </div>
       </div>
 
