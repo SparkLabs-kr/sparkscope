@@ -73,7 +73,9 @@ function TitleOnlyBadge({ t }: { t: Translate }) {
   );
 }
 
-export function ArticlesTable({ articles, canScrap = false, canBookmark = false, canReport = false, canRequestReport = false, emptyText, showCategoryColumn = true, showKeywordColumn = false }: { articles: Article[]; canScrap?: boolean; canBookmark?: boolean; canReport?: boolean; canRequestReport?: boolean; emptyText?: string; showCategoryColumn?: boolean; showKeywordColumn?: boolean }) {
+// showPitchColumn: 피칭 점수는 본부의 영업 판단이라 포트폴리오사 화면에서는 끈다.
+// 끄지 않으면 값이 늘 '—'인 빈 칸만 남아, 무엇을 숨기고 있는지가 오히려 드러난다.
+export function ArticlesTable({ articles, canScrap = false, canBookmark = false, canReport = false, canRequestReport = false, emptyText, showCategoryColumn = true, showKeywordColumn = false, showPitchColumn = true }: { articles: Article[]; canScrap?: boolean; canBookmark?: boolean; canReport?: boolean; canRequestReport?: boolean; emptyText?: string; showCategoryColumn?: boolean; showKeywordColumn?: boolean; showPitchColumn?: boolean }) {
   const t = useT();
   const locale = useLocale();
   if (articles.length === 0) {
@@ -118,7 +120,7 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
               <th className="text-left px-3 py-2">{t('제목')}</th>
               <th className="text-left px-3 py-2 w-28">{t('매체')}</th>
               <th className="text-center px-3 py-2 w-16">{t('중요도')}</th>
-              <th className="text-center px-3 py-2 w-16">{t('피칭')}</th>
+              {showPitchColumn && <th className="text-center px-3 py-2 w-16">{t('피칭')}</th>}
               {(canReport || canRequestReport) && <th className="text-center px-2 py-2 w-8 border-l border-spark-border" title={canReport ? t('노이즈 신고(관리자)') : t('노이즈 신고 요청')}>🚫</th>}
             </tr>
           </thead>
@@ -174,7 +176,7 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
                   </td>
                   <td className="px-3 py-3 text-xs text-gray-600">{t(a.source)}{others.length > 0 && ` ${t('외 {n}', { n: others.length })}`}</td>
                   <td className={`px-3 py-3 text-center text-xs ${IMP_STYLE[a.importance ?? 'LOW']}`}>{a.importance === 'HIGH' || a.importance === 'CRITICAL' ? t('높음') : a.importance === 'MEDIUM' ? t('중') : t('낮음')}</td>
-                  <td className="px-3 py-3 text-center text-xs font-bold text-amber-700">{a.pitchScore && a.pitchScore >= 60 ? a.pitchScore : '—'}</td>
+                  {showPitchColumn && <td className="px-3 py-3 text-center text-xs font-bold text-amber-700">{a.pitchScore && a.pitchScore >= 60 ? a.pitchScore : '—'}</td>}
                   {(canReport || canRequestReport) && (
                     <td className="px-2 py-3 text-center border-l border-spark-border">
                       {canReport ? <NoiseReportButton id={a.id} initial={!!a.isNoise} /> : <NoiseReportRequestButton id={a.id} />}
@@ -257,7 +259,7 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
                 <span className="truncate">{t(a.source)}{others.length > 0 && ` ${t('외 {n}', { n: others.length })}`}</span>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
                   {(a.importance === 'HIGH' || a.importance === 'CRITICAL') && <span className={IMP_STYLE[a.importance]}>{t('높')}</span>}
-                  {a.pitchScore && a.pitchScore >= 60 && <span className="text-amber-700 font-bold">{t('{n}점', { n: a.pitchScore })}</span>}
+                  {showPitchColumn && a.pitchScore && a.pitchScore >= 60 && <span className="text-amber-700 font-bold">{t('{n}점', { n: a.pitchScore })}</span>}
                   {(canReport || canRequestReport) && (
                     <span className="pl-1.5 ml-0.5 border-l border-spark-border">
                       {canReport ? <NoiseReportButton id={a.id} initial={!!a.isNoise} /> : <NoiseReportRequestButton id={a.id} />}

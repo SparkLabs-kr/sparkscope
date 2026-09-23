@@ -55,8 +55,10 @@ function csvCell(v: string): string {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export function ArticleListView({ articles, canScrap = false, canBookmark = false, canReport = false, canRequestReport = false, emptyText, showSearch = false, showCategory = false, csvName = 'sparkscope' }: {
+export function ArticleListView({ articles, canScrap = false, canBookmark = false, canReport = false, canRequestReport = false, emptyText, showSearch = false, showCategory = false, csvName = 'sparkscope', showPitchColumn = true }: {
   articles: Article[];
+  /** 피칭 점수 열 표시 여부. 포트폴리오사 화면은 끈다. */
+  showPitchColumn?: boolean;
   canScrap?: boolean;
   canBookmark?: boolean;
   canReport?: boolean;
@@ -197,6 +199,7 @@ export function ArticleListView({ articles, canScrap = false, canBookmark = fals
         canRequestReport={canRequestReport}
         showCategoryColumn={!cat}
         showKeywordColumn={cat === 'competitor' || cat === 'industry_trend'}
+        showPitchColumn={showPitchColumn}
         emptyText={showSearch && q.trim() ? t('‘{q}’에 맞는 기사가 없습니다.', { q: q.trim() }) : emptyText}
       />
     </div>
