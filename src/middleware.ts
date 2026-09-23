@@ -32,14 +32,15 @@ const PUBLIC_API = ['/api/auth', '/api/cron', '/api/partner'];
 
 /**
  * 로그인 없이 부를 수 있는 정확한 경로. 접두사가 아니라 완전 일치다 —
- * '/api/access-request' 를 PUBLIC_API 에 넣으면 하위의
- * '/api/access-request/decide'(승인 API)까지 같이 열려 버린다.
+ * 접두사로 열면 하위 경로까지 같이 열린다. 예전에 '/api/access-request'(접수)를
+ * 여기 두었는데, 접두사였다면 '/api/access-request/decide'(승인)까지 열릴 뻔했다.
+ * 접수 API 는 2026-09-23에 지웠고 승인 API 만 남아 있다(관리자 전용).
  *
  * '/api/subscription' 이 열려 있어야 하는 이유: 다이제스트 수신자 대부분은 로그인 계정이
  * 없고, 메일 푸터의 토큰 링크로 구독을 바꾼다. 토큰을 모르면 아무 행도 못 건드리므로
  * (라우트가 token 또는 세션으로 자기 행 하나만 찾는다) 열어 둬도 남의 설정은 못 바꾼다.
  */
-const PUBLIC_API_EXACT = ['/api/access-request', '/api/session-reset', '/api/subscription'];
+const PUBLIC_API_EXACT = ['/api/session-reset', '/api/subscription'];
 
 const SESSION_COOKIES = ['next-auth.session-token', '__Secure-next-auth.session-token'];
 

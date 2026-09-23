@@ -16,8 +16,6 @@ import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useT } from '@/lib/i18n/client';
 
-type Mode = 'company' | null;
-
 /** 구글 로고 — 브랜드 가이드상 색을 임의로 바꾸지 않는다. */
 function GoogleMark() {
   return (
@@ -42,10 +40,6 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
 function LoginFormInner({ googleEnabled }: { googleEnabled: boolean }) {
   const t = useT();
   const params = useSearchParams();
-  // 화면에는 버튼이 없지만, /login?mode=company 로 들어오면 포트폴리오사 폼이 열린다.
-  // 지원할 때 링크 하나로 안내할 수 있게 남겨 둔 통로다.
-  const [mode, setMode] = useState<Mode>(null);
-  const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const checkEmail = params.get('check') === 'email';
   // NextAuth가 실패를 ?error=로 실어 보낸다. 가장 흔한 건 Verification —
@@ -104,61 +98,6 @@ function LoginFormInner({ googleEnabled }: { googleEnabled: boolean }) {
       </p>
     </div>
   ) : null;
-
-  // ── 포트폴리오사: 메일 입력 화면 ───────────────────────────────
-  if (mode === 'company' || params.get('mode') === 'company') {
-    return (
-      <form
-        onSubmit={async e => {
-          e.preventDefault();
-          setSubmitting(true);
-          await signIn('email', { email, callbackUrl: '/portfolio' });
-        }}
-        className="max-w-md w-full"
-      >
-        <div className="text-xs font-bold tracking-wider text-spark-purple mb-2 text-center">SPARKSCOPE</div>
-        <h1 className="text-2xl font-bold mb-1 text-center">{t('포트폴리오사 로그인')}</h1>
-        <p className="text-sm text-gray-600 mb-6 text-center">
-          {t('이메일을 입력하면 로그인 링크를 보내드립니다')}
-        </p>
-
-        {errorBanner}
-
-        <input
-          id="login-email"
-          type="email"
-          required
-          autoFocus
-          placeholder="name@company.com"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          className="w-full px-4 py-3 border border-gray-200 rounded-lg mb-3 focus:outline-none focus:border-spark-purple"
-        />
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full py-3 bg-spark-purple text-white font-semibold rounded-lg hover:opacity-90 disabled:opacity-50"
-        >
-          {submitting ? t('전송 중...') : t('로그인 링크 받기')}
-        </button>
-
-        <p className="mt-4 text-center text-[12.5px] text-gray-500">
-          {t('아직 승인받지 못하셨나요?')}{' '}
-          <a href="/request-access" className="text-spark-purple font-semibold hover:underline">
-            {t('접근 요청하기')}
-          </a>
-        </p>
-
-        {/* 쿼리(?mode=company)까지 지워야 한다 — state 만 되돌리면 같은 폼이 다시 열린다. */}
-        <a
-          href="/login"
-          className="mt-5 block w-full text-center text-[12.5px] text-gray-400 hover:text-spark-purple"
-        >
-          ← {t('다른 방법으로 로그인')}
-        </a>
-      </form>
-    );
-  }
 
   // ── 첫 화면: 어느 길인지 고른다 ────────────────────────────────
   /**
@@ -225,10 +164,11 @@ function LoginFormInner({ googleEnabled }: { googleEnabled: boolean }) {
           </>
         )}
 
-        {/* 포트폴리오사 입구와 접근 요청 버튼은 2026-09-23에 화면에서 뺐다.
-            그쪽 로그인 방식을 다시 정하기로 해서, 정해지기 전까지 안내하지 않는다.
-            기능 자체는 살아 있다 — /login?mode=company 와 /request-access 로
-            여전히 닿을 수 있어서, 이미 계정을 받은 대표가 완전히 막히지는 않는다. */}
+        {/* 로그인 화면은 사내 두 입구뿐이다.
+            포트폴리오사 입구와 접근 요청 화면은 2026-09-23에 지웠다 — 방식을 다시
+            정하기로 했고, 그 시점에 실제 포트폴리오사 계정도 접근 요청도 0건이라
+            막히는 사람이 없었다. 되살릴 때는 이 자리에 버튼을 다시 놓으면 된다.
+            승인·계정 발급 쪽(/dashboard/accounts)은 그대로 살아 있다. */}
         {!googleEnabled && (
           <p className="rounded-xl border border-dashed border-gray-300 px-4 py-5 text-center text-[13px] text-gray-500">
             {t('지금은 로그인할 수 없습니다. 담당자에게 문의해 주세요.')}
