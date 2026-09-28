@@ -27,7 +27,25 @@ const norm = (s: string) =>
   s.replace(/<[^>]*>/g, '').replace(/&[a-z]+;|&#\d+;/g, ' ')
     .replace(/[^0-9a-zA-Z가-힣]/g, '').toLowerCase();
 
-/** 구글 뉴스가 제목 끝에 붙이는 " - 매체명"을 뗀다. 검색어로 쓰면 결과가 줄어든다. */
+/**
+ * 검색어 다듬기.
+ *
+ * 제목을 그대로 넣으면 결과가 0건인 경우가 많다. 구글 뉴스가 붙인 " - 매체명",
+ * 매체가 붙인 말머리 "[빅데이터로본다]", 끝의 분류 " : 정치" 같은 것이 검색어에
+ * 섞이면 네이버가 그 문자열까지 찾으려 든다. 실측으로 하나씩 확인해 뺐다
+ * (2026-09-28: 원본 0건 → 정리 후 5건이 된 사례).
+ *
+ * 앞 여덟 낱말만 쓴다 — 긴 제목을 통째로 넣으면 부제까지 맞아야 해서 다시 0건이 된다.
+ */
+const cleanQuery = (t: string) => t
+  .replace(/\s*-\s*[^-]{2,14}$/, '')
+  .replace(/\s*:\s*[가-힣]{2,4}$/, '')
+  .replace(/^\s*\[[^\]]{1,20}\]\s*/, '')
+  .replace(/[…·]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .split(' ').slice(0, 8).join(' ');
+
 const stripOutlet = (t: string) => t.replace(/\s*-\s*[^-]{2,14}$/, '');
 
 export const isGoogleRelayLink = (link: string) =>
@@ -35,7 +53,7 @@ export const isGoogleRelayLink = (link: string) =>
 
 /** 네이버 뉴스 검색 결과 페이지 — 원문을 못 찾았을 때 보내는 곳. */
 export const naverSearchUrl = (title: string) =>
-  `https://search.naver.com/search.naver?where=news&query=${encodeURIComponent(stripOutlet(title).slice(0, 60))}`;
+  `https://search.naver.com/search.naver?where=news&query=${encodeURIComponent(cleanQuery(title))}`;
 
 async function search(title: string): Promise<{ title: string; url: string }[]> {
   const res = await fetch(naverSearchUrl(title), {
@@ -89,11 +107,33 @@ export type NaverResult =
   | { status: 'throttled' };
 
 export async function lookupViaNaver(title: string): Promise<NaverResult> {
+  // 한글이 없는 제목은 네이버 뉴스에 없다. 요청을 아끼고 바로 넘긴다 —
+  // 미국 지역방송(WFAA "Storm Timecast")·대만 매체(LINE TODAY)가 여기 해당한다.
+  if (!/[가-힣]/.test(title)) return { status: 'nomatch' };
+
   const hits = await search(title).catch(() => []);
-  if (hits.length === 0) return { status: 'throttled' };
-  const want = norm(stripOutlet(title));
-  const hit = hits.find(h => sameArticle(want, h.title));
-  return hit ? { status: 'found', url: hit.url } : { status: 'nomatch' };
+  if (hits.length > 0) {
+    const want = norm(stripOutlet(title));
+    const hit = hits.find(h => sameArticle(want, h.title));
+    return hit ? { status: 'found', url: hit.url } : { status: 'nomatch' };
+  }
+
+  // 0건이 나왔다. 속도 제한인지, 진짜로 없는 기사인지 갈라야 한다.
+  //
+  // 처음에는 "0건 = 속도 제한"으로 봤는데 틀렸다(2026-09-28). 작은 매체나 외국
+  // 매체 기사는 네이버가 아예 색인하지 않아서 정상 응답으로도 0건이 나온다
+  // (일간투데이·동북일보·Jkn 등). 그걸 속도 제한으로 오해하면 일괄 작업이
+  // 멀쩡한 상태에서 멈춘다.
+  //
+  // 그래서 확실히 결과가 나오는 말로 한 번 물어본다. 그것도 0건이면 우리가 막힌
+  // 것이고, 결과가 나오면 아까 0건은 진짜 없는 기사다.
+  return (await canaryOk()) ? { status: 'nomatch' } : { status: 'throttled' };
+}
+
+/** 반드시 결과가 있는 검색어. 응답이 정상인지 확인하는 용도다. */
+async function canaryOk(): Promise<boolean> {
+  const hits = await search('스파크랩').catch(() => []);
+  return hits.length > 0;
 }
 
 /** 주소만 필요할 때. 속도 제한과 불일치를 구분하지 않는다. */
