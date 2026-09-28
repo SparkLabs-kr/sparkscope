@@ -130,10 +130,21 @@ export async function lookupViaNaver(title: string): Promise<NaverResult> {
   return (await canaryOk()) ? { status: 'nomatch' } : { status: 'throttled' };
 }
 
-/** 반드시 결과가 있는 검색어. 응답이 정상인지 확인하는 용도다. */
+/**
+ * 응답이 정상인지 확인하는 검색어. '스파크랩'은 평소 20건 남짓 나온다.
+ *
+ * 있고 없고로 보면 안 된다(2026-09-28). 네이버는 요청이 쌓이면 아예 막는 대신
+ * **결과 수를 줄여서** 준다 — 평소 22건이던 카나리아가 1건으로 떨어졌다. 그 상태에서는
+ * 우리가 찾는 기사가 목록에 없으니 전부 "같은 기사 못 찾음"으로 기록되는데, 실제로는
+ * 우리가 제한에 걸린 것이다. 700건 일괄 작업이 475건째부터 복구를 멈춘 것이 이것이었다.
+ *
+ * 그래서 넉넉한 수가 돌아오는지를 본다. 3건 미만이면 정상 응답으로 보지 않는다.
+ */
+const CANARY_MIN_HITS = 3;
+
 async function canaryOk(): Promise<boolean> {
   const hits = await search('스파크랩').catch(() => []);
-  return hits.length > 0;
+  return hits.length >= CANARY_MIN_HITS;
 }
 
 /** 주소만 필요할 때. 속도 제한과 불일치를 구분하지 않는다. */
