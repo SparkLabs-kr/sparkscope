@@ -20,6 +20,7 @@ import { FEEDS, INDICATOR_FEEDS, DOMAIN_KEYWORDS, type Feed } from './news-feeds
 import { scoreImportance, type Importance, type Verdict } from './news-importance';
 import { groupSameStory, differentVersions } from './news-cluster';
 import { collectPopular, BROWSER_HEADERS } from './news-popular';
+import { resolveGoogleNewsUrls } from './google-news-resolver';
 import { readPopular, savePopular } from './news-popular-store';
 import { extractTrendKeywords, type TrendKeyword } from './news-keywords';
 import { corroborate } from './news-corroborate';
@@ -326,6 +327,71 @@ function tokens(title: string): Set<string> {
  * 1위 카드에 남의 기사 원문이 달리는 사고가 난다(2026-09-11에 겪었다). 못 찾으면
  * 그 항목을 뺀다 — 열리지 않는 링크를 남겨 두는 것보다 낫다.
  */
+
+/**
+ * 구글 뉴스 중계주소를 진짜 기사 주소로 바꾼다.
+ *
+ * 우리 피드 중 몇 곳은 구글 뉴스 검색 결과를 받는다(Reuters 등). 그 링크는
+ * news.google.com/rss/articles/CBMi… 형태의 중계주소인데, 토큰이 살아 있는 동안에만
+ * 기사로 넘어가고 만료되면 구글 화면이 뜬다 — "원문 보기를 눌렀더니 기사가 아니라
+ * 구글 검색창"이라는 신고가 이것이었다(2026-09-17). 서버에서 받아 보면 200이라
+ * 링크 점검으로는 안 잡힌다. 그래서 만료를 기다리지 않고 미리 풀어 둔다.
+ *
+ * 해석기는 이미 있다(google-news-resolver.ts). 메일 쪽은 발송 직전에 쓰고 있었는데
+ * (digest-links.ts) 인터 탭 경로는 쓰지 않아 중계주소가 그대로 화면에 나갔다.
+ * 2026-09-28 실측: 화면에 뜬 링크 161건 중 35건이 중계주소였다.
+ *
+ * URL 단위로 캐시한다. 구글은 한 번에 100건쯤부터 막으므로(digest-links.ts 주석)
+ * 매 회차 35건씩 다시 푸는 것은 차단을 부르고 낭비다. 캐시에 없는 것만 푼다.
+ */
+const GNEWS_KIND = 'gnews_url';
+/**
+ * 한 회차에 새로 풀 개수. 작게 잡는다.
+ *
+ * 구글은 짧은 시간에 몰아 부르면 막는다. 2026-09-28에 12건을 풀고 곧바로 사전계산
+ * (도메인 2 × 기간 3 = 여섯 번)을 돌렸더니 첫 묶음부터 0/6으로 전부 실패했고,
+ * 해석기가 스스로 "연속 실패 — 차단으로 보고 중단"을 찍었다. 상한을 한 회차 기준으로만
+ * 두면 여섯 번이 곱해져서 의미가 없다. 그래서 프로세스 전체 예산을 따로 둔다.
+ *
+ * 한 번 푼 주소는 캐시에 남으므로 서두를 이유가 없다. 매시간 8건이면 하루 190건이고,
+ * 화면에 새로 올라오는 중계주소(하루 30여 건)보다 넉넉하다.
+ */
+const GNEWS_MAX_PER_RUN = 8;
+const GNEWS_MAX_PER_PROCESS = 16;
+let gnewsBudget = GNEWS_MAX_PER_PROCESS;
+const isGoogleRelay = (u: string) => u.includes('news.google.com/rss/articles');
+
+async function resolveRelayLinks(urls: string[]): Promise<Map<string, string>> {
+  const targets = [...new Set(urls.filter(isGoogleRelay))];
+  if (targets.length === 0) return new Map();
+
+  const rows = await prisma.dashboardInsight.findMany({
+    where: { kind: GNEWS_KIND, key: { in: targets } },
+    select: { key: true, value: true },
+  }).catch(() => [] as { key: string; value: string }[]);
+  const out = new Map<string, string>(rows.map(r => [r.key, r.value]));
+
+  const todo = targets
+    .filter(u => !out.has(u))
+    .slice(0, Math.max(0, Math.min(GNEWS_MAX_PER_RUN, gnewsBudget)));
+  gnewsBudget -= todo.length;
+  if (todo.length > 0) {
+    const fresh = await resolveGoogleNewsUrls(todo).catch(e => {
+      console.error('[news-digest] 구글 링크 해석 실패(무시):', e);
+      return new Map<string, string>();
+    });
+    for (const [k, v] of fresh) out.set(k, v);
+    console.log(`[news-digest] 구글 중계주소 해석 ${fresh.size}/${todo.length}건 (캐시 ${rows.length}건)`);
+    await Promise.all([...fresh].map(([key, value]) =>
+      prisma.dashboardInsight.upsert({
+        where: { kind_key: { kind: GNEWS_KIND, key } },
+        create: { kind: GNEWS_KIND, key, value },
+        update: { value },
+      }).catch(() => {})));
+  }
+  return out;
+}
+
 const DEAD_LINK_TIMEOUT_MS = 6_000;
 
 async function linkStatus(url: string): Promise<number> {
@@ -1010,14 +1076,44 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
     return [] as TrendKeyword[];
   });
 
-  const alive = await dropDeadLinks(ranked).catch(e => {
-    console.error('[news-digest] 링크 점검 실패(무시):', e);
-    return ranked;
+  // 화면에 나가는 링크 손질 — 순서가 있다. 먼저 구글 중계주소를 진짜 주소로 바꾸고
+  // (그래야 죽은 링크 점검이 진짜 주소를 본다), 그다음 열리지 않는 것을 걸러낸다.
+  const relay = await resolveRelayLinks([
+    ...ranked.map(it => it.url),
+    ...ranked.flatMap(it => it.alsoIn.map(a => a.url)),
+    ...keywords.map(k => k.url),
+  ]).catch(e => {
+    console.error('[news-digest] 구글 링크 해석 실패(무시):', e);
+    return new Map<string, string>();
   });
+  const unwrap = (u: string) => relay.get(u) ?? u;
+
+  const resolved = ranked.map(it => ({
+    ...it,
+    url: unwrap(it.url),
+    alsoIn: it.alsoIn.map(a => ({ ...a, url: unwrap(a.url) })),
+  }));
+
+  const alive = await dropDeadLinks(resolved).catch(e => {
+    console.error('[news-digest] 링크 점검 실패(무시):', e);
+    return resolved;
+  });
+
+  // 키워드 칩도 같은 손질을 받는다 — 칩이 가리키는 주소가 죽어 있으면 목록에서는
+  // 사라진 기사를 칩만 계속 가리킨다(2026-09-28에 AlphaSignal 건으로 확인).
+  const liveUrls = new Set(alive.map(it => it.url));
+  const droppedUrls = new Set(
+    resolved.filter(it => !liveUrls.has(it.url)).map(it => it.url));
+  const swapped = new Map(
+    alive.flatMap(a => { const before = resolved.find(r => r.title === a.title && r.url !== a.url);
+      return before ? [[before.url, a.url] as const] : []; }));
+  const chips = keywords
+    .map(k => { const u = swapped.get(unwrap(k.url)) ?? unwrap(k.url); return { ...k, url: u }; })
+    .filter(k => !droppedUrls.has(k.url));
 
   return {
     items: alive,
     feeds: results.map(r => ({ name: r.feed.name, ok: r.ok, count: r.entries.length })),
-    keywords,
+    keywords: chips,
   };
 }
