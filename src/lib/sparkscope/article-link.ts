@@ -8,8 +8,26 @@ export function hasRealLink(link: string): boolean {
   return true;
 }
 
-// 원문 링크를 못 찾은 백필 기사는 제목+매체로 구글 검색 결과라도 열어준다 (그냥 "링크 없음"보다 낫다).
+/**
+ * 원문 주소를 못 구한 기사를 보낼 곳.
+ *
+ * 한국어 제목이면 네이버 뉴스 검색으로 보낸다. 구글 웹검색은 블로그·쇼핑·커뮤니티가
+ * 섞여 나와서 기사를 다시 찾아야 하는데, 뉴스 검색은 같은 사건을 쓴 기사 목록이
+ * 바로 나오고 대개 첫 줄이 그 기사다. "원문 보기를 눌렀더니 검색창"이라는 불만의
+ * 절반은 여기서 줄어든다(2026-09-28).
+ *
+ * 애초에 여기까지 오는 기사를 줄이는 것이 본 해결이다 — 구글 중계주소는
+ * naver-resolver.ts가 원문 주소로 되돌리고(표본 복구율 84~92%), 이 폴백은 그래도
+ * 못 찾은 나머지를 위한 자리다.
+ *
+ * 매체명을 검색어에 넣지 않는다. 네이버 뉴스 검색은 매체명을 제목의 일부로 보고
+ * 찾으려 들어서 오히려 결과가 줄어든다. 제목만으로 충분하다.
+ */
 export function searchFallbackUrl(title: string, source: string): string {
+  const clean = title.replace(/\s*-\s*[^-]{2,14}$/, '').slice(0, 60);
+  if (/[가-힣]/.test(title)) {
+    return `https://search.naver.com/search.naver?where=news&query=${encodeURIComponent(clean)}`;
+  }
   return `https://www.google.com/search?q=${encodeURIComponent(`${title} ${source}`)}`;
 }
 
