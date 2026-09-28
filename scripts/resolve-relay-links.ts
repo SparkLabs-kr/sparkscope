@@ -12,7 +12,7 @@
  */
 import './_env';
 import { prisma } from '../src/lib/prisma';
-import { resolveViaNaver } from '../src/lib/sparkscope/naver-resolver';
+import { lookupViaNaver } from '../src/lib/sparkscope/naver-resolver';
 
 const arg = (name: string, dflt: number) => {
   const i = process.argv.indexOf(name);
@@ -36,23 +36,45 @@ async function main() {
   });
   console.log(`대상 ${rows.length}건 (최근 ${days}일)${dry ? ' · 저장하지 않음' : ''}`);
 
-  let ok = 0, miss = 0, dup = 0;
+  let ok = 0, miss = 0, dup = 0, throttled = 0, done = 0;
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
   for (const [i, a] of rows.entries()) {
-    const real = await resolveViaNaver(a.title).catch(() => null);
-    if (!real) { miss++; }
-    else if (dry) { ok++; }
+    let r = await lookupViaNaver(a.title).catch(() => ({ status: 'throttled' } as const));
+
+    // 검색 결과가 0건이면 속도 제한으로 본다. 잠깐 쉬고 한 번 더 해 본다 —
+    // 이걸 "그 기사는 없다"로 기록하면 멀쩡한 기사가 영영 안 고쳐진다
+    // (2026-09-28에 500건을 그렇게 날렸다, naver-resolver.ts 주석 참고).
+    if (r.status === 'throttled') {
+      await sleep(20_000);
+      r = await lookupViaNaver(a.title).catch(() => ({ status: 'throttled' } as const));
+      if (r.status === 'throttled') {
+        throttled++;
+        if (throttled >= 3) {
+          console.log(`\n네이버가 계속 빈 결과를 줍니다 — ${done}건까지만 처리하고 멈춥니다.`);
+          console.log('시간을 두고 다시 실행하면 이어서 진행됩니다(이미 고친 것은 대상에서 빠집니다).');
+          break;
+        }
+        continue;
+      }
+      throttled = 0;
+    }
+
+    done++;
+    if (r.status === 'nomatch') miss++;
+    else if (dry) ok++;
     else {
       // link는 unique다. 같은 주소가 이미 있으면 그 기사가 제대로 저장돼 있다는 뜻이라
       // 중복 행을 남기지 않고 넘어간다(digest-links.ts와 같은 처리).
-      try { await prisma.article.update({ where: { id: a.id }, data: { link: real } }); ok++; }
+      try { await prisma.article.update({ where: { id: a.id }, data: { link: r.url } }); ok++; }
       catch { dup++; }
     }
-    if ((i + 1) % 25 === 0) console.log(`  ${i + 1}/${rows.length} — 복구 ${ok} · 실패 ${miss} · 중복 ${dup}`);
-    // 네이버에 부담을 주지 않는 간격. 25건에 약 13초.
-    await new Promise(r => setTimeout(r, 500));
+    if (done % 25 === 0) console.log(`  ${i + 1}/${rows.length} — 복구 ${ok} · 불일치 ${miss} · 중복 ${dup}`);
+    // 0.5초로 돌렸다가 100건쯤부터 전부 빈 결과를 받았다. 1.2초면 안정적이다.
+    await sleep(1_200);
   }
-  const rate = rows.length ? ((ok / rows.length) * 100).toFixed(0) : '0';
-  console.log(`\n복구 ${ok}건 (${rate}%) · 못 찾음 ${miss}건 · 이미 있는 주소 ${dup}건`);
+  const rate = done ? ((ok / done) * 100).toFixed(0) : '0';
+  console.log(`\n처리 ${done}건 — 복구 ${ok}건 (${rate}%) · 같은 기사 못 찾음 ${miss}건 · 이미 있는 주소 ${dup}건`);
   await prisma.$disconnect();
 }
 

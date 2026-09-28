@@ -68,14 +68,36 @@ function sameArticle(want: string, got: string): boolean {
 }
 
 /**
- * 제목으로 원문 주소를 찾는다. 못 찾으면 null.
+ * 제목으로 원문 주소를 찾는다.
  *
- * 네이버 자체 기사 페이지(n.news.naver.com)보다 언론사 원문을 앞에 둔다 —
+ * 세 가지를 구분해서 돌려준다. 이게 중요하다 — "결과가 하나도 없다"와 "찾았는데
+ * 같은 기사가 없다"는 다른 상황인데, 둘을 똑같이 null로 뭉치면 속도 제한에 걸린
+ * 것을 "그 기사는 네이버에 없다"로 잘못 기록한다. 실제로 그렇게 당했다:
+ * 2026-09-28에 0.5초 간격으로 600건을 돌렸더니 앞 100건은 79건 복구됐는데
+ * 그 뒤 500건이 전부 실패로 찍혔다. 같은 기사들을 1.2초 간격으로 다시 돌리니
+ * 12건 중 12건이 복구됐다. 네이버가 막은 게 아니라 우리가 너무 빨랐던 것이다.
+ *
+ * 검색 결과 자체가 0건이면 속도 제한으로 본다. 제목으로 뉴스 검색을 하면 같은
+ * 사건을 쓴 기사가 보통 여러 건 나오므로, 0건은 정상적인 응답이 아니다.
+ *
+ * 언론사 원문을 네이버 자체 기사 페이지(n.news.naver.com)보다 앞에 둔다 —
  * 검색 결과가 언론사 주소를 먼저 주므로 순서를 그대로 쓰면 된다.
  */
-export async function resolveViaNaver(title: string): Promise<string | null> {
+export type NaverResult =
+  | { status: 'found'; url: string }
+  | { status: 'nomatch' }
+  | { status: 'throttled' };
+
+export async function lookupViaNaver(title: string): Promise<NaverResult> {
   const hits = await search(title).catch(() => []);
-  if (hits.length === 0) return null;
+  if (hits.length === 0) return { status: 'throttled' };
   const want = norm(stripOutlet(title));
-  return hits.find(h => sameArticle(want, h.title))?.url ?? null;
+  const hit = hits.find(h => sameArticle(want, h.title));
+  return hit ? { status: 'found', url: hit.url } : { status: 'nomatch' };
+}
+
+/** 주소만 필요할 때. 속도 제한과 불일치를 구분하지 않는다. */
+export async function resolveViaNaver(title: string): Promise<string | null> {
+  const r = await lookupViaNaver(title);
+  return r.status === 'found' ? r.url : null;
 }
