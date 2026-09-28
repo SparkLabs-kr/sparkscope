@@ -5,7 +5,7 @@
  * 뒤 단계는 들어가지 않는다 — 분야를 일부러 섞지 않는다.
  *
  *   1. 스파크랩 직접 언급 뉴스              (Article sparklabs_self)
- *   2. 포트폴리오사 뉴스 중 중요도 HIGH 이상  (Article portfolio_company*, 회사당 1건)
+ *   2. 포트폴리오사 뉴스 중 중요도 HIGH 이상  (Article portfolio_company*, 회사당 1건 — 없으면 MEDIUM 상위 2건)
  *   3. 이번 주 AI 트렌드                    (메일 "🤖 AI 트렌드 TOP 5"와 같은 목록 — signal-feed.ts)
  *   4. 해외 주요 트렌드 토픽                 (Inter 기사 중 AI, 포트폴리오 연결 많은 순)
  *
@@ -35,6 +35,8 @@ const CATEGORY_LABEL: Record<string, string> = {
   competitor: '🤝 AC·VC 업계 동향',
   industry_trend: '🌐 스타트업계 뉴스',
 };
+/** 포트폴리오 HIGH가 없는 날 대신 넣을 MEDIUM 건수 */
+const PORTFOLIO_MEDIUM_FALLBACK = 2;
 const PORTFOLIO_CATEGORIES = new Set(['portfolio_company', 'portfolio_company_tw', 'portfolio_company_gv']);
 const IMPORTANCE_RANK: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
 const TREND_LABEL = '📈 이번 주 AI 트렌드';
@@ -179,14 +181,18 @@ async function pickByTiers(): Promise<{ picked: BriefingCandidate[]; tiers: numb
   ]);
 
   // 2단계: 포트폴리오사 HIGH 이상, 회사당 1건 — 같은 회사 기사 두 개가 두 칸을 차지하지 않게.
-  const usedCompany = new Set<string>();
-  const portfolioHigh = intra.filter(a => {
-    if (!PORTFOLIO_CATEGORIES.has(a.category)) return false;
-    if ((IMPORTANCE_RANK[a.importance ?? ''] ?? 0) < IMPORTANCE_RANK.HIGH) return false;
-    if (usedCompany.has(a.company)) return false;
-    usedCompany.add(a.company);
-    return true;
-  });
+  // HIGH가 하나도 없으면 MEDIUM 상위 2건으로 대신한다(2026-09-28 소윤 결정 — 분석이 포트폴리오
+  // 기사에 HIGH를 주는 일이 드물어서, HIGH만 받으면 이 단계가 거의 늘 비었다).
+  const onePerCompany = (list: IntraCandidate[]) => {
+    const used = new Set<string>();
+    return list.filter(a => (used.has(a.company) ? false : (used.add(a.company), true)));
+  };
+  const portfolio = intra.filter(a => PORTFOLIO_CATEGORIES.has(a.category));
+  const rankOf = (a: IntraCandidate) => IMPORTANCE_RANK[a.importance ?? ''] ?? 0;
+  const portfolioHighOnly = onePerCompany(portfolio.filter(a => rankOf(a) >= IMPORTANCE_RANK.HIGH));
+  const portfolioHigh = portfolioHighOnly.length > 0
+    ? portfolioHighOnly
+    : onePerCompany(portfolio.filter(a => rankOf(a) === IMPORTANCE_RANK.MEDIUM)).slice(0, PORTFOLIO_MEDIUM_FALLBACK);
 
   const tierLists: BriefingCandidate[][] = [
     intra.filter(a => a.category === 'sparklabs_self'),

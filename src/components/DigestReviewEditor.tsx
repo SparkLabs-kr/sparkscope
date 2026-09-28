@@ -306,7 +306,7 @@ export function DigestReviewEditor({
             {reco && <span className="text-gray-400"> · {tr('추천')} {fmtTime(reco.computedAt)} {tr('기준')}</span>}
           </p>
           <p className="text-[11px] text-gray-400 mb-2">
-            {tr('추천 순서: ① 스파크랩 직접 언급 → ② 포트폴리오사 중요도 HIGH → ③ 이번 주 AI 트렌드 → ④ 해외 AI 트렌드 (바이오 제외)')}
+            {tr('추천 순서: ① 스파크랩 직접 언급 → ② 포트폴리오사 중요도 HIGH(없으면 MEDIUM 상위 2) → ③ 이번 주 AI 트렌드 → ④ 해외 AI 트렌드 (바이오 제외)')}
           </p>
           <div className="space-y-2">
             {briefing.map((h, idx) => (
