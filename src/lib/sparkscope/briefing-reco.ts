@@ -5,7 +5,7 @@
  * 뒤 단계는 들어가지 않는다 — 분야를 일부러 섞지 않는다.
  *
  *   1. 스파크랩 직접 언급 뉴스              (Article sparklabs_self)
- *   2. 포트폴리오사 뉴스 중 중요도 HIGH 이상  (Article portfolio_company*, 회사당 1건 — 없으면 MEDIUM 상위 2건)
+ *   2. 포트폴리오사 뉴스 중 중요도 높은 것    (Article portfolio_company*, 회사당 1건, 최소 2건 보장 — pickByTiers)
  *   3. 이번 주 AI 트렌드                    (메일 "🤖 AI 트렌드 TOP 5"와 같은 목록 — signal-feed.ts)
  *   4. 해외 주요 트렌드 토픽                 (Inter 기사 중 AI, 포트폴리오 연결 많은 순)
  *
@@ -35,11 +35,17 @@ const CATEGORY_LABEL: Record<string, string> = {
   competitor: '🤝 AC·VC 업계 동향',
   industry_trend: '🌐 스타트업계 뉴스',
 };
-/** 포트폴리오 HIGH가 없는 날 대신 넣을 MEDIUM 건수 */
-const PORTFOLIO_MEDIUM_FALLBACK = 2;
+/** 브리핑에 포트폴리오 기사를 최소 몇 건 넣을지 */
+const PORTFOLIO_MIN = 2;
 const PORTFOLIO_CATEGORIES = new Set(['portfolio_company', 'portfolio_company_tw', 'portfolio_company_gv']);
 const IMPORTANCE_RANK: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
 const TREND_LABEL = '📈 이번 주 AI 트렌드';
+/**
+ * 주가 시황 기사 — 추천에서만 뺀다(교체 후보에는 남긴다). 분석이 이런 기사에도 HIGH를 줘서,
+ * 같은 사건 묶음의 대표로 "스카이랩스 주가 2.51% 하락"이 "타임 헬스테크 500 선정" 대신 뽑혔다
+ * (2026-09-28). 묶기 전에 빼야 진짜 뉴스가 대표가 된다.
+ */
+const STOCK_TICKER = /주가|특징주|급등락|상한가|하한가|장중|시황|[‘'"]上[’'"]|[‘'"]下[’'"]/;
 const INTER_LABEL = '🔭 해외 트렌드 · AI';
 
 /** 교체 후보 한 줄 — 헤드라인 + 화면에 보여줄 보조 정보 */
@@ -80,10 +86,16 @@ async function loadIntra(windowDays: number | null, cluster: boolean): Promise<I
   const all = (await loadDigestCandidates()).filter(a => !since || new Date(a.pubDate) >= since);
   // buildClusteredPool은 id 자리에 링크를 넣으므로, 대표 기사의 id를 링크로 되찾는다.
   const idByLink = new Map(all.map(a => [a.link, a.id]));
-  const pool = cluster ? (buildClusteredPool(all) as ReviewArticle[]) : all;
+  // 추천용(cluster)은 주가 시황 기사를 묶기 전에 뺀다 — 위 STOCK_TICKER 참고.
+  const pool = cluster
+    ? (buildClusteredPool(all.filter(a => !STOCK_TICKER.test(a.title))) as ReviewArticle[])
+    : all;
   return pool
+    // 같은 중요도면 여러 매체가 함께 다룬 사건이 먼저(otherOutlets — 묶기 결과). 이게 없으면
+    // 15개 매체가 보도한 "스카이랩스 타임 헬스테크 500 선정"이 공시 기사 한 건에 밀렸다.
     .sort((a, b) =>
       (IMPORTANCE_RANK[b.importance] ?? 0) - (IMPORTANCE_RANK[a.importance] ?? 0)
+      || (b.otherOutlets ?? 0) - (a.otherOutlets ?? 0)
       || b.priorityScore - a.priorityScore)
     .map(a => ({
       kind: 'intra' as const,
@@ -172,31 +184,68 @@ async function currentBasis(): Promise<string> {
   return last?.finishedAt?.toISOString() ?? 'none';
 }
 
+/**
+ * 포트폴리오 기사를 회사 단위로 묶어 회사당 대표 1건. 순서는 중요도 → 보도량(같은 회사 기사 수) →
+ * priorityScore. 사건 단위 묶기(clusterArticles)는 매체마다 제목이 크게 다르면 한 사건을 여러 개로
+ * 쪼개서, 15개 매체가 보도한 "스카이랩스 타임 헬스테크 500"의 보도량이 0으로 잡혔다. 브리핑은
+ * 어차피 회사당 1건이라 회사로 묶는 편이 정확하다. 주가 시황 기사는 대표·보도량 모두에서 뺀다.
+ */
+function portfolioByCompany(list: IntraCandidate[]): IntraCandidate[] {
+  const byCompany = new Map<string, IntraCandidate[]>();
+  for (const a of list) {
+    if (!PORTFOLIO_CATEGORIES.has(a.category) || STOCK_TICKER.test(a.title)) continue;
+    const arr = byCompany.get(a.company) ?? [];
+    arr.push(a);
+    byCompany.set(a.company, arr);
+  }
+  const rank = (a: IntraCandidate) => IMPORTANCE_RANK[a.importance ?? ''] ?? 0;
+  return Array.from(byCompany.values())
+    .map(arr => ({ rep: arr[0], coverage: arr.length }))   // loadIntra가 이미 중요도·점수 순으로 정렬해 둠
+    .sort((x, y) => rank(y.rep) - rank(x.rep) || y.coverage - x.coverage || 0)
+    .map(x => x.rep);
+}
+
 /** 4단계 규칙으로 5칸을 채운다. */
 async function pickByTiers(): Promise<{ picked: BriefingCandidate[]; tiers: number[] }> {
-  const [intra, trends, inter] = await Promise.all([
+  const [intra, intraRecentAll, intraWeekAll, trends, inter] = await Promise.all([
     loadIntra(RECO_WINDOW_DAYS, true),
+    loadIntra(RECO_WINDOW_DAYS, false),
+    loadIntra(null, false),
     loadTrends().catch(e => { console.error('[briefing-reco] AI 트렌드 읽기 실패(건너뜀):', e); return [] as BriefingCandidate[]; }),
     loadInter(RECO_WINDOW_DAYS),
   ]);
 
-  // 2단계: 포트폴리오사 HIGH 이상, 회사당 1건 — 같은 회사 기사 두 개가 두 칸을 차지하지 않게.
-  // HIGH가 하나도 없으면 MEDIUM 상위 2건으로 대신한다(2026-09-28 소윤 결정 — 분석이 포트폴리오
-  // 기사에 HIGH를 주는 일이 드물어서, HIGH만 받으면 이 단계가 거의 늘 비었다).
-  const onePerCompany = (list: IntraCandidate[]) => {
-    const used = new Set<string>();
-    return list.filter(a => (used.has(a.company) ? false : (used.add(a.company), true)));
-  };
-  const portfolio = intra.filter(a => PORTFOLIO_CATEGORIES.has(a.category));
+  // 2단계: 포트폴리오사 — 최소 PORTFOLIO_MIN건을 보장한다(2026-09-28 소윤 결정). 회사당 1건.
+  //   ① 최근 3일 HIGH 이상은 전부 → 모자라면 ② 최근 3일 MEDIUM → ③ 최근 7일 HIGH → ④ 최근 7일 MEDIUM
+  // 월요일은 주말이 끼어 3일 창에 포트폴리오 기사가 1~2건뿐인 날이 많아 7일까지 넓힌다.
+  // LOW는 넣지 않는다 — 동명이인·부분문자열 오탐("카도" → 시낭송대회 기사)이 섞여 있다.
   const rankOf = (a: IntraCandidate) => IMPORTANCE_RANK[a.importance ?? ''] ?? 0;
-  const portfolioHighOnly = onePerCompany(portfolio.filter(a => rankOf(a) >= IMPORTANCE_RANK.HIGH));
-  const portfolioHigh = portfolioHighOnly.length > 0
-    ? portfolioHighOnly
-    : onePerCompany(portfolio.filter(a => rankOf(a) === IMPORTANCE_RANK.MEDIUM)).slice(0, PORTFOLIO_MEDIUM_FALLBACK);
+  const recentPf = portfolioByCompany(intraRecentAll);
+  const weekPf = portfolioByCompany(intraWeekAll);
+  const portfolioSteps = [
+    recentPf.filter(a => rankOf(a) >= IMPORTANCE_RANK.HIGH),
+    recentPf.filter(a => rankOf(a) === IMPORTANCE_RANK.MEDIUM),
+    weekPf.filter(a => rankOf(a) >= IMPORTANCE_RANK.HIGH),
+    weekPf.filter(a => rankOf(a) === IMPORTANCE_RANK.MEDIUM),
+  ];
+  const portfolioPicks: IntraCandidate[] = [];
+  const usedCompany = new Set<string>();
+  portfolioSteps.forEach((step, i) => {
+    // 첫 단계(3일 HIGH)는 전부, 그 뒤는 최소 건수를 채울 때까지만.
+    for (const a of step) {
+      if (i > 0 && portfolioPicks.length >= PORTFOLIO_MIN) return;
+      if (usedCompany.has(a.company)) continue;
+      usedCompany.add(a.company);
+      portfolioPicks.push(a);
+    }
+  });
+  // 스파크랩 기사가 많은 날에도 포트폴리오 자리를 남긴다.
+  const reserved = Math.min(PORTFOLIO_MIN, portfolioPicks.length);
+  const sparklabs = intra.filter(a => a.category === 'sparklabs_self').slice(0, BRIEFING_MAX - reserved);
 
   const tierLists: BriefingCandidate[][] = [
-    intra.filter(a => a.category === 'sparklabs_self'),
-    portfolioHigh,
+    sparklabs,
+    portfolioPicks,
     trends,
     inter,
   ];
