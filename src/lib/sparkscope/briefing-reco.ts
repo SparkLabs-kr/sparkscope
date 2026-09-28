@@ -205,9 +205,29 @@ function portfolioByCompany(list: IntraCandidate[]): IntraCandidate[] {
     .map(x => x.rep);
 }
 
+/**
+ * 최근 7일 동안 이미 브리핑에 나간 기사 url — 발송 때 저장된 스냅샷(daily_briefing)에서 읽는다.
+ * 포트폴리오를 7일까지 넓혀 찾으므로, 이게 없으면 수요일에 나간 기사가 금·월에 또 나간다.
+ * 오늘 스냅샷은 빼고 본다(오늘 재발송·재계산 때 자기 자신을 지우지 않게).
+ */
+async function recentlyBriefedUrls(): Promise<Set<string>> {
+  const today = kstDateKey();
+  const keys = Array.from({ length: 7 }, (_, i) => kstDateKey(new Date(Date.now() - (i + 1) * 864e5)));
+  const rows = await prisma.dashboardInsight.findMany({
+    where: { kind: 'daily_briefing', key: { in: keys.filter(k => k !== today) } },
+    select: { value: true },
+  });
+  const urls = new Set<string>();
+  for (const r of rows) {
+    try { for (const h of (JSON.parse(r.value).headlines ?? [])) urls.add(h.url); } catch { /* 깨진 행은 무시 */ }
+  }
+  return urls;
+}
+
 /** 4단계 규칙으로 5칸을 채운다. */
 async function pickByTiers(): Promise<{ picked: BriefingCandidate[]; tiers: number[] }> {
-  const [intra, intraRecentAll, intraWeekAll, trends, inter] = await Promise.all([
+  const [briefed, intra, intraRecentAll, intraWeekAll, trends, inter] = await Promise.all([
+    recentlyBriefedUrls(),
     loadIntra(RECO_WINDOW_DAYS, true),
     loadIntra(RECO_WINDOW_DAYS, false),
     loadIntra(null, false),
@@ -220,8 +240,11 @@ async function pickByTiers(): Promise<{ picked: BriefingCandidate[]; tiers: numb
   // 월요일은 주말이 끼어 3일 창에 포트폴리오 기사가 1~2건뿐인 날이 많아 7일까지 넓힌다.
   // LOW는 넣지 않는다 — 동명이인·부분문자열 오탐("카도" → 시낭송대회 기사)이 섞여 있다.
   const rankOf = (a: IntraCandidate) => IMPORTANCE_RANK[a.importance ?? ''] ?? 0;
-  const recentPf = portfolioByCompany(intraRecentAll);
-  const weekPf = portfolioByCompany(intraWeekAll);
+  // 지난 브리핑에 나간 회사는 통째로 뺀다 — 같은 사건을 다른 매체 기사로 또 내보내지 않게.
+  const briefedCompanies = new Set(intraWeekAll.filter(a => briefed.has(a.url)).map(a => a.company));
+  const notBriefed = (a: IntraCandidate) => !briefedCompanies.has(a.company);
+  const recentPf = portfolioByCompany(intraRecentAll).filter(notBriefed);
+  const weekPf = portfolioByCompany(intraWeekAll).filter(notBriefed);
   const portfolioSteps = [
     recentPf.filter(a => rankOf(a) >= IMPORTANCE_RANK.HIGH),
     recentPf.filter(a => rankOf(a) === IMPORTANCE_RANK.MEDIUM),
@@ -251,7 +274,8 @@ async function pickByTiers(): Promise<{ picked: BriefingCandidate[]; tiers: numb
   ];
   const picked: BriefingCandidate[] = [];
   const tiers: number[] = [];
-  const seenUrl = new Set<string>();
+  // 다른 단계도 지난 브리핑에 나간 기사는 건너뛴다(AI 트렌드 목록은 7일 창이라 겹치기 쉽다).
+  const seenUrl = new Set<string>(briefed);
   tierLists.forEach((list, i) => {
     for (const c of list) {
       if (picked.length >= BRIEFING_MAX) return;
