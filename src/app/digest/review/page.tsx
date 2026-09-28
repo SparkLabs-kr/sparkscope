@@ -69,7 +69,7 @@ export default async function DigestReviewPage() {
 
       {candidates.length === 0 ? (
         <div className="rounded-xl border border-dashed border-gray-300 bg-white px-4 py-12 text-center text-gray-500">
-          {t('최근 4일 내 발송할 후보 기사가 없습니다. 수집이 실행되면 후보가 채워집니다.')}
+          {t('최근 3일 내 발송할 후보 기사가 없습니다. 수집이 실행되면 후보가 채워집니다.')}
         </div>
       ) : (
         <DigestReviewEditor

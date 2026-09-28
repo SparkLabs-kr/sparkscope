@@ -19,8 +19,15 @@ const CATEGORY_PRIORITY: Record<string, number> = {
   industry_trend: 40,
 };
 
-// 후보 기사 창(일). 발송 주기(월·수·금)를 고려한 최근 4일.
-const CANDIDATE_WINDOW_DAYS = 7; // 첫 발송: 최근 7일(예: 7/1~7/8). 이후 주간 발송 기준.
+/**
+ * 다이제스트 후보 기사 창의 시작 시각 — 검수 화면과 10:30 자동 발송(runner.ts loadSendArticles)이
+ * 이 한 함수를 같이 쓴다. 예전엔 검수 화면만 "7일 전 0시부터"를 써서, 미리보기엔 있는 기사가
+ * 실제 메일에선 빠졌다(2026-09-28, 9/21~22 스파크랩 기사 3건). 계산식은 발송 쪽 것을 그대로 옮겼다.
+ */
+export function sendWindowStart(): Date {
+  const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+  return new Date(kstNow.getTime() - 3 * 24 * 60 * 60 * 1000);
+}
 
 export interface ReviewArticle extends AnalyzedArticle {
   id: string;
@@ -132,15 +139,14 @@ export function passesDigestGuard(
 
 /** 최근 창의 비노이즈 기사 + 포트폴리오 관련성 가드 적용 후보 로드. */
 export async function loadDigestCandidates(): Promise<ReviewArticle[]> {
-  const since = new Date();
-  since.setDate(since.getDate() - CANDIDATE_WINDOW_DAYS);
-  since.setHours(0, 0, 0, 0); // 구간 시작일 00:00부터 포함 (7/1 전체 포함)
+  const since = sendWindowStart();
 
   const [rows, targets] = await Promise.all([
     prisma.article.findMany({
-      where: { pubDate: { gte: since }, isNoise: false },
+      // 발송 재료(loadSendArticles)와 같은 조건 — 분석 끝난 관련 기사만, 최대 500건.
+      where: { pubDate: { gte: since }, isNoise: false, category: { not: 'unrelated' }, analyzedAt: { not: null } },
       orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }],
-      take: 400,
+      take: 500,
     }),
     prisma.monitoringTarget.findMany({
       where: { category: { in: ['portfolio_company', 'sparklabs_self'] }, status: 'ACTIVE' },

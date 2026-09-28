@@ -18,7 +18,7 @@ import { attachInterDigest } from './inter-digest';
 import { attachAiSignals } from './signal-digest';
 import { attachResolvedLinks } from './digest-links';
 import { publishSignalFeed } from './signal-publish';
-import { buildDigestKeyMap, buildDigestContextMap, passesDigestGuard } from './review';
+import { buildDigestKeyMap, buildDigestContextMap, passesDigestGuard, sendWindowStart } from './review';
 import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } from './mailer';
 import { sendDigestToSubscribers } from './digest-send';
 import { collectInterNews } from './inter-collect';
@@ -93,11 +93,10 @@ function pickBestPerStory(list: AnalyzedArticle[]): AnalyzedArticle[] {
  */
 export async function loadSendArticles(): Promise<RawArticle[]> {
     // 기존 DB의 최근 3일 분석된 기사 사용 (수집 생략)
-    const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-    const threeDaysAgo = new Date(kstNow.getTime() - 3 * 24 * 60 * 60 * 1000);
+    // 창 시작은 검수 화면과 같은 함수(review.ts sendWindowStart) — 미리보기와 실제 메일이 갈리지 않게.
     const existing = await prisma.article.findMany({
       where: {
-        pubDate: { gte: threeDaysAgo },
+        pubDate: { gte: sendWindowStart() },
         isNoise: false,
         category: { not: 'unrelated' },
         analyzedAt: { not: null },

@@ -607,7 +607,7 @@ export const EN: Record<string, string> = {
   '다이제스트 검수·발송': 'Digest review & send',
   '발송 예정: 매주 월·수·금 오전 10시 30분. [오늘 편집 저장]한 TOP 3·제외 기사·브리핑 헤드라인은 자동 발송에 반영되고, 실제 발송 화면을 미리 볼 수 있습니다.':
     "Scheduled to send Mon/Wed/Fri at 10:30 AM. TOP 3, exclusions and briefing headlines saved with [Save today's edits] apply to the automatic send, and you can preview exactly what will be sent.",
-  '최근 4일 내 발송할 후보 기사가 없습니다. 수집이 실행되면 후보가 채워집니다.':
+  '최근 3일 내 발송할 후보 기사가 없습니다. 수집이 실행되면 후보가 채워집니다.':
     'No candidate articles from the last 4 days. Candidates appear once collection runs.',
   '편집자 한 줄': 'Editor’s note',
   '메일 상단에 들어갈 편집자 한 줄 인사': 'A one-line editor’s greeting for the top of the email',
