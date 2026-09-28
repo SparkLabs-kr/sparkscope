@@ -83,9 +83,13 @@ type SocialCard =
 export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
   const t = useT();
   const locale = useLocale();
-  // 기본은 '오늘'이다. 7일로 두면 며칠 전 기사가 히어로 자리를 차지해서, 오늘 터진
-  // 사건을 보려고 들어온 사람이 한 번 더 눌러야 했다(2026-09-11).
-  const [days, setDays] = useState<number>(1);
+  // 기본은 '이번 주'다(2026-09-28 소윤 요청).
+  //
+  // 2026-09-11에는 '오늘'로 뒀다 — 7일로 두면 며칠 전 기사가 히어로 자리를 차지해서
+  // 오늘 터진 사건을 보려면 한 번 더 눌러야 했기 때문이다. 그런데 반대쪽 불편이 더
+  // 컸다: 수집이 하루 1회(06:13)라 '오늘' 탭은 그날 아침까지 들어온 것만 보여주고,
+  // 늦게 나온 기사는 다음 날에야 뜬다. 첫 화면이 비거나 얇아 보이는 날이 생긴다.
+  const [days, setDays] = useState<number>(7);
   const [digest, setDigest] = useState<DigestResp | null>(null);
   const [open, setOpen] = useState<string | null>(null);
 

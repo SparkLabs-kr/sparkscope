@@ -19,7 +19,7 @@
 import { FEEDS, INDICATOR_FEEDS, DOMAIN_KEYWORDS, type Feed } from './news-feeds';
 import { scoreImportance, type Importance, type Verdict } from './news-importance';
 import { groupSameStory, differentVersions } from './news-cluster';
-import { collectPopular } from './news-popular';
+import { collectPopular, BROWSER_HEADERS } from './news-popular';
 import { readPopular, savePopular } from './news-popular-store';
 import { extractTrendKeywords, type TrendKeyword } from './news-keywords';
 import { corroborate } from './news-corroborate';
@@ -301,6 +301,104 @@ function tokens(title: string): Set<string> {
     title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)
       .filter(w => w.length >= 4 && !STOP.has(w)),
   );
+}
+
+
+/**
+ * 화면에 올리기 직전, 죽은 원문 주소를 걸러낸다.
+ *
+ * 매체가 발행 후 제목을 고치면 주소까지 같이 바뀌는 곳이 있다. AlphaSignal이 그렇다
+ * (2026-09-28 실측): 우리가 저장한
+ *   /news/openai-fixes-silent-image-bug-breaking-gpt-6-sol-and-luna-vision  → 404
+ * 같은 기사가 지금은
+ *   /news/openai-patches-gpt-6-sol-and-luna-s-silent-image-understanding-bug → 200
+ * 으로 살아 있었다. 그날 AI 탭 1위 카드의 '원문 보기'가 404로 나가고 있었다.
+ *
+ * 404만 본다. 403·429는 유료벽·봇 검문이라 서버에서만 막히고 사람이 열면 열린다
+ * (블룸버그·NYT·FT·VentureBeat가 여기 해당한다). 그걸 죽은 것으로 세면 멀쩡한
+ * 1면 기사를 통째로 버린다.
+ *
+ * "한 번만 관측된 주소는 사라진 것으로 본다"는 규칙도 검토했다가 버렸다 — 그 조건에
+ * 걸리는 96건 중 표본 24건을 직접 열어 보니 24건 전부 살아 있었다. AI타임스처럼
+ * 목록이 빨리 넘어가는 곳은 정상 기사도 한 회차만 잡힌다.
+ *
+ * 바뀐 주소를 찾을 때는 같은 매체 + 제목이 거의 같을 때만 갈아끼운다. 느슨하게 붙이면
+ * 1위 카드에 남의 기사 원문이 달리는 사고가 난다(2026-09-11에 겪었다). 못 찾으면
+ * 그 항목을 뺀다 — 열리지 않는 링크를 남겨 두는 것보다 낫다.
+ */
+const DEAD_LINK_TIMEOUT_MS = 6_000;
+
+async function linkStatus(url: string): Promise<number> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), DEAD_LINK_TIMEOUT_MS);
+  try {
+    const r = await fetch(url, { redirect: 'follow', signal: ctl.signal, headers: BROWSER_HEADERS });
+    return r.status;
+  } catch {
+    return 0; // 네트워크 실패는 판단하지 않는다 — 살아 있는 것으로 둔다.
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function dropDeadLinks(items: DigestItem[]): Promise<DigestItem[]> {
+  const codes = await Promise.all(items.map(it => linkStatus(it.url)));
+  const dead = items.filter((_, i) => codes[i] === 404 || codes[i] === 410);
+  if (dead.length === 0) return items;
+
+  // 같은 매체의 최근 1면 기록에서 대체 주소를 찾는다.
+  const rows = await prisma.newsHeadline.findMany({
+    where: {
+      source: { in: [...new Set(dead.map(d => d.source))] },
+      firstSeenAt: { gte: new Date(Date.now() - 14 * 86_400_000) },
+    },
+    select: { source: true, title: true, url: true, firstSeenAt: true },
+    orderBy: { lastSeenAt: 'desc' },
+  }).catch(() => [] as { source: string; title: string; url: string; firstSeenAt: Date }[]);
+
+  const out: DigestItem[] = [];
+  for (const [i, it] of items.entries()) {
+    if (codes[i] !== 404 && codes[i] !== 410) { out.push(it); continue; }
+    const t = tokens(it.title);
+    // 가장 많이 겹치는 것 하나만 고른다. 먼저 찾은 것을 쓰면 비슷한 제목이 여럿일 때
+    // 엉뚱한 쪽이 걸린다.
+    const seenAt = new Date(it.publishedAt ?? Date.now()).getTime();
+    const swap = rows
+      .filter(r => r.source === it.source && r.url !== it.url
+        // 제목을 고치는 것은 발행 직후의 일이다. 며칠 떨어진 기사는 다른 사건으로 본다.
+        && Math.abs(r.firstSeenAt.getTime() - seenAt) <= 3 * 86_400_000)
+      .map(r => ({ r, score: titleOverlap(t, tokens(r.title)) }))
+      .sort((x, y) => y.score - x.score)
+      .find(x => x.score >= SAME_TITLE_MIN)?.r;
+    if (swap) {
+      console.log(`[news-digest] 주소가 바뀐 기사 교체: ${it.source} — ${it.title.slice(0, 40)}`);
+      out.push({ ...it, url: swap.url });
+    } else {
+      console.log(`[news-digest] 죽은 링크 제외(${codes[i]}): ${it.source} — ${it.title.slice(0, 40)}`);
+    }
+  }
+  return out;
+}
+
+/**
+ * 제목이 얼마나 겹치나 — 짧은 쪽 대비 비율. 낱말 3개 미만이면 판단하지 않는다(0).
+ *
+ * 문턱 0.6은 실측으로 정했다. AlphaSignal이 고친 제목이
+ *   "OpenAI Fixes Silent Image Bug Breaking GPT-6 Sol and Luna Vision" →
+ *   "OpenAI Patches GPT-6 Sol and Luna's Silent Image Understanding Bug"
+ * 로 4/6 = 0.67이었다. 0.7로 잡았더니 이 건이 걸러져 교체 대신 제외됐다.
+ *
+ * 0.6이어도 헐겁지 않다 — 같은 매체이고, 원래 주소가 404로 확인됐고, 발행 시점이
+ * 사흘 안이고, 겹치는 낱말이 3개 이상인 것 중에서 가장 많이 겹치는 하나만 고른다.
+ * 사건 병합(sameStory, 0.45)보다 훨씬 좁다.
+ */
+const SAME_TITLE_MIN = 0.6;
+
+function titleOverlap(a: Set<string>, b: Set<string>): number {
+  if (a.size < 3 || b.size < 3) return 0;
+  let ov = 0;
+  for (const w of a) if (b.has(w)) ov++;
+  return ov >= 3 ? ov / Math.min(a.size, b.size) : 0;
 }
 
 /**
@@ -912,8 +1010,13 @@ export async function collectDigest(domain: NewsDomain, days = 7, limit = 12): P
     return [] as TrendKeyword[];
   });
 
+  const alive = await dropDeadLinks(ranked).catch(e => {
+    console.error('[news-digest] 링크 점검 실패(무시):', e);
+    return ranked;
+  });
+
   return {
-    items: ranked,
+    items: alive,
     feeds: results.map(r => ({ name: r.feed.name, ok: r.ok, count: r.entries.length })),
     keywords,
   };

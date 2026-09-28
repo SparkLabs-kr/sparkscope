@@ -37,7 +37,7 @@ const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (
  * 브라우저가 보내는 머리글을 같이 보낸다 — User-Agent 하나만으로는 막는 곳이 있다.
  * 다른 소스에는 영향이 없다(2026-09-11 확인: 전부 200 그대로).
  */
-const BROWSER_HEADERS: Record<string, string> = {
+export const BROWSER_HEADERS: Record<string, string> = {
   'User-Agent': UA,
   accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
   'accept-language': 'en-US,en;q=0.9',
