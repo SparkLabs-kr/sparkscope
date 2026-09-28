@@ -22,11 +22,12 @@ const CATEGORY_PRIORITY: Record<string, number> = {
 /**
  * 다이제스트 후보 기사 창의 시작 시각 — 검수 화면과 10:30 자동 발송(runner.ts loadSendArticles)이
  * 이 한 함수를 같이 쓴다. 예전엔 검수 화면만 "7일 전 0시부터"를 써서, 미리보기엔 있는 기사가
- * 실제 메일에선 빠졌다(2026-09-28, 9/21~22 스파크랩 기사 3건). 계산식은 발송 쪽 것을 그대로 옮겼다.
+ * 실제 메일에선 빠졌다(2026-09-28, 9/21~22 스파크랩 기사 3건).
  */
 export function sendWindowStart(): Date {
-  const kstNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
-  return new Date(kstNow.getTime() - 3 * 24 * 60 * 60 * 1000);
+  // 지금으로부터 정확히 72시간 전. 예전 식(toLocaleString으로 KST "벽시계"를 만든 뒤 3일 빼기)은
+  // 서버가 UTC(Vercel)면 9시간이 덜 잡혀 실제로는 63시간이었다(2026-09-28 소윤 결정으로 수정).
+  return new Date(Date.now() - 72 * 60 * 60 * 1000);
 }
 
 export interface ReviewArticle extends AnalyzedArticle {
