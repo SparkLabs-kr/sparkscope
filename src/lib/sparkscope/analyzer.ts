@@ -59,6 +59,37 @@ const HOLISTIC_NEGATIVE_THRESHOLD = 3;
 const VALID_TONES: Tone[] = ['POSITIVE', 'NEUTRAL', 'NEGATIVE', 'MIXED'];
 const VALID_IMPORTANCE: Importance[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
 
+/**
+ * 업계 동향(industry_trend) 기사의 중요도 상한.
+ *
+ * 위기 규칙("소송·수사·압수수색·사망 등이 있으면 HIGH")은 프롬프트에 "포폴사/스파크랩이
+ * 주어인 기사"라고 적혀 있는데, 모델이 그 범위를 넘겨 적용한다. 실제로 HL만도(대기업,
+ * industry_trend) 기사가 최근 30일에 HIGH 29건·CRITICAL 1건이었다 — 하청 노동자
+ * 끼임 사망과 압수수색이라는 한 사건을 열 개 매체가 쓴 것이 전부 HIGH로 올라왔다
+ * (2026-09-28 소윤 지적: "스타트업도 아니고 대기업인데 싹 다 중요도 높음").
+ *
+ * 업계 동향 칸은 "스타트업 생태계에 무슨 일이 있나"를 보는 자리다. 대기업 한 곳의
+ * 개별 사건은 그 자리에서 HIGH일 이유가 없다. 그래서 MEDIUM으로 눌러 둔다.
+ *
+ * 정책·제도 기사는 예외로 남긴다 — 프롬프트가 "정부 정책 발표 같은 영향력 큰 기사"를
+ * HIGH로 올리라고 따로 지시하고 있고, 그건 업계 전체에 걸리는 소식이라 이 칸의
+ * 목적에 맞는다.
+ */
+const POLICY_HINTS = /정책|제도|규제|법안|개정|시행령|예산|지원사업|공고|육성|진흥|국회|정부|부처|장관|위원회/;
+
+function capIndustryImportance(
+  category: string | undefined,
+  importance: Importance,
+  title: string,
+): Importance {
+  if (category !== 'industry_trend') return importance;
+  if (importance !== 'HIGH' && importance !== 'CRITICAL') return importance;
+  if (POLICY_HINTS.test(title)) return importance;
+  return 'MEDIUM';
+}
+
+
+
 // LLM이 소문자("negative")나 공백 섞인 값을 줘도 정규화해서 인식. 매치 안 되면 undefined(호출부에서 기본값 처리).
 function normalizeTone(raw: unknown): Tone | undefined {
   if (typeof raw !== 'string') return undefined;
@@ -194,9 +225,10 @@ async function classifyBatch(articles: Array<RawArticle & { _id: string }>): Pro
         if (item.importance !== undefined && importance === undefined) {
           console.error('[analyzer] LLM returned unrecognized importance value:', item.importance);
         }
+        const titleOf = batch.find(b => b._id === item.id)?.title ?? '';
         results.set(item.id, {
           category: item.category,
-          importance: importance ?? 'MEDIUM',
+          importance: capIndustryImportance(item.category, importance ?? 'MEDIUM', titleOf),
           isNoise: item.isNoise,
           noiseReason: item.noiseReason,
           needsDeepAnalysis: item.needsDeepAnalysis,

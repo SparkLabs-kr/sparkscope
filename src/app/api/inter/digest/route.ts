@@ -29,7 +29,8 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return auth.response;
 
   const sp = req.nextUrl.searchParams;
-  const domain: NewsDomain = sp.get('domain') === 'ai' ? 'ai' : 'bio';
+  // 기본은 AI — 화면 기본 탭과 같아야 한다(InterPanel.tsx).
+  const domain: NewsDomain = sp.get('domain') === 'bio' ? 'bio' : 'ai';
   const dRaw = Number(sp.get('days'));
   const days = [1, 7, 30].includes(dRaw) ? dRaw : 7;
 

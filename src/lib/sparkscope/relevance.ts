@@ -31,7 +31,12 @@ export type FilterReason = 'exclude_word' | 'ad_noise' | 'sports_ad' | 'irreleva
 
 // ── 스포츠·게임·연예·광고 강제 제외 ──────────────────────────────
 // helperKeywords의 사람 이름(대표자명 등)이 야구선수·연예인과 겹쳐 대량 오통과되는 문제 대응.
-const URL_EXCLUDE = ['/sports/', '/baseball/', '/soccer/', '/game/', '/entertain/', '/photo/', '/issue/'];
+// '/photos/'는 '/photo/'로 안 걸린다(includes는 부분일치라 복수형을 못 잡는다).
+// 뉴스1이 사진 페이지를 news1.kr/photos/로 내보내는데, 그게 기사로 수집돼 왔다 —
+// 2026-09-28 실측 60일 11건. 제목이 "발언하는 김정관 장관", "기념촬영하는 …",
+// "키캡 굿즈 들고 찰칵…" 같은 사진 설명이고 본문이 두세 줄뿐이라, 읽는 사람에게는
+// 내용 없는 기사로 보인다(소윤 지적: "2-3줄밖에 없는 뻥기사").
+const URL_EXCLUDE = ['/sports/', '/baseball/', '/soccer/', '/game/', '/entertain/', '/photo/', '/photos/', '/issue/'];
 // 스포츠 전문 매체 (26개 확정 매체엔 없지만 안전망)
 const SPORTS_MEDIA = ['스포츠서울', '스포츠경향', 'OSEN', '일간스포츠', '스포츠동아', '스포츠조선', '스포탈코리아', '엑스포츠뉴스', 'MHN스포츠'];
 // 야구/스포츠·체육 용어 (제목 포함 시 제외)

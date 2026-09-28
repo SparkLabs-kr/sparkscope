@@ -98,7 +98,8 @@ export function InterPanel({
   const t = useT();
   const router = useRouter();
   const sp = useSearchParams();
-  const domain: InterDomain = sp.get('domain') === 'ai' ? 'ai' : 'bio';
+  // 기본은 AI다(2026-09-28 소윤 요청). 주소에 domain=bio가 있을 때만 바이오다.
+  const domain: InterDomain = sp.get('domain') === 'bio' ? 'bio' : 'ai';
   const country = (COUNTRY_TABS.find(c => c.id === sp.get('country'))?.id ?? 'all') as InterCountry;
 
   // 조회에 실제로 쓰이는 값은 URL(from/to/country)이고, 아래 draft는 "고르는 중"인 값이다.
@@ -201,15 +202,17 @@ export function InterPanel({
           세그먼티드 컨트롤로 묶었다(2026-09-08). 한 덩어리로 보여야 "둘 중 하나"라는 게 읽힌다. */}
       <div data-tour="inter-domain" className="mb-6">
         <div className="inline-flex w-full sm:w-auto items-stretch gap-1 rounded-2xl border border-spark-border bg-spark-cream p-1">
-          <DomainTabBig
-            icon="🧬" label={t('바이오')} sub={t('제약 · 진단 · 유전체')}
-            active={domain === 'bio'} activeCls="bg-cyan-600 text-white shadow-[0_2px_10px_-3px_rgba(8,145,178,0.6)]"
-            onClick={() => pushParams({ domain: 'bio' })}
-          />
+          {/* AI가 왼쪽이고 기본값이다(2026-09-28 소윤 요청). 왼쪽 자리와 기본값은
+              같이 간다 — 첫 화면에 켜져 있는 탭이 오른쪽에 있으면 순서가 어긋나 보인다. */}
           <DomainTabBig
             icon="🤖" label="AI" sub={t('모델 · 반도체 · 에이전트')}
             active={domain === 'ai'} activeCls="bg-emerald-600 text-white shadow-[0_2px_10px_-3px_rgba(5,150,105,0.6)]"
             onClick={() => pushParams({ domain: 'ai' })}
+          />
+          <DomainTabBig
+            icon="🧬" label={t('바이오')} sub={t('제약 · 진단 · 유전체')}
+            active={domain === 'bio'} activeCls="bg-cyan-600 text-white shadow-[0_2px_10px_-3px_rgba(8,145,178,0.6)]"
+            onClick={() => pushParams({ domain: 'bio' })}
           />
         </div>
       </div>

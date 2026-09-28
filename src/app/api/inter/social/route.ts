@@ -73,7 +73,8 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return auth.response;
 
   const sp = req.nextUrl.searchParams;
-  const domain: SocialDomain = sp.get('domain') === 'ai' ? 'ai' : 'bio';
+  // 기본은 AI — 화면 기본 탭과 같아야 한다(InterPanel.tsx).
+  const domain: SocialDomain = sp.get('domain') === 'bio' ? 'bio' : 'ai';
 
   const hoursRaw = Number(sp.get('hours'));
   const hours = Number.isFinite(hoursRaw) && hoursRaw > 0 ? Math.min(hoursRaw, 24 * 90) : DEFAULT_HOURS;

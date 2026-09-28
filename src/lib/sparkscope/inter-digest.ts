@@ -22,13 +22,26 @@
  */
 import {
   buildMatrix,
+  DOMAIN_LABEL,
   loadInterData,
   type InterDomain,
 } from '../inter-sample-data';
 
 /** 조회창 — 대시보드 기본(3개월)보다 짧게. 메일은 "이번 주 해외 흐름"을 묻는 것이므로 7일. */
 const WINDOW_DAYS = 7;
-/** 메일에 올릴 카드(기사) 수 */
+/**
+ * 메일에 넣는 도메인. 예전엔 'bio' 하나뿐이었고 호출부가 인자를 안 넘겨서 AI 도메인은
+ * 대시보드에만 있고 메일에는 한 번도 나가지 않았다(2026-09-10 실측: AI 172건·6개사 >
+ * bio 132건·3개사 — 빠져 있던 쪽이 더 두꺼웠다).
+ *
+ * 두 도메인을 넣되 카드 수는 늘리지 않는다. 도메인별로 3건씩 뽑아 6건으로 붙이면 메일만
+ * 길어지고 "덜 중요한 bio 3위"가 "더 중요한 AI 1위"와 같은 비중으로 실린다. 대신 두
+ * 도메인의 매치를 한 풀에 넣고 같은 점수(배지+매체등급+근거구체성)로 경쟁시켜 상위
+ * CARD_LIMIT건만 남긴다 — 세 점수 모두 도메인과 무관하게 계산되므로 그대로 비교된다.
+ */
+const DEFAULT_DOMAINS: InterDomain[] = ['bio', 'ai'];
+
+/** 메일에 올릴 카드(기사) 수 — 도메인을 늘려도 이 값은 그대로다(통합 랭킹 상위 N건). */
 const CARD_LIMIT = 3;
 /** 카드 하나에 보여줄 회사 수 */
 const COMPANY_PER_CARD = 2;
@@ -51,6 +64,7 @@ export interface InterDigestCompany {
 
 export interface InterDigestCard {
   cellLabel: string;      // "디지털헬스 × 연구성과"
+  domainLabel: string;    // "바이오" | "AI" — 두 도메인을 섞어 싣기 때문에 어느 판인지 표시한다
   badge: string;          // surge | opportunity | major | quiet | none
   badgeLabel: string;
   sourceKind: 'paper' | 'opinion' | 'news';
@@ -63,6 +77,7 @@ export interface InterDigestCard {
 
 export interface InterDigestCombo {
   label: string;
+  domainLabel: string;
   count: number;
   prevCount: number;
   deltaPct: number | null;
@@ -73,6 +88,8 @@ export interface InterDigestBlock {
   total: number;
   prevTotal: number;
   deltaPct: number | null;
+  /** 도메인별 분석 건수 — 본문 안내문에 "바이오 132 · AI 172"로 쓴다 */
+  domainTotals: { label: string; total: number }[];
   /** 카드에 실제로 등장하는 회사 이름(중복 제거) — 헤더 stat 칸에 쓴다 */
   companyNames: string[];
   combos: InterDigestCombo[];
@@ -109,18 +126,39 @@ function formatDate(d: Date): string {
  * 해외 트렌드 블록을 만든다. 쓸 만한 매치가 하나도 없으면 null —
  * 호출부는 null이면 섹션을 통째로 빼면 된다(메일은 예전 모습 그대로).
  */
-export async function buildInterDigest(
-  domain: InterDomain = 'bio',
-  now: Date = new Date(),
-): Promise<InterDigestBlock | null> {
-  const until = new Date(now); until.setHours(23, 59, 59, 999);
-  const since = new Date(until.getTime() - WINDOW_DAYS * 86400000); since.setHours(0, 0, 0, 0);
+type InterVerdict = Awaited<ReturnType<typeof loadInterData>>['verdicts'][number];
 
+/** 도메인 하나 분량의 점수 매긴 매치 + 헤드라인 수치. 여러 도메인을 합칠 수 있게 떼어냈다. */
+interface DomainSlice {
+  domain: InterDomain;
+  scored: {
+    vid: string;
+    score: number;
+    badge: string;
+    cellLabel: string;
+    domainLabel: string;
+    sourceKind: 'paper' | 'opinion' | 'news';
+    company: string;
+    reason: string;
+    verdict: InterVerdict;
+  }[];
+  total: number;
+  prevTotal: number;
+  combos: InterDigestCombo[];
+}
+
+/** 도메인 하나를 읽어 점수까지 매긴다. 데이터가 없으면 null — 호출부는 그 도메인만 건너뛴다. */
+async function loadDomainSlice(
+  domain: InterDomain,
+  since: Date,
+  until: Date,
+): Promise<DomainSlice | null> {
   const data = await loadInterData(domain, since, until, 'all');
   if (data.verdicts.length === 0) return null;
 
   const matrix = buildMatrix(domain, data);
   const h = matrix.headline;
+  const domainLabel = DOMAIN_LABEL[domain];
 
   // verdictId -> 그 기사가 속한 셀(배지·라벨). topItems는 셀당 최신 3건이라
   // 여기 안 잡히는 기사는 배지 none으로 떨어지며, 그게 곧 "매트릭스에서 존재감이 없다"는 뜻이다.
@@ -142,12 +180,49 @@ export async function buildInterDigest(
       score: (BADGE_SCORE[badge] ?? 0) + src.score + reasonScore(m.reason, m.companyName),
       badge,
       cellLabel: cell?.label ?? '기타 트렌드',
+      domainLabel,
       sourceKind: src.kind,
       company: m.companyName,
       reason: m.reason,
       verdict: v,
     }];
   });
+
+  // 상단 띠 — hottest는 증가율 순이라 감소만 있는 날에도 값이 채워진다.
+  // "급증"이라 부르는 기준은 셀 배지(computeCellBadge)와 같게 맞춘다: 직전 대비 +50% 이상 & 3건 이상.
+  const combos: InterDigestCombo[] = h.hottest.slice(0, COMBO_LIMIT).map(x => ({
+    label: x.label,
+    domainLabel,
+    count: x.count,
+    prevCount: x.prevCount,
+    deltaPct: x.deltaPct,
+    isSurge: x.prevCount > 0 && x.deltaPct !== null && x.deltaPct >= 50 && x.count >= 3,
+  }));
+
+  return { domain, scored, total: h.total, prevTotal: h.prevTotal, combos };
+}
+
+/**
+ * 해외 트렌드 블록을 만든다. 쓸 만한 매치가 하나도 없으면 null —
+ * 호출부는 null이면 섹션을 통째로 빼면 된다(메일은 예전 모습 그대로).
+ *
+ * 도메인을 여러 개 받으면 카드를 도메인별로 나눠 담지 않고 **한 풀에서 통합 랭킹**을 매긴다
+ * (위 DEFAULT_DOMAINS 주석 참고).
+ */
+export async function buildInterDigest(
+  domains: InterDomain | InterDomain[] = DEFAULT_DOMAINS,
+  now: Date = new Date(),
+): Promise<InterDigestBlock | null> {
+  const until = new Date(now); until.setHours(23, 59, 59, 999);
+  const since = new Date(until.getTime() - WINDOW_DAYS * 86400000); since.setHours(0, 0, 0, 0);
+
+  const list = Array.isArray(domains) ? domains : [domains];
+  // 한 도메인이 비어도 나머지는 살린다 — 둘 다 비었을 때만 섹션을 뺀다.
+  const slices = (await Promise.all(list.map(d => loadDomainSlice(d, since, until))))
+    .filter((x): x is DomainSlice => x !== null);
+  if (slices.length === 0) return null;
+
+  const scored = slices.flatMap(s => s.scored);
   if (scored.length === 0) return null;
 
   scored.sort((a, b) => b.score - a.score);
@@ -160,42 +235,50 @@ export async function buildInterDigest(
     byArticle.set(s.vid, arr);
   }
 
-  const cards: InterDigestCard[] = Array.from(byArticle.values())
-    .sort((a, b) => b[0]!.score - a[0]!.score)
-    .slice(0, CARD_LIMIT)
-    .map(rows => {
-      const top = rows[0]!;
-      const v = top.verdict;
-      return {
-        cellLabel: top.cellLabel,
-        badge: top.badge,
-        badgeLabel: BADGE_LABEL[top.badge] ?? '',
-        sourceKind: top.sourceKind,
-        title: v.titleKo || v.news.title,
-        url: v.news.url,
-        media: v.news.source,
-        dateLabel: formatDate(v.news.publishedAt),
-        companies: rows.slice(0, COMPANY_PER_CARD).map(r => ({ name: r.company, reason: r.reason })),
-      };
+  const seenUrl = new Set<string>();
+  const cards: InterDigestCard[] = [];
+  for (const rows of Array.from(byArticle.values()).sort((a, b) => b[0]!.score - a[0]!.score)) {
+    if (cards.length >= CARD_LIMIT) break;
+    const top = rows[0]!;
+    const v = top.verdict;
+    // 같은 기사가 두 도메인에 다 태깅돼 있으면 verdict 행이 따로라 vid가 갈린다 — URL로 한 번 더 막는다.
+    if (seenUrl.has(v.news.url)) continue;
+    seenUrl.add(v.news.url);
+    cards.push({
+      cellLabel: top.cellLabel,
+      domainLabel: top.domainLabel,
+      badge: top.badge,
+      badgeLabel: BADGE_LABEL[top.badge] ?? '',
+      sourceKind: top.sourceKind,
+      title: v.titleKo || v.news.title,
+      url: v.news.url,
+      media: v.news.source,
+      dateLabel: formatDate(v.news.publishedAt),
+      companies: rows.slice(0, COMPANY_PER_CARD).map(r => ({ name: r.company, reason: r.reason })),
     });
+  }
   if (cards.length === 0) return null;
 
   const companyNames = Array.from(new Set(cards.flatMap(c => c.companies.map(x => x.name))));
 
-  // 상단 띠 — hottest는 증가율 순이라 감소만 있는 날에도 값이 채워진다.
-  // "급증"이라 부르는 기준은 셀 배지(computeCellBadge)와 같게 맞춘다: 직전 대비 +50% 이상 & 3건 이상.
-  const combos: InterDigestCombo[] = h.hottest.slice(0, COMBO_LIMIT).map(x => ({
-    label: x.label,
-    count: x.count,
-    prevCount: x.prevCount,
-    deltaPct: x.deltaPct,
-    isSurge: x.prevCount > 0 && x.deltaPct !== null && x.deltaPct >= 50 && x.count >= 3,
-  }));
+  // 상단 띠도 도메인을 합쳐 상위 COMBO_LIMIT개만 남긴다. 정렬 기준은 도메인 하나였을 때와
+  // 같은 뜻("hottest")을 유지한다 — 급증 먼저, 그다음 증가율, 증가율을 못 믿는 조합(null)은
+  // 건수로 비교. 건수만으로 줄세우면 판이 큰 쪽이 띠를 독식한다.
+  const combos = slices.flatMap(s => s.combos)
+    .sort((a, b) =>
+      Number(b.isSurge) - Number(a.isSurge)
+      || (b.deltaPct ?? -Infinity) - (a.deltaPct ?? -Infinity)
+      || b.count - a.count)
+    .slice(0, COMBO_LIMIT);
+
+  const total = slices.reduce((n, s) => n + s.total, 0);
+  const prevTotal = slices.reduce((n, s) => n + s.prevTotal, 0);
 
   return {
-    total: h.total,
-    prevTotal: h.prevTotal,
-    deltaPct: h.deltaPct,
+    total,
+    prevTotal,
+    deltaPct: prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : null,
+    domainTotals: slices.map(s => ({ label: DOMAIN_LABEL[s.domain], total: s.total })),
     companyNames,
     combos,
     hasSurge: combos.some(c => c.isSurge),
@@ -203,16 +286,12 @@ export async function buildInterDigest(
   };
 }
 
-/**
- * DigestData에 Inter 블록을 붙인다. Inter 쪽에서 무슨 일이 나도 국내 다이제스트 발송은
- * 막지 않는다 — 실패하면 inter=null로 두고 예전과 똑같은 메일이 나간다.
- */
 export async function attachInterDigest<T extends { inter?: InterDigestBlock | null }>(
   data: T,
-  domain: InterDomain = 'bio',
+  domains: InterDomain | InterDomain[] = DEFAULT_DOMAINS,
 ): Promise<T> {
   try {
-    data.inter = await buildInterDigest(domain);
+    data.inter = await buildInterDigest(domains);
   } catch (e: any) {
     console.error(`[Inter] 다이제스트 블록 생성 실패 — 해외 섹션 없이 발송합니다: ${e?.message}`);
     data.inter = null;
@@ -248,7 +327,8 @@ export function renderInterStrip(b: InterDigestBlock): string {
 
   const rows = b.combos.map((c, i) => `
     <div class="i-rank">
-      <span class="i-no">${i + 1}.</span> <span class="i-combo">${esc(c.label)}</span>
+      <span class="i-no">${i + 1}.</span> <span class="i-dom">${esc(c.domainLabel)}</span>
+      <span class="i-combo">${esc(c.label)}</span>
       <span class="i-nums"> · ${c.count}건</span>${
         c.isSurge ? '<span class="i-tag surge">급증</span>' : ''
       }
@@ -280,7 +360,7 @@ export function renderInterSection(b: InterDigestBlock, baseUrl: string): string
       `<div class="i-co">· <b>${esc(co.name)}</b> — ${esc(co.reason)}</div>`).join('');
     return `
     <div class="inter-match">
-      <div class="i-match-label">${esc(c.cellLabel)}</div>
+      <div class="i-match-label"><span class="i-dom">${esc(c.domainLabel)}</span> ${esc(c.cellLabel)}</div>
       <div>${badgeTag}${kindTag}</div>
       <div class="i-match-title"><a href="${esc(c.url)}" target="_blank">${esc(c.title)}</a></div>
       <div class="i-match-src">${esc(c.media)} · ${c.dateLabel}</div>
@@ -292,8 +372,12 @@ export function renderInterSection(b: InterDigestBlock, baseUrl: string): string
   <div class="section inter-sec">
     <div class="section-label inter-lb">🔭 글로벌 트렌드 × 스파크랩 포트폴리오</div>
     <div class="i-sub">
-      ${WINDOW_DAYS}일 기준, 해외 매체·논문 <strong>${b.total}건</strong>을 분석해 스파크랩 포트폴리오와
-      관련된 주요 트렌드 <strong>${b.cards.length}건</strong>을 선정했습니다.
+      ${WINDOW_DAYS}일 기준, 해외 매체·논문 <strong>${b.total}건</strong>${
+        b.domainTotals.length > 1
+          ? `(${b.domainTotals.map(d => `${esc(d.label)} ${d.total}`).join(' · ')})`
+          : ''
+      }을 분석해 스파크랩 포트폴리오와 관련된 주요 트렌드 <strong>${b.cards.length}건</strong>을
+      선정했습니다. 바이오·AI를 한 기준으로 비교해 중요도 순으로 골랐습니다.
     </div>
     ${cards}
   </div>`;
@@ -324,6 +408,7 @@ export const INTER_EMAIL_CSS = `
 .i-co{font-size:12.5px;color:#065F46;line-height:1.6;padding:4px 0}
 .i-co b{color:#047857;font-weight:800}
 .i-cta{display:block;width:100%;box-sizing:border-box;margin-top:13px;padding:13px 20px;background:#059669;color:#FFF !important;text-decoration:none;border-radius:8px;font-size:13px;font-weight:700;text-align:center}
+.i-dom{display:inline-block;padding:1px 7px;margin-right:5px;border-radius:9px;background:#D1FAE5;color:#065F46;font-size:10.5px;font-weight:800;letter-spacing:0;text-transform:none;vertical-align:middle}
 .i-tag{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;margin-right:6px}
 .i-tag.surge{background:#FEE2E2;color:#991B1B}
 .i-tag.opp{background:#FEF3C7;color:#92400E}

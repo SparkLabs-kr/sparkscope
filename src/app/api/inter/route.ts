@@ -36,7 +36,8 @@ export async function GET(req: NextRequest) {
 
   const locale = getLocale();
   const sp = req.nextUrl.searchParams;
-  const domain: InterDomain = sp.get('domain') === 'ai' ? 'ai' : 'bio';
+  // 기본은 AI — 화면 기본 탭과 같아야 한다(InterPanel.tsx).
+  const domain: InterDomain = sp.get('domain') === 'bio' ? 'bio' : 'ai';
   const countryParam = sp.get('country') as InterCountry | null;
   const country: InterCountry = countryParam && COUNTRIES.includes(countryParam) ? countryParam : 'all';
 
