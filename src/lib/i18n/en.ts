@@ -8,6 +8,24 @@
  * 기사 제목·AI 요약 문장·회사명처럼 DB/AI에서 오는 값은 번역 대상이 아니다(원문 그대로 노출).
  */
 export const EN: Record<string, string> = {
+  // ── 데일리 브리핑 헤드라인 (2026-09-28) ─────────────────────────
+  '오늘 브리핑 헤드라인': "Today's briefing headlines",
+  '저장됨 — 10:30 발송 때 이 목록으로 영상을 만듭니다.': 'Saved — the 10:30 send will build the video from this list.',
+  '아직 저장 안 됨 — 저장하지 않으면 발송 시점의 메일 TOP 3 + 해외 상위 2개로 자동 선정됩니다.':
+    'Not saved yet — if left unsaved, the email TOP 3 plus the top 2 global stories are picked automatically at send time.',
+  '해외 기사에서 추가': 'Add from global stories',
+  '브리핑 추가': 'Add to briefing',
+  '국내 기사는 아래 후보 목록의 [브리핑 추가] 버튼으로 넣을 수 있습니다.': 'Add Korean stories with the [Add to briefing] button in the candidate list below.',
+  '오늘 편집 저장 (메일 TOP 3 · 제외 · 브리핑)': "Save today's edits (email TOP 3 · exclusions · briefing)",
+  '자동 선정으로 되돌리기': 'Revert to automatic',
+  '저장 중…': 'Saving…',
+  '저장 실패': 'Save failed',
+  '편집을 지웠습니다. 발송 시점에 자동 선정됩니다.': 'Edits cleared. Everything will be picked automatically at send time.',
+  '저장했습니다. 오늘 10:30 메일과 브리핑에 반영됩니다.': "Saved. Today's 10:30 email and briefing will use these edits.",
+  '바뀐 내용이 아직 저장되지 않았습니다 — 아래 [오늘 편집 저장]을 눌러야 10:30 자동 메일에 반영됩니다.':
+    "Unsaved changes — press [Save today's edits] below to apply them to the 10:30 automatic email.",
+  '[오늘 편집 저장]한 TOP 3·제외 기사는 10:30 자동 메일에도 그대로 반영됩니다.':
+    "TOP 3 and exclusions saved with [Save today's edits] also apply to the 10:30 automatic email.",
   '지금은 로그인할 수 없습니다. 담당자에게 문의해 주세요.':
     'Sign-in is unavailable right now. Please contact your SparkLabs contact.',
   // ── 포트폴리오사 화면 · 업계 동향 (2026-09-23) ────────────────────
@@ -574,8 +592,8 @@ export const EN: Record<string, string> = {
   // ── 다이제스트 검수 ──────────────────────────────────────────────
   '다이제스트 검수': 'Digest review',
   '다이제스트 검수·발송': 'Digest review & send',
-  '발송 예정: 매주 월·수·금 오전 9시. 발송 전 TOP 3 순서·포함, 카테고리 요약, 편집자 한 줄을 조정하고 실제 발송 화면을 미리 볼 수 있습니다.':
-    'Scheduled to send Mon/Wed/Fri at 9:00 AM. Before it goes out you can adjust the top-3 order and inclusion, the category summaries, and the editor’s note, and preview exactly what will be sent.',
+  '발송 예정: 매주 월·수·금 오전 10시 30분. [오늘 편집 저장]한 TOP 3·제외 기사·브리핑 헤드라인은 자동 발송에 반영되고, 실제 발송 화면을 미리 볼 수 있습니다.':
+    "Scheduled to send Mon/Wed/Fri at 10:30 AM. TOP 3, exclusions and briefing headlines saved with [Save today's edits] apply to the automatic send, and you can preview exactly what will be sent.",
   '최근 4일 내 발송할 후보 기사가 없습니다. 수집이 실행되면 후보가 채워집니다.':
     'No candidate articles from the last 4 days. Candidates appear once collection runs.',
   '편집자 한 줄': 'Editor’s note',

@@ -3,11 +3,15 @@ import { articleTitle } from '@/lib/sparkscope/article-title';
 import { useT, useLocale } from '@/lib/i18n/client';
 // 다이제스트 검수 에디터 — TOP3 순서·포함 조정, 카테고리 요약, 편집자 한 줄, 실시간 미리보기, 발송.
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { BriefingHeadline } from '@/lib/sparkscope/briefing';
+
+const BRIEFING_MAX = 5;
 
 interface Cand {
   id: string;
   title: string;
   titleEn?: string | null;
+  link: string;
   source: string;
   category: string;
   oneLiner: string;
@@ -32,18 +36,30 @@ export function DigestReviewEditor({
   initialEditorIntro,
   canSend,
   recipient,
+  interOptions,
+  initialExcludedIds,
+  autoTop3Ids,
+  savedBriefing,
+  hasSavedEdits,
+  suggestedBriefing,
 }: {
   candidates: Cand[];
   initialTop3Ids: string[];
   initialEditorIntro: string;
   canSend: boolean;
   recipient: string;
+  interOptions: BriefingHeadline[];
+  initialExcludedIds: string[];
+  autoTop3Ids: string[];
+  savedBriefing: BriefingHeadline[];
+  hasSavedEdits: boolean;
+  suggestedBriefing: BriefingHeadline[];
 }) {
   const tr = useT();
   const locale = useLocale();
   const [editorIntro, setEditorIntro] = useState(initialEditorIntro);
   const [top3Ids, setTop3Ids] = useState<string[]>(initialTop3Ids.slice(0, 3));
-  const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const [excluded, setExcluded] = useState<Set<string>>(new Set(initialExcludedIds));
   const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [previewHtml, setPreviewHtml] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -52,6 +68,85 @@ export function DigestReviewEditor({
   const [testEmail, setTestEmail] = useState('');
 
   const byId = useMemo(() => new Map(candidates.map(c => [c.id, c])), [candidates]);
+
+  // 오늘 편집(메일 TOP 3 · 제외 · 브리핑 헤드라인) — 저장해야 10:30 자동 발송과 영상에 반영된다.
+  // 저장 전까지 브리핑은 "자동 선정 예상"을 보여준다.
+  const [briefing, setBriefing] = useState<BriefingHeadline[]>(savedBriefing.length > 0 ? savedBriefing : suggestedBriefing);
+  const [briefingSaved, setBriefingSaved] = useState(hasSavedEdits);
+  const [briefingDirty, setBriefingDirty] = useState(false);
+  // TOP 3·제외는 처음 값과 달라지면 "저장 안 됨"으로 본다.
+  const initialEditKey = useRef(JSON.stringify([initialTop3Ids.slice(0, 3), [...initialExcludedIds].sort()]));
+  const editKey = JSON.stringify([top3Ids, Array.from(excluded).sort()]);
+  const [savedEditKey, setSavedEditKey] = useState(initialEditKey.current);
+  const mailDirty = editKey !== savedEditKey;
+  const [briefingMsg, setBriefingMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [briefingBusy, setBriefingBusy] = useState(false);
+  // ref(id)와 url 둘 다로 중복을 본다 — 발송 크론이 만든 자동 선정분은 ref가 링크일 수 있다.
+  const inBriefing = useMemo(() => new Set(briefing.flatMap(h => [h.ref, h.url])), [briefing]);
+
+  function editBriefing(fn: (prev: BriefingHeadline[]) => BriefingHeadline[]) {
+    setBriefing(fn);
+    setBriefingDirty(true);
+    setBriefingMsg(null);
+  }
+  function addBriefing(h: BriefingHeadline) {
+    editBriefing(prev => (prev.some(x => x.ref === h.ref || x.url === h.url) || prev.length >= BRIEFING_MAX ? prev : [...prev, h]));
+  }
+  function moveBriefing(idx: number, dir: -1 | 1) {
+    editBriefing(prev => {
+      const next = [...prev];
+      const j = idx + dir;
+      if (j < 0 || j >= next.length) return prev;
+      [next[idx], next[j]] = [next[j], next[idx]];
+      return next;
+    });
+  }
+  function candToHeadline(a: Cand): BriefingHeadline {
+    return { kind: 'intra', ref: a.id, title: a.title, summary: a.oneLiner || a.title, source: a.source, url: a.link, label: CAT_LABEL[a.category] ?? a.category };
+  }
+  const linkOf = (id: string) => byId.get(id)?.link;
+  async function saveEdits(reset = false) {
+    setBriefingBusy(true);
+    setBriefingMsg(null);
+    try {
+      const body = reset
+        ? { headlines: [], top3Links: [], excludedLinks: [] }
+        : {
+            headlines: briefing,
+            top3Links: top3Ids.map(linkOf).filter(Boolean),
+            excludedLinks: Array.from(excluded).map(linkOf).filter(Boolean),
+            // 자동 선정과 사람 수정의 차이를 날짜별로 남긴다 — 랭킹을 고칠 근거(briefing.ts DailyEdits)
+            autoSuggested: {
+              headlines: suggestedBriefing.map(h => h.url),
+              top3Links: autoTop3Ids.map(linkOf).filter(Boolean),
+            },
+          };
+      const res = await fetch('/api/digest/edits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error ?? tr('저장 실패'));
+      if (reset) {
+        setBriefing(suggestedBriefing);
+        setTop3Ids(autoTop3Ids.slice(0, 3));
+        setExcluded(new Set());
+        setSavedEditKey(JSON.stringify([autoTop3Ids.slice(0, 3), []]));
+        setBriefingSaved(false);
+        setBriefingMsg({ ok: true, text: tr('편집을 지웠습니다. 발송 시점에 자동 선정됩니다.') });
+      } else {
+        setSavedEditKey(editKey);
+        setBriefingSaved(true);
+        setBriefingMsg({ ok: true, text: tr('저장했습니다. 오늘 10:30 메일과 브리핑에 반영됩니다.') });
+      }
+      setBriefingDirty(false);
+    } catch (e: any) {
+      setBriefingMsg({ ok: false, text: String(e?.message ?? e) });
+    } finally {
+      setBriefingBusy(false);
+    }
+  }
 
   const payload = useMemo(() => ({
     editorIntro,
@@ -157,6 +252,11 @@ export function DigestReviewEditor({
         {/* TOP 3 */}
         <section className="bg-white p-5 rounded-xl border border-gray-200">
           <div className="font-bold mb-1">⭐ {tr('오늘의 핵심 TOP 3')} <span className="text-xs font-normal text-gray-400">{tr('(스크랩 우선 자동 선정 · 순서/포함 조정 가능)')}</span></div>
+          <p className={`text-xs mb-1 ${mailDirty ? 'text-amber-600' : 'text-gray-400'}`}>
+            {mailDirty
+              ? tr('바뀐 내용이 아직 저장되지 않았습니다 — 아래 [오늘 편집 저장]을 눌러야 10:30 자동 메일에 반영됩니다.')
+              : tr('[오늘 편집 저장]한 TOP 3·제외 기사는 10:30 자동 메일에도 그대로 반영됩니다.')}
+          </p>
           {top3Ids.length === 0 && <p className="text-sm text-gray-400 py-2">{tr('선택된 TOP 3가 없습니다. 아래 후보에서')} <b>{tr('TOP3 추가')}</b>{tr('로 최대 3개까지 올리세요.')}</p>}
           <div className="space-y-2 mt-2">
             {top3Ids.map((id, idx) => {
@@ -178,6 +278,62 @@ export function DigestReviewEditor({
               );
             })}
           </div>
+        </section>
+
+        {/* 데일리 브리핑 헤드라인 */}
+        <section className="bg-white p-5 rounded-xl border border-gray-200">
+          <div className="font-bold mb-1">🎬 {tr('오늘 브리핑 헤드라인')} <span className="text-xs font-normal text-gray-400">({briefing.length}/{BRIEFING_MAX})</span></div>
+          <p className="text-xs text-gray-500 mb-2">
+            {briefingSaved && !briefingDirty && !mailDirty
+              ? tr('저장됨 — 10:30 발송 때 이 목록으로 영상을 만듭니다.')
+              : tr('아직 저장 안 됨 — 저장하지 않으면 발송 시점의 메일 TOP 3 + 해외 상위 2개로 자동 선정됩니다.')}
+          </p>
+          <div className="space-y-2">
+            {briefing.map((h, idx) => (
+              <div key={h.ref} className="flex items-start gap-2 rounded-lg border border-gray-200 p-2.5">
+                <div className="text-sm font-bold text-spark-purple w-6 text-center">{idx + 1}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-gray-800 truncate">{h.title}</div>
+                  <div className="text-xs text-gray-500">{tr(h.label)} · {tr(h.source)}</div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => moveBriefing(idx, -1)} disabled={idx === 0} className="px-1.5 py-0.5 text-xs rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-30">▲</button>
+                  <button onClick={() => moveBriefing(idx, 1)} disabled={idx === briefing.length - 1} className="px-1.5 py-0.5 text-xs rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-30">▼</button>
+                  <button onClick={() => editBriefing(prev => prev.filter(x => x.ref !== h.ref))} className="px-1.5 py-0.5 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50">✕</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {interOptions.length > 0 && (
+            <details className="mt-3">
+              <summary className="cursor-pointer text-xs font-semibold text-gray-600">🔭 {tr('해외 기사에서 추가')} ({interOptions.length})</summary>
+              <div className="mt-2 space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                {interOptions.map(h => (
+                  <div key={h.ref} className="flex items-center gap-2 rounded-lg border border-gray-100 p-2 text-sm">
+                    <div className="flex-1 min-w-0">
+                      <div className="truncate text-gray-800">{h.title}</div>
+                      <div className="text-[11px] text-gray-400">{h.summary} · {h.source}</div>
+                    </div>
+                    {!inBriefing.has(h.ref) && (
+                      <button onClick={() => addBriefing(h)} disabled={briefing.length >= BRIEFING_MAX} className="shrink-0 px-2 py-0.5 text-[11px] rounded border border-spark-purple text-spark-purple hover:bg-spark-light-purple/30 disabled:opacity-30">{tr('브리핑 추가')}</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+          <p className="mt-2 text-[11px] text-gray-400">{tr('국내 기사는 아래 후보 목록의 [브리핑 추가] 버튼으로 넣을 수 있습니다.')}</p>
+          <div className="mt-3 flex gap-2">
+            <button onClick={() => saveEdits()} disabled={briefingBusy} className="flex-1 rounded-lg bg-spark-purple py-2 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50">
+              {briefingBusy ? tr('저장 중…') : `💾 ${tr('오늘 편집 저장 (메일 TOP 3 · 제외 · 브리핑)')}`}
+            </button>
+            {briefingSaved && (
+              <button onClick={() => saveEdits(true)} disabled={briefingBusy} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50">{tr('자동 선정으로 되돌리기')}</button>
+            )}
+          </div>
+          {briefingMsg && (
+            <div className={`mt-2 rounded-lg px-3 py-2 text-xs ${briefingMsg.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{briefingMsg.text}</div>
+          )}
         </section>
 
         {/* 카테고리별 요약 + 후보 기사 */}
@@ -208,6 +364,9 @@ export function DigestReviewEditor({
                         </div>
                         {!inTop3 && !isExcluded && (
                           <button onClick={() => addTop3(a.id)} disabled={top3Ids.length >= 3} className="shrink-0 px-2 py-0.5 text-[11px] rounded border border-spark-purple text-spark-purple hover:bg-spark-light-purple/30 disabled:opacity-30" title={top3Ids.length >= 3 ? tr('TOP3가 이미 3개입니다') : ''}>{tr('TOP3 추가')}</button>
+                        )}
+                        {!isExcluded && !inBriefing.has(a.id) && !inBriefing.has(a.link) && (
+                          <button onClick={() => addBriefing(candToHeadline(a))} disabled={briefing.length >= BRIEFING_MAX} className="shrink-0 px-2 py-0.5 text-[11px] rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-30">🎬 {tr('브리핑 추가')}</button>
                         )}
                         <button onClick={() => toggleExclude(a.id)} className={`shrink-0 px-2 py-0.5 text-[11px] rounded border ${isExcluded ? 'border-gray-300 text-gray-500' : 'border-red-200 text-red-600 hover:bg-red-50'}`}>
                           {isExcluded ? tr('되돌리기') : tr('제외')}

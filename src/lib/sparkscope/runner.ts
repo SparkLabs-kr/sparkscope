@@ -22,6 +22,7 @@ import { buildDigestKeyMap, buildDigestContextMap, passesDigestGuard } from './r
 import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } from './mailer';
 import { sendDigestToSubscribers } from './digest-send';
 import { collectInterNews } from './inter-collect';
+import { publishBriefingSnapshot, loadDailyEdits, applyTop3Edits } from './briefing';
 import { filterInterNewsWithGemini } from './inter-filter';
 import { matchInterNewsWithPortfolio } from './inter-portfolio-match';
 import { computeAndStoreInterSummaries } from './inter-summary';
@@ -149,8 +150,17 @@ export async function buildDigestForSend(analyzed: AnalyzedArticle[]): Promise<D
   });
   const guardKeyMap = buildDigestKeyMap(guardTargets);
   const guardContextMap = buildDigestContextMap(guardTargets);
-  const digestReady = analyzed.filter(a => passesDigestGuard(a, guardKeyMap, guardContextMap));
-  console.log(`[runner] digest guard: ${analyzed.length} -> ${digestReady.length} (노이즈/관련성 재검증 후)`);
+  // 편집자가 검수 콘솔에 저장한 그날 수정(제외 기사·TOP 3) — 없으면 예전과 완전히 같다.
+  // 읽기 실패로 발송이 막히면 안 되므로 실패는 "수정 없음"으로 본다.
+  const edits = await loadDailyEdits().catch(e => {
+    console.error('[runner] 그날 편집 수정 읽기 실패(무시):', e);
+    return null;
+  });
+  const excludedLinks = new Set(edits?.excludedLinks ?? []);
+  const digestReady = analyzed
+    .filter(a => passesDigestGuard(a, guardKeyMap, guardContextMap))
+    .filter(a => !excludedLinks.has(a.link));
+  console.log(`[runner] digest guard: ${analyzed.length} -> ${digestReady.length} (노이즈/관련성 재검증 후${excludedLinks.size ? `, 편집자 제외 ${excludedLinks.size}건 반영` : ''})`);
 
   // 5. TOP3 후보 AI 최종 검증 — TOP3는 발송 메일에서 가장 눈에 띄는 자리라, 규칙 기반
   // 필터를 다 통과해도 놓칠 수 있는 "제목엔 회사명 있지만 실제로는 무관"한 경우까지 저비용
@@ -160,7 +170,25 @@ export async function buildDigestForSend(analyzed: AnalyzedArticle[]): Promise<D
   const scrapped = await prisma.article.findMany({ where: { isScrapped: true }, select: { link: true } });
   const scrappedLinks = new Set(scrapped.map(s => s.link));
   const top3Pool = rankTop3Pool(buildClusteredPool(digestReady), scrappedLinks);
-  const verifiedTop3 = await pickVerifiedTop3(top3Pool, 3);
+  // 편집자가 TOP 3를 지정했으면 그 순서가 먼저, 모자라면 AI 검증 결과로 채운다.
+  // 검수 화면 후보 창(7일)이 발송 재료 창(3일, loadSendArticles)보다 넓어서, 편집자가 고른 기사가
+  // 재료에 없을 수 있다 — 사람이 직접 고른 것이니 날짜와 무관하게 DB에서 불러와 넣는다.
+  const editPool: AnalyzedArticle[] = [...digestReady];
+  const missing = (edits?.top3Links ?? []).filter(l => !digestReady.some(a => a.link === l));
+  if (missing.length > 0) {
+    const rows = await prisma.article.findMany({ where: { link: { in: missing } } });
+    for (const r of rows as any[]) {
+      editPool.push({
+        ...r,
+        relatedCompanies: typeof r.relatedCompanies === 'string' ? JSON.parse(r.relatedCompanies) : (r.relatedCompanies ?? []),
+      });
+    }
+  }
+  const verifiedTop3 = applyTop3Edits(await pickVerifiedTop3(top3Pool, 3), editPool, edits);
+  if (edits?.top3Links.length) {
+    const found = edits.top3Links.filter(l => verifiedTop3.some(a => a.link === l)).length;
+    console.log(`[runner] 편집자 TOP 3 반영: 지정 ${edits.top3Links.length}건 중 ${found}건`);
+  }
 
   // 6. 다이제스트 데이터 + HTML (검증된 TOP3 + 본부 스크랩 기사 + Inter 섹션 반영)
   const data = await attachAiSignals(await attachInterDigest(
@@ -416,6 +444,13 @@ export async function runDailyDigest(opts: RunOptions = {}) {
     // 메일에 들어간 것과 같은 객체라 둘이 갈리지 않는다. 실패해도 발송은 계속한다.
     await publishSignalFeed(data.aiSignals).catch(e =>
       console.error('[runner] AI 시그널 발행 실패(무시):', e));
+    // 데일리 브리핑 영상의 재료 — 메일과 같은 data에서 헤드라인 5개를 뽑아 저장한다.
+    // 실제 발송하는 실행에서만(수집 전용 실행이 그날 스냅샷을 덮어쓰지 않게). 실패해도 발송은 계속한다.
+    if (opts.send && !opts.dryRun) {
+      await publishBriefingSnapshot(data)
+        .then(s => console.log(`[runner] 브리핑 헤드라인 저장: ${s.headlines.length}건 (${s.source})`))
+        .catch(e => console.error('[runner] 브리핑 헤드라인 저장 실패(무시):', e));
+    }
 
     const html = renderDigestHtml(data, opts.baseUrl);
     const subject = buildSubject(data.dateLabel, data.top3[0]?.title);

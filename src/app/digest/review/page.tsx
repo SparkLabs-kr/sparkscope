@@ -8,6 +8,8 @@ import { OPEN_ACCESS } from '@/lib/flags';
 import { canScrap } from '@/lib/scrap';
 import { loadDigestCandidates, buildReviewDigest } from '@/lib/sparkscope/review';
 import { DigestReviewEditor } from '@/components/DigestReviewEditor';
+import { buildInterDigest } from '@/lib/sparkscope/inter-digest';
+import { loadDailyEdits, intraHeadline, interHeadline, BRIEFING_MAX } from '@/lib/sparkscope/briefing';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,12 +22,30 @@ export default async function DigestReviewPage() {
   // 검수 화면의 후보 제목도 EN이면 영어로 — 메일 본문(미리보기)은 실제 발송본이라 한국어 그대로다.
   if (getLocale() === 'en') await ensureArticleEnDeep([candidates]);
   const initial = buildReviewDigest(candidates);
-  const initialTop3Ids = initial.top3.map(a => (a as any).id).filter(Boolean) as string[];
+  // top3는 클러스터링(buildClusteredPool)을 거치며 id 자리에 링크가 들어온다 — 링크로 후보 id를 되찾는다.
+  // (id로만 찾던 때는 TOP 3 칸이 늘 비어 보였다.)
+  const idByLink = new Map(candidates.map(a => [a.link, a.id]));
+  const autoTop3Ids = initial.top3.map(a => idByLink.get(a.link) ?? (a as any).id).filter(Boolean) as string[];
+  // 오늘 저장된 편집이 있으면 그 상태로 연다 — 10:30 자동 발송도 이 값을 쓴다.
+  const edits = await loadDailyEdits();
+  const savedTop3Ids = (edits?.top3Links ?? []).map(l => idByLink.get(l)).filter(Boolean) as string[];
+  const initialTop3Ids = savedTop3Ids.length > 0 ? savedTop3Ids : autoTop3Ids;
+  const initialExcludedIds = (edits?.excludedLinks ?? []).map(l => idByLink.get(l)).filter(Boolean) as string[];
+
+  // 데일리 브리핑 헤드라인 — 해외 카드는 메일과 같은 블록에서 고른다. 실패하면 국내만.
+  const inter = await buildInterDigest().catch(() => null);
+  const interOptions = (inter?.cards ?? []).map(interHeadline);
+  // 저장된 선택이 없으면 "자동 선정 예상"을 보여준다(발송 크론과 같은 규칙: 국내 TOP3 + 해외 상위 2).
+  const suggestedPicks = [
+    ...initial.top3.map(a => intraHeadline({ ...a, id: idByLink.get(a.link) })),
+    ...interOptions.slice(0, 2),
+  ].slice(0, BRIEFING_MAX);
 
   const dto = candidates.map(a => ({
     id: a.id,
     title: a.title,
     titleEn: a.titleEn,
+    link: a.link,
     source: a.source,
     category: a.category,
     oneLiner: a.oneLiner,
@@ -42,7 +62,7 @@ export default async function DigestReviewPage() {
         <div>
           <h1 className="text-3xl font-bold">📤 {t('다이제스트 검수·발송')}</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {t('발송 예정: 매주 월·수·금 오전 9시. 발송 전 TOP 3 순서·포함, 카테고리 요약, 편집자 한 줄을 조정하고 실제 발송 화면을 미리 볼 수 있습니다.')}
+            {t('발송 예정: 매주 월·수·금 오전 10시 30분. [오늘 편집 저장]한 TOP 3·제외 기사·브리핑 헤드라인은 자동 발송에 반영되고, 실제 발송 화면을 미리 볼 수 있습니다.')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -61,6 +81,12 @@ export default async function DigestReviewPage() {
           initialTop3Ids={initialTop3Ids}
           initialEditorIntro={initial.editorIntro}
           canSend={canSend}
+          interOptions={interOptions}
+          initialExcludedIds={initialExcludedIds}
+          autoTop3Ids={autoTop3Ids}
+          savedBriefing={edits?.headlines ?? []}
+          hasSavedEdits={!!edits}
+          suggestedBriefing={suggestedPicks}
           recipient={process.env.DIGEST_TEST_RECIPIENT ?? process.env.DIGEST_TO_GROUP ?? ''}
         />
       )}
