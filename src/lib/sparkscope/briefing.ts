@@ -26,7 +26,8 @@ const KIND_PICKS = 'briefing_picks';
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
 export interface BriefingHeadline {
-  kind: 'intra' | 'inter';
+  /** intra 국내 기사 · trend 이번 주 AI 트렌드(signal-feed) · inter 해외 트렌드(Inter 기사) */
+  kind: 'intra' | 'trend' | 'inter';
   /** 기사 id(국내) 또는 기사 URL(해외 — Inter 카드에는 id가 없다). 검수 콘솔의 선택 키. */
   ref: string;
   title: string;

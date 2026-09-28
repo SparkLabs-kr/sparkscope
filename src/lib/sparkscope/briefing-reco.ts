@@ -1,36 +1,31 @@
 /**
  * 데일리 브리핑 추천 헤드라인 5개 + 검수 화면의 교체 후보 목록.
  *
- * "중요도가 제일 높은 5개"를 뽑는다. 분야(스파크랩·포트폴리오·업계·해외)를 일부러 섞지 않는다 —
- * 그날 중요한 게 전부 포트폴리오 기사면 5개 다 포트폴리오여도 된다(2026-09-28 소윤 결정).
+ * 추천은 아래 순서대로 위에서부터 채운다(2026-09-28 소윤 결정). 앞 단계가 5칸을 다 채우면
+ * 뒤 단계는 들어가지 않는다 — 분야를 일부러 섞지 않는다.
  *
- * 국내(Article.importance·priorityScore)와 해외(InterNewsVerdict — 중요도 칸 없음)는 점수 체계가
- * 달라 규칙으로는 한 줄에 세울 수 없다. 그래서 양쪽 상위 후보를 추려 AI에게 한 번에 보여 주고
- * 순위를 매기게 한다(호출 1회). AI가 실패하면 국내 중요도 순으로 대신한다.
+ *   1. 스파크랩 직접 언급 뉴스              (Article sparklabs_self)
+ *   2. 포트폴리오사 뉴스 중 중요도 HIGH 이상  (Article portfolio_company*, 회사당 1건)
+ *   3. 이번 주 AI 트렌드                    (메일 "🤖 AI 트렌드 TOP 5"와 같은 목록 — signal-feed.ts)
+ *   4. 해외 주요 트렌드 토픽                 (Inter 기사 중 AI, 포트폴리오 연결 많은 순)
  *
- * 추천은 수집이 끝날 때마다 한 번만 계산해 DashboardInsight(briefing_reco)에 저장한다.
- * 검수 화면에서 본 추천과 발송 때 쓰이는 추천이 같아야 하기 때문이다 — AI는 부를 때마다 조금씩
- * 다른 답을 내므로, 매번 새로 계산하면 "화면에선 A였는데 영상엔 B"가 된다.
- * 새 수집이 끝나면(daily-collect RunLog가 바뀌면) 다시 계산한다.
+ * 바이오는 추천에도 교체 후보에도 넣지 않는다. AC·VC 업계 동향·스타트업계 뉴스는 추천 대상이
+ * 아니지만, 편집자가 직접 고를 수 있게 교체 후보에는 남긴다.
  *
- * 서버 전용 — OpenAI SDK를 쓰므로 클라이언트 컴포넌트에서 import 하지 않는다(CLAUDE.md i18n 절 참고).
+ * 규칙만으로 정하므로 같은 데이터면 늘 같은 답이 나온다. 그래도 수집 1회당 한 번 계산해
+ * DashboardInsight(briefing_reco)에 저장한다 — AI 트렌드 목록은 2시간마다 새로 계산되므로,
+ * 검수 화면을 본 뒤 발송 전에 목록이 바뀌면 "화면에선 A였는데 영상엔 B"가 될 수 있다.
  */
-import OpenAI from 'openai';
 import { prisma } from '@/lib/prisma';
 import { loadDigestCandidates, type ReviewArticle } from './review';
 import { buildClusteredPool } from './digest';
+import { buildSignalFeed } from './signal-feed';
 import { BRIEFING_MAX, kstDateKey, type BriefingHeadline } from './briefing';
 
 const KIND_RECO = 'briefing_reco';
-const MODEL = 'gpt-4.1';
 /** 추천 대상 창 — 발송 재료 창(loadSendArticles 3일)과 같게 둔다. 교체 후보는 검수 화면과 같은 7일. */
 const RECO_WINDOW_DAYS = 3;
 const PICKER_WINDOW_DAYS = 7;
-/** AI에게 보여줄 후보 수 — 국내·해외 각각 */
-const SHORTLIST_INTRA = 12;
-const SHORTLIST_INTER = 10;
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const CATEGORY_LABEL: Record<string, string> = {
   sparklabs_self: '🏢 스파크랩 뉴스',
@@ -40,13 +35,15 @@ const CATEGORY_LABEL: Record<string, string> = {
   competitor: '🤝 AC·VC 업계 동향',
   industry_trend: '🌐 스타트업계 뉴스',
 };
-const DOMAIN_LABEL: Record<string, string> = { ai: 'AI', bio: '바이오' };
+const PORTFOLIO_CATEGORIES = new Set(['portfolio_company', 'portfolio_company_tw', 'portfolio_company_gv']);
 const IMPORTANCE_RANK: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+const TREND_LABEL = '📈 이번 주 AI 트렌드';
+const INTER_LABEL = '🔭 해외 트렌드 · AI';
 
 /** 교체 후보 한 줄 — 헤드라인 + 화면에 보여줄 보조 정보 */
 export interface BriefingCandidate extends BriefingHeadline {
   pubDate: string;
-  /** 국내: CRITICAL/HIGH/MEDIUM/LOW. 해외는 없음 */
+  /** 국내: CRITICAL/HIGH/MEDIUM/LOW. 해외·트렌드는 없음 */
   importance?: string;
   /** 해외: 연결된 포트폴리오사 수 */
   matchCount?: number;
@@ -54,57 +51,59 @@ export interface BriefingCandidate extends BriefingHeadline {
 
 export interface BriefingRecommendation {
   headlines: BriefingHeadline[];
+  /** 'rule' — 4단계 규칙. 'ai'는 2026-09-28 이전 방식(AI 순위)으로 만든 캐시다 */
   method: 'ai' | 'rule';
+  /** 헤드라인마다 몇 단계(1~4)에서 뽑혔는지 — headlines와 같은 순서 */
+  tiers?: number[];
   /** 이 추천의 근거가 된 수집 완료 시각(ISO) — 바뀌면 다시 계산한다 */
   basis: string;
   computedAt: string;
 }
 
+type IntraCandidate = BriefingCandidate & { category: string; company: string };
+
 function daysAgo(n: number): Date {
   return new Date(Date.now() - n * 24 * 60 * 60 * 1000);
-}
-
-function intraCandidate(a: ReviewArticle): BriefingCandidate {
-  return {
-    kind: 'intra',
-    ref: a.id,
-    title: a.title,
-    summary: a.oneLiner || a.title,
-    source: a.source,
-    url: a.link,
-    label: CATEGORY_LABEL[a.category] ?? a.category,
-    pubDate: new Date(a.pubDate).toISOString(),
-    importance: a.importance,
-  };
 }
 
 /**
  * 국내 후보 — 검수 화면과 같은 가드를 통과한 기사를 중요도 순으로.
  * cluster=true(추천용)면 같은 사건은 하나로 묶는다. 교체 목록은 묶지 않는다 — 묶으면 대표 1건만
  * 남아서, 편집자가 원하는 매체의 기사(예: 영문 대표에 가려진 한국어 기사)를 고를 수 없다.
+ * windowDays=null이면 검수 화면 후보 창 그대로(7일 전 0시부터) — 시간 단위로 다시 자르면
+ * 검수 목록엔 있는 기사가 교체 목록에선 빠진다.
  */
-async function loadIntra(windowDays: number | null, cluster: boolean): Promise<BriefingCandidate[]> {
-  // null = 검수 화면 후보 창 그대로(loadDigestCandidates — 7일 전 0시부터). 시간 단위로 다시 자르면
-  // 검수 목록엔 있는 기사가 교체 목록에선 빠진다.
+async function loadIntra(windowDays: number | null, cluster: boolean): Promise<IntraCandidate[]> {
   const since = windowDays === null ? null : daysAgo(windowDays);
   const all = (await loadDigestCandidates()).filter(a => !since || new Date(a.pubDate) >= since);
   // buildClusteredPool은 id 자리에 링크를 넣으므로, 대표 기사의 id를 링크로 되찾는다.
   const idByLink = new Map(all.map(a => [a.link, a.id]));
   const pool = cluster ? (buildClusteredPool(all) as ReviewArticle[]) : all;
   return pool
-    .map(a => ({ ...a, id: idByLink.get(a.link) ?? a.id }))
     .sort((a, b) =>
       (IMPORTANCE_RANK[b.importance] ?? 0) - (IMPORTANCE_RANK[a.importance] ?? 0)
       || b.priorityScore - a.priorityScore)
-    .map(intraCandidate);
+    .map(a => ({
+      kind: 'intra' as const,
+      ref: idByLink.get(a.link) ?? a.id,
+      title: a.title,
+      summary: a.oneLiner || a.title,
+      source: a.source,
+      url: a.link,
+      label: CATEGORY_LABEL[a.category] ?? a.category,
+      pubDate: new Date(a.pubDate).toISOString(),
+      importance: a.importance,
+      category: a.category,
+      company: a.matchedKeyword,
+    }));
 }
 
-/** 해외 후보 — 관련 판정된 Inter 기사. 포트폴리오 연결이 많은 것 → 최신 순. */
+/** 해외 후보 — 관련 판정된 Inter 기사 중 AI만(바이오 제외). 포트폴리오 연결이 많은 것 → 최신 순. */
 async function loadInter(windowDays: number): Promise<BriefingCandidate[]> {
   const rows = await prisma.interNewsVerdict.findMany({
-    where: { relevant: true, news: { publishedAt: { gte: daysAgo(windowDays) } } },
+    where: { relevant: true, domain: 'ai', news: { publishedAt: { gte: daysAgo(windowDays) } } },
     select: {
-      titleKo: true, reason: true, domain: true,
+      titleKo: true, reason: true,
       news: { select: { title: true, url: true, source: true, publishedAt: true } },
       _count: { select: { matches: true } },
     },
@@ -121,51 +120,45 @@ async function loadInter(windowDays: number): Promise<BriefingCandidate[]> {
       summary: r.reason,
       source: r.news.source,
       url: r.news.url,
-      label: `🔭 해외 · ${DOMAIN_LABEL[r.domain ?? ''] ?? '기타'}`,
+      label: INTER_LABEL,
       pubDate: r.news.publishedAt.toISOString(),
       matchCount: r._count.matches,
     }));
 }
 
-/** 검수 화면 교체 후보 전체(7일). 국내 중요도 순 → 해외. */
-export async function loadBriefingCandidates(): Promise<BriefingCandidate[]> {
-  const [intra, inter] = await Promise.all([loadIntra(null, false), loadInter(PICKER_WINDOW_DAYS)]);
-  return [...intra, ...inter];
+/** 이번 주 AI 트렌드 — 메일의 AI 트렌드 TOP 5와 같은 목록(사전계산을 읽으므로 빠르다). */
+async function loadTrends(): Promise<BriefingCandidate[]> {
+  const feed = await buildSignalFeed('ai');
+  return feed.items.map(it => ({
+    kind: 'trend' as const,
+    ref: it.url,
+    title: it.titleKo || it.title,
+    summary: it.summaryKo || it.title,
+    source: it.source,
+    url: it.url,
+    label: TREND_LABEL,
+    pubDate: it.publishedAt ?? feed.generatedAt,
+  }));
 }
 
-const RANK_SYSTEM = `당신은 스파크랩(SparkLabs, 한국의 스타트업 액셀러레이터·VC)의 아침 브리핑 편집자입니다.
-임직원이 출근길에 2~3분 동안 들을 헤드라인 ${BRIEFING_MAX}개를 고릅니다.
+/** 화면·저장용 헤드라인만 남긴다(보조 정보 제거). */
+function toHeadline(c: BriefingCandidate & Partial<IntraCandidate>): BriefingHeadline {
+  const { pubDate: _p, importance: _i, matchCount: _m, category: _c, company: _k, ...h } = c;
+  return h;
+}
+function toCandidate(c: IntraCandidate): BriefingCandidate {
+  const { category: _c, company: _k, ...rest } = c;
+  return rest;
+}
 
-기준은 "중요도" 하나입니다.
-- 스파크랩과 포트폴리오사에 직접 영향을 주거나, 스타트업·투자 업계에서 가장 큰 사건일수록 중요합니다.
-- 분야를 골고루 섞지 마세요. 중요한 것이 한 분야에 몰려 있으면 그대로 고릅니다.
-- 같은 사건을 다룬 기사는 하나만 고릅니다. 국내 기사와 해외 기사가 같은 사건을 각자 보도한 경우가
-  많으니(예: 해외 원문과 그걸 옮긴 국내 기사) 특히 주의하세요. 둘 중 우리에게 더 가까운 쪽 하나만 남깁니다.
-- 주가 등락·행사 스케치·칼럼처럼 사건이 아닌 기사는 뒤로 미룹니다.
-
-JSON 배열로 후보 번호만, 중요한 순서대로 정확히 ${BRIEFING_MAX}개 답하세요. 예: [3, 0, 12, 7, 5]`;
-
-async function rankWithAI(pool: BriefingCandidate[]): Promise<BriefingCandidate[] | null> {
-  const lines = pool.map((c, i) =>
-    `${i}. [${c.kind === 'intra' ? `국내 ${c.label.replace(/^\S+\s/, '')}${c.importance ? ` · ${c.importance}` : ''}` : `해외 ${c.label.replace(/^\S+\s/, '')}${c.matchCount ? ` · 포트폴리오 연결 ${c.matchCount}` : ''}`}] ${c.title} — ${c.summary}`);
-  const resp = await openai.chat.completions.create({
-    model: MODEL,
-    max_tokens: 100,
-    temperature: 0,
-    messages: [
-      { role: 'system', content: RANK_SYSTEM },
-      { role: 'user', content: lines.join('\n') },
-    ],
-  });
-  const text = resp.choices[0]?.message?.content ?? '';
-  const match = text.match(/\[[\d\s,]*\]/);
-  if (!match) return null;
-  const picked: BriefingCandidate[] = [];
-  for (const i of JSON.parse(match[0]) as number[]) {
-    const c = pool[i];
-    if (c && !picked.includes(c)) picked.push(c);
-  }
-  return picked.length > 0 ? picked.slice(0, BRIEFING_MAX) : null;
+/** 검수 화면 교체 후보 전체. 국내(7일) → AI 트렌드 → 해외 AI(7일). 바이오는 없다. */
+export async function loadBriefingCandidates(): Promise<BriefingCandidate[]> {
+  const [intra, trends, inter] = await Promise.all([
+    loadIntra(null, false),
+    loadTrends().catch(() => [] as BriefingCandidate[]),
+    loadInter(PICKER_WINDOW_DAYS),
+  ]);
+  return [...intra.map(toCandidate), ...trends, ...inter];
 }
 
 async function currentBasis(): Promise<string> {
@@ -177,10 +170,43 @@ async function currentBasis(): Promise<string> {
   return last?.finishedAt?.toISOString() ?? 'none';
 }
 
-/** 후보 한 줄에서 화면·저장용 헤드라인만 남긴다. */
-function toHeadline(c: BriefingCandidate): BriefingHeadline {
-  const { pubDate: _p, importance: _i, matchCount: _m, ...h } = c;
-  return h;
+/** 4단계 규칙으로 5칸을 채운다. */
+async function pickByTiers(): Promise<{ picked: BriefingCandidate[]; tiers: number[] }> {
+  const [intra, trends, inter] = await Promise.all([
+    loadIntra(RECO_WINDOW_DAYS, true),
+    loadTrends().catch(e => { console.error('[briefing-reco] AI 트렌드 읽기 실패(건너뜀):', e); return [] as BriefingCandidate[]; }),
+    loadInter(RECO_WINDOW_DAYS),
+  ]);
+
+  // 2단계: 포트폴리오사 HIGH 이상, 회사당 1건 — 같은 회사 기사 두 개가 두 칸을 차지하지 않게.
+  const usedCompany = new Set<string>();
+  const portfolioHigh = intra.filter(a => {
+    if (!PORTFOLIO_CATEGORIES.has(a.category)) return false;
+    if ((IMPORTANCE_RANK[a.importance ?? ''] ?? 0) < IMPORTANCE_RANK.HIGH) return false;
+    if (usedCompany.has(a.company)) return false;
+    usedCompany.add(a.company);
+    return true;
+  });
+
+  const tierLists: BriefingCandidate[][] = [
+    intra.filter(a => a.category === 'sparklabs_self'),
+    portfolioHigh,
+    trends,
+    inter,
+  ];
+  const picked: BriefingCandidate[] = [];
+  const tiers: number[] = [];
+  const seenUrl = new Set<string>();
+  tierLists.forEach((list, i) => {
+    for (const c of list) {
+      if (picked.length >= BRIEFING_MAX) return;
+      if (seenUrl.has(c.url)) continue;
+      seenUrl.add(c.url);
+      picked.push(c);
+      tiers.push(i + 1);
+    }
+  });
+  return { picked, tiers };
 }
 
 /**
@@ -198,22 +224,17 @@ export async function getBriefingRecommendation(force = false): Promise<Briefing
     if (row) {
       try {
         const cached = JSON.parse(row.value) as BriefingRecommendation;
-        if (cached.basis === basis && cached.headlines?.length > 0) return cached;
+        // 'ai'는 예전 방식으로 만든 캐시 — 규칙이 바뀌었으니 다시 계산한다.
+        if (cached.basis === basis && cached.method === 'rule' && cached.headlines?.length > 0) return cached;
       } catch { /* 깨진 캐시는 새로 계산 */ }
     }
   }
 
-  const [intra, inter] = await Promise.all([loadIntra(RECO_WINDOW_DAYS, true), loadInter(RECO_WINDOW_DAYS)]);
-  const pool = [...intra.slice(0, SHORTLIST_INTRA), ...inter.slice(0, SHORTLIST_INTER)];
-  let picked: BriefingCandidate[] | null = null;
-  try {
-    picked = await rankWithAI(pool);
-  } catch (e) {
-    console.error('[briefing-reco] AI 순위 실패 — 국내 중요도 순으로 대신합니다:', e);
-  }
+  const { picked, tiers } = await pickByTiers();
   const rec: BriefingRecommendation = {
-    headlines: (picked ?? intra.slice(0, BRIEFING_MAX)).map(toHeadline),
-    method: picked ? 'ai' : 'rule',
+    headlines: picked.map(toHeadline),
+    method: 'rule',
+    tiers,
     basis,
     computedAt: new Date().toISOString(),
   };

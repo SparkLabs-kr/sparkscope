@@ -12,9 +12,10 @@ export const EN: Record<string, string> = {
   '추천 계산 중…': 'Computing picks…',
   '추천 다시 받기': 'Refresh picks',
   '저장됨 — 발송 때 이 목록으로 영상을 만듭니다.': 'Saved — the video will be built from this list at send time.',
-  '아직 저장 안 됨 — 저장하지 않으면 🤖 추천 5개가 그대로 나갑니다.': 'Not saved yet — if left unsaved, the 5 🤖 picks go out as is.',
-  '🤖 AI 추천': '🤖 AI picks',
-  '⚙️ 중요도 순 추천': '⚙️ Picks by importance',
+  '아직 저장 안 됨 — 저장하지 않으면 추천 5개가 그대로 나갑니다.': 'Not saved yet — if left unsaved, the 5 picks go out as is.',
+  '추천 순서: ① 스파크랩 직접 언급 → ② 포트폴리오사 중요도 HIGH → ③ 이번 주 AI 트렌드 → ④ 해외 AI 트렌드 (바이오 제외)':
+    'Pick order: ① SparkLabs mentions → ② portfolio news rated HIGH → ③ this week in AI → ④ global AI trends (bio excluded)',
+  'AI 트렌드': 'AI trends',
   '기준': 'as of',
   '추천': 'Recommended',
   '바꾸기': 'Replace',

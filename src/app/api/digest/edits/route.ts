@@ -13,7 +13,7 @@ export async function GET() {
 }
 
 function isHeadline(h: any): h is BriefingHeadline {
-  return h && (h.kind === 'intra' || h.kind === 'inter')
+  return h && (h.kind === 'intra' || h.kind === 'trend' || h.kind === 'inter')
     && ['ref', 'title', 'summary', 'source', 'url', 'label'].every(k => typeof h[k] === 'string');
 }
 const isStringList = (v: unknown): v is string[] => Array.isArray(v) && v.every(x => typeof x === 'string');
