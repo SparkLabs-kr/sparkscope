@@ -4,10 +4,12 @@
  * 추천은 아래 순서대로 위에서부터 채운다(2026-09-28 소윤 결정). 앞 단계가 5칸을 다 채우면
  * 뒤 단계는 들어가지 않는다 — 분야를 일부러 섞지 않는다.
  *
- *   1. 스파크랩 직접 언급 뉴스              (Article sparklabs_self)
- *   2. 포트폴리오사 뉴스 중 중요도 높은 것    (Article portfolio_company*, 회사당 1건, 최소 2건 보장 — pickByTiers)
- *   3. 이번 주 AI 트렌드                    (메일 "🤖 AI 트렌드 TOP 5"와 같은 목록 — signal-feed.ts)
- *   4. 해외 주요 트렌드 토픽                 (Inter 기사 중 AI, 포트폴리오 연결 많은 순)
+ *   1. 스파크랩 직접 언급 뉴스      (다이제스트 "스파크랩 직접 언급" 섹션)
+ *   2. 포트폴리오사 뉴스             (다이제스트 "포트폴리오 하이라이트" 섹션, 중요도 순, 최소 2건 보장)
+ *   3. 이번 주 AI 트렌드            (다이제스트 "AI 트렌드 TOP 5" 섹션)
+ *   4. 해외 주요 트렌드 토픽         (다이제스트 "해외 트렌드" 섹션 중 AI)
+ *
+ * 재료는 다이제스트에 실린 기사뿐이고 기간도 다이제스트를 그대로 따른다 — 여기서 따로 창을 자르지 않는다.
  *
  * 바이오는 추천에도 교체 후보에도 넣지 않는다. AC·VC 업계 동향·스타트업계 뉴스는 추천 대상이
  * 아니지만, 편집자가 직접 고를 수 있게 교체 후보에는 남긴다.
@@ -17,14 +19,15 @@
  * 검수 화면을 본 뒤 발송 전에 목록이 바뀌면 "화면에선 A였는데 영상엔 B"가 될 수 있다.
  */
 import { prisma } from '@/lib/prisma';
-import { loadDigestCandidates, type ReviewArticle } from './review';
-import { buildClusteredPool } from './digest';
+import { loadDigestCandidates, buildReviewDigest } from './review';
+import { attachInterDigest } from './inter-digest';
+import { attachAiSignals } from './signal-digest';
+import type { AnalyzedArticle, DigestData } from './types';
 import { buildSignalFeed } from './signal-feed';
 import { BRIEFING_MAX, kstDateKey, type BriefingHeadline } from './briefing';
 
 const KIND_RECO = 'briefing_reco';
-/** 추천 대상 창 — 발송 재료 창(loadSendArticles 3일)과 같게 둔다. 교체 후보는 검수 화면과 같은 7일. */
-const RECO_WINDOW_DAYS = 3;
+/** 교체 후보 중 해외 기사 창 — 검수 화면 후보와 같은 7일 */
 const PICKER_WINDOW_DAYS = 7;
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -37,7 +40,6 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 /** 브리핑에 포트폴리오 기사를 최소 몇 건 넣을지 */
 const PORTFOLIO_MIN = 2;
-const PORTFOLIO_CATEGORIES = new Set(['portfolio_company', 'portfolio_company_tw', 'portfolio_company_gv']);
 const IMPORTANCE_RANK: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
 const TREND_LABEL = '📈 이번 주 AI 트렌드';
 /**
@@ -74,32 +76,16 @@ function daysAgo(n: number): Date {
   return new Date(Date.now() - n * 24 * 60 * 60 * 1000);
 }
 
-/**
- * 국내 후보 — 검수 화면과 같은 가드를 통과한 기사를 중요도 순으로.
- * cluster=true(추천용)면 같은 사건은 하나로 묶는다. 교체 목록은 묶지 않는다 — 묶으면 대표 1건만
- * 남아서, 편집자가 원하는 매체의 기사(예: 영문 대표에 가려진 한국어 기사)를 고를 수 없다.
- * windowDays=null이면 검수 화면 후보 창 그대로(7일 전 0시부터) — 시간 단위로 다시 자르면
- * 검수 목록엔 있는 기사가 교체 목록에선 빠진다.
- */
-async function loadIntra(windowDays: number | null, cluster: boolean): Promise<IntraCandidate[]> {
-  const since = windowDays === null ? null : daysAgo(windowDays);
-  const all = (await loadDigestCandidates()).filter(a => !since || new Date(a.pubDate) >= since);
-  // buildClusteredPool은 id 자리에 링크를 넣으므로, 대표 기사의 id를 링크로 되찾는다.
-  const idByLink = new Map(all.map(a => [a.link, a.id]));
-  // 추천용(cluster)은 주가 시황 기사를 묶기 전에 뺀다 — 위 STOCK_TICKER 참고.
-  const pool = cluster
-    ? (buildClusteredPool(all.filter(a => !STOCK_TICKER.test(a.title))) as ReviewArticle[])
-    : all;
-  return pool
-    // 같은 중요도면 여러 매체가 함께 다룬 사건이 먼저(otherOutlets — 묶기 결과). 이게 없으면
-    // 15개 매체가 보도한 "스카이랩스 타임 헬스테크 500 선정"이 공시 기사 한 건에 밀렸다.
+/** 교체 후보(국내) — 검수 화면 후보 전체, 묶지 않고 중요도 순. 묶으면 대표 1건만 남아 원하는 매체 기사를 못 고른다. */
+async function loadIntraPicker(): Promise<IntraCandidate[]> {
+  const all = await loadDigestCandidates();
+  return [...all]
     .sort((a, b) =>
       (IMPORTANCE_RANK[b.importance] ?? 0) - (IMPORTANCE_RANK[a.importance] ?? 0)
-      || (b.otherOutlets ?? 0) - (a.otherOutlets ?? 0)
       || b.priorityScore - a.priorityScore)
     .map(a => ({
       kind: 'intra' as const,
-      ref: idByLink.get(a.link) ?? a.id,
+      ref: a.id,
       title: a.title,
       summary: a.oneLiner || a.title,
       source: a.source,
@@ -168,7 +154,7 @@ function toCandidate(c: IntraCandidate): BriefingCandidate {
 /** 검수 화면 교체 후보 전체. 국내(7일) → AI 트렌드 → 해외 AI(7일). 바이오는 없다. */
 export async function loadBriefingCandidates(): Promise<BriefingCandidate[]> {
   const [intra, trends, inter] = await Promise.all([
-    loadIntra(null, false),
+    loadIntraPicker(),
     loadTrends().catch(() => [] as BriefingCandidate[]),
     loadInter(PICKER_WINDOW_DAYS),
   ]);
@@ -182,27 +168,6 @@ async function currentBasis(): Promise<string> {
     select: { finishedAt: true },
   });
   return last?.finishedAt?.toISOString() ?? 'none';
-}
-
-/**
- * 포트폴리오 기사를 회사 단위로 묶어 회사당 대표 1건. 순서는 중요도 → 보도량(같은 회사 기사 수) →
- * priorityScore. 사건 단위 묶기(clusterArticles)는 매체마다 제목이 크게 다르면 한 사건을 여러 개로
- * 쪼개서, 15개 매체가 보도한 "스카이랩스 타임 헬스테크 500"의 보도량이 0으로 잡혔다. 브리핑은
- * 어차피 회사당 1건이라 회사로 묶는 편이 정확하다. 주가 시황 기사는 대표·보도량 모두에서 뺀다.
- */
-function portfolioByCompany(list: IntraCandidate[]): IntraCandidate[] {
-  const byCompany = new Map<string, IntraCandidate[]>();
-  for (const a of list) {
-    if (!PORTFOLIO_CATEGORIES.has(a.category) || STOCK_TICKER.test(a.title)) continue;
-    const arr = byCompany.get(a.company) ?? [];
-    arr.push(a);
-    byCompany.set(a.company, arr);
-  }
-  const rank = (a: IntraCandidate) => IMPORTANCE_RANK[a.importance ?? ''] ?? 0;
-  return Array.from(byCompany.values())
-    .map(arr => ({ rep: arr[0], coverage: arr.length }))   // loadIntra가 이미 중요도·점수 순으로 정렬해 둠
-    .sort((x, y) => rank(y.rep) - rank(x.rep) || y.coverage - x.coverage || 0)
-    .map(x => x.rep);
 }
 
 /**
@@ -224,57 +189,104 @@ async function recentlyBriefedUrls(): Promise<Set<string>> {
   return urls;
 }
 
-/** 4단계 규칙으로 5칸을 채운다. */
+/**
+ * 다이제스트에 실린 기사만 재료로 쓴다(2026-09-28 소윤 결정 — "다이제스트에 나온 것 중 뽑는다,
+ * 기간도 다이제스트를 그대로 따라간다"). 예전엔 여기서 3일·7일 창을 따로 잘라서, 다이제스트에
+ * 버젓이 실린 스파크랩 기사 3건(9/21~22)이 추천에서는 빠졌다.
+ * 검수 화면 미리보기와 같은 조립(review.ts buildReviewDigest)을 쓴다 — 편집자가 보는 메일이 기준.
+ */
+async function buildDigestForBriefing(): Promise<DigestData> {
+  const candidates = await loadDigestCandidates();
+  return attachAiSignals(await attachInterDigest(buildReviewDigest(candidates)));
+}
+
+function fromArticle(a: AnalyzedArticle & { id?: string }, idByLink: Map<string, string>): IntraCandidate {
+  return {
+    kind: 'intra',
+    ref: idByLink.get(a.link) ?? a.id ?? a.link,
+    title: a.title,
+    summary: a.oneLiner || a.title,
+    source: a.source,
+    url: a.link,
+    label: CATEGORY_LABEL[a.category] ?? a.category,
+    pubDate: new Date(a.pubDate).toISOString(),
+    importance: a.importance,
+    category: a.category,
+    company: a.matchedKeyword,
+  };
+}
+
+/** 제목에 한글이 있는가 — 영문 기사(같은 사건의 영문판)를 국내 단계에서 거르는 용도 */
+const isKorean = (t: string) => /[가-힣]/.test(t);
+
+/** 4단계 규칙으로 5칸을 채운다 — 재료는 전부 다이제스트 섹션. */
 async function pickByTiers(): Promise<{ picked: BriefingCandidate[]; tiers: number[] }> {
-  const [briefed, intra, intraRecentAll, intraWeekAll, trends, inter] = await Promise.all([
+  const [briefed, data, candidates] = await Promise.all([
     recentlyBriefedUrls(),
-    loadIntra(RECO_WINDOW_DAYS, true),
-    loadIntra(RECO_WINDOW_DAYS, false),
-    loadIntra(null, false),
-    loadTrends().catch(e => { console.error('[briefing-reco] AI 트렌드 읽기 실패(건너뜀):', e); return [] as BriefingCandidate[]; }),
-    loadInter(RECO_WINDOW_DAYS),
+    buildDigestForBriefing(),
+    loadDigestCandidates(),
   ]);
-
-  // 2단계: 포트폴리오사 — 최소 PORTFOLIO_MIN건을 보장한다(2026-09-28 소윤 결정). 회사당 1건.
-  //   ① 최근 3일 HIGH 이상은 전부 → 모자라면 ② 최근 3일 MEDIUM → ③ 최근 7일 HIGH → ④ 최근 7일 MEDIUM
-  // 월요일은 주말이 끼어 3일 창에 포트폴리오 기사가 1~2건뿐인 날이 많아 7일까지 넓힌다.
-  // LOW는 넣지 않는다 — 동명이인·부분문자열 오탐("카도" → 시낭송대회 기사)이 섞여 있다.
+  const idByLink = new Map(candidates.map(a => [a.link, a.id]));
   const rankOf = (a: IntraCandidate) => IMPORTANCE_RANK[a.importance ?? ''] ?? 0;
-  // 지난 브리핑에 나간 회사는 통째로 뺀다 — 같은 사건을 다른 매체 기사로 또 내보내지 않게.
-  const briefedCompanies = new Set(intraWeekAll.filter(a => briefed.has(a.url)).map(a => a.company));
-  const notBriefed = (a: IntraCandidate) => !briefedCompanies.has(a.company);
-  const recentPf = portfolioByCompany(intraRecentAll).filter(notBriefed);
-  const weekPf = portfolioByCompany(intraWeekAll).filter(notBriefed);
-  const portfolioSteps = [
-    recentPf.filter(a => rankOf(a) >= IMPORTANCE_RANK.HIGH),
-    recentPf.filter(a => rankOf(a) === IMPORTANCE_RANK.MEDIUM),
-    weekPf.filter(a => rankOf(a) >= IMPORTANCE_RANK.HIGH),
-    weekPf.filter(a => rankOf(a) === IMPORTANCE_RANK.MEDIUM),
-  ];
-  const portfolioPicks: IntraCandidate[] = [];
-  const usedCompany = new Set<string>();
-  portfolioSteps.forEach((step, i) => {
-    // 첫 단계(3일 HIGH)는 전부, 그 뒤는 최소 건수를 채울 때까지만.
-    for (const a of step) {
-      if (i > 0 && portfolioPicks.length >= PORTFOLIO_MIN) return;
-      if (usedCompany.has(a.company)) continue;
-      usedCompany.add(a.company);
-      portfolioPicks.push(a);
-    }
-  });
-  // 스파크랩 기사가 많은 날에도 포트폴리오 자리를 남긴다.
-  const reserved = Math.min(PORTFOLIO_MIN, portfolioPicks.length);
-  const sparklabs = intra.filter(a => a.category === 'sparklabs_self').slice(0, BRIEFING_MAX - reserved);
 
-  const tierLists: BriefingCandidate[][] = [
-    sparklabs,
-    portfolioPicks,
-    trends,
-    inter,
-  ];
+  // ① 스파크랩 직접 언급 섹션 — 한국어 기사만. 다이제스트엔 같은 사건이 한국어·영문 기사로 둘 다
+  //    실리는데(중앙아시아 펀드 9/21), 브리핑은 한국어 음성이라 영문 제목은 읽기도 어색하다.
+  const sparklabsAll = data.sparklabsArticles.filter(a => isKorean(a.title)).map(a => fromArticle(a, idByLink));
+
+  // ② 포트폴리오 하이라이트 섹션(이미 회사당 1건) — 중요도 → 섹션 순서. 최소 PORTFOLIO_MIN건.
+  //    주가 시황 기사는 뺀다. 지난 7일 브리핑에 나간 회사도 뺀다(같은 사건을 또 내보내지 않게).
+  const briefedCompanies = new Set(
+    candidates.filter(a => briefed.has(a.link)).map(a => a.matchedKeyword));
+  //    섹션 대표가 주가 기사면 버리지 않고 같은 회사의 다른 기사로 바꾼다 — 다이제스트엔 스카이랩스가
+  //    "주가 2.51% 하락"으로 실렸지만 같은 주 진짜 뉴스는 "타임 헬스테크 500 선정"이었다.
+  const byCompany = (company: string) => candidates
+    .filter(c => c.matchedKeyword === company && !STOCK_TICKER.test(c.title) && isKorean(c.title))
+    .sort((x, y) => (IMPORTANCE_RANK[y.importance] ?? 0) - (IMPORTANCE_RANK[x.importance] ?? 0) || y.priorityScore - x.priorityScore)[0];
+  const portfolio = data.portfolioArticles
+    .map(a => (STOCK_TICKER.test(a.title) || !isKorean(a.title) ? byCompany(a.matchedKeyword) : a))
+    .filter((a): a is NonNullable<typeof a> => !!a)
+    .map(a => fromArticle(a, idByLink))
+    .filter(a => !briefedCompanies.has(a.company))
+    .map((a, i) => ({ a, i }))
+    .sort((x, y) => rankOf(y.a) - rankOf(x.a) || x.i - y.i)
+    .map(x => x.a);
+
+  // ③ AI 트렌드 TOP 5 섹션
+  const trends: BriefingCandidate[] = (data.aiSignals?.items ?? []).map(it => ({
+    kind: 'trend' as const,
+    ref: it.url,
+    title: it.titleKo || it.title,
+    summary: it.summaryKo || it.title,
+    source: it.source,
+    url: it.url,
+    label: TREND_LABEL,
+    pubDate: it.publishedAt ?? data.aiSignals!.generatedAt,
+  }));
+
+  // ④ 해외 트렌드 섹션 중 AI 카드(바이오 제외)
+  const inter: BriefingCandidate[] = (data.inter?.cards ?? [])
+    .filter(c => c.domainLabel === 'AI')
+    .map(c => ({
+      kind: 'inter' as const,
+      ref: c.url,
+      title: c.title,
+      summary: c.cellLabel,
+      source: c.media,
+      url: c.url,
+      label: INTER_LABEL,
+      pubDate: new Date().toISOString(),
+      matchCount: c.companies.length,
+      companies: c.companies.map(x => x.name),
+    }));
+
+  // 스파크랩 기사가 많은 날에도 포트폴리오 자리를 남긴다.
+  const reserved = Math.min(PORTFOLIO_MIN, portfolio.length);
+  const sparklabs = sparklabsAll.filter(a => !briefed.has(a.url)).slice(0, BRIEFING_MAX - reserved);
+
+  const tierLists: BriefingCandidate[][] = [sparklabs, portfolio, trends, inter];
   const picked: BriefingCandidate[] = [];
   const tiers: number[] = [];
-  // 다른 단계도 지난 브리핑에 나간 기사는 건너뛴다(AI 트렌드 목록은 7일 창이라 겹치기 쉽다).
+  // 지난 브리핑에 나간 기사는 건너뛴다.
   const seenUrl = new Set<string>(briefed);
   tierLists.forEach((list, i) => {
     for (const c of list) {
