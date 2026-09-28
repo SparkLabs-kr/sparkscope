@@ -15,7 +15,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { OPEN_ACCESS } from '@/lib/flags';
 import { canScrap as canScrapEmail } from '@/lib/scrap';
-import { getSessionUser } from '@/lib/authz';
+import { getSessionUser, canManage } from '@/lib/authz';
 import { normalizeSource } from '@/lib/sparkscope/media';
 import { matchesAsToken, isBlockedNoise, normalizeTitleKey } from '@/lib/sparkscope/relevance';
 import { clusterArticles } from '@/lib/sparkscope/cluster';
@@ -904,10 +904,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const data = await loadDashboardData(range.from, range.to, company, range.isDefaultRange, categoryOfRegion(region), region);
   const session = await getServerSession(authOptions);
   const canScrap = canScrapEmail(session?.user?.email ?? null);
-  const pendingSuggestionCount = canScrap ? await prisma.noiseSuggestion.count({ where: { status: 'PENDING' } }) : 0;
+  // 관리 화면(키워드·노이즈·검수) 권한 — 버튼 노출과 페이지 입장이 같은 조건을 봐야 한다(authz.ts canManage).
+  const canManageContent = await canManage();
+  const pendingSuggestionCount = canManageContent ? await prisma.noiseSuggestion.count({ where: { status: 'PENDING' } }) : 0;
   // .catch(() => 0): NoiseReportRequest 테이블이 아직 DB에 반영 안 됐어도(prisma db push 전) 대시보드가
   // 죽지 않도록 방어 — 반영 전엔 그냥 0건으로 표시된다.
-  const pendingReportCount = canScrap
+  const pendingReportCount = canManageContent
     ? await prisma.noiseReportRequest.count({ where: { status: 'PENDING' } }).catch(() => 0)
     : 0;
   const userId = (session?.user as any)?.id as string | undefined;
@@ -915,12 +917,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   // 사내 계정(관리자·임직원)인가 — 북마크·노이즈 신고 요청은 쓰기라 사내만 한다.
   // (해당 API 도 requireInternal 로 막혀 있어, 버튼만 보이면 눌러도 실패한다.)
   const isStaffAccount = sessionUser?.role !== 'PORTFOLIO';
-  // 관리 화면 링크는 관리자에게만. 임직원에게 보여 줘도 들어가면 403 이라
+  // 관리 화면 링크는 canManageContent(위)로 — 들어갈 수 없는 사람에게 보이면
   // "보이는데 안 되는" 상태가 되고, 그게 아예 안 보이는 것보다 나쁘다.
-  const isAdmin = sessionUser?.role === 'ADMIN';
   const canBookmark = !!userId && isStaffAccount;
   // 관리자는 즉시 처리(NoiseReportButton)가 있으니, 신고 "요청" 버튼은 로그인한 비관리자에게만.
-  const canRequestReport = canBookmark && !canScrap;
+  const canRequestReport = canBookmark && !canManageContent;
   const bookmarkedIds = userId
     ? new Set((await prisma.bookmark.findMany({ where: { userId }, select: { articleId: true } })).map(b => b.articleId))
     : new Set<string>();
@@ -1060,8 +1061,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           {canScrap && <Link href="/dashboard/scraps" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⭐ {tr('스크랩함')}</Link>}
           {canBookmark && <Link href="/dashboard/bookmarks" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔖 {tr('내 북마크')}</Link>}
           <Link href="/dashboard/subscriptions" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">✉️ {tr('구독 설정')}</Link>
-          {isAdmin && <Link href="/dashboard/keywords" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⚙️ {tr('키워드 관리')}</Link>}
-          {isAdmin && <Link href="/dashboard/noise-suggestions" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔍 {tr('노이즈 제안')}{(pendingSuggestionCount + pendingReportCount) > 0 ? ` (${pendingSuggestionCount + pendingReportCount})` : ''}</Link>}
+          {canManageContent && <Link href="/digest/review" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">📤 {tr('다이제스트 검수')}</Link>}
+          {canManageContent && <Link href="/dashboard/keywords" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⚙️ {tr('키워드 관리')}</Link>}
+          {canManageContent && <Link href="/dashboard/noise-suggestions" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔍 {tr('노이즈 제안')}{(pendingSuggestionCount + pendingReportCount) > 0 ? ` (${pendingSuggestionCount + pendingReportCount})` : ''}</Link>}
         </div>
       </div>
 
@@ -1407,7 +1409,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             articles={companyArticlesWithBookmark as any}
             canScrap={canScrap}
             canBookmark={canBookmark}
-            canReport={canScrap}
+            canReport={canManageContent}
             canRequestReport={canRequestReport}
             showSearch={false}
             csvName={data.selectedCompanyName ?? tr('포트폴리오사')}
@@ -1418,7 +1420,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             articles={articlesWithBookmark as any}
             canScrap={canScrap}
             canBookmark={canBookmark}
-            canReport={canScrap}
+            canReport={canManageContent}
             canRequestReport={canRequestReport}
             showSearch={true}
             showCategory={true}

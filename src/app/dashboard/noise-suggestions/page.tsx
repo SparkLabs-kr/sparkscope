@@ -3,9 +3,7 @@ import Link from 'next/link';
 import { getLocale, getT } from '@/lib/i18n/server';
 import { ensureArticleEnDeep } from '@/lib/sparkscope/translate-content';
 import { redirect } from 'next/navigation';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { canScrap } from '@/lib/scrap';
+import { canManage } from '@/lib/authz';
 import { prisma } from '@/lib/prisma';
 import { NoiseQueueList, type QueueItem } from '@/components/NoiseQueueList';
 import { AnalysisAuditQueueList, type AuditFlagItem } from '@/components/AnalysisAuditQueueList';
@@ -15,8 +13,7 @@ export const dynamic = 'force-dynamic';
 export default async function NoiseSuggestionsPage() {
   const t = getT();
   const isEn = getLocale() === 'en';
-  const session = await getServerSession(authOptions);
-  if (!canScrap(session?.user?.email ?? null)) redirect('/dashboard');
+  if (!(await canManage())) redirect('/dashboard');
 
   const [pendingSuggestions, pendingRequests] = await Promise.all([
     prisma.noiseSuggestion.findMany({ where: { status: 'PENDING' }, orderBy: { createdAt: 'desc' } }),

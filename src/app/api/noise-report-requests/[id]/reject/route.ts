@@ -3,14 +3,15 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { canScrap } from '@/lib/scrap';
+import { requireManager } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
   const email = session?.user?.email ?? null;
-  if (!canScrap(email)) return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
+  const gate = await requireManager();
+  if (!gate.ok) return gate.response;
 
   const reportRequest = await prisma.noiseReportRequest.findUnique({ where: { id: params.id } });
   if (!reportRequest) return NextResponse.json({ error: '신고를 찾을 수 없습니다.' }, { status: 404 });

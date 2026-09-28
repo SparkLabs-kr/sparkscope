@@ -15,6 +15,7 @@ import { authOptions } from '@/lib/auth';
 import { OPEN_ACCESS } from '@/lib/flags';
 import { prisma } from '@/lib/prisma';
 import { resolveRole, isInternal, type Role } from '@/lib/roles';
+import { canScrap } from '@/lib/scrap';
 
 export type { Role };
 
@@ -226,6 +227,32 @@ export async function requireUser(): Promise<
     ok: false,
     response: new Response(JSON.stringify({ error: 'unauthorized' }), {
       status: 401,
+      headers: { 'content-type': 'application/json' },
+    }),
+  };
+}
+
+/**
+ * 관리 화면(키워드 관리·노이즈 제안·다이제스트 검수)에 들어갈 수 있는가 — 관리자 등급이거나,
+ * 예전부터 쓰던 지정 계정(SCRAP_ALLOWED_EMAILS)이면 통과.
+ *
+ * 2026-09-28: 로그인 재설계(27b2e26) 뒤 대시보드는 버튼을 "관리자 등급"에게 보여 주는데
+ * 페이지·API는 여전히 이메일 목록으로만 막고 있었다. 목록에 없는 관리자는 버튼을 눌러도
+ * 대시보드로 되돌아가서 "버튼이 안 눌린다"로 보였다. 버튼과 문이 같은 조건을 보게 여기로 모은다.
+ */
+export async function canManage(): Promise<boolean> {
+  const user = await getSessionUser();
+  if (user?.role === 'ADMIN' && user.active) return true;
+  return canScrap(user?.email ?? null);
+}
+
+/** canManage의 API용 — 통과 못 하면 403 응답을 돌려준다. */
+export async function requireManager(): Promise<{ ok: true } | { ok: false; response: Response }> {
+  if (await canManage()) return { ok: true };
+  return {
+    ok: false,
+    response: new Response(JSON.stringify({ error: '권한이 없습니다.' }), {
+      status: 403,
       headers: { 'content-type': 'application/json' },
     }),
   };
