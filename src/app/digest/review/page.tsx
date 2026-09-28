@@ -2,21 +2,19 @@
 import Link from 'next/link';
 import { getLocale, getT } from '@/lib/i18n/server';
 import { ensureArticleEnDeep } from '@/lib/sparkscope/translate-content';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { OPEN_ACCESS } from '@/lib/flags';
-import { canScrap } from '@/lib/scrap';
 import { loadDigestCandidates, buildReviewDigest } from '@/lib/sparkscope/review';
 import { DigestReviewEditor } from '@/components/DigestReviewEditor';
-import { buildInterDigest } from '@/lib/sparkscope/inter-digest';
-import { loadDailyEdits, intraHeadline, interHeadline, BRIEFING_MAX } from '@/lib/sparkscope/briefing';
+import { loadDailyEdits } from '@/lib/sparkscope/briefing';
+import { getBriefingRecommendation, loadBriefingCandidates } from '@/lib/sparkscope/briefing-reco';
+import { canManage } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DigestReviewPage() {
   const t = getT();
-  const session = OPEN_ACCESS ? { user: { email: 'dev@localhost' } } as any : await getServerSession(authOptions);
-  const canSend = canScrap(session?.user?.email ?? null);
+  // 발송 버튼도 관리 화면과 같은 조건(관리자 등급 또는 지정 계정) — authz.ts canManage.
+  const canSend = OPEN_ACCESS || await canManage();
 
   const candidates = await loadDigestCandidates();
   // 검수 화면의 후보 제목도 EN이면 영어로 — 메일 본문(미리보기)은 실제 발송본이라 한국어 그대로다.
@@ -32,14 +30,12 @@ export default async function DigestReviewPage() {
   const initialTop3Ids = savedTop3Ids.length > 0 ? savedTop3Ids : autoTop3Ids;
   const initialExcludedIds = (edits?.excludedLinks ?? []).map(l => idByLink.get(l)).filter(Boolean) as string[];
 
-  // 데일리 브리핑 헤드라인 — 해외 카드는 메일과 같은 블록에서 고른다. 실패하면 국내만.
-  const inter = await buildInterDigest().catch(() => null);
-  const interOptions = (inter?.cards ?? []).map(interHeadline);
-  // 저장된 선택이 없으면 "자동 선정 예상"을 보여준다(발송 크론과 같은 규칙: 국내 TOP3 + 해외 상위 2).
-  const suggestedPicks = [
-    ...initial.top3.map(a => intraHeadline({ ...a, id: idByLink.get(a.link) })),
-    ...interOptions.slice(0, 2),
-  ].slice(0, BRIEFING_MAX);
+  // 데일리 브리핑 — 🤖 추천 5개(수집 1회당 한 번 계산해 캐시, 발송 크론도 같은 걸 쓴다)와 교체 후보.
+  // 추천이 실패해도 화면은 열려야 한다 — 그땐 빈 추천으로 두고 직접 고르게 한다.
+  const [reco, briefingCandidates] = await Promise.all([
+    getBriefingRecommendation().catch(e => { console.error('[review] 브리핑 추천 실패:', e); return null; }),
+    loadBriefingCandidates().catch(() => []),
+  ]);
 
   const dto = candidates.map(a => ({
     id: a.id,
@@ -81,12 +77,13 @@ export default async function DigestReviewPage() {
           initialTop3Ids={initialTop3Ids}
           initialEditorIntro={initial.editorIntro}
           canSend={canSend}
-          interOptions={interOptions}
+          briefingCandidates={briefingCandidates}
+          initialReco={reco}
           initialExcludedIds={initialExcludedIds}
           autoTop3Ids={autoTop3Ids}
           savedBriefing={edits?.headlines ?? []}
           hasSavedEdits={!!edits}
-          suggestedBriefing={suggestedPicks}
+          suggestedBriefing={reco?.headlines ?? []}
           recipient={process.env.DIGEST_TEST_RECIPIENT ?? process.env.DIGEST_TO_GROUP ?? ''}
         />
       )}

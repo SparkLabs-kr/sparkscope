@@ -23,6 +23,7 @@ import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } f
 import { sendDigestToSubscribers } from './digest-send';
 import { collectInterNews } from './inter-collect';
 import { publishBriefingSnapshot, loadDailyEdits, applyTop3Edits } from './briefing';
+import { getBriefingRecommendation } from './briefing-reco';
 import { filterInterNewsWithGemini } from './inter-filter';
 import { matchInterNewsWithPortfolio } from './inter-portfolio-match';
 import { computeAndStoreInterSummaries } from './inter-summary';
@@ -447,7 +448,11 @@ export async function runDailyDigest(opts: RunOptions = {}) {
     // 데일리 브리핑 영상의 재료 — 메일과 같은 data에서 헤드라인 5개를 뽑아 저장한다.
     // 실제 발송하는 실행에서만(수집 전용 실행이 그날 스냅샷을 덮어쓰지 않게). 실패해도 발송은 계속한다.
     if (opts.send && !opts.dryRun) {
-      await publishBriefingSnapshot(data)
+      const reco = await getBriefingRecommendation().catch(e => {
+        console.error('[runner] 브리핑 추천 실패 — 메일 TOP3 기반으로 대신합니다:', e);
+        return null;
+      });
+      await publishBriefingSnapshot(data, reco?.headlines ?? null)
         .then(s => console.log(`[runner] 브리핑 헤드라인 저장: ${s.headlines.length}건 (${s.source})`))
         .catch(e => console.error('[runner] 브리핑 헤드라인 저장 실패(무시):', e));
     }

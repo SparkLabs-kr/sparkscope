@@ -6,8 +6,8 @@
  * 헤드라인을 뽑아 저장한다(runner.ts). 영상 파이프라인은 이 스냅샷만 읽는다 —
  * AI 시그널 TOP 5를 파트너 배너용으로 물질화하는 것(signal-publish.ts)과 같은 패턴.
  *
- * 헤드라인은 국내(Intra) TOP3 + 해외(Inter) 카드 상위를 합쳐 최대 5개다.
- * 편집자가 검수 콘솔에서 고쳐 저장해 두면(briefing_picks — 아래 DailyEdits) 자동 선정 대신 그걸 쓴다.
+ * 헤드라인은 국내·해외를 합쳐 중요도가 제일 높은 최대 5개다(추천: briefing-reco.ts).
+ * 편집자가 검수 콘솔에서 고쳐 저장해 두면(briefing_picks — 아래 DailyEdits) 추천 대신 그걸 쓴다.
  * 고른 것은 "그날" 것만 유효하다 — 지난 발송일에 고른 목록이 다음 발송일에 새어 나가지 않게
  * KST 날짜를 키로 쓴다.
  *
@@ -89,7 +89,7 @@ export function interHeadline(c: InterDigestCard): BriefingHeadline {
   };
 }
 
-/** 편집자 선택이 없을 때의 기본값 — 메일 TOP3 그대로 + 해외 카드 상위로 채운다. */
+/** 추천(briefing-reco.ts)마저 없을 때의 마지막 대안 — 메일 TOP3 + 해외 카드 상위로 채운다. */
 export function defaultHeadlines(data: DigestData): BriefingHeadline[] {
   const intra = data.top3.map(a => intraHeadline(a));
   const inter = (data.inter?.cards ?? []).slice(0, DEFAULT_INTER_SLOTS).map(interHeadline);
@@ -192,18 +192,23 @@ export function applyTop3Edits<T extends { link: string }>(
 // ── 발송 시점 스냅샷 ─────────────────────────────────────────────
 
 /**
- * 발송 크론이 메일 데이터를 만든 직후 호출한다. 편집자 선택이 있으면 그것을, 없으면 자동 선정을
- * 저장한다. 같은 날 다시 돌면(수동 재발송 등) 덮어쓴다.
+ * 발송 크론이 메일 데이터를 만든 직후 호출한다. 우선순위: 편집자 선택 → 추천(recommended) →
+ * 메일 TOP3 기반 기본값. 같은 날 다시 돌면(수동 재발송 등) 덮어쓴다.
+ * 추천은 호출부가 넘긴다 — briefing-reco.ts가 이 파일을 import 하므로 여기서 부르면 순환한다.
  */
-export async function publishBriefingSnapshot(data: DigestData, dateKey = kstDateKey()): Promise<BriefingSnapshot> {
+export async function publishBriefingSnapshot(
+  data: DigestData, recommended: BriefingHeadline[] | null = null, dateKey = kstDateKey(),
+): Promise<BriefingSnapshot> {
   const edits = await loadDailyEdits(dateKey);
   const picks = edits && edits.headlines.length > 0
     ? edits.headlines.filter(h => !edits.excludedLinks.includes(h.url))
     : null;
+  const excluded = new Set(edits?.excludedLinks ?? []);
+  const reco = (recommended ?? []).filter(h => !excluded.has(h.url));
   const snapshot: BriefingSnapshot = {
     dateKey,
     dateLabel: data.dateLabel,
-    headlines: picks && picks.length > 0 ? picks : defaultHeadlines(data),
+    headlines: picks && picks.length > 0 ? picks : reco.length > 0 ? reco : defaultHeadlines(data),
     source: picks && picks.length > 0 ? 'editor' : 'auto',
     computedAt: new Date().toISOString(),
   };

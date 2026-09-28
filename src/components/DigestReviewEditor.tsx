@@ -4,6 +4,7 @@ import { useT, useLocale } from '@/lib/i18n/client';
 // 다이제스트 검수 에디터 — TOP3 순서·포함 조정, 카테고리 요약, 편집자 한 줄, 실시간 미리보기, 발송.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BriefingHeadline } from '@/lib/sparkscope/briefing';
+import type { BriefingCandidate, BriefingRecommendation } from '@/lib/sparkscope/briefing-reco';
 
 const BRIEFING_MAX = 5;
 
@@ -36,7 +37,8 @@ export function DigestReviewEditor({
   initialEditorIntro,
   canSend,
   recipient,
-  interOptions,
+  briefingCandidates,
+  initialReco,
   initialExcludedIds,
   autoTop3Ids,
   savedBriefing,
@@ -48,7 +50,8 @@ export function DigestReviewEditor({
   initialEditorIntro: string;
   canSend: boolean;
   recipient: string;
-  interOptions: BriefingHeadline[];
+  briefingCandidates: BriefingCandidate[];
+  initialReco: BriefingRecommendation | null;
   initialExcludedIds: string[];
   autoTop3Ids: string[];
   savedBriefing: BriefingHeadline[];
@@ -71,6 +74,11 @@ export function DigestReviewEditor({
 
   // 오늘 편집(메일 TOP 3 · 제외 · 브리핑 헤드라인) — 저장해야 10:30 자동 발송과 영상에 반영된다.
   // 저장 전까지 브리핑은 "자동 선정 예상"을 보여준다.
+  // 저장 전까지 브리핑은 🤖 추천 5개를 보여준다. [추천 다시 받기]로 바뀔 수 있어 상태로 둔다.
+  const [reco, setReco] = useState<BriefingRecommendation | null>(initialReco);
+  const [suggested, setSuggested] = useState<BriefingHeadline[]>(suggestedBriefing);
+  const recoUrls = useMemo(() => new Set((reco?.headlines ?? []).map(h => h.url)), [reco]);
+  const [recoBusy, setRecoBusy] = useState(false);
   const [briefing, setBriefing] = useState<BriefingHeadline[]>(savedBriefing.length > 0 ? savedBriefing : suggestedBriefing);
   const [briefingSaved, setBriefingSaved] = useState(hasSavedEdits);
   const [briefingDirty, setBriefingDirty] = useState(false);
@@ -101,9 +109,48 @@ export function DigestReviewEditor({
       return next;
     });
   }
-  function candToHeadline(a: Cand): BriefingHeadline {
-    return { kind: 'intra', ref: a.id, title: a.title, summary: a.oneLiner || a.title, source: a.source, url: a.link, label: CAT_LABEL[a.category] ?? a.category };
+
+  // 교체 후보 고르기 — replaceIdx가 있으면 그 자리를 바꾸고, 없으면 빈자리에 추가한다.
+  const [replaceIdx, setReplaceIdx] = useState<number | null>(null);
+  const [pickQuery, setPickQuery] = useState('');
+  const [pickKind, setPickKind] = useState<'all' | 'intra' | 'inter'>('all');
+  const pickList = useMemo(() => {
+    const q = pickQuery.trim().toLowerCase();
+    const excludedLinks = new Set(Array.from(excluded).map(id => byId.get(id)?.link));
+    return briefingCandidates
+      .filter(c => !inBriefing.has(c.ref) && !inBriefing.has(c.url) && !excludedLinks.has(c.url))
+      .filter(c => pickKind === 'all' || c.kind === pickKind)
+      .filter(c => !q || [c.title, c.source, c.summary].some(t => t.toLowerCase().includes(q)))
+      .slice(0, 60);
+  }, [briefingCandidates, inBriefing, excluded, byId, pickKind, pickQuery]);
+  function pickCandidate(c: BriefingCandidate) {
+    const { pubDate: _p, importance: _i, matchCount: _m, ...h } = c;
+    if (replaceIdx !== null) {
+      const idx = replaceIdx;
+      editBriefing(prev => prev.map((x, i) => (i === idx ? h : x)));
+      setReplaceIdx(null);
+    } else {
+      addBriefing(h);
+    }
   }
+  async function refreshReco() {
+    setRecoBusy(true);
+    setBriefingMsg(null);
+    try {
+      const res = await fetch('/api/digest/briefing-reco', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || !data.reco) throw new Error(data.error ?? tr('추천을 받지 못했습니다.'));
+      setReco(data.reco);
+      setSuggested(data.reco.headlines);
+      // 아직 손대지 않았으면 새 추천으로 바로 갈아 끼운다. 편집 중이면 편집을 지키고 🤖 표시만 바뀐다.
+      if (!briefingSaved && !briefingDirty) setBriefing(data.reco.headlines);
+    } catch (e: any) {
+      setBriefingMsg({ ok: false, text: String(e?.message ?? e) });
+    } finally {
+      setRecoBusy(false);
+    }
+  }
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul' });
   const linkOf = (id: string) => byId.get(id)?.link;
   async function saveEdits(reset = false) {
     setBriefingBusy(true);
@@ -117,7 +164,7 @@ export function DigestReviewEditor({
             excludedLinks: Array.from(excluded).map(linkOf).filter(Boolean),
             // 자동 선정과 사람 수정의 차이를 날짜별로 남긴다 — 랭킹을 고칠 근거(briefing.ts DailyEdits)
             autoSuggested: {
-              headlines: suggestedBriefing.map(h => h.url),
+              headlines: suggested.map(h => h.url),
               top3Links: autoTop3Ids.map(linkOf).filter(Boolean),
             },
           };
@@ -129,7 +176,7 @@ export function DigestReviewEditor({
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error ?? tr('저장 실패'));
       if (reset) {
-        setBriefing(suggestedBriefing);
+        setBriefing(suggested);
         setTop3Ids(autoTop3Ids.slice(0, 3));
         setExcluded(new Set());
         setSavedEditKey(JSON.stringify([autoTop3Ids.slice(0, 3), []]));
@@ -280,49 +327,80 @@ export function DigestReviewEditor({
           </div>
         </section>
 
-        {/* 데일리 브리핑 헤드라인 */}
+        {/* 데일리 브리핑 헤드라인 — 추천 5개가 기본, 슬롯마다 [바꾸기]로 다른 기사와 교체 */}
         <section className="bg-white p-5 rounded-xl border border-gray-200">
-          <div className="font-bold mb-1">🎬 {tr('오늘 브리핑 헤드라인')} <span className="text-xs font-normal text-gray-400">({briefing.length}/{BRIEFING_MAX})</span></div>
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <div className="font-bold">🎬 {tr('오늘 브리핑 헤드라인')} <span className="text-xs font-normal text-gray-400">({briefing.length}/{BRIEFING_MAX})</span></div>
+            <button onClick={refreshReco} disabled={recoBusy} className="shrink-0 rounded border border-gray-200 px-2 py-0.5 text-[11px] text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+              {recoBusy ? tr('추천 계산 중…') : `🔄 ${tr('추천 다시 받기')}`}
+            </button>
+          </div>
           <p className="text-xs text-gray-500 mb-2">
             {briefingSaved && !briefingDirty && !mailDirty
-              ? tr('저장됨 — 10:30 발송 때 이 목록으로 영상을 만듭니다.')
-              : tr('아직 저장 안 됨 — 저장하지 않으면 발송 시점의 메일 TOP 3 + 해외 상위 2개로 자동 선정됩니다.')}
+              ? tr('저장됨 — 발송 때 이 목록으로 영상을 만듭니다.')
+              : tr('아직 저장 안 됨 — 저장하지 않으면 🤖 추천 5개가 그대로 나갑니다.')}
+            {reco && <span className="text-gray-400"> · {reco.method === 'ai' ? tr('🤖 AI 추천') : tr('⚙️ 중요도 순 추천')} {fmtTime(reco.computedAt)} {tr('기준')}</span>}
           </p>
           <div className="space-y-2">
             {briefing.map((h, idx) => (
-              <div key={h.ref} className="flex items-start gap-2 rounded-lg border border-gray-200 p-2.5">
+              <div key={h.ref} className={`flex items-start gap-2 rounded-lg border p-2.5 ${replaceIdx === idx ? 'border-spark-purple bg-spark-light-purple/20' : 'border-gray-200'}`}>
                 <div className="text-sm font-bold text-spark-purple w-6 text-center">{idx + 1}</div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-gray-800 truncate">{h.title}</div>
+                  <div className="text-sm font-semibold text-gray-800 truncate">{recoUrls.has(h.url) && <span title={tr('추천')}>🤖 </span>}{h.title}</div>
                   <div className="text-xs text-gray-500">{tr(h.label)} · {tr(h.source)}</div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => setReplaceIdx(replaceIdx === idx ? null : idx)} className={`px-2 py-0.5 text-xs rounded border ${replaceIdx === idx ? 'border-spark-purple bg-spark-purple text-white' : 'border-spark-purple text-spark-purple hover:bg-spark-light-purple/30'}`}>{replaceIdx === idx ? tr('취소') : tr('바꾸기')}</button>
                   <button onClick={() => moveBriefing(idx, -1)} disabled={idx === 0} className="px-1.5 py-0.5 text-xs rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-30">▲</button>
                   <button onClick={() => moveBriefing(idx, 1)} disabled={idx === briefing.length - 1} className="px-1.5 py-0.5 text-xs rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-30">▼</button>
-                  <button onClick={() => editBriefing(prev => prev.filter(x => x.ref !== h.ref))} className="px-1.5 py-0.5 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50">✕</button>
+                  <button onClick={() => { setReplaceIdx(null); editBriefing(prev => prev.filter(x => x.ref !== h.ref)); }} className="px-1.5 py-0.5 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50">✕</button>
                 </div>
               </div>
             ))}
           </div>
-          {interOptions.length > 0 && (
-            <details className="mt-3">
-              <summary className="cursor-pointer text-xs font-semibold text-gray-600">🔭 {tr('해외 기사에서 추가')} ({interOptions.length})</summary>
-              <div className="mt-2 space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                {interOptions.map(h => (
-                  <div key={h.ref} className="flex items-center gap-2 rounded-lg border border-gray-100 p-2 text-sm">
+
+          {/* 교체·추가 후보 — [바꾸기]를 누른 자리가 있으면 그 자리를 바꾸고, 없으면 빈자리에 추가한다 */}
+          {(replaceIdx !== null || briefing.length < BRIEFING_MAX) && (
+            <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <div className="text-xs font-semibold text-gray-700 mb-2">
+                {replaceIdx !== null
+                  ? tr('{n}번 자리에 넣을 기사를 고르세요', { n: replaceIdx + 1 })
+                  : tr('빈자리에 넣을 기사를 고르세요')}
+              </div>
+              <div className="flex gap-2 mb-2">
+                <input
+                  value={pickQuery}
+                  onChange={e => setPickQuery(e.target.value)}
+                  placeholder={tr('제목·매체·요약 검색')}
+                  className="flex-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-spark-purple"
+                />
+                {(['all', 'intra', 'inter'] as const).map(k => (
+                  <button key={k} onClick={() => setPickKind(k)} className={`rounded-lg border px-2 py-1 text-[11px] ${pickKind === k ? 'border-spark-purple bg-spark-purple text-white' : 'border-gray-300 bg-white text-gray-600'}`}>
+                    {k === 'all' ? tr('전체') : k === 'intra' ? tr('국내') : tr('해외')}
+                  </button>
+                ))}
+              </div>
+              <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
+                {pickList.length === 0 && <p className="text-xs text-gray-400 py-2">{tr('조건에 맞는 기사가 없습니다.')}</p>}
+                {pickList.map(c => (
+                  <div key={c.ref} className="flex items-center gap-2 rounded border border-gray-100 bg-white p-2 text-sm">
                     <div className="flex-1 min-w-0">
-                      <div className="truncate text-gray-800">{h.title}</div>
-                      <div className="text-[11px] text-gray-400">{h.summary} · {h.source}</div>
+                      <div className="truncate text-gray-800">{recoUrls.has(c.url) && '🤖 '}{c.title}</div>
+                      <div className="text-[11px] text-gray-400">
+                        {tr(c.label)} · {tr(c.source)} · {c.pubDate.slice(5, 10).replace('-', '/')}
+                        {c.importance && (c.importance === 'HIGH' || c.importance === 'CRITICAL') && <span className="ml-1 font-semibold text-amber-600">{c.importance}</span>}
+                        {c.matchCount ? ` · ${tr('포트폴리오 연결 {n}', { n: c.matchCount })}` : ''}
+                      </div>
                     </div>
-                    {!inBriefing.has(h.ref) && (
-                      <button onClick={() => addBriefing(h)} disabled={briefing.length >= BRIEFING_MAX} className="shrink-0 px-2 py-0.5 text-[11px] rounded border border-spark-purple text-spark-purple hover:bg-spark-light-purple/30 disabled:opacity-30">{tr('브리핑 추가')}</button>
-                    )}
+                    <button onClick={() => pickCandidate(c)} className="shrink-0 px-2 py-0.5 text-[11px] rounded border border-spark-purple text-spark-purple hover:bg-spark-light-purple/30">
+                      {replaceIdx !== null ? tr('이걸로 바꾸기') : tr('추가')}
+                    </button>
                   </div>
                 ))}
               </div>
-            </details>
+            </div>
           )}
-          <p className="mt-2 text-[11px] text-gray-400">{tr('국내 기사는 아래 후보 목록의 [브리핑 추가] 버튼으로 넣을 수 있습니다.')}</p>
+
           <div className="mt-3 flex gap-2">
             <button onClick={() => saveEdits()} disabled={briefingBusy} className="flex-1 rounded-lg bg-spark-purple py-2 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50">
               {briefingBusy ? tr('저장 중…') : `💾 ${tr('오늘 편집 저장 (메일 TOP 3 · 제외 · 브리핑)')}`}
@@ -364,9 +442,6 @@ export function DigestReviewEditor({
                         </div>
                         {!inTop3 && !isExcluded && (
                           <button onClick={() => addTop3(a.id)} disabled={top3Ids.length >= 3} className="shrink-0 px-2 py-0.5 text-[11px] rounded border border-spark-purple text-spark-purple hover:bg-spark-light-purple/30 disabled:opacity-30" title={top3Ids.length >= 3 ? tr('TOP3가 이미 3개입니다') : ''}>{tr('TOP3 추가')}</button>
-                        )}
-                        {!isExcluded && !inBriefing.has(a.id) && !inBriefing.has(a.link) && (
-                          <button onClick={() => addBriefing(candToHeadline(a))} disabled={briefing.length >= BRIEFING_MAX} className="shrink-0 px-2 py-0.5 text-[11px] rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-30">🎬 {tr('브리핑 추가')}</button>
                         )}
                         <button onClick={() => toggleExclude(a.id)} className={`shrink-0 px-2 py-0.5 text-[11px] rounded border ${isExcluded ? 'border-gray-300 text-gray-500' : 'border-red-200 text-red-600 hover:bg-red-50'}`}>
                           {isExcluded ? tr('되돌리기') : tr('제외')}
@@ -416,7 +491,7 @@ export function DigestReviewEditor({
               </p>
             </>
           ) : (
-            <p className="text-center text-sm text-gray-500 py-2">{tr('발송 권한이 없습니다. (SCRAP_ALLOWED_EMAILS 지정 계정만 발송 가능)')}</p>
+            <p className="text-center text-sm text-gray-500 py-2">{tr('발송 권한이 없습니다. (관리자 계정만 발송 가능)')}</p>
           )}
           {sendMsg && (
             <div className={`mt-3 rounded-lg px-3 py-2 text-sm ${sendMsg.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>

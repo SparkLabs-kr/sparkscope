@@ -1,8 +1,6 @@
-// 다이제스트 검수 발송 — 편집자 오버라이드 반영 HTML을 실제 발송. SCRAP_ALLOWED_EMAILS만.
+// 다이제스트 검수 발송 — 편집자 오버라이드 반영 HTML을 실제 발송. 관리 권한자만(authz.ts canManage).
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { canScrap } from '@/lib/scrap';
+import { canManage } from '@/lib/authz';
 import { prisma } from '@/lib/prisma';
 import { loadDigestCandidates, buildReviewDigest, type ReviewOverrides } from '@/lib/sparkscope/review';
 import { renderDigestHtml } from '@/lib/sparkscope/digest';
@@ -14,10 +12,8 @@ import { sendDigestEmail, buildSubject } from '@/lib/sparkscope/mailer';
 export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  const email = session?.user?.email ?? null;
-  if (!canScrap(email)) {
-    return NextResponse.json({ error: '발송 권한이 없습니다. (SCRAP_ALLOWED_EMAILS 지정 계정만 가능)' }, { status: 403 });
+  if (!(await canManage())) {
+    return NextResponse.json({ error: '발송 권한이 없습니다. (관리자 계정만 가능)' }, { status: 403 });
   }
 
   const body = (await req.json().catch(() => ({}))) as ReviewOverrides & { testRecipient?: string };

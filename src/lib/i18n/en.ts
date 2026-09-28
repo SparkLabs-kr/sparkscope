@@ -9,13 +9,25 @@
  */
 export const EN: Record<string, string> = {
   // ── 데일리 브리핑 헤드라인 (2026-09-28) ─────────────────────────
+  '추천 계산 중…': 'Computing picks…',
+  '추천 다시 받기': 'Refresh picks',
+  '저장됨 — 발송 때 이 목록으로 영상을 만듭니다.': 'Saved — the video will be built from this list at send time.',
+  '아직 저장 안 됨 — 저장하지 않으면 🤖 추천 5개가 그대로 나갑니다.': 'Not saved yet — if left unsaved, the 5 🤖 picks go out as is.',
+  '🤖 AI 추천': '🤖 AI picks',
+  '⚙️ 중요도 순 추천': '⚙️ Picks by importance',
+  '기준': 'as of',
+  '추천': 'Recommended',
+  '바꾸기': 'Replace',
+  '{n}번 자리에 넣을 기사를 고르세요': 'Choose a story for slot {n}',
+  '빈자리에 넣을 기사를 고르세요': 'Choose a story for the empty slot',
+  '제목·매체·요약 검색': 'Search title, outlet or summary',
+  '국내': 'Korea',
+  '해외': 'Global',
+  '조건에 맞는 기사가 없습니다.': 'No stories match.',
+  '포트폴리오 연결 {n}': '{n} portfolio links',
+  '이걸로 바꾸기': 'Use this',
+  '추천을 받지 못했습니다.': 'Could not get picks.',
   '오늘 브리핑 헤드라인': "Today's briefing headlines",
-  '저장됨 — 10:30 발송 때 이 목록으로 영상을 만듭니다.': 'Saved — the 10:30 send will build the video from this list.',
-  '아직 저장 안 됨 — 저장하지 않으면 발송 시점의 메일 TOP 3 + 해외 상위 2개로 자동 선정됩니다.':
-    'Not saved yet — if left unsaved, the email TOP 3 plus the top 2 global stories are picked automatically at send time.',
-  '해외 기사에서 추가': 'Add from global stories',
-  '브리핑 추가': 'Add to briefing',
-  '국내 기사는 아래 후보 목록의 [브리핑 추가] 버튼으로 넣을 수 있습니다.': 'Add Korean stories with the [Add to briefing] button in the candidate list below.',
   '오늘 편집 저장 (메일 TOP 3 · 제외 · 브리핑)': "Save today's edits (email TOP 3 · exclusions · briefing)",
   '자동 선정으로 되돌리기': 'Revert to automatic',
   '저장 중…': 'Saving…',
@@ -620,8 +632,7 @@ export const EN: Record<string, string> = {
   '발송하시겠습니까?': 'Send it?',
   '발송 완료': 'Sent',
   '발송 실패': 'Send failed',
-  '발송 권한이 없습니다. (SCRAP_ALLOWED_EMAILS 지정 계정만 발송 가능)':
-    'You do not have send permission. (Only accounts listed in SCRAP_ALLOWED_EMAILS can send.)',
+  '발송 권한이 없습니다. (관리자 계정만 발송 가능)': 'You do not have permission to send. (Admin accounts only)',
   // ── 챗봇 UI ─────────────────────────────────────────────────────
   '어떤 기사를 찾고 계세요?': 'What are you looking for?',
   '스파크스코프가 모아둔 기사에서 찾아보고, 흐름까지 정리해드릴게요.':
