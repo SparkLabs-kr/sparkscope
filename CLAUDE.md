@@ -71,10 +71,28 @@
 - 작업: DB에 있는 것만 발송, 수집 안 함 (`skipCollect=true`)
 - 엔드포인트: `GET /api/cron/daily-send-only`
 
+**데일리 브리핑 영상 (2026-09-29~):**
+
+GitHub `schedule`은 예약보다 2~3시간 늦게 시작한다(9/11~9/28 실측 06:13 예약 → 08:03~09:06 시작).
+그래서 **"언제"는 Vercel 크론, "무엇을"은 GitHub Actions**로 나눴다 — Vercel이 제시각에
+`/api/cron/dispatch`로 workflow_dispatch를 걸면 곧바로 시작한다.
+
+| KST | 담당 | 작업 |
+|---|---|---|
+| 매일 05:50 | Vercel → `daily-collect.yml` | 수집(07:00~07:50 완료). 06:13 `schedule`은 예비 — 이미 돌았으면 `collect-guard.ts`가 건너뜀 |
+| 월·수·금 08:25 | Vercel → `daily-briefing.yml` | 헤드라인 확정 → 대본 → TTS → MP4 → Supabase Storage `briefings` (수집 미완료면 09:05까지 대기) |
+| 월·수·금 09:00 | Vercel `/api/cron/briefing-notify` | 잔디 전송(영상 있을 때) |
+| 월·수·금 09:30 | Vercel `/api/cron/briefing-notify?final=1` | 못 보냈으면 영상 없이 헤드라인이라도 전송 |
+
+- 필요한 설정: Vercel `GITHUB_DISPATCH_TOKEN`(이 저장소 Actions 쓰기 권한 fine-grained 토큰),
+  `JANDI_WEBHOOK_URL` / GitHub 시크릿 `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`.
+- 브리핑 헤드라인은 08:25에 확정된다. 10:30 메일 크론은 스냅샷이 있으면 건드리지 않는다.
+- 코드: `src/lib/briefing-video/`, 페이지 `/briefing/[날짜]`(로그인 없이 열림 — 공개 헤드라인만).
+
 ### 규칙
 
 - ✅ 발송 크론은 **수집하지 않는다**. 수집은 반드시 별도 크론이 담당한다.
-- ✅ 같은 작업을 **Vercel과 GitHub Actions 양쪽에 만들지 않는다**.
+- ✅ 같은 작업을 **Vercel과 GitHub Actions 양쪽에 만들지 않는다**. (Vercel이 GitHub 워크플로를 *시작만* 시키는 dispatch는 예외 — 작업 자체는 한 곳에서만 돈다.)
   > 과거 `daily-digest-send.yml`이 Vercel 발송과 중복으로 돌다가 실패만 반복했고, 2026-07-16에 삭제함.
 - ✅ 크론 작동 여부를 물을 땐 **추측하지 말고** `vercel.json`과 `.github/workflows/` 파일을 직접 읽고 답한다.
 

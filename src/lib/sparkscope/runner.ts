@@ -22,7 +22,7 @@ import { buildDigestKeyMap, buildDigestContextMap, passesDigestGuard, sendWindow
 import { sendDigestEmail, buildSubject, isSendDomainVerified, sendOwnerAlert } from './mailer';
 import { sendDigestToSubscribers } from './digest-send';
 import { collectInterNews } from './inter-collect';
-import { publishBriefingSnapshot, loadDailyEdits, applyTop3Edits } from './briefing';
+import { publishBriefingSnapshot, loadBriefingSnapshot, loadDailyEdits, applyTop3Edits } from './briefing';
 import { getBriefingRecommendation } from './briefing-reco';
 import { filterInterNewsWithGemini } from './inter-filter';
 import { matchInterNewsWithPortfolio } from './inter-portfolio-match';
@@ -446,7 +446,9 @@ export async function runDailyDigest(opts: RunOptions = {}) {
       console.error('[runner] AI 시그널 발행 실패(무시):', e));
     // 데일리 브리핑 영상의 재료 — 메일과 같은 data에서 헤드라인 5개를 뽑아 저장한다.
     // 실제 발송하는 실행에서만(수집 전용 실행이 그날 스냅샷을 덮어쓰지 않게). 실패해도 발송은 계속한다.
-    if (opts.send && !opts.dryRun) {
+    // 영상은 08:25 브리핑 워크플로가 이미 스냅샷을 만들어 확정했다 — 있으면 건드리지 않는다
+    // (덮어쓰면 영상과 기록이 달라진다). 여기서 만드는 건 그 워크플로가 실패한 날의 대비뿐이다.
+    if (opts.send && !opts.dryRun && !(await loadBriefingSnapshot().catch(() => null))) {
       const reco = await getBriefingRecommendation().catch(e => {
         console.error('[runner] 브리핑 추천 실패 — 메일 TOP3 기반으로 대신합니다:', e);
         return null;

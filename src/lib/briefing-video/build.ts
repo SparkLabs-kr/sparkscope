@@ -1,0 +1,66 @@
+/**
+ * 데일리 브리핑 영상 한 편을 만든다 — 스냅샷 준비 → 대본 → 음성 → 슬라이드 → MP4.
+ * GitHub Actions(daily-briefing.yml)와 로컬(scripts/build-briefing.ts)이 같은 함수를 쓴다.
+ */
+import path from 'path';
+import { loadSendArticles, buildDigestForSend } from '../sparkscope/runner';
+import { publishBriefingSnapshot, loadBriefingSnapshot, kstDateKey, type BriefingSnapshot } from '../sparkscope/briefing';
+import { getBriefingRecommendation } from '../sparkscope/briefing-reco';
+import type { AnalyzedArticle } from '../sparkscope/types';
+import { writeBriefingScript, spokenDate, type ScriptSegment } from './script';
+import { synthesize } from './tts';
+import { introSlide, itemSlide, outroSlide } from './slides';
+import { renderVideo, type Clip } from './render';
+
+/**
+ * 오늘 헤드라인 스냅샷을 새로 만든다 — 10:30 메일과 같은 재료·같은 조립(buildDigestForSend)에서
+ * 편집자 저장 → 추천 → 메일 TOP3 순으로 고른다. 영상은 이 시점의 결과로 확정된다.
+ */
+export async function prepareSnapshot(): Promise<BriefingSnapshot> {
+  const raw = await loadSendArticles();
+  const analyzed: AnalyzedArticle[] = (raw as any[]).map(a => ({
+    ...a,
+    relatedCompanies: typeof a.relatedCompanies === 'string' ? JSON.parse(a.relatedCompanies) : (a.relatedCompanies ?? []),
+  }));
+  const data = await buildDigestForSend(analyzed);
+  const reco = await getBriefingRecommendation().catch(e => {
+    console.error('[briefing] 추천 실패 — 메일 TOP3 기반으로 대신합니다:', e);
+    return null;
+  });
+  return publishBriefingSnapshot(data, reco?.headlines ?? null);
+}
+
+export interface BuiltBriefing {
+  snapshot: BriefingSnapshot;
+  segments: ScriptSegment[];
+  file: string;
+  seconds: number;
+}
+
+export async function buildBriefingVideo(opts: { outDir: string; prepare?: boolean }): Promise<BuiltBriefing> {
+  const snapshot = opts.prepare
+    ? await prepareSnapshot()
+    : (await loadBriefingSnapshot()) ?? (await prepareSnapshot());
+  if (snapshot.headlines.length === 0) throw new Error('헤드라인이 없습니다 — 영상을 만들 수 없음');
+  console.log(`[briefing] 헤드라인 ${snapshot.headlines.length}건 (${snapshot.source})`);
+
+  const segments = await writeBriefingScript(snapshot);
+  console.log(`[briefing] 대본 ${segments.reduce((n, s) => n + s.text.length, 0)}자`);
+
+  const dateLabel = spokenDate(snapshot.dateKey);
+  const total = snapshot.headlines.length;
+  // 음성은 병렬로 — 문단 7개를 순서대로 부르면 1분 가까이 걸린다.
+  const speeches = await Promise.all(segments.map(s => synthesize(s.text)));
+  const clips: Clip[] = segments.map((s, i) => ({
+    png: s.kind === 'intro' ? introSlide(dateLabel, snapshot.headlines)
+      : s.kind === 'outro' ? outroSlide(dateLabel)
+      : itemSlide(dateLabel, snapshot.headlines[s.index!], s.index!, total),
+    wav: speeches[i].wav,
+    seconds: speeches[i].seconds,
+  }));
+
+  const file = path.join(opts.outDir, `briefing-${snapshot.dateKey || kstDateKey()}.mp4`);
+  const seconds = await renderVideo(clips, path.join(opts.outDir, 'work'), file);
+  console.log(`[briefing] 영상 ${seconds.toFixed(1)}초 → ${file}`);
+  return { snapshot, segments, file, seconds };
+}
