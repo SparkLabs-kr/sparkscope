@@ -151,10 +151,10 @@ export function outroSlide(dateLabel: string): Buffer {
   ctx.textAlign = 'center';
   ctx.font = '60px "Pretendard ExtraBold"';
   ctx.fillStyle = C.ink;
-  ctx.fillText('좋은 하루 보내세요', W / 2, 340);
+  ctx.fillText('오늘 브리핑은 여기까지', W / 2, 340);
   ctx.font = '30px "Pretendard SemiBold"';
   ctx.fillStyle = C.purple;
-  ctx.fillText('자세한 내용은 SparkScope에서', W / 2, 410);
+  ctx.fillText('자세한 내용은 스파크스코프 대시보드에서', W / 2, 410);
   ctx.textAlign = 'left';
   return canvas.toBuffer('image/png');
 }
