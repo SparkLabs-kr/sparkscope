@@ -24,7 +24,11 @@ export interface Clip {
   seconds: number;
 }
 
-export async function renderVideo(clips: Clip[], workDir: string, outFile: string): Promise<number> {
+export async function renderVideo(clips: Clip[], workDirIn: string, outFileIn: string): Promise<number> {
+  // 절대 경로로 바꾼다 — concat 목록(list.txt) 안의 상대 경로는 ffmpeg가 목록 파일 폴더 기준으로
+  // 다시 풀어서 "out/briefing/work/out/briefing/work/s0.mp4"가 됐다(2026-09-30 첫 Actions 실행 실패).
+  const workDir = path.resolve(workDirIn);
+  const outFile = path.resolve(outFileIn);
   await mkdir(workDir, { recursive: true });
   const parts: string[] = [];
   let total = 0;
