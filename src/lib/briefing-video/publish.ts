@@ -4,7 +4,8 @@
  *
  * 공개 버킷인 이유: 잔디에서 누르면 로그인 없이 바로 재생돼야 한다(출근길 휴대폰). 영상 내용은
  * 공개 기사 헤드라인뿐이고, 포트폴리오 매칭 같은 내부 분석은 대본에 넣지 않는다(CLAUDE.md 파트너 규칙과 같은 기준).
- * 업로드에는 service_role 키가 필요하다 — GitHub Actions 시크릿 SUPABASE_SERVICE_ROLE_KEY.
+ * 업로드에는 비밀키가 필요하다 — GitHub Actions 시크릿 SUPABASE_SERVICE_ROLE_KEY. 새 방식 Secret key(sb_secret_…)나
+ * 예전 방식 service_role 키 둘 다 된다.
  */
 import { readFile } from 'fs/promises';
 import { prisma } from '@/lib/prisma';
@@ -31,7 +32,9 @@ export async function publishBriefingVideo(built: BuiltBriefing): Promise<string
   const r = await fetch(`${base}/storage/v1/object/${BUCKET}/${objectPath}`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${key}`,
+      // 새 방식 비밀키(sb_secret_…)는 JWT가 아니라 apikey 헤더로만 보낸다(게이트웨이가 권한을 붙여 준다).
+      // 예전 service_role 키(JWT)는 Authorization에도 싣는다. 둘 다 받게 해 둔다.
+      ...(key.startsWith('sb_') ? {} : { Authorization: `Bearer ${key}` }),
       apikey: key,
       'content-type': 'video/mp4',
       'x-upsert': 'true',            // 같은 날 다시 만들면 덮어쓴다
