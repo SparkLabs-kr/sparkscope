@@ -1,24 +1,20 @@
 /**
  * 데일리 브리핑 추천 헤드라인 5개 + 검수 화면의 교체 후보 목록.
  *
- * 추천은 아래 순서대로 위에서부터 채운다(2026-09-28 소윤 결정). 앞 단계가 5칸을 다 채우면
- * 뒤 단계는 들어가지 않는다 — 분야를 일부러 섞지 않는다.
+ * 추천은 항상 5개, 칸 수를 정해 두고 칸마다 AI가 가장 중요한 기사를 고른다(2026-09-30 소윤 결정):
+ *   스파크랩 소식이 있는 날  스파크랩 1 · 포트폴리오 2 · AI 1 · 스타트업계 1
+ *   없는 날                  포트폴리오 2 · AI 2(국내 1 · 글로벌 1) · 스타트업계 1
+ * 칸을 채울 후보가 모자라면 AI 칸으로 넘긴다. 칸 계산은 quotas(), 선정은 rankWithAI().
  *
- *   1. 스파크랩 직접 언급 뉴스      (다이제스트 "스파크랩 직접 언급" 섹션)
- *   2. 포트폴리오사 뉴스             (다이제스트 "포트폴리오 하이라이트" 섹션, 중요도 순, 최소 2건 보장)
- *   3. 이번 주 AI 트렌드            (다이제스트 "AI 트렌드 TOP 5" 섹션)
- *   4. 해외 주요 트렌드 토픽         (다이제스트 "해외 트렌드" 섹션 중 AI)
+ * 바이오는 추천에도 교체 후보에도 넣지 않는다.
  *
- * 재료는 다이제스트에 실린 기사뿐이고 기간도 다이제스트를 그대로 따른다 — 여기서 따로 창을 자르지 않는다.
- *
- * 바이오는 추천에도 교체 후보에도 넣지 않는다. AC·VC 업계 동향·스타트업계 뉴스는 추천 대상이
- * 아니지만, 편집자가 직접 고를 수 있게 교체 후보에는 남긴다.
- *
- * 규칙만으로 정하므로 같은 데이터면 늘 같은 답이 나온다. 그래도 수집 1회당 한 번 계산해
- * DashboardInsight(briefing_reco)에 저장한다 — AI 트렌드 목록은 2시간마다 새로 계산되므로,
- * 검수 화면을 본 뒤 발송 전에 목록이 바뀌면 "화면에선 A였는데 영상엔 B"가 될 수 있다.
+ * 수집 1회당 한 번 계산해 DashboardInsight(briefing_reco)에 저장한다 — AI 선정은 부를 때마다
+ * 조금씩 다를 수 있고 AI 트렌드 목록도 2시간마다 바뀌므로, 매번 새로 계산하면 "화면에선 A였는데
+ * 영상엔 B"가 된다.
  */
+import OpenAI from 'openai';
 import { prisma } from '@/lib/prisma';
+import { buildClusteredPool } from './digest';
 import { loadDigestCandidates, buildReviewDigest } from './review';
 import { attachInterDigest } from './inter-digest';
 import { attachAiSignals } from './signal-digest';
@@ -27,6 +23,8 @@ import { buildSignalFeed } from './signal-feed';
 import { BRIEFING_MAX, kstDateKey, type BriefingHeadline } from './briefing';
 
 const KIND_RECO = 'briefing_reco';
+const RANK_MODEL = 'gpt-4.1';
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 /** 교체 후보 중 해외 기사 창 — 검수 화면 후보와 같은 7일 */
 const PICKER_WINDOW_DAYS = 7;
 
@@ -38,8 +36,6 @@ const CATEGORY_LABEL: Record<string, string> = {
   competitor: '🤝 AC·VC 업계 동향',
   industry_trend: '🌐 스타트업계 뉴스',
 };
-/** 브리핑에 포트폴리오 기사를 최소 몇 건 넣을지 */
-const PORTFOLIO_MIN = 2;
 const IMPORTANCE_RANK: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
 const TREND_LABEL = '📈 이번 주 AI 트렌드';
 /**
@@ -61,9 +57,9 @@ export interface BriefingCandidate extends BriefingHeadline {
 
 export interface BriefingRecommendation {
   headlines: BriefingHeadline[];
-  /** 'rule' — 4단계 규칙. 'ai'는 2026-09-28 이전 방식(AI 순위)으로 만든 캐시다 */
-  method: 'ai' | 'rule';
-  /** 헤드라인마다 몇 단계(1~4)에서 뽑혔는지 — headlines와 같은 순서 */
+  /** 'quota' — 칸 수 + 칸별 AI 선정(9/30~). 'rule'·'ai'는 예전 방식으로 만든 캐시 */
+  method: 'ai' | 'rule' | 'quota';
+  /** 헤드라인마다 어느 칸(1 스파크랩·2 포트폴리오·3 AI 국내·4 AI 글로벌·5 스타트업계)인지 — headlines와 같은 순서 */
   tiers?: number[];
   /** 이 추천의 근거가 된 수집 완료 시각(ISO) — 바뀌면 다시 계산한다 */
   basis: string;
@@ -201,10 +197,12 @@ async function buildDigestForBriefing(): Promise<DigestData> {
 }
 
 function fromArticle(a: AnalyzedArticle & { id?: string }, idByLink: Map<string, string>): IntraCandidate {
+  // 구글 뉴스 경유 기사는 제목 끝에 " - 조선비즈" 같은 매체명이 붙어 온다 — 화면·낭독에서 뗀다.
+  const title = a.title.replace(/\s+-\s+[^-]{1,20}$/, '').trim() || a.title;
   return {
     kind: 'intra',
     ref: idByLink.get(a.link) ?? a.id ?? a.link,
-    title: a.title,
+    title,
     summary: a.oneLiner || a.title,
     source: a.source,
     url: a.link,
@@ -219,7 +217,85 @@ function fromArticle(a: AnalyzedArticle & { id?: string }, idByLink: Map<string,
 /** 제목에 한글이 있는가 — 영문 기사(같은 사건의 영문판)를 국내 단계에서 거르는 용도 */
 const isKorean = (t: string) => /[가-힣]/.test(t);
 
-/** 4단계 규칙으로 5칸을 채운다 — 재료는 전부 다이제스트 섹션. */
+/** 국내 AI 기업·업계 기사를 가려내는 1차 필터(최종 판단은 AI가 한다). */
+const AI_TOPIC = /AI|인공지능|생성형|LLM|GPT|에이전트|챗봇|딥러닝|머신러닝|파운데이션 ?모델|NPU|AI반도체|거대언어/i;
+
+/** 추천 칸 종류 — 화면의 "추천①~⑤"가 이 순서다. */
+export const SLOT_LABEL: Record<number, string> = {
+  1: '스파크랩', 2: '포트폴리오', 3: 'AI 국내', 4: 'AI 글로벌', 5: '스타트업계',
+};
+
+type Group = 'S' | 'P' | 'D' | 'G' | 'T';
+const GROUP_TIER: Record<Group, number> = { S: 1, P: 2, D: 3, G: 4, T: 5 };
+const GROUP_NAME: Record<Group, string> = {
+  S: '스파크랩 자사 소식', P: '포트폴리오사 소식', D: '국내 AI 기업·업계 소식', G: '글로벌 AI 기업·업계 소식', T: '스타트업계 소식',
+};
+
+/**
+ * 칸 수(2026-09-30 소윤 결정 — 항상 5개):
+ *   스파크랩 소식이 있는 날  스파크랩 1 · 포트폴리오 2 · AI 1(국내·글로벌 중 더 중요한 쪽) · 스타트업계 1
+ *   없는 날                  포트폴리오 2 · AI 2(국내 1 · 글로벌 1) · 스타트업계 1
+ * 후보가 모자란 칸은 AI 칸으로 넘긴다(국내·글로벌 반반 원칙 유지).
+ */
+function quotas(avail: Record<Group, number>): Record<Group, number> {
+  const q: Record<Group, number> = { S: 0, P: 0, D: 0, G: 0, T: 0 };
+  q.S = Math.min(1, avail.S);
+  q.P = Math.min(2, avail.P);
+  q.T = Math.min(1, avail.T);
+  let ai = BRIEFING_MAX - q.S - q.P - q.T;
+  if (ai === 1) {
+    // 한 칸이면 국내·글로벌 중 하나 — 어느 쪽인지는 AI가 고른다(여기선 가능한 쪽만 열어 둔다).
+    q.D = avail.D > 0 ? 1 : 0;
+    q.G = avail.G > 0 ? 1 : 0;
+    return q; // D·G 둘 다 1이면 "둘 중 하나" — rankWithAI가 1개만 고르게 한다
+  }
+  q.D = Math.min(Math.floor(ai / 2), avail.D);
+  q.G = Math.min(ai - q.D, avail.G);
+  q.D = Math.min(ai - q.G, avail.D); // 글로벌이 모자라면 국내로
+  return q;
+}
+
+const RANK_SYSTEM = `당신은 스파크랩(한국의 스타트업 액셀러레이터·VC)의 아침 브리핑 편집자입니다.
+임직원이 출근길에 들을 헤드라인을 고릅니다. 그룹마다 정해진 개수만큼, 그 그룹 안에서 가장 중요한 기사를 고르세요.
+
+중요도 기준
+- 스파크랩·포트폴리오사에 직접 영향을 주는 사건 > 업계 전반에 큰 사건 > 일반 소식.
+- 투자 유치·인수합병·상장·대형 계약·신제품 출시·규제 변화처럼 "사건"이 있는 기사를 우선합니다.
+- 주가 등락·행사 스케치·인터뷰·칼럼은 뒤로 미룹니다.
+- 같은 사건을 다룬 기사는 그룹이 달라도 하나만 고릅니다(국내 기사와 해외 기사가 같은 사건일 수 있음).
+- "국내 AI"는 한국 기업·기관이 주인공인 AI 소식, "글로벌 AI"는 해외 기업·기관이 주인공인 AI 소식입니다.
+
+JSON으로만 답하세요: {"picks": {"S": ["S0"], "P": ["P2","P0"], "D": ["D1"], "G": ["G0"], "T": ["T3"]}}
+그룹마다 요청한 개수를 정확히 지키고, 요청하지 않은 그룹은 빈 배열로 두세요.`;
+
+async function rankWithAI(
+  pools: Record<Group, BriefingCandidate[]>, q: Record<Group, number>, aiEither: boolean,
+): Promise<Record<Group, BriefingCandidate[]> | null> {
+  const lines: string[] = [];
+  (Object.keys(pools) as Group[]).forEach(g => {
+    if (q[g] === 0) return;
+    lines.push(`\n## ${GROUP_NAME[g]} — ${aiEither && (g === 'D' || g === 'G') ? '국내·글로벌 AI 합쳐 1개' : `${q[g]}개`}`);
+    pools[g].forEach((c, i) => lines.push(`${g}${i}. ${c.title} — ${c.summary}${c.importance ? ` [${c.importance}]` : ''}`));
+  });
+  const resp = await openai.chat.completions.create({
+    model: RANK_MODEL,
+    temperature: 0,
+    response_format: { type: 'json_object' },
+    messages: [{ role: 'system', content: RANK_SYSTEM }, { role: 'user', content: lines.join('\n') }],
+  });
+  const parsed = JSON.parse(resp.choices[0]?.message?.content ?? '{}') as { picks?: Partial<Record<Group, string[]>> };
+  if (!parsed.picks) return null;
+  const out = { S: [], P: [], D: [], G: [], T: [] } as Record<Group, BriefingCandidate[]>;
+  (Object.keys(out) as Group[]).forEach(g => {
+    for (const id of parsed.picks?.[g] ?? []) {
+      const c = pools[g][Number(String(id).replace(/^\D+/, ''))];
+      if (c && !out[g].includes(c)) out[g].push(c);
+    }
+  });
+  return out;
+}
+
+/** 칸 수에 맞춰 5칸을 채운다 — 재료는 다이제스트(같은 72시간 창)와 AI 트렌드·해외 트렌드. */
 async function pickByTiers(): Promise<{ picked: BriefingCandidate[]; tiers: number[] }> {
   const [briefed, data, candidates] = await Promise.all([
     recentlyBriefedUrls(),
@@ -227,74 +303,83 @@ async function pickByTiers(): Promise<{ picked: BriefingCandidate[]; tiers: numb
     loadDigestCandidates(),
   ]);
   const idByLink = new Map(candidates.map(a => [a.link, a.id]));
-  const rankOf = (a: IntraCandidate) => IMPORTANCE_RANK[a.importance ?? ''] ?? 0;
+  const rankOf = (a: { importance?: string }) => IMPORTANCE_RANK[a.importance ?? ''] ?? 0;
+  const fresh = (c: BriefingCandidate) => !briefed.has(c.url);
 
-  // ① 스파크랩 직접 언급 섹션 — 한국어 기사만. 다이제스트엔 같은 사건이 한국어·영문 기사로 둘 다
-  //    실리는데(중앙아시아 펀드 9/21), 브리핑은 한국어 음성이라 영문 제목은 읽기도 어색하다.
-  const sparklabsAll = data.sparklabsArticles.filter(a => isKorean(a.title)).map(a => fromArticle(a, idByLink));
+  // 스파크랩 — 다이제스트 섹션, 한국어 기사만(같은 사건의 영문판이 두 칸을 차지하지 않게).
+  const S = data.sparklabsArticles.filter(a => isKorean(a.title)).map(a => fromArticle(a, idByLink)).filter(fresh);
 
-  // ② 포트폴리오 하이라이트 섹션(이미 회사당 1건) — 중요도 → 섹션 순서. 최소 PORTFOLIO_MIN건.
-  //    주가 시황 기사는 뺀다. 지난 7일 브리핑에 나간 회사도 뺀다(같은 사건을 또 내보내지 않게).
-  const briefedCompanies = new Set(
-    candidates.filter(a => briefed.has(a.link)).map(a => a.matchedKeyword));
-  //    섹션 대표가 주가 기사면 버리지 않고 같은 회사의 다른 기사로 바꾼다 — 다이제스트엔 스카이랩스가
-  //    "주가 2.51% 하락"으로 실렸지만 같은 주 진짜 뉴스는 "타임 헬스테크 500 선정"이었다.
+  // 포트폴리오 — 다이제스트 섹션(회사당 1건). 주가 기사면 같은 회사 다른 기사로. 지난 7일 브리핑에 나간 회사 제외.
+  const briefedCompanies = new Set(candidates.filter(a => briefed.has(a.link)).map(a => a.matchedKeyword));
   const byCompany = (company: string) => candidates
     .filter(c => c.matchedKeyword === company && !STOCK_TICKER.test(c.title) && isKorean(c.title))
-    .sort((x, y) => (IMPORTANCE_RANK[y.importance] ?? 0) - (IMPORTANCE_RANK[x.importance] ?? 0) || y.priorityScore - x.priorityScore)[0];
-  const portfolio = data.portfolioArticles
+    .sort((x, y) => rankOf(y) - rankOf(x) || y.priorityScore - x.priorityScore)[0];
+  const P = data.portfolioArticles
     .map(a => (STOCK_TICKER.test(a.title) || !isKorean(a.title) ? byCompany(a.matchedKeyword) : a))
     .filter((a): a is NonNullable<typeof a> => !!a)
     .map(a => fromArticle(a, idByLink))
-    .filter(a => !briefedCompanies.has(a.company))
-    .map((a, i) => ({ a, i }))
-    .sort((x, y) => rankOf(y.a) - rankOf(x.a) || x.i - y.i)
-    .map(x => x.a);
+    .filter(a => !briefedCompanies.has(a.company) && fresh(a))
+    .sort((x, y) => rankOf(y) - rankOf(x))
+    .slice(0, 8);
 
-  // ③ AI 트렌드 TOP 5 섹션
-  const trends: BriefingCandidate[] = (data.aiSignals?.items ?? []).map(it => ({
-    kind: 'trend' as const,
-    ref: it.url,
-    title: it.titleKo || it.title,
-    summary: it.summaryKo || it.title,
-    source: it.source,
-    url: it.url,
-    label: TREND_LABEL,
-    pubDate: it.publishedAt ?? data.aiSignals!.generatedAt,
-  }));
+  // 국내 AI — 72시간 후보 중 AI 주제의 국내 기사(업계·경쟁사), 같은 사건 묶고 중요도 순.
+  const domesticAi = buildClusteredPool(candidates.filter(a =>
+    (a.category === 'industry_trend' || a.category === 'competitor')
+    && isKorean(a.title) && AI_TOPIC.test(a.title) && !STOCK_TICKER.test(a.title)));
+  const D = domesticAi
+    .map(a => ({ ...fromArticle(a, idByLink), label: '🇰🇷 국내 AI' }))
+    .filter(fresh)
+    .sort((x, y) => rankOf(y) - rankOf(x))
+    .slice(0, 8);
 
-  // ④ 해외 트렌드 섹션 중 AI 카드(바이오 제외)
-  const inter: BriefingCandidate[] = (data.inter?.cards ?? [])
-    .filter(c => c.domainLabel === 'AI')
-    .map(c => ({
-      kind: 'inter' as const,
-      ref: c.url,
-      title: c.title,
-      summary: c.cellLabel,
-      source: c.media,
-      url: c.url,
-      label: INTER_LABEL,
-      pubDate: new Date().toISOString(),
-      matchCount: c.companies.length,
-      companies: c.companies.map(x => x.name),
-    }));
+  // 글로벌 AI — 메일의 AI 트렌드 TOP 5 + 해외 트렌드 AI 카드
+  const G: BriefingCandidate[] = [
+    ...(data.aiSignals?.items ?? []).map(it => ({
+      kind: 'trend' as const, ref: it.url, title: it.titleKo || it.title, summary: it.summaryKo || it.title,
+      source: it.source, url: it.url, label: TREND_LABEL, pubDate: it.publishedAt ?? data.aiSignals!.generatedAt,
+    })),
+    ...(data.inter?.cards ?? []).filter(c => c.domainLabel === 'AI').map(c => ({
+      kind: 'inter' as const, ref: c.url, title: c.title, summary: c.cellLabel, source: c.media, url: c.url,
+      label: INTER_LABEL, pubDate: new Date().toISOString(), companies: c.companies.map(x => x.name),
+    })),
+  ].filter(fresh);
 
-  // 스파크랩 기사가 많은 날에도 포트폴리오 자리를 남긴다.
-  const reserved = Math.min(PORTFOLIO_MIN, portfolio.length);
-  const sparklabs = sparklabsAll.filter(a => !briefed.has(a.url)).slice(0, BRIEFING_MAX - reserved);
+  // 스타트업계 — 다이제스트 "스타트업계 뉴스" 섹션(국내 AI 칸과 겹치지 않게 AI 주제는 뺀다).
+  const T = data.industryArticles
+    .filter(a => isKorean(a.title) && !AI_TOPIC.test(a.title) && !STOCK_TICKER.test(a.title))
+    .map(a => fromArticle(a, idByLink))
+    .filter(fresh);
 
-  const tierLists: BriefingCandidate[][] = [sparklabs, portfolio, trends, inter];
+  const pools: Record<Group, BriefingCandidate[]> = { S, P, D, G, T };
+  const q = quotas({ S: S.length, P: P.length, D: D.length, G: G.length, T: T.length });
+  const aiEither = q.D === 1 && q.G === 1 && q.S + q.P + q.T === BRIEFING_MAX - 1;
+
+  let chosen: Record<Group, BriefingCandidate[]> | null = null;
+  try {
+    chosen = await rankWithAI(pools, q, aiEither);
+  } catch (e) {
+    console.error('[briefing-reco] AI 선정 실패 — 그룹별 중요도 순으로 대신합니다:', e);
+  }
+  // AI 답을 칸 수에 맞춰 다듬는다(모자라면 그룹 앞에서부터 채우고, 넘치면 자른다).
+  const want = { ...q };
+  if (aiEither) {
+    const aiPick = chosen?.D[0] ? 'D' : chosen?.G[0] ? 'G' : (D.length ? 'D' : 'G');
+    want.D = aiPick === 'D' ? 1 : 0;
+    want.G = aiPick === 'G' ? 1 : 0;
+  }
   const picked: BriefingCandidate[] = [];
   const tiers: number[] = [];
-  // 지난 브리핑에 나간 기사는 건너뛴다.
-  const seenUrl = new Set<string>(briefed);
-  tierLists.forEach((list, i) => {
-    for (const c of list) {
-      if (picked.length >= BRIEFING_MAX) return;
-      if (seenUrl.has(c.url)) continue;
-      seenUrl.add(c.url);
+  const used = new Set<string>();
+  (['S', 'P', 'D', 'G', 'T'] as Group[]).forEach(g => {
+    const order = [...(chosen?.[g] ?? []), ...pools[g]];
+    let n = 0;
+    for (const c of order) {
+      if (n >= want[g]) break;
+      if (used.has(c.url)) continue;
+      used.add(c.url);
       picked.push(c);
-      tiers.push(i + 1);
+      tiers.push(GROUP_TIER[g]);
+      n++;
     }
   });
   return { picked, tiers };
@@ -316,7 +401,7 @@ export async function getBriefingRecommendation(force = false): Promise<Briefing
       try {
         const cached = JSON.parse(row.value) as BriefingRecommendation;
         // 'ai'는 예전 방식으로 만든 캐시 — 규칙이 바뀌었으니 다시 계산한다.
-        if (cached.basis === basis && cached.method === 'rule' && cached.headlines?.length > 0) return cached;
+        if (cached.basis === basis && cached.method === 'quota' && cached.headlines?.length > 0) return cached;
       } catch { /* 깨진 캐시는 새로 계산 */ }
     }
   }
@@ -324,7 +409,7 @@ export async function getBriefingRecommendation(force = false): Promise<Briefing
   const { picked, tiers } = await pickByTiers();
   const rec: BriefingRecommendation = {
     headlines: picked.map(toHeadline),
-    method: 'rule',
+    method: 'quota',
     tiers,
     basis,
     computedAt: new Date().toISOString(),

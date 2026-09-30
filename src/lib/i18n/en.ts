@@ -13,8 +13,8 @@ export const EN: Record<string, string> = {
   '추천 다시 받기': 'Refresh picks',
   '저장됨 — 발송 때 이 목록으로 영상을 만듭니다.': 'Saved — the video will be built from this list at send time.',
   '아직 저장 안 됨 — 저장하지 않으면 추천 5개가 그대로 나갑니다.': 'Not saved yet — if left unsaved, the 5 picks go out as is.',
-  '추천 순서: ① 스파크랩 직접 언급 → ② 포트폴리오사 중요도 높은 순(최소 2) → ③ 이번 주 AI 트렌드 → ④ 해외 AI 트렌드 (바이오 제외)':
-    'Pick order: ① SparkLabs mentions → ② portfolio news by importance (at least 2) → ③ this week in AI → ④ global AI trends (bio excluded)',
+  '추천 5개: 스파크랩 소식 있으면 스파크랩 1 · 포트폴리오 2 · AI 1 · 스타트업계 1 / 없으면 포트폴리오 2 · AI 2(국내 1·글로벌 1) · 스타트업계 1':
+    'Five picks: with SparkLabs news, SparkLabs 1 · portfolio 2 · AI 1 · startup 1 / otherwise portfolio 2 · AI 2 (Korea 1 · global 1) · startup 1',
   'AI 트렌드': 'AI trends',
   '기준': 'as of',
   '추천': 'Recommended',
