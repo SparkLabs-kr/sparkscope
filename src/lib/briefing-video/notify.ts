@@ -35,24 +35,12 @@ export async function notifyBriefing(opts: { final: boolean; baseUrl: string }):
     return { status: 'no-webhook' };
   }
 
-  const page = `${opts.baseUrl.replace(/\/$/, '')}/briefing/${dateKey}`;
-  const minutes = video ? `${Math.floor(video.seconds / 60)}분 ${video.seconds % 60}초` : '';
-  const body = {
-    body: video
-      ? `🎬 [${spokenDate(dateKey)} 스파크스코프 데일리 브리핑](${page}) · ${minutes}`
-      : `📰 [${spokenDate(dateKey)} 스파크스코프 데일리 브리핑](${page}) (오늘은 영상 없이 헤드라인만 보내 드립니다)`,
-    connectColor: '#5046E5',
-    connectInfo: headlines.map((h, i) => ({
-      title: `${i + 1}. ${h.title}`,
-      description: `${h.label.replace(/^[\p{Extended_Pictographic}️\s]+/u, '')} · ${h.source}`,
-    })),
-  };
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { Accept: 'application/vnd.tosslab.jandi-v2+json', 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!r.ok) throw new Error(`잔디 전송 실패 ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  await postJandi(url, briefingMessage({
+    dateKey,
+    titles: headlines.map(h => h.title),
+    videoPage: video ? `${opts.baseUrl.replace(/\/$/, '')}/briefing/${dateKey}` : null,
+    baseUrl: opts.baseUrl,
+  }));
 
   await prisma.dashboardInsight.upsert({
     where: { kind_key: { kind: KIND_NOTIFIED, key: dateKey } },
@@ -63,22 +51,53 @@ export async function notifyBriefing(opts: { final: boolean; baseUrl: string }):
 }
 
 /**
- * 연결 확인용 테스트 메시지 — 오늘 발송 기록(briefing_notified)을 남기지 않는다.
- * 잔디 웹훅을 새로 넣거나 토픽을 바꿨을 때 /api/cron/briefing-notify?test=1 로 호출한다.
+ * 메시지 형식 — 2026-09-30 소윤 확정. 카드(connectInfo) 없이 본문 한 덩어리로:
+ *
+ *   스파크스코프 데일리 브리핑 9.30
+ *   1. (기사 제목)
+ *   …
+ *   5. (기사 제목)
+ *   ▶ 영상 보기 (링크)          ← 영상이 없는 날은 이 줄이 빠진다
+ *   스파크스코프 바로가기 (링크)
+ */
+export function briefingMessage(m: { dateKey: string; titles: string[]; videoPage: string | null; baseUrl: string }): string {
+  const [, mm, dd] = m.dateKey.split('-').map(Number);
+  const base = m.baseUrl.replace(/\/$/, '');
+  return [
+    `스파크스코프 데일리 브리핑 ${mm}.${dd}`,
+    ...m.titles.map((t, i) => `${i + 1}. ${t}`),
+    ...(m.videoPage ? [`[▶ 영상 보기](${m.videoPage})`] : []),
+    `[스파크스코프 바로가기](${base}/dashboard)`,
+  ].join('\n');
+}
+
+async function postJandi(url: string, body: string): Promise<void> {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { Accept: 'application/vnd.tosslab.jandi-v2+json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body }),
+  });
+  if (!r.ok) throw new Error(`잔디 전송 실패 ${r.status}: ${(await r.text()).slice(0, 200)}`);
+}
+
+/**
+ * 연결·형식 확인용 테스트 — 오늘 추천 헤드라인으로 실제와 같은 형식을 보낸다(맨 위에 [테스트] 표시).
+ * 오늘 발송 기록(briefing_notified)은 남기지 않는다.
  */
 export async function sendJandiTest(baseUrl: string): Promise<void> {
   const url = process.env.JANDI_WEBHOOK_URL;
   if (!url) throw new Error('JANDI_WEBHOOK_URL 이 설정돼 있지 않습니다(Vercel 환경변수 + 재배포 확인)');
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { Accept: 'application/vnd.tosslab.jandi-v2+json', 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      body: `✅ [스파크스코프 데일리 브리핑 연결 테스트](${baseUrl.replace(/\/$/, '')}/digest/review)`,
-      connectColor: '#5046E5',
-      connectInfo: [
-        { title: '연결 확인', description: '이 메시지가 보이면 잔디 연동이 정상입니다. 월·수·금 09:00에 브리핑 링크가 이 토픽으로 옵니다.' },
-      ],
-    }),
-  });
-  if (!r.ok) throw new Error(`잔디 전송 실패 ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  const dateKey = kstDateKey();
+  const { getBriefingRecommendation } = await import('../sparkscope/briefing-reco');
+  const snapshot = await loadBriefingSnapshot(dateKey);
+  const titles = snapshot?.headlines.map(h => h.title)
+    ?? (await getBriefingRecommendation().catch(() => null))?.headlines.map(h => h.title)
+    ?? ['(오늘 헤드라인 없음)'];
+  const video = await loadBriefingVideo(dateKey);
+  await postJandi(url, `[테스트] ${briefingMessage({
+    dateKey,
+    titles,
+    videoPage: `${baseUrl.replace(/\/$/, '')}/briefing/${dateKey}`,
+    baseUrl,
+  })}${video ? '' : '\n(테스트라 영상 링크는 아직 열리지 않을 수 있습니다)'}`);
 }
