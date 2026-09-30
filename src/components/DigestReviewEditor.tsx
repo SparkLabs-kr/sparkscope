@@ -140,6 +140,22 @@ export function DigestReviewEditor({
       addBriefing(h);
     }
   }
+  const [jandiBusy, setJandiBusy] = useState(false);
+  async function testJandi() {
+    setJandiBusy(true);
+    setBriefingMsg(null);
+    try {
+      const res = await fetch('/api/digest/jandi-test', { method: 'POST' });
+      const data = await res.json();
+      setBriefingMsg(data.ok
+        ? { ok: true, text: tr('잔디로 테스트 메시지를 보냈습니다. 토픽을 확인해 주세요.') }
+        : { ok: false, text: data.error ?? tr('잔디 전송 실패') });
+    } catch (e: any) {
+      setBriefingMsg({ ok: false, text: String(e?.message ?? e) });
+    } finally {
+      setJandiBusy(false);
+    }
+  }
   async function refreshReco() {
     setRecoBusy(true);
     setBriefingMsg(null);
@@ -295,6 +311,9 @@ export function DigestReviewEditor({
         <section className="bg-white p-5 rounded-xl border border-gray-200">
           <div className="flex items-center justify-between gap-2 mb-1">
             <div className="font-bold">🎬 {tr('오늘 브리핑 헤드라인')} <span className="text-xs font-normal text-gray-400">({briefing.length}/{BRIEFING_MAX})</span></div>
+            <button onClick={testJandi} disabled={jandiBusy} className="shrink-0 rounded border border-gray-200 px-2 py-0.5 text-[11px] text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+              {jandiBusy ? tr('보내는 중…') : `💬 ${tr('잔디 연결 테스트')}`}
+            </button>
             <button onClick={refreshReco} disabled={recoBusy} className="shrink-0 rounded border border-gray-200 px-2 py-0.5 text-[11px] text-gray-600 hover:bg-gray-50 disabled:opacity-50">
               {recoBusy ? tr('추천 계산 중…') : `🔄 ${tr('추천 다시 받기')}`}
             </button>

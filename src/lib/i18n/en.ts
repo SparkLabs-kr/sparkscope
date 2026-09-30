@@ -10,6 +10,9 @@
 export const EN: Record<string, string> = {
   // ── 데일리 브리핑 헤드라인 (2026-09-28) ─────────────────────────
   '추천 계산 중…': 'Computing picks…',
+  '잔디 연결 테스트': 'Test JANDI',
+  '잔디로 테스트 메시지를 보냈습니다. 토픽을 확인해 주세요.': 'Test message sent to JANDI. Check the topic.',
+  '잔디 전송 실패': 'JANDI send failed',
   '추천 다시 받기': 'Refresh picks',
   '저장됨 — 발송 때 이 목록으로 영상을 만듭니다.': 'Saved — the video will be built from this list at send time.',
   '아직 저장 안 됨 — 저장하지 않으면 추천 5개가 그대로 나갑니다.': 'Not saved yet — if left unsaved, the 5 picks go out as is.',
