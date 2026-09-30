@@ -9,13 +9,16 @@ import { loadDigestCandidates, buildReviewDigest } from '../src/lib/sparkscope/r
 import { renderDigestHtml } from '../src/lib/sparkscope/digest';
 import { attachInterDigest } from '../src/lib/sparkscope/inter-digest';
 import { attachAiSignals } from '../src/lib/sparkscope/signal-digest';
+import { attachResolvedLinks } from '../src/lib/sparkscope/digest-links';
 import { buildSubject } from '../src/lib/sparkscope/mailer';
 
 async function main() {
   const out = process.argv[2] ?? '/tmp/digest-today.html';
   const candidates = await loadDigestCandidates();
   // 발송 경로(runner.ts)와 같은 순서로 붙인다 — 그래야 초안이 실제 메일과 같다.
-  const data = await attachAiSignals(await attachInterDigest(buildReviewDigest(candidates)));
+  const data = await attachAiSignals(await attachInterDigest(
+    await attachResolvedLinks(buildReviewDigest(candidates)),
+  ));
   const html = renderDigestHtml(data, 'https://sparkscope.vercel.app');
 
   console.log('제목:', buildSubject(data.dateLabel, data.top3[0]?.title));
