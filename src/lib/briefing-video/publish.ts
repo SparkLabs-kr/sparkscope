@@ -28,6 +28,10 @@ export async function publishBriefingVideo(built: BuiltBriefing): Promise<string
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!base || !key) throw new Error('NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY 가 없습니다');
 
+  // 흔한 실수: 공개키(anon·sb_publishable_)를 넣으면 RLS에 막혀 403 "row-level security"가 난다.
+  if (keyRole(key) !== 'service') {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY 에 공개키(anon/publishable)가 들어 있습니다 — Supabase → Settings → API Keys의 Secret key(sb_secret_…) 또는 Legacy 탭의 service_role 키를 넣어 주세요');
+  }
   const objectPath = `${built.snapshot.dateKey}/briefing.mp4`;
   const r = await fetch(`${base}/storage/v1/object/${BUCKET}/${objectPath}`, {
     method: 'POST',
@@ -61,6 +65,17 @@ export async function publishBriefingVideo(built: BuiltBriefing): Promise<string
     update: { value },
   });
   return url;
+}
+
+function keyRole(key: string): 'service' | 'public' {
+  if (key.startsWith('sb_secret_')) return 'service';
+  if (key.startsWith('sb_publishable_')) return 'public';
+  try {
+    const payload = JSON.parse(Buffer.from(key.split('.')[1], 'base64url').toString());
+    return payload.role === 'service_role' ? 'service' : 'public';
+  } catch {
+    return 'service'; // 모르는 형식은 서버가 판단하게 둔다
+  }
 }
 
 export async function loadBriefingVideo(dateKey: string): Promise<BriefingVideoRecord | null> {
