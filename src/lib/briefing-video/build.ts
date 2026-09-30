@@ -8,7 +8,7 @@ import { publishBriefingSnapshot, loadBriefingSnapshot, kstDateKey, type Briefin
 import { getBriefingRecommendation } from '../sparkscope/briefing-reco';
 import type { AnalyzedArticle } from '../sparkscope/types';
 import { writeBriefingScript, spokenDate, type ScriptSegment } from './script';
-import { synthesize } from './tts';
+import { synthesizeAll } from './tts';
 import { introSlide, itemSlide, outroSlide } from './slides';
 import { renderVideo, type Clip } from './render';
 
@@ -49,8 +49,9 @@ export async function buildBriefingVideo(opts: { outDir: string; prepare?: boole
 
   const dateLabel = spokenDate(snapshot.dateKey);
   const total = snapshot.headlines.length;
-  // 음성은 병렬로 — 문단 7개를 순서대로 부르면 1분 가까이 걸린다.
-  const speeches = await Promise.all(segments.map(s => synthesize(s.text)));
+  // 음성은 하나씩 — 동시에 보내면 Gemini TTS 분당 한도(429)에 걸린다(tts.ts synthesizeAll).
+  const { speeches, voice } = await synthesizeAll(segments.map(s => s.text));
+  console.log(`[briefing] 음성 ${voice}`);
   const clips: Clip[] = segments.map((s, i) => ({
     png: s.kind === 'intro' ? introSlide(dateLabel, snapshot.headlines)
       : s.kind === 'outro' ? outroSlide(dateLabel)

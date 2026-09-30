@@ -29,33 +29,68 @@ export interface Speech {
   seconds: number;
 }
 
-export async function synthesize(text: string): Promise<Speech> {
+/**
+ * 한도 초과(429) 대비 — Gemini TTS는 preview라 분당 호출 한도가 낮다(2026-09-30 Actions 첫 실행에서
+ * 문단 7개를 동시에 보냈다가 429). 그래서 문단은 하나씩(synthesizeAll) 보내고, 429면 오래 기다린다.
+ * 그래도 안 되면 같은 이름의 정식 음성(Chirp 3 HD · Charon)으로 영상 전체를 만든다 — 문단마다
+ * 목소리가 섞이지 않게 전부 바꾼다. 9시 발송이 음성 때문에 막히면 안 된다.
+ */
+export const FALLBACK_VOICE = 'ko-KR-Chirp3-HD-Charon';
+
+async function callTts(text: string, gemini: boolean): Promise<Speech> {
+  const r = await fetch('https://texttospeech.googleapis.com/v1/text:synthesize', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${await token()}`,
+      'x-goog-user-project': PROJECT,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      input: gemini ? { text, prompt: VOICE.style } : { text },
+      voice: gemini
+        ? { languageCode: 'ko-KR', name: VOICE.name, modelName: VOICE.model }
+        : { languageCode: 'ko-KR', name: FALLBACK_VOICE },
+      audioConfig: { audioEncoding: 'LINEAR16', sampleRateHertz: SAMPLE_RATE },
+    }),
+  });
+  const j: any = await r.json();
+  if (!r.ok) throw Object.assign(new Error(`TTS ${r.status}: ${JSON.stringify(j).slice(0, 300)}`), { status: r.status });
+  const wav = Buffer.from(j.audioContent, 'base64');
+  // LINEAR16 응답은 44바이트 WAV 헤더 + 16비트 모노 PCM
+  return { wav, seconds: (wav.length - 44) / (2 * SAMPLE_RATE) };
+}
+
+async function withRetry(text: string, gemini: boolean): Promise<Speech> {
   let lastErr: unknown;
-  // 일시적 5xx·429는 몇 번 다시 시도한다 — 발송 시각이 정해져 있어 한 번 실패로 끝나면 안 된다.
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 5; attempt++) {
     try {
-      const r = await fetch('https://texttospeech.googleapis.com/v1/text:synthesize', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${await token()}`,
-          'x-goog-user-project': PROJECT,
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          input: { text, prompt: VOICE.style },
-          voice: { languageCode: 'ko-KR', name: VOICE.name, modelName: VOICE.model },
-          audioConfig: { audioEncoding: 'LINEAR16', sampleRateHertz: SAMPLE_RATE },
-        }),
-      });
-      const j: any = await r.json();
-      if (!r.ok) throw new Error(`TTS ${r.status}: ${JSON.stringify(j).slice(0, 300)}`);
-      const wav = Buffer.from(j.audioContent, 'base64');
-      // LINEAR16 응답은 44바이트 WAV 헤더 + 16비트 모노 PCM
-      return { wav, seconds: (wav.length - 44) / (2 * SAMPLE_RATE) };
-    } catch (e) {
+      return await callTts(text, gemini);
+    } catch (e: any) {
       lastErr = e;
-      await new Promise(res => setTimeout(res, 2000 * (attempt + 1)));
+      // 429는 분 단위 한도라 길게(20·40·60초…), 그 밖의 일시 오류는 짧게 기다린다.
+      const wait = e?.status === 429 ? 20_000 * (attempt + 1) : 2_000 * (attempt + 1);
+      console.warn(`[tts] ${gemini ? 'Gemini' : 'Chirp'} ${e?.status ?? ''} — ${wait / 1000}초 뒤 재시도(${attempt + 1}/5)`);
+      await new Promise(res => setTimeout(res, wait));
     }
   }
   throw lastErr;
+}
+
+/** 문단 전체를 하나씩 합성한다. Gemini가 끝내 실패하면 전부 대체 음성으로 다시 만든다. */
+export async function synthesizeAll(texts: string[]): Promise<{ speeches: Speech[]; voice: string }> {
+  try {
+    const speeches: Speech[] = [];
+    for (const t of texts) speeches.push(await withRetry(t, true));
+    return { speeches, voice: `${VOICE.model}/${VOICE.name}` };
+  } catch (e) {
+    console.error(`[tts] Gemini 음성 실패 — 전체를 ${FALLBACK_VOICE}로 다시 만듭니다:`, e);
+    const speeches: Speech[] = [];
+    for (const t of texts) speeches.push(await withRetry(t, false));
+    return { speeches, voice: FALLBACK_VOICE };
+  }
+}
+
+/** 한 문단만 합성(테스트용). */
+export async function synthesize(text: string): Promise<Speech> {
+  return withRetry(text, true);
 }
