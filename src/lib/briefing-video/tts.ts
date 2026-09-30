@@ -33,7 +33,7 @@ export interface Speech {
  * 한도 초과(429) 대비 — Gemini TTS는 preview라 분당 호출 한도가 낮다(2026-09-30 Actions 첫 실행에서
  * 문단 7개를 동시에 보냈다가 429). 그래서 문단은 하나씩(synthesizeAll) 보내고, 429면 오래 기다린다.
  * 그래도 안 되면 같은 이름의 정식 음성(Chirp 3 HD · Charon)으로 영상 전체를 만든다 — 문단마다
- * 목소리가 섞이지 않게 전부 바꾼다. 9시 발송이 음성 때문에 막히면 안 된다.
+ * 목소리가 섞이지 않게 전부 바꾼다. 발송이 음성 때문에 막히면 안 된다.
  */
 export const FALLBACK_VOICE = 'ko-KR-Chirp3-HD-Charon';
 

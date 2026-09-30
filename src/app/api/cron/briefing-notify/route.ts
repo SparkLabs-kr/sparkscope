@@ -1,4 +1,4 @@
-// 월·수·금 브리핑 잔디 알림 — 09:00(영상 있으면 전송) · 09:30(?final=1, 영상 없어도 헤드라인이라도 전송) · ?test=1 연결 테스트.
+// 월·수·금 브리핑 잔디 알림 — 10:45(영상 있으면 전송) · 11:15(?final=1, 영상 없어도 헤드라인이라도 전송) · ?test=1 연결 테스트.
 import { NextResponse } from 'next/server';
 import { notifyBriefing, sendJandiTest } from '@/lib/briefing-video/notify';
 
