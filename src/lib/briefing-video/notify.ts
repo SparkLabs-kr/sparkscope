@@ -61,3 +61,24 @@ export async function notifyBriefing(opts: { final: boolean; baseUrl: string }):
   });
   return { status: 'sent', withVideo: !!video };
 }
+
+/**
+ * 연결 확인용 테스트 메시지 — 오늘 발송 기록(briefing_notified)을 남기지 않는다.
+ * 잔디 웹훅을 새로 넣거나 토픽을 바꿨을 때 /api/cron/briefing-notify?test=1 로 호출한다.
+ */
+export async function sendJandiTest(baseUrl: string): Promise<void> {
+  const url = process.env.JANDI_WEBHOOK_URL;
+  if (!url) throw new Error('JANDI_WEBHOOK_URL 이 설정돼 있지 않습니다(Vercel 환경변수 + 재배포 확인)');
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { Accept: 'application/vnd.tosslab.jandi-v2+json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      body: `✅ [스파크스코프 데일리 브리핑 연결 테스트](${baseUrl.replace(/\/$/, '')}/digest/review)`,
+      connectColor: '#5046E5',
+      connectInfo: [
+        { title: '연결 확인', description: '이 메시지가 보이면 잔디 연동이 정상입니다. 월·수·금 09:00에 브리핑 링크가 이 토픽으로 옵니다.' },
+      ],
+    }),
+  });
+  if (!r.ok) throw new Error(`잔디 전송 실패 ${r.status}: ${(await r.text()).slice(0, 200)}`);
+}

@@ -1,6 +1,6 @@
-// 월·수·금 브리핑 잔디 알림 — 09:00(영상 있으면 전송) · 09:30(?final=1, 영상 없어도 헤드라인이라도 전송).
+// 월·수·금 브리핑 잔디 알림 — 09:00(영상 있으면 전송) · 09:30(?final=1, 영상 없어도 헤드라인이라도 전송) · ?test=1 연결 테스트.
 import { NextResponse } from 'next/server';
-import { notifyBriefing } from '@/lib/briefing-video/notify';
+import { notifyBriefing, sendJandiTest } from '@/lib/briefing-video/notify';
 
 export const runtime = 'nodejs';
 
@@ -10,6 +10,11 @@ export async function GET(req: Request) {
   }
   const u = new URL(req.url);
   try {
+    // ?test=1 — 연결 확인용 테스트 메시지(발송 기록 안 남김)
+    if (u.searchParams.get('test') === '1') {
+      await sendJandiTest(process.env.NEXTAUTH_URL ?? u.origin);
+      return NextResponse.json({ ok: true, status: 'test-sent' });
+    }
     const result = await notifyBriefing({
       final: u.searchParams.get('final') === '1',
       baseUrl: process.env.NEXTAUTH_URL ?? u.origin,
