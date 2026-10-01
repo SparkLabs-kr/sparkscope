@@ -78,7 +78,7 @@ export function DigestReviewEditor({
 
   const byId = useMemo(() => new Map(candidates.map(c => [c.id, c])), [candidates]);
 
-  // 오늘 편집(메일 TOP 3 · 제외 · 브리핑 헤드라인) — 저장해야 10:30 자동 발송과 영상에 반영된다.
+  // 오늘 편집(메일 TOP 3 · 제외 · 브리핑 헤드라인) — 저장해야 09:30 자동 발송과 영상에 반영된다.
   // 저장 전까지 브리핑은 "자동 선정 예상"을 보여준다.
   // 저장 전까지 브리핑은 추천 5개를 보여준다. [추천 다시 받기]로 바뀔 수 있어 상태로 둔다.
   const [reco, setReco] = useState<BriefingRecommendation | null>(initialReco);
@@ -208,7 +208,7 @@ export function DigestReviewEditor({
       } else {
         setSavedEditKey(editKey);
         setBriefingSaved(true);
-        setBriefingMsg({ ok: true, text: tr('저장했습니다. 오늘 10:30 메일과 브리핑에 반영됩니다.') });
+        setBriefingMsg({ ok: true, text: tr('저장했습니다. 다음 방송(09:30 메일 · 09:45 브리핑)에 반영됩니다.') });
       }
       setBriefingDirty(false);
     } catch (e: any) {
@@ -310,7 +310,7 @@ export function DigestReviewEditor({
         {/* 데일리 브리핑 헤드라인 — 추천 5개가 기본, 슬롯마다 [바꾸기]로 다른 기사와 교체 */}
         <section className="bg-white p-5 rounded-xl border border-gray-200">
           <div className="flex items-center justify-between gap-2 mb-1">
-            <div className="font-bold">🎬 {tr('오늘 브리핑 헤드라인')} <span className="text-xs font-normal text-gray-400">({briefing.length}/{BRIEFING_MAX})</span></div>
+            <div className="font-bold">🎬 {reco?.program === 'weekly' ? tr('월요일 위클리 브리핑 헤드라인') : tr('데일리 브리핑 헤드라인')} <span className="text-xs font-normal text-gray-400">({briefing.length}/{BRIEFING_MAX})</span></div>
             <button onClick={testJandi} disabled={jandiBusy} className="shrink-0 rounded border border-gray-200 px-2 py-0.5 text-[11px] text-gray-600 hover:bg-gray-50 disabled:opacity-50">
               {jandiBusy ? tr('보내는 중…') : `💬 ${tr('잔디 연결 테스트')}`}
             </button>
@@ -325,7 +325,9 @@ export function DigestReviewEditor({
             {reco && <span className="text-gray-400"> · {tr('추천')} {fmtTime(reco.computedAt)} {tr('기준')}</span>}
           </p>
           <p className="text-[11px] text-gray-400 mb-2">
-            {tr('추천 5개: 스파크랩 소식 있으면 스파크랩 1 · 포트폴리오 2 · AI 1 · 스타트업계 1 / 없으면 포트폴리오 2 · AI 2(국내 1·글로벌 1) · 스타트업계 1')}
+            {reco?.program === 'weekly'
+              ? tr('위클리 5개: 지난주 화~일 기사 중 스파크랩·포트폴리오 우선, AI 최소 1개, 남으면 AI → 스타트업계')
+              : tr('추천 5개: 스파크랩 소식 있으면 스파크랩 1 · 포트폴리오 2 · AI 1 · 스타트업계 1 / 없으면 포트폴리오 2 · AI 2(국내 1·글로벌 1) · 스타트업계 1')}
           </p>
           <div className="space-y-2">
             {briefing.map((h, idx) => (
@@ -417,8 +419,8 @@ export function DigestReviewEditor({
           <div className="font-bold mb-1">⭐ {tr('오늘의 핵심 TOP 3')} <span className="text-xs font-normal text-gray-400">{tr('(스크랩 우선 자동 선정 · 순서/포함 조정 가능)')}</span></div>
           <p className={`text-xs mb-1 ${mailDirty ? 'text-amber-600' : 'text-gray-400'}`}>
             {mailDirty
-              ? tr('바뀐 내용이 아직 저장되지 않았습니다 — 아래 [오늘 편집 저장]을 눌러야 10:30 자동 메일에 반영됩니다.')
-              : tr('[오늘 편집 저장]한 TOP 3·제외 기사는 10:30 자동 메일에도 그대로 반영됩니다.')}
+              ? tr('바뀐 내용이 아직 저장되지 않았습니다 — 아래 [오늘 편집 저장]을 눌러야 09:30 자동 메일에 반영됩니다.')
+              : tr('[오늘 편집 저장]한 TOP 3·제외 기사는 09:30 자동 메일에도 그대로 반영됩니다.')}
           </p>
           {top3Ids.length === 0 && <p className="text-sm text-gray-400 py-2">{tr('선택된 TOP 3가 없습니다. 아래 후보에서')} <b>{tr('TOP3 추가')}</b>{tr('로 최대 3개까지 올리세요.')}</p>}
           <div className="space-y-2 mt-2">

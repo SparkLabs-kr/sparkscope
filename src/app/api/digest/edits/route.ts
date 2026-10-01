@@ -1,4 +1,4 @@
-// 그날(KST) 편집 수정 저장 — 브리핑 헤드라인 + 메일 TOP 3 + 제외 기사. 10:30 자동 발송과 브리핑 영상이 읽는다.
+// 다음 방송일(briefing.ts broadcastFor) 편집 수정 저장 — 브리핑 헤드라인 + 메일 TOP 3 + 제외 기사. 09:30 자동 발송과 브리핑 영상이 읽는다.
 // 전부 비워서 저장하면 자동 선정으로 돌아간다.
 import { NextResponse } from 'next/server';
 import { requireInternal, requireManager, getSessionUser } from '@/lib/authz';

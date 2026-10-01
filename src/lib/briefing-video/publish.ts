@@ -16,6 +16,8 @@ export const KIND_VIDEO = 'briefing_video';
 
 export interface BriefingVideoRecord {
   dateKey: string;
+  /** daily · weekly(월 Claw-e 뉴스데스크). 없으면 daily */
+  program?: 'daily' | 'weekly';
   url: string;
   seconds: number;
   headlines: { title: string; url: string; label: string; source: string }[];
@@ -52,6 +54,7 @@ export async function publishBriefingVideo(built: BuiltBriefing): Promise<string
 
   const record: BriefingVideoRecord = {
     dateKey: built.snapshot.dateKey,
+    program: built.snapshot.program ?? 'daily',
     url,
     seconds: Math.round(built.seconds),
     headlines: built.snapshot.headlines.map(h => ({ title: h.title, url: h.url, label: h.label, source: h.source })),

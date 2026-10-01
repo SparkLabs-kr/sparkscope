@@ -13,7 +13,7 @@ import { introSlide, itemSlide, outroSlide } from './slides';
 import { renderVideo, type Clip } from './render';
 
 /**
- * 오늘 헤드라인 스냅샷을 새로 만든다 — 10:30 메일과 같은 재료·같은 조립(buildDigestForSend)에서
+ * 오늘 헤드라인 스냅샷을 새로 만든다 — 09:30 메일과 같은 재료·같은 조립(buildDigestForSend)에서
  * 편집자 저장 → 추천 → 메일 TOP3 순으로 고른다. 영상은 이 시점의 결과로 확정된다.
  */
 export async function prepareSnapshot(): Promise<BriefingSnapshot> {
@@ -42,7 +42,12 @@ export async function buildBriefingVideo(opts: { outDir: string; prepare?: boole
     ? await prepareSnapshot()
     : (await loadBriefingSnapshot()) ?? (await prepareSnapshot());
   if (snapshot.headlines.length === 0) throw new Error('헤드라인이 없습니다 — 영상을 만들 수 없음');
-  console.log(`[briefing] 헤드라인 ${snapshot.headlines.length}건 (${snapshot.source})`);
+  console.log(`[briefing] ${snapshot.program ?? 'daily'} 헤드라인 ${snapshot.headlines.length}건 (${snapshot.source})`);
+  // 월요일은 위클리(Claw-e 뉴스데스크) — 같은 스냅샷을 다른 화면·목소리로.
+  if (snapshot.program === 'weekly') {
+    const { buildNewsdeskVideo } = await import('./newsdesk');
+    return buildNewsdeskVideo({ outDir: opts.outDir, snapshot });
+  }
 
   const segments = await writeBriefingScript(snapshot);
   console.log(`[briefing] 대본 ${segments.reduce((n, s) => n + s.text.length, 0)}자`);

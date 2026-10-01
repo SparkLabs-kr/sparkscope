@@ -20,7 +20,7 @@ const CATEGORY_PRIORITY: Record<string, number> = {
 };
 
 /**
- * 다이제스트 후보 기사 창의 시작 시각 — 검수 화면과 10:30 자동 발송(runner.ts loadSendArticles)이
+ * 다이제스트 후보 기사 창의 시작 시각 — 검수 화면과 09:30 자동 발송(runner.ts loadSendArticles)이
  * 이 한 함수를 같이 쓴다. 예전엔 검수 화면만 "7일 전 0시부터"를 써서, 미리보기엔 있는 기사가
  * 실제 메일에선 빠졌다(2026-09-28, 9/21~22 스파크랩 기사 3건).
  */
@@ -138,14 +138,18 @@ export function passesDigestGuard(
   return true;
 }
 
-/** 최근 창의 비노이즈 기사 + 포트폴리오 관련성 가드 적용 후보 로드. */
-export async function loadDigestCandidates(): Promise<ReviewArticle[]> {
-  const since = sendWindowStart();
+/**
+ * 최근 창의 비노이즈 기사 + 포트폴리오 관련성 가드 적용 후보 로드.
+ * window를 주면 그 기간(브리핑 — briefing.ts broadcastFor), 없으면 메일 창(72시간).
+ */
+export async function loadDigestCandidates(window?: { since: Date; until?: Date }): Promise<ReviewArticle[]> {
+  const since = window?.since ?? sendWindowStart();
+  const until = window?.until;
 
   const [rows, targets] = await Promise.all([
     prisma.article.findMany({
       // 발송 재료(loadSendArticles)와 같은 조건 — 분석 끝난 관련 기사만, 최대 500건.
-      where: { pubDate: { gte: since }, isNoise: false, category: { not: 'unrelated' }, analyzedAt: { not: null } },
+      where: { pubDate: { gte: since, ...(until ? { lt: until } : {}) }, isNoise: false, category: { not: 'unrelated' }, analyzedAt: { not: null } },
       orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }],
       take: 500,
     }),

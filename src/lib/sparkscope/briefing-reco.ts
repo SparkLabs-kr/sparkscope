@@ -20,7 +20,7 @@ import { attachInterDigest } from './inter-digest';
 import { attachAiSignals } from './signal-digest';
 import type { AnalyzedArticle, DigestData } from './types';
 import { buildSignalFeed } from './signal-feed';
-import { BRIEFING_MAX, kstDateKey, type BriefingHeadline } from './briefing';
+import { BRIEFING_MAX, broadcastFor, kstDateKey, type BriefingHeadline, type BroadcastWindow, type BriefingProgram } from './briefing';
 
 const KIND_RECO = 'briefing_reco';
 const RANK_MODEL = 'gpt-4.1';
@@ -43,7 +43,8 @@ const TREND_LABEL = '📈 이번 주 AI 트렌드';
  * 같은 사건 묶음의 대표로 "스카이랩스 주가 2.51% 하락"이 "타임 헬스테크 500 선정" 대신 뽑혔다
  * (2026-09-28). 묶기 전에 빼야 진짜 뉴스가 대표가 된다.
  */
-const STOCK_TICKER = /주가|특징주|급등락|상한가|하한가|장중|시황|[‘'"]上[’'"]|[‘'"]下[’'"]/;
+// "상장 초기 16.98% 하락"처럼 등락률만 다룬 기사도(2026-10-01 위클리 시험에서 포트폴리오 칸에 뽑힘).
+const STOCK_TICKER = /주가|특징주|급등락|상한가|하한가|장중|시황|[‘'"]上[’'"]|[‘'"]下[’'"]|\d+(\.\d+)?%\s*(하락|상승|급락|급등)/;
 const INTER_LABEL = '🔭 해외 트렌드 · AI';
 
 /** 교체 후보 한 줄 — 헤드라인 + 화면에 보여줄 보조 정보 */
@@ -57,6 +58,7 @@ export interface BriefingCandidate extends BriefingHeadline {
 
 export interface BriefingRecommendation {
   headlines: BriefingHeadline[];
+  program?: BriefingProgram;
   /** 'quota' — 칸 수 + 칸별 AI 선정(9/30~). 'rule'·'ai'는 예전 방식으로 만든 캐시 */
   method: 'ai' | 'rule' | 'quota';
   /** 헤드라인마다 어느 칸(1 스파크랩·2 포트폴리오·3 AI 국내·4 AI 글로벌·5 스타트업계)인지 — headlines와 같은 순서 */
@@ -213,8 +215,8 @@ async function recentlyBriefedUrls(): Promise<{ urls: Set<string>; titles: Set<s
  * 버젓이 실린 스파크랩 기사 3건(9/21~22)이 추천에서는 빠졌다.
  * 검수 화면 미리보기와 같은 조립(review.ts buildReviewDigest)을 쓴다 — 편집자가 보는 메일이 기준.
  */
-async function buildDigestForBriefing(): Promise<DigestData> {
-  const candidates = await loadDigestCandidates();
+async function buildDigestForBriefing(w: BroadcastWindow): Promise<DigestData> {
+  const candidates = await loadDigestCandidates(w);
   return attachAiSignals(await attachInterDigest(buildReviewDigest(candidates)));
 }
 
@@ -317,23 +319,47 @@ async function rankWithAI(
   return out;
 }
 
-/** 칸 수에 맞춰 5칸을 채운다 — 재료는 다이제스트(같은 72시간 창)와 AI 트렌드·해외 트렌드. */
-async function pickByTiers(): Promise<{ picked: BriefingCandidate[]; tiers: number[] }> {
+/**
+ * 위클리(월) 칸 수 — 스파크랩·포트폴리오 우선, AI 최소 1개, 남으면 AI → 스타트업계(2026-10-01 소윤 결정).
+ * 데일리 quotas()와 같은 모양으로 돌려줘 아래 선정 과정을 그대로 쓴다.
+ */
+function weeklyQuotas(n: Record<Group, number>): Record<Group, number> {
+  const q: Record<Group, number> = { S: 0, P: 0, D: 0, G: 0, T: 0 };
+  const hasAi = n.D + n.G > 0;
+  let room = BRIEFING_MAX - (hasAi ? 1 : 0);
+  q.S = Math.min(n.S, room); room -= q.S;
+  q.P = Math.min(n.P, room); room -= q.P;
+  if (hasAi) {
+    // AI 몫 = 1 + 남은 칸. 국내·글로벌이 둘 다 있으면 1칸은 "둘 중 하나"(aiEither)로 둔다.
+    let ai = 1 + Math.min(room, n.D + n.G - 1); room -= ai - 1;
+    if (ai === 1 && n.D > 0 && n.G > 0) { q.D = 1; q.G = 1; }
+    else { q.D = Math.min(n.D, Math.ceil(ai / 2)); q.G = Math.min(n.G, ai - q.D); q.D = Math.min(n.D, ai - q.G); }
+  }
+  q.T = Math.min(n.T, room);
+  return q;
+}
+
+/**
+ * 칸 수에 맞춰 5칸을 채운다 — 재료는 방송 기간(broadcastFor)의 다이제스트 섹션과 AI 트렌드·해외 트렌드.
+ * 위클리는 한 주 정리라 "최근 브리핑에 나간 기사 제외"를 하지 않는다.
+ */
+export async function pickByTiers(w: BroadcastWindow): Promise<{ picked: BriefingCandidate[]; tiers: number[] }> {
   const [briefed, data, candidates] = await Promise.all([
     recentlyBriefed(),
-    buildDigestForBriefing(),
-    loadDigestCandidates(),
+    buildDigestForBriefing(w),
+    loadDigestCandidates(w),
   ]);
   const idByLink = new Map(candidates.map(a => [a.link, a.id]));
   const rankOf = (a: { importance?: string }) => IMPORTANCE_RANK[a.importance ?? ''] ?? 0;
-  const fresh = (c: BriefingCandidate) => !briefed.has(c.url, c.title);
+  const weekly = w.program === 'weekly';
+  const fresh = (c: BriefingCandidate) => weekly || !briefed.has(c.url, c.title);
 
   // 스파크랩 — 다이제스트 섹션, 한국어 기사만(같은 사건의 영문판이 두 칸을 차지하지 않게).
   // 지난 브리핑에 나갔어도 다시 넣는다 — 메일에 실려 있는 동안은 브리핑도 메일과 맞춘다(2026-10-01 소윤 결정).
   const S = data.sparklabsArticles.filter(a => isKorean(a.title)).map(a => fromArticle(a, idByLink));
 
   // 포트폴리오 — 다이제스트 섹션(회사당 1건). 주가 기사면 같은 회사 다른 기사로. 지난 7일 브리핑에 나간 회사 제외.
-  const briefedCompanies = new Set(candidates.filter(a => briefed.has(a.link, a.title)).map(a => a.matchedKeyword));
+  const briefedCompanies = new Set(weekly ? [] : candidates.filter(a => briefed.has(a.link, a.title)).map(a => a.matchedKeyword));
   const byCompany = (company: string) => candidates
     .filter(c => c.matchedKeyword === company && !STOCK_TICKER.test(c.title) && isKorean(c.title))
     .sort((x, y) => rankOf(y) - rankOf(x) || y.priorityScore - x.priorityScore)[0];
@@ -374,7 +400,8 @@ async function pickByTiers(): Promise<{ picked: BriefingCandidate[]; tiers: numb
     .filter(fresh);
 
   const pools: Record<Group, BriefingCandidate[]> = { S, P, D, G, T };
-  const q = quotas({ S: S.length, P: P.length, D: D.length, G: G.length, T: T.length });
+  const counts = { S: S.length, P: P.length, D: D.length, G: G.length, T: T.length };
+  const q = weekly ? weeklyQuotas(counts) : quotas(counts);
   const aiEither = q.D === 1 && q.G === 1 && q.S + q.P + q.T === BRIEFING_MAX - 1;
 
   let chosen: Record<Group, BriefingCandidate[]> | null = null;
@@ -413,8 +440,10 @@ async function pickByTiers(): Promise<{ picked: BriefingCandidate[]; tiers: numb
  * force=true면 새로 계산한다(검수 화면의 "추천 다시 받기").
  */
 export async function getBriefingRecommendation(force = false): Promise<BriefingRecommendation> {
-  const dateKey = kstDateKey();
-  const basis = await currentBasis();
+  // 다음 방송(월=위클리, 수·금=데일리) 기준. 캐시 키도 방송일 — 목요일에 보는 검수 화면은 금요일 방송분.
+  const w = broadcastFor();
+  const dateKey = w.dateKey;
+  const basis = `${await currentBasis()}|${w.program}|${w.since.toISOString()}`;
   if (!force) {
     const row = await prisma.dashboardInsight.findUnique({
       where: { kind_key: { kind: KIND_RECO, key: dateKey } },
@@ -429,8 +458,9 @@ export async function getBriefingRecommendation(force = false): Promise<Briefing
     }
   }
 
-  const { picked, tiers } = await pickByTiers();
+  const { picked, tiers } = await pickByTiers(w);
   const rec: BriefingRecommendation = {
+    program: w.program,
     headlines: picked.map(toHeadline),
     method: 'quota',
     tiers,

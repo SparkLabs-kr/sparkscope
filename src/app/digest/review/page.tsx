@@ -24,7 +24,7 @@ export default async function DigestReviewPage() {
   // (id로만 찾던 때는 TOP 3 칸이 늘 비어 보였다.)
   const idByLink = new Map(candidates.map(a => [a.link, a.id]));
   const autoTop3Ids = initial.top3.map(a => idByLink.get(a.link) ?? (a as any).id).filter(Boolean) as string[];
-  // 오늘 저장된 편집이 있으면 그 상태로 연다 — 10:30 자동 발송도 이 값을 쓴다.
+  // 오늘 저장된 편집이 있으면 그 상태로 연다 — 09:30 자동 발송도 이 값을 쓴다.
   const edits = await loadDailyEdits();
   const savedTop3Ids = (edits?.top3Links ?? []).map(l => idByLink.get(l)).filter(Boolean) as string[];
   const initialTop3Ids = savedTop3Ids.length > 0 ? savedTop3Ids : autoTop3Ids;
@@ -58,7 +58,7 @@ export default async function DigestReviewPage() {
         <div>
           <h1 className="text-3xl font-bold">📤 {t('다이제스트 검수·발송')}</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {t('발송 예정: 매주 월·수·금 오전 10시 30분. [오늘 편집 저장]한 TOP 3·제외 기사·브리핑 헤드라인은 자동 발송에 반영되고, 실제 발송 화면을 미리 볼 수 있습니다.')}
+            {t('발송 예정: 매주 월·수·금 오전 9시 30분. [오늘 편집 저장]한 TOP 3·제외 기사·브리핑 헤드라인은 자동 발송에 반영되고, 실제 발송 화면을 미리 볼 수 있습니다.')}
           </p>
         </div>
         <div className="flex items-center gap-2">

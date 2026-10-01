@@ -2,7 +2,7 @@
  * 데일리 브리핑(월·수·금 영상)의 헤드라인 데이터.
  *
  * 브리핑은 그날 나간 다이제스트 메일을 재료로 만든다. 메일과 영상이 서로 다른 기사를
- * 고르면 안 되므로, 10:30 발송 크론이 메일용 DigestData를 만든 바로 그 자리에서
+ * 고르면 안 되므로, 09:30 발송 크론이 메일용 DigestData를 만든 바로 그 자리에서
  * 헤드라인을 뽑아 저장한다(runner.ts). 영상 파이프라인은 이 스냅샷만 읽는다 —
  * AI 시그널 TOP 5를 파트너 배너용으로 물질화하는 것(signal-publish.ts)과 같은 패턴.
  *
@@ -43,6 +43,8 @@ export interface BriefingHeadline {
 
 export interface BriefingSnapshot {
   dateKey: string;
+  /** daily(수·금) · weekly(월 Claw-e 뉴스데스크). 없으면 daily(예전 기록) */
+  program?: BriefingProgram;
   dateLabel: string;
   headlines: BriefingHeadline[];
   /** 편집자가 고른 목록을 썼는지, 자동 선정인지 — 영상 쪽에서 로그용 */
@@ -58,6 +60,57 @@ const CATEGORY_LABEL: Record<string, string> = {
   competitor: '🤝 AC·VC 업계 동향',
   industry_trend: '🌐 스타트업계 뉴스',
 };
+
+// ── 방송 일정과 기사 기간 (2026-10-01 소윤 결정) ─────────────────────
+//
+//   월 09:30 메일 · 09:45 잔디 — 위클리(Claw-e 뉴스데스크)만. 지난주 화 00:00 ~ 일 24:00 기사에서 5개
+//   수 09:30 메일 · 09:45 잔디 — 데일리만. 월 09:30(지난 메일) 이후 기사에서 5개
+//   금 09:30 메일 · 09:45 잔디 — 데일리만. 수 09:30 이후 기사에서 5개
+//
+// 검수 화면·추천·영상·메일 크론이 모두 이 함수 하나로 "다음 방송"을 정한다.
+
+export type BriefingProgram = 'daily' | 'weekly';
+export const SEND_KST = { h: 9, m: 30 };
+
+export interface BroadcastWindow {
+  program: BriefingProgram;
+  /** 방송일(KST YYYY-MM-DD) */
+  dateKey: string;
+  since: Date;
+  /** 없으면 지금까지 */
+  until?: Date;
+  /** "9월 29일부터 10월 4일까지" — 위클리 화면·인사말용 */
+  label: string;
+}
+
+/** KST 날짜 dateKey의 hh:mm 실제 시각 */
+function kstAt(dateKey: string, h: number, m: number, addDays = 0): Date {
+  const [y, mo, d] = dateKey.split('-').map(Number);
+  return new Date(Date.UTC(y, mo - 1, d + addDays, h - 9, m));
+}
+
+/**
+ * 지금 기준 다음 방송(또는 오늘 오전 방송). 월·수·금 정오 전이면 오늘 방송, 아니면 다음 월·수·금.
+ * 정오를 기준으로 삼는 이유: 09:30 발송·09:45 잔디 뒤 재실행·확인이 오전에 몰리기 때문.
+ */
+export function broadcastFor(now: Date = new Date()): BroadcastWindow {
+  const k = new Date(now.getTime() + KST_OFFSET_MS);
+  let offset = 0;
+  for (; offset < 7; offset++) {
+    const dow = (k.getUTCDay() + offset) % 7;
+    if ([1, 3, 5].includes(dow) && (offset > 0 || k.getUTCHours() < 12)) break;
+  }
+  const dateKey = kstDateKey(new Date(now.getTime() + offset * 864e5));
+  const dow = (k.getUTCDay() + offset) % 7;
+  const md = (t: Date) => { const x = new Date(t.getTime() + KST_OFFSET_MS); return `${x.getUTCMonth() + 1}월 ${x.getUTCDate()}일`; };
+  if (dow === 1) {
+    const since = kstAt(dateKey, 0, 0, -6);   // 지난 화요일 0시
+    const until = kstAt(dateKey, 0, 0);       // 월요일 0시(= 일요일 끝)
+    return { program: 'weekly', dateKey, since, until, label: `${md(since)}부터 ${md(new Date(until.getTime() - 1))}까지` };
+  }
+  const since = kstAt(dateKey, SEND_KST.h, SEND_KST.m, -2); // 수→월, 금→수 09:30
+  return { program: 'daily', dateKey, since, label: `${md(since)} 오후부터` };
+}
 
 /** d는 실제 타임스탬프 — KST 기준 날짜 문자열(YYYY-MM-DD). */
 export function kstDateKey(d: Date = new Date()): string {
@@ -100,7 +153,7 @@ export function defaultHeadlines(data: DigestData): BriefingHeadline[] {
 // ── 편집자 수정 (그날 하루치) ─────────────────────────────────────
 //
 // 편집자가 검수 콘솔에서 저장한 그날의 수정 — 브리핑 헤드라인 + 메일 TOP 3 + 제외 기사.
-// 10:30 자동 발송(runner.ts)과 영상이 둘 다 이걸 읽는다.
+// 09:30 자동 발송(runner.ts)과 영상이 둘 다 이걸 읽는다.
 //
 // 이건 "매번 사람이 고른다"는 운영 방식이 아니라, 자동 선정이 우리 기준을 잘 잡을 때까지
 // 틀린 걸 바로잡는 장치다. 그래서 자동 선정 결과(autoSuggested)를 같이 남긴다 — 날짜별로
@@ -127,7 +180,9 @@ function hasAnyEdit(e: DailyEdits): boolean {
   return e.headlines.length > 0 || e.top3Links.length > 0 || e.excludedLinks.length > 0;
 }
 
-export async function loadDailyEdits(dateKey = kstDateKey()): Promise<DailyEdits | null> {
+// 수정은 "다음 방송일" 키로 저장한다 — 목요일에 검수 화면에서 고친 건 금요일 방송분이다(09:30 발송이라
+// 전날 미리 고르는 일이 많다). 방송일 오전에 고치면 그날 키가 된다(broadcastFor 정오 기준).
+export async function loadDailyEdits(dateKey = broadcastFor().dateKey): Promise<DailyEdits | null> {
   const row = await prisma.dashboardInsight.findUnique({
     where: { kind_key: { kind: KIND_PICKS, key: dateKey } },
     select: { value: true },
@@ -150,7 +205,7 @@ export async function loadDailyEdits(dateKey = kstDateKey()): Promise<DailyEdits
 }
 
 /** 수정이 하나도 없으면(전부 비우면) 행을 지우고 자동 선정으로 돌아간다. */
-export async function saveDailyEdits(edits: DailyEdits, dateKey = kstDateKey()): Promise<void> {
+export async function saveDailyEdits(edits: DailyEdits, dateKey = broadcastFor().dateKey): Promise<void> {
   if (!hasAnyEdit(edits)) {
     await prisma.dashboardInsight.deleteMany({ where: { kind: KIND_PICKS, key: dateKey } });
     return;
@@ -208,6 +263,7 @@ export async function publishBriefingSnapshot(
   const reco = (recommended ?? []).filter(h => !excluded.has(h.url));
   const snapshot: BriefingSnapshot = {
     dateKey,
+    program: broadcastFor().program,
     dateLabel: data.dateLabel,
     headlines: picks && picks.length > 0 ? picks : reco.length > 0 ? reco : defaultHeadlines(data),
     source: picks && picks.length > 0 ? 'editor' : 'auto',

@@ -62,12 +62,11 @@
 
 **발송:**
 - Vercel Cron: `vercel.json`
-- 일정: 월·수·금 **10:30 KST (UTC 01:30)**
-  > 2026-09-11까지는 09:00이었다. 그런데 수집(GitHub Actions)이 매일 1~2시간씩 밀려
-  > 09:15~10:00에 끝나는 바람에 **발송일 6/6 전부 그날 데이터 없이 나갔다**(9/11 메일은
-  > 9/11 기사 0건, 매체 6곳이 함께 보도한 기사가 누락). 8일치 실측으로 09:00은 1/8,
-  > 10:00은 8/8이지만 9/4에 정확히 10:00에 끝난 적이 있어 여유가 없고, 10:30이면 8/8에
-  > 30분 이상 여유가 남는다. 이수·소윤 결정으로 10:30으로 옮김.
+- 일정: 월·수·금 **09:30 KST (UTC 00:30)** (2026-10-01 소윤 결정)
+  > 9/11~9/30엔 10:30이었다. 수집(GitHub Actions `schedule`)이 2~3시간씩 늦게 시작해 09:15~10:29에
+  > 끝났기 때문(9/11 메일은 그날 기사 0건). 05:50 Vercel dispatch(아래)로 수집이 07시대에 끝나게 하고
+  > 09:30으로 당겼다. **`GITHUB_DISPATCH_TOKEN`이 없으면 이 전제가 깨진다** — 수집이 늦게 끝나 메일에
+  > 그날 기사가 빠질 수 있다. 토큰을 먼저 확인할 것.
 - 작업: DB에 있는 것만 발송, 수집 안 함 (`skipCollect=true`)
 - 엔드포인트: `GET /api/cron/daily-send-only`
 
@@ -77,22 +76,30 @@ GitHub `schedule`은 예약보다 2~3시간 늦게 시작한다(9/11~9/28 실측
 그래서 **"언제"는 Vercel 크론, "무엇을"은 GitHub Actions**로 나눴다 — Vercel이 제시각에
 `/api/cron/dispatch`로 workflow_dispatch를 걸면 곧바로 시작한다.
 
-브리핑은 **그날 다이제스트 메일을 영상으로 옮긴 것**이라 메일 뒤에 나간다(2026-09-30 소윤 결정 —
-메일보다 먼저 나가면 메일과 다른 기사가 들어갈 수 있어 의미가 없다).
+월요일은 **위클리(Claw-e 뉴스데스크)만**, 수·금은 **데일리만** 나간다(2026-10-01 소윤 결정). 무엇을 언제 내보낼지는
+`briefing.ts broadcastFor()` 한 곳이 정한다.
+
+| 방송 | 기사 기간 | 선정 |
+|---|---|---|
+| 월 위클리 | 지난주 화 00:00 ~ 일 24:00 | 스파크랩·포트폴리오 우선 · AI 최소 1 · 남으면 AI → 스타트업계 |
+| 수 데일리 | 월 09:30(지난 메일) 이후 | 스파크랩 1·포트폴리오 2·AI 1·스타트업계 1 (없으면 PF2·AI2·스타트업1) |
+| 금 데일리 | 수 09:30 이후 | 같음 |
 
 | KST | 담당 | 작업 |
 |---|---|---|
 | 매일 05:50 | Vercel → `daily-collect.yml` | 수집. 06:13 `schedule`은 예비 — 이미 돌았으면 `collect-guard.ts`가 건너뜀 |
-| 월·수·금 10:30 | Vercel `/api/cron/daily-send-only` | 메일 발송 + **브리핑 헤드라인 스냅샷 확정**(runner.ts) |
-| 월·수·금 10:32 | Vercel → `daily-briefing.yml` | 스냅샷 → 대본 → TTS → MP4 → Supabase Storage `briefings` (메일 발송 기록을 11:10까지 기다림) |
-| 월·수·금 10:45 | Vercel `/api/cron/briefing-notify` | 잔디 전송(영상 있을 때) |
-| 월·수·금 11:15 | Vercel `/api/cron/briefing-notify?final=1` | 못 보냈으면 영상 없이 헤드라인이라도 전송 |
+| 월 08:30 | Vercel → `daily-briefing.yml` | 위클리 영상(오늘 수집 완료를 09:25까지 기다림) |
+| 월·수·금 09:30 | Vercel `/api/cron/daily-send-only` | 메일 발송 + 브리핑 헤드라인 스냅샷 확정(영상이 이미 있으면 안 건드림) |
+| 수·금 09:32 | Vercel → `daily-briefing.yml` | 데일리 영상(메일 발송을 10:05까지 기다림) |
+| 월·수·금 09:45 | Vercel `/api/cron/briefing-notify` | 잔디 전송(영상 있을 때) — 월 "위클리 브리핑", 수·금 "데일리 브리핑" |
+| 월·수·금 10:15 | Vercel `/api/cron/briefing-notify?final=1` | 못 보냈으면 영상 없이 헤드라인이라도 전송 |
 
-- 필요한 설정: Vercel `GITHUB_DISPATCH_TOKEN`(이 저장소 Actions 쓰기 권한 fine-grained 토큰),
+- 필요한 설정: Vercel `GITHUB_DISPATCH_TOKEN`(이 저장소 Actions 쓰기 권한 fine-grained 토큰 — 이수 관리),
   `JANDI_WEBHOOK_URL` / GitHub 시크릿 `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`.
-- 토큰이 없으면 05:50·10:32 dispatch가 안 된다. 그 대비로 예비 schedule 수집이 실제로 돈 월·수·금엔
+- 토큰이 없으면 Vercel dispatch가 안 된다. 그 대비로 예비 schedule 수집이 실제로 돈 월·수·금엔
   `daily-collect.yml`의 `briefing` 작업이 이어서 브리핑 워크플로를 부른다(workflow_call). 오늘 영상이
-  이미 있으면 `wait-for-send.ts`가 건너뛰어 두 번 만들지 않는다.
+  이미 있으면 `wait-for-briefing.ts`가 건너뛰어 두 번 만들지 않는다.
+- 검수 화면 편집(briefing_picks)은 **다음 방송일** 키로 저장된다 — 목요일에 고친 건 금요일분.
 - 코드: `src/lib/briefing-video/`, 페이지 `/briefing/[날짜]`(로그인 없이 열림 — 공개 헤드라인만).
 
 ### 규칙

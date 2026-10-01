@@ -448,7 +448,7 @@ export async function runDailyDigest(opts: RunOptions = {}) {
     // 데일리 브리핑 영상의 재료 — 메일과 같은 data에서 헤드라인 5개를 뽑아 저장한다.
     // 실제 발송하는 실행에서만(수집 전용 실행이 그날 스냅샷을 덮어쓰지 않게). 실패해도 발송은 계속한다.
     // 2026-09-30부터 영상은 이 메일을 영상으로 옮긴 것이다 — 메일 발송이 헤드라인을 확정하고,
-    // 10:32 브리핑 워크플로가 그걸 읽는다. 그래서 발송 때마다 새로 쓴다. 단 오늘 영상이 이미 나갔으면
+    // 09:32 브리핑 워크플로가 그걸 읽는다(월요일은 08:30 위클리가 먼저 만들어 둔다). 그래서 발송 때마다 새로 쓴다. 단 오늘 영상이 이미 나갔으면
     // (수동 재발송 등) 건드리지 않는다 — 덮어쓰면 영상과 기록이 달라진다.
     if (opts.send && !opts.dryRun && !(await loadBriefingVideo(kstDateKey()).catch(() => null))) {
       const reco = await getBriefingRecommendation().catch(e => {
