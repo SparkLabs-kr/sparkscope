@@ -27,11 +27,11 @@ const PICK = 5;
 const ASSETS = path.join(process.cwd(), 'assets/newsdesk');
 const PROGRAM = 'Claw-e 뉴스데스크';
 
-/** 목소리 — 2026-10-01 소윤 확정: Orus, 앳된 소년 톤, 1.12배속. */
+/** 목소리 — 2026-10-01 소윤·이수 확정: Leda(밝은 여성 앵커), 1.12배속. Orus·Achird·앵커 톤 시안과 비교해 고름. */
 export const NEWSDESK_VOICE: VoiceSpec = {
   model: 'gemini-2.5-flash-tts',
-  name: 'Orus',
-  style: '앳되고 귀여운 소년 목소리로, 밝고 생기 있게, 약간 빠른 속도로 읽어 주세요.',
+  name: 'Leda',
+  style: '밝고 친근한 주간 뉴스 진행자처럼, 또렷하고 경쾌하게 읽어 주세요.',
   speed: 1.12,
 };
 
