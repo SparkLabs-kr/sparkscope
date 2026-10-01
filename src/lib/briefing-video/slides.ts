@@ -3,7 +3,7 @@
  * 폰트는 Pretendard(OFL) — node_modules/pretendard에서 읽는다.
  * 색은 대시보드와 같은 스파크 팔레트(tailwind.config: spark.*).
  */
-import { createCanvas, GlobalFonts, type SKRSContext2D } from '@napi-rs/canvas';
+import { createCanvas, GlobalFonts, type Image, type SKRSContext2D } from '@napi-rs/canvas';
 import path from 'path';
 import type { BriefingHeadline } from '../sparkscope/briefing';
 
@@ -54,7 +54,14 @@ function wrap(ctx: SKRSContext2D, text: string, maxWidth: number, maxLines: numb
 }
 
 /** 프로그램 — 데일리(월·수·금)와 Claw-e 뉴스데스크(월)가 같은 슬라이드를 쓴다. hostSpace면 오른쪽 아래를 캐릭터 자리로 비운다. */
-export interface SlideOpts { program?: string; hostSpace?: boolean }
+/** hostImage — 오른쪽 아래에 가만히 서 있는 진행자 그림(투명 PNG). 움직이는 GIF는 정신없다는 의견으로 바꿈(2026-10-01). */
+export interface SlideOpts { program?: string; hostSpace?: boolean; hostImage?: Image }
+
+function drawHost(ctx: SKRSContext2D, img: Image) {
+  const w = 300;
+  const h = Math.round((img.height / img.width) * w);
+  ctx.drawImage(img, W - w - 30, H - h - 24, w, h);
+}
 const HOST_W = 340;
 
 /**
@@ -181,6 +188,7 @@ export function itemSlide(dateLabel: string, h: BriefingHeadline, index: number,
   ctx.fillRect(0, H - 8, W, 8);
   ctx.fillStyle = C.purple;
   ctx.fillRect(0, H - 8, (W * (index + 1)) / total, 8);
+  if (o.hostImage) drawHost(ctx, o.hostImage);
   return canvas.toBuffer('image/png');
 }
 

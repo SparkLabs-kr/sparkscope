@@ -9,17 +9,18 @@
  * 재료는 이미 나간 데일리 스냅샷(DashboardInsight daily_briefing)뿐이라 새 기사를 찾지 않는다 —
  * 한 주 동안 영상으로 나간 것의 요약이다.
  *
- * 화면은 데일리와 같은 슬라이드(slides.ts)에 오른쪽 아래 Claw-e(손 흔드는 GIF)를 얹고,
+ * 화면은 데일리와 같은 슬라이드(slides.ts)에 오른쪽 아래 Claw-e(정지 그림 claw-e.png)를 얹고,
  * 오프닝만 뉴스데스크 타이틀 GIF를 쓴다. 에셋: assets/newsdesk/.
  */
 import path from 'path';
+import { loadImage } from '@napi-rs/canvas';
 import OpenAI from 'openai';
 import { prisma } from '@/lib/prisma';
 import { kstDateKey, type BriefingHeadline, type BriefingSnapshot } from '../sparkscope/briefing';
 import { titleKey } from '../sparkscope/briefing-reco';
 import { writeBriefingScript, type ScriptSegment } from './script';
 import { synthesizeAll, type VoiceSpec } from './tts';
-import { introSlide, itemSlide, outroSlide, W, H } from './slides';
+import { introSlide, itemSlide, outroSlide } from './slides';
 import { renderVideo, type Clip } from './render';
 
 const KIND_WEEKLY = 'weekly_briefing';
@@ -146,8 +147,8 @@ export async function buildNewsdeskVideo(opts: { outDir: string; dateKey?: strin
   const { speeches, voice } = await synthesizeAll(segments.map(s => s.text), NEWSDESK_VOICE);
   console.log(`[newsdesk] 음성 ${voice}`);
 
-  const o = { program: PROGRAM, hostSpace: true };
-  const host = { file: path.join(ASSETS, 'claw-e-wave.gif'), w: 320, x: W - 330, y: H - 340 };
+  // 소식 화면의 Claw-e는 가만히 서 있는 그림 — 손 흔드는 GIF는 계속 움직여 정신없었다(2026-10-01 소윤).
+  const o = { program: PROGRAM, hostSpace: true, hostImage: await loadImage(path.join(ASSETS, 'claw-e.png')) };
   const total = snapshot.headlines.length;
   const clips: Clip[] = segments.map((s, i) => ({
     png: s.kind === 'intro' ? introSlide(snapshot.weekLabel, snapshot.headlines, o)
@@ -155,10 +156,10 @@ export async function buildNewsdeskVideo(opts: { outDir: string; dateKey?: strin
       : itemSlide(snapshot.weekLabel, snapshot.headlines[s.index!], s.index!, total, o),
     wav: speeches[i].wav,
     seconds: speeches[i].seconds,
-    // 오프닝은 타이틀 GIF, 마무리는 서울 야경 엔딩 GIF, 소식 화면엔 손 흔드는 Claw-e.
+    // 오프닝은 타이틀 GIF, 마무리는 서울 야경 엔딩 GIF.
     ...(s.kind === 'intro' ? { backgroundGif: path.join(ASSETS, 'title.gif') }
       : s.kind === 'outro' ? { backgroundGif: path.join(ASSETS, 'ending.gif') }
-      : { overlayGif: host }),
+      : {}),
   }));
 
   const file = path.join(opts.outDir, `newsdesk-${snapshot.dateKey}.mp4`);
