@@ -5,6 +5,7 @@
  * 선정 원칙(2026-10-01 소윤 결정):
  *   1순위 스파크랩·포트폴리오 소식 → 2순위 AI 트렌드 → 3순위 스타트업계 소식
  *   윗 순위부터 채우고, 같은 순위 안에서는 AI(gpt-4.1)가 중요도 순으로 고른다.
+ *   단 AI 소식은 최소 1개 — 1순위만으로 5칸이 다 차지 않게 한 칸을 먼저 잡아 둔다.
  * 재료는 이미 나간 데일리 스냅샷(DashboardInsight daily_briefing)뿐이라 새 기사를 찾지 않는다 —
  * 한 주 동안 영상으로 나간 것의 요약이다.
  *
@@ -26,11 +27,11 @@ const PICK = 5;
 const ASSETS = path.join(process.cwd(), 'assets/newsdesk');
 const PROGRAM = 'Claw-e 뉴스데스크';
 
-/** 목소리 — 소윤이 샘플 6종 중 고르기 전까지 임시로 Leda(밝은 앵커). */
+/** 목소리 — 2026-10-01 소윤 확정: Orus, 앳된 소년 톤, 1.12배속. */
 export const NEWSDESK_VOICE: VoiceSpec = {
   model: 'gemini-2.5-flash-tts',
-  name: 'Leda',
-  style: '밝고 친근한 주간 뉴스 진행자처럼, 또렷하고 경쾌하게 읽어 주세요.',
+  name: 'Orus',
+  style: '앳되고 귀여운 소년 목소리로, 밝고 생기 있게, 약간 빠른 속도로 읽어 주세요.',
   speed: 1.12,
 };
 
@@ -93,12 +94,18 @@ export async function selectWeekly(dateKey = kstDateKey()): Promise<BriefingSnap
       }
     } catch { /* 깨진 행은 무시 */ }
   }
+  const ranked = new Map<number, BriefingHeadline[]>();
+  for (const tier of [1, 2, 3]) ranked.set(tier, await rankWithin(pool.filter(h => tierOf(h) === tier)));
+  const reservedAi = ranked.get(2)!.slice(0, 1);
   const picked: BriefingHeadline[] = [];
   for (const tier of [1, 2, 3]) {
-    if (picked.length >= PICK) break;
-    const ranked = await rankWithin(pool.filter(h => tierOf(h) === tier));
-    picked.push(...ranked.slice(0, PICK - picked.length));
+    const room = PICK - reservedAi.length - picked.length;
+    if (room <= 0) break;
+    picked.push(...ranked.get(tier)!.filter(h => !reservedAi.includes(h)).slice(0, room));
   }
+  // 순위 순서대로 보이게 — AI 칸은 1순위 소식들 뒤에.
+  picked.push(...reservedAi);
+  picked.sort((a, b) => tierOf(a) - tierOf(b));
   return {
     dateKey,
     dateLabel: label,
