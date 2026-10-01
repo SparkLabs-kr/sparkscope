@@ -329,7 +329,8 @@ async function pickByTiers(): Promise<{ picked: BriefingCandidate[]; tiers: numb
   const fresh = (c: BriefingCandidate) => !briefed.has(c.url, c.title);
 
   // 스파크랩 — 다이제스트 섹션, 한국어 기사만(같은 사건의 영문판이 두 칸을 차지하지 않게).
-  const S = data.sparklabsArticles.filter(a => isKorean(a.title)).map(a => fromArticle(a, idByLink)).filter(fresh);
+  // 지난 브리핑에 나갔어도 다시 넣는다 — 메일에 실려 있는 동안은 브리핑도 메일과 맞춘다(2026-10-01 소윤 결정).
+  const S = data.sparklabsArticles.filter(a => isKorean(a.title)).map(a => fromArticle(a, idByLink));
 
   // 포트폴리오 — 다이제스트 섹션(회사당 1건). 주가 기사면 같은 회사 다른 기사로. 지난 7일 브리핑에 나간 회사 제외.
   const briefedCompanies = new Set(candidates.filter(a => briefed.has(a.link, a.title)).map(a => a.matchedKeyword));
