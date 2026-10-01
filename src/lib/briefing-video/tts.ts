@@ -37,7 +37,9 @@ export interface Speech {
  */
 export const FALLBACK_VOICE = 'ko-KR-Chirp3-HD-Charon';
 
-async function callTts(text: string, gemini: boolean): Promise<Speech> {
+export type VoiceSpec = { model: string; name: string; style: string };
+
+async function callTts(text: string, gemini: boolean, v: VoiceSpec = VOICE): Promise<Speech> {
   const r = await fetch('https://texttospeech.googleapis.com/v1/text:synthesize', {
     method: 'POST',
     headers: {
@@ -46,9 +48,9 @@ async function callTts(text: string, gemini: boolean): Promise<Speech> {
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      input: gemini ? { text, prompt: VOICE.style } : { text },
+      input: gemini ? { text, prompt: v.style } : { text },
       voice: gemini
-        ? { languageCode: 'ko-KR', name: VOICE.name, modelName: VOICE.model }
+        ? { languageCode: 'ko-KR', name: v.name, modelName: v.model }
         : { languageCode: 'ko-KR', name: FALLBACK_VOICE },
       audioConfig: { audioEncoding: 'LINEAR16', sampleRateHertz: SAMPLE_RATE },
     }),
@@ -60,11 +62,11 @@ async function callTts(text: string, gemini: boolean): Promise<Speech> {
   return { wav, seconds: (wav.length - 44) / (2 * SAMPLE_RATE) };
 }
 
-async function withRetry(text: string, gemini: boolean): Promise<Speech> {
+async function withRetry(text: string, gemini: boolean, v?: VoiceSpec): Promise<Speech> {
   let lastErr: unknown;
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
-      return await callTts(text, gemini);
+      return await callTts(text, gemini, v);
     } catch (e: any) {
       lastErr = e;
       // 429는 분 단위 한도라 길게(20·40·60초…), 그 밖의 일시 오류는 짧게 기다린다.
@@ -77,11 +79,11 @@ async function withRetry(text: string, gemini: boolean): Promise<Speech> {
 }
 
 /** 문단 전체를 하나씩 합성한다. Gemini가 끝내 실패하면 전부 대체 음성으로 다시 만든다. */
-export async function synthesizeAll(texts: string[]): Promise<{ speeches: Speech[]; voice: string }> {
+export async function synthesizeAll(texts: string[], v: VoiceSpec = VOICE): Promise<{ speeches: Speech[]; voice: string }> {
   try {
     const speeches: Speech[] = [];
-    for (const t of texts) speeches.push(await withRetry(t, true));
-    return { speeches, voice: `${VOICE.model}/${VOICE.name}` };
+    for (const t of texts) speeches.push(await withRetry(t, true, v));
+    return { speeches, voice: `${v.model}/${v.name}` };
   } catch (e) {
     console.error(`[tts] Gemini 음성 실패 — 전체를 ${FALLBACK_VOICE}로 다시 만듭니다:`, e);
     const speeches: Speech[] = [];

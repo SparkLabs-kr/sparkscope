@@ -22,6 +22,10 @@ export interface Clip {
   png: Buffer;
   wav: Buffer;
   seconds: number;
+  /** 화면 전체를 이 GIF로(반복 재생) — 뉴스데스크 오프닝 타이틀. png 대신 쓴다. */
+  backgroundGif?: string;
+  /** 슬라이드 위에 반복 재생할 GIF(캐릭터) — 오른쪽 아래, 너비 w */
+  overlayGif?: { file: string; w: number; x: number; y: number };
 }
 
 export async function renderVideo(clips: Clip[], workDirIn: string, outFileIn: string): Promise<number> {
@@ -40,12 +44,20 @@ export async function renderVideo(clips: Clip[], workDirIn: string, outFileIn: s
     await writeFile(png, c.png);
     await writeFile(wav, c.wav);
     const dur = c.seconds + GAP_SECONDS;
+    const video = c.backgroundGif
+      ? ['-stream_loop', '-1', '-i', path.resolve(c.backgroundGif), '-i', wav,
+         '-filter_complex', `[0:v]scale=1280:720,fps=30,format=yuv420p[v]`, '-map', '[v]', '-map', '1:a']
+      : c.overlayGif
+        ? ['-loop', '1', '-framerate', '30', '-i', png, '-i', wav,
+           '-stream_loop', '-1', '-i', path.resolve(c.overlayGif.file),
+           '-filter_complex', `[2:v]scale=${c.overlayGif.w}:-1,fps=30[h];[0:v][h]overlay=${c.overlayGif.x}:${c.overlayGif.y}:format=auto,format=yuv420p[v]`,
+           '-map', '[v]', '-map', '1:a']
+        : ['-loop', '1', '-framerate', '30', '-i', png, '-i', wav];
     await ffmpeg([
-      '-loop', '1', '-framerate', '30', '-i', png,
-      '-i', wav,
+      ...video,
       '-af', `apad=pad_dur=${GAP_SECONDS}`,
       '-t', dur.toFixed(2),
-      '-c:v', 'libx264', '-tune', 'stillimage', '-pix_fmt', 'yuv420p', '-r', '30',
+      '-c:v', 'libx264', ...(c.backgroundGif || c.overlayGif ? [] : ['-tune', 'stillimage']), '-pix_fmt', 'yuv420p', '-r', '30',
       '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-ac', '1',
       mp4,
     ]);

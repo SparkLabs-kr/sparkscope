@@ -53,7 +53,11 @@ function wrap(ctx: SKRSContext2D, text: string, maxWidth: number, maxLines: numb
   return lines;
 }
 
-function base(dateLabel: string) {
+/** 프로그램 — 데일리(월·수·금)와 Claw-e 뉴스데스크(월)가 같은 슬라이드를 쓴다. hostSpace면 오른쪽 아래를 캐릭터 자리로 비운다. */
+export interface SlideOpts { program?: string; hostSpace?: boolean }
+const HOST_W = 340;
+
+function base(dateLabel: string, program = '데일리 브리핑') {
   ensureFonts();
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
@@ -67,18 +71,19 @@ function base(dateLabel: string) {
   ctx.fillText('SparkScope', 64, 72);
   ctx.font = '22px "Pretendard SemiBold"';
   ctx.fillStyle = C.muted;
-  ctx.fillText('데일리 브리핑', 222, 72);
+  ctx.fillText(program, 222, 72);
   ctx.textAlign = 'right';
   ctx.fillText(dateLabel, W - 64, 72);
   ctx.textAlign = 'left';
   return { canvas, ctx };
 }
 
-export function introSlide(dateLabel: string, headlines: BriefingHeadline[]): Buffer {
-  const { canvas, ctx } = base(dateLabel);
+export function introSlide(dateLabel: string, headlines: BriefingHeadline[], o: SlideOpts = {}): Buffer {
+  const { canvas, ctx } = base(dateLabel, o.program);
+  const textW = W - 200 - (o.hostSpace ? HOST_W : 0);
   ctx.font = '64px "Pretendard ExtraBold"';
   ctx.fillStyle = C.ink;
-  ctx.fillText('오늘의 헤드라인', 64, 190);
+  ctx.fillText(o.hostSpace ? '이번 주 헤드라인' : '오늘의 헤드라인', 64, 190);
   let y = 270;
   headlines.forEach((h, i) => {
     ctx.fillStyle = C.purple;
@@ -92,14 +97,15 @@ export function introSlide(dateLabel: string, headlines: BriefingHeadline[]): Bu
     ctx.textAlign = 'left';
     ctx.fillStyle = C.ink;
     ctx.font = '30px "Pretendard SemiBold"';
-    ctx.fillText(wrap(ctx, h.title, W - 200, 1)[0] ?? '', 124, y);
+    ctx.fillText(wrap(ctx, h.title, textW, 1)[0] ?? '', 124, y);
     y += 82;
   });
   return canvas.toBuffer('image/png');
 }
 
-export function itemSlide(dateLabel: string, h: BriefingHeadline, index: number, total: number): Buffer {
-  const { canvas, ctx } = base(dateLabel);
+export function itemSlide(dateLabel: string, h: BriefingHeadline, index: number, total: number, o: SlideOpts = {}): Buffer {
+  const { canvas, ctx } = base(dateLabel, o.program);
+  const textW = W - 128 - (o.hostSpace ? HOST_W : 0);
   // 순번
   ctx.font = '120px "Pretendard ExtraBold"';
   ctx.fillStyle = C.lightPurple;
@@ -119,7 +125,7 @@ export function itemSlide(dateLabel: string, h: BriefingHeadline, index: number,
   ctx.font = '54px "Pretendard ExtraBold"';
   ctx.fillStyle = C.ink;
   let y = 400;
-  for (const line of wrap(ctx, h.title, W - 128, 3)) {
+  for (const line of wrap(ctx, h.title, textW, 3)) {
     ctx.fillText(line, 64, y);
     y += 72;
   }
@@ -127,7 +133,7 @@ export function itemSlide(dateLabel: string, h: BriefingHeadline, index: number,
   ctx.font = '28px "Pretendard Regular"';
   ctx.fillStyle = C.inkSoft;
   y += 8;
-  for (const line of wrap(ctx, h.summary, W - 128, 2)) {
+  for (const line of wrap(ctx, h.summary, textW, 2)) {
     ctx.fillText(line, 64, y);
     y += 42;
   }
@@ -136,7 +142,7 @@ export function itemSlide(dateLabel: string, h: BriefingHeadline, index: number,
   ctx.fillStyle = C.muted;
   ctx.fillText(h.source, 64, H - 48);
   ctx.textAlign = 'right';
-  ctx.fillText(`${index + 1} / ${total}`, W - 64, H - 48);
+  ctx.fillText(`${index + 1} / ${total}`, W - 64 - (o.hostSpace ? HOST_W : 0), H - 48);
   ctx.textAlign = 'left';
   // 진행 막대
   ctx.fillStyle = '#E7E3DB';
@@ -146,12 +152,12 @@ export function itemSlide(dateLabel: string, h: BriefingHeadline, index: number,
   return canvas.toBuffer('image/png');
 }
 
-export function outroSlide(dateLabel: string): Buffer {
-  const { canvas, ctx } = base(dateLabel);
+export function outroSlide(dateLabel: string, o: SlideOpts = {}): Buffer {
+  const { canvas, ctx } = base(dateLabel, o.program);
   ctx.textAlign = 'center';
   ctx.font = '60px "Pretendard ExtraBold"';
   ctx.fillStyle = C.ink;
-  ctx.fillText('오늘 브리핑은 여기까지', W / 2, 340);
+  ctx.fillText(o.hostSpace ? '이번 주 뉴스데스크는 여기까지' : '오늘 브리핑은 여기까지', W / 2, 340);
   ctx.font = '30px "Pretendard SemiBold"';
   ctx.fillStyle = C.purple;
   ctx.fillText('자세한 내용은 스파크스코프 대시보드에서', W / 2, 410);

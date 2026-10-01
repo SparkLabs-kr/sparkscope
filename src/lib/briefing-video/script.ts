@@ -76,7 +76,10 @@ function describe(h: BriefingHeadline, i: number): string {
   return `${i}. [${h.label}] 제목: ${h.title} / 요약: ${h.summary} / 출처: ${h.source}${extra}`;
 }
 
-export async function writeBriefingScript(snapshot: BriefingSnapshot): Promise<ScriptSegment[]> {
+/** 인사·마무리 문구 — 데일리가 기본, 뉴스데스크(newsdesk.ts)는 자기 문구를 넘긴다. */
+export interface ScriptFrame { intro: string; outro: string }
+
+export async function writeBriefingScript(snapshot: BriefingSnapshot, frame?: ScriptFrame): Promise<ScriptSegment[]> {
   const heads = snapshot.headlines;
   const resp = await openai.chat.completions.create({
     model: MODEL,
@@ -92,7 +95,7 @@ export async function writeBriefingScript(snapshot: BriefingSnapshot): Promise<S
 
   const segments: ScriptSegment[] = [{
     kind: 'intro',
-    text: `좋은 아침입니다. ${spokenDate(snapshot.dateKey)}, 스파크스코프 데일리 브리핑입니다.`,
+    text: frame?.intro ?? `좋은 아침입니다. ${spokenDate(snapshot.dateKey)}, 스파크스코프 데일리 브리핑입니다.`,
   }];
   heads.forEach((h, i) => {
     // AI가 빠뜨린 항목은 요약으로라도 채운다 — 화면엔 있는데 말이 없는 슬라이드가 생기지 않게.
@@ -101,7 +104,7 @@ export async function writeBriefingScript(snapshot: BriefingSnapshot): Promise<S
   });
   segments.push({
     kind: 'outro',
-    text: '오늘 준비한 브리핑은 여기까지입니다. 더 자세한 내용은 스파크스코프 대시보드에서 확인해 주세요!',
+    text: frame?.outro ?? '오늘 준비한 브리핑은 여기까지입니다. 더 자세한 내용은 스파크스코프 대시보드에서 확인해 주세요!',
   });
   return segments;
 }
