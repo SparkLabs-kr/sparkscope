@@ -12,7 +12,7 @@ import { ensurePortfolioHits, ensurePortfolioHitsEn } from '@/lib/sparkscope/new
 import { ensureTitleEn } from '@/lib/sparkscope/news-summary';
 import { backfillEntityLabelsEn } from '@/lib/sparkscope/entity-cards';
 import { getLocale } from '@/lib/i18n/server';
-import { readDigest, saveDigest } from '@/lib/sparkscope/digest-store';
+import { readDigest, readDigestEntities, saveDigest } from '@/lib/sparkscope/digest-store';
 import { requireUser } from '@/lib/authz';
 
 export const runtime = 'nodejs';
@@ -68,11 +68,16 @@ export async function GET(req: NextRequest) {
     // 매체 본문을 그대로 싣지 않기 위해서고, 페이로드도 불필요하게 커진다.
     const safe = items.map(({ sourceText, ...rest }) => rest);
     // 다음 사람은 기다리지 않게 저장해 둔다.
-    // 즉석 계산 경로에서는 이름 카드를 만들지 않는다 — 여기까지 온 사람은 이미
-    // 오래 기다리고 있고, 이름 카드는 크론이 다음 회차에 채운다.
-    await saveDigest(domain, days, { items: safe, feeds, keywords, entities: [] }).catch(
+    //
+    // 이름 카드는 여기서 만들지 않는다 — 여기까지 온 사람은 이미 오래 기다리고 있고,
+    // 카드는 크론이 다음 회차에 채운다. 다만 **이미 저장돼 있던 카드는 그대로 둔다.**
+    // 예전엔 빈 배열로 덮어써서, 이 경로를 한 번 타면 카드가 통째로 사라졌다
+    // (2026-10-01 소윤 신고: "오늘 왜 키워드 하나도 안 잡힘?"). 목록 캐시가 만료돼
+    // 여기로 온 것이지 카드가 틀린 게 아니라, 버릴 이유가 없다.
+    const keptEntities = await readDigestEntities(domain, days).catch(() => []);
+    await saveDigest(domain, days, { items: safe, feeds, keywords, entities: keptEntities }).catch(
       e => console.error('[api/inter/digest] 캐시 저장 실패(무시):', e));
-    return NextResponse.json({ domain, days, items: safe, feeds, keywords, entities: [] });
+    return NextResponse.json({ domain, days, items: safe, feeds, keywords, entities: keptEntities });
   } catch (e: any) {
     console.error('[api/inter/digest] 실패:', e);
     return NextResponse.json({ domain, days, items: [], feeds: [], keywords: [], entities: [], error: String(e?.message ?? e) }, { status: 200 });

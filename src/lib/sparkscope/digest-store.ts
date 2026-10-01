@@ -59,6 +59,31 @@ export async function saveDigest(
 }
 
 /**
+ * 저장된 이름 카드만 꺼내 온다 — **유효기간을 보지 않는다.**
+ *
+ * 즉석 계산 경로가 쓰려고 만들었다. 그 경로는 목록을 새로 만들지만 이름 카드는
+ * 만들지 않는데(라우트 주석 참고), 그렇다고 빈 배열로 저장해 버리면 멀쩡히 있던
+ * 카드가 지워진다. 실제로 그렇게 사라졌다(2026-10-01 소윤 신고: "오늘 왜 키워드
+ * 하나도 안 잡힘?"). 목록이 오래됐다고 해서 카드까지 버릴 이유는 없다 —
+ * 같은 기사들에서 뽑은 이름이라 목록보다 천천히 변한다.
+ */
+export async function readDigestEntities(
+  domain: NewsDomain, days: number,
+): Promise<EntityCard[]> {
+  const row = await prisma.dashboardInsight.findUnique({
+    where: { kind_key: { kind: KIND, key: keyOf(domain, days) } },
+    select: { value: true },
+  }).catch(() => null);
+  if (!row) return [];
+  try {
+    const p = JSON.parse(row.value) as DigestPayload;
+    return Array.isArray(p.entities) ? p.entities : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * 사전계산 결과를 읽는다. maxAgeMs보다 오래됐으면 null을 준다 —
  * 크론이 죽었을 때 며칠 지난 목록을 계속 보여주면 안 된다.
  */
