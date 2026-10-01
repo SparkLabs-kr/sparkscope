@@ -171,7 +171,25 @@ async function currentBasis(): Promise<string> {
  * 포트폴리오를 7일까지 넓혀 찾으므로, 이게 없으면 수요일에 나간 기사가 금·월에 또 나간다.
  * 오늘 스냅샷은 빼고 본다(오늘 재발송·재계산 때 자기 자신을 지우지 않게).
  */
-async function recentlyBriefedUrls(): Promise<Set<string>> {
+/**
+ * 같은 기사라도 주소가 바뀌어 들어온다 — 구글 뉴스 중계 주소였다가 원문 주소로 풀리거나, 같은 보도를
+ * 다른 매체가 옮겨 싣는다(2026-10-01: 9/30 브리핑의 스카이랩스·국대 AI 기사가 주소만 바뀌어 다시 추천됨).
+ * 그래서 주소와 함께 제목(공백·기호·" - 매체" 제거)으로도 맞춘다.
+ */
+export function titleKey(title: string): string {
+  return title.replace(/\s+-\s+[^-]+$/, '').replace(/[^0-9a-zA-Z가-힣]/g, '').toLowerCase();
+}
+
+interface Briefed { has(url: string, title?: string): boolean }
+
+async function recentlyBriefed(): Promise<Briefed> {
+  const urls = await recentlyBriefedUrls();
+  return {
+    has: (url, title) => urls.urls.has(url) || (!!title && urls.titles.has(titleKey(title))),
+  };
+}
+
+async function recentlyBriefedUrls(): Promise<{ urls: Set<string>; titles: Set<string> }> {
   const today = kstDateKey();
   const keys = Array.from({ length: 7 }, (_, i) => kstDateKey(new Date(Date.now() - (i + 1) * 864e5)));
   const rows = await prisma.dashboardInsight.findMany({
@@ -179,10 +197,14 @@ async function recentlyBriefedUrls(): Promise<Set<string>> {
     select: { value: true },
   });
   const urls = new Set<string>();
+  const titles = new Set<string>();
   for (const r of rows) {
-    try { for (const h of (JSON.parse(r.value).headlines ?? [])) urls.add(h.url); } catch { /* 깨진 행은 무시 */ }
+    try {
+      for (const h of (JSON.parse(r.value).headlines ?? [])) { urls.add(h.url); titles.add(titleKey(h.title ?? '')); }
+    } catch { /* 깨진 행은 무시 */ }
   }
-  return urls;
+  titles.delete('');
+  return { urls, titles };
 }
 
 /**
@@ -298,19 +320,19 @@ async function rankWithAI(
 /** 칸 수에 맞춰 5칸을 채운다 — 재료는 다이제스트(같은 72시간 창)와 AI 트렌드·해외 트렌드. */
 async function pickByTiers(): Promise<{ picked: BriefingCandidate[]; tiers: number[] }> {
   const [briefed, data, candidates] = await Promise.all([
-    recentlyBriefedUrls(),
+    recentlyBriefed(),
     buildDigestForBriefing(),
     loadDigestCandidates(),
   ]);
   const idByLink = new Map(candidates.map(a => [a.link, a.id]));
   const rankOf = (a: { importance?: string }) => IMPORTANCE_RANK[a.importance ?? ''] ?? 0;
-  const fresh = (c: BriefingCandidate) => !briefed.has(c.url);
+  const fresh = (c: BriefingCandidate) => !briefed.has(c.url, c.title);
 
   // 스파크랩 — 다이제스트 섹션, 한국어 기사만(같은 사건의 영문판이 두 칸을 차지하지 않게).
   const S = data.sparklabsArticles.filter(a => isKorean(a.title)).map(a => fromArticle(a, idByLink)).filter(fresh);
 
   // 포트폴리오 — 다이제스트 섹션(회사당 1건). 주가 기사면 같은 회사 다른 기사로. 지난 7일 브리핑에 나간 회사 제외.
-  const briefedCompanies = new Set(candidates.filter(a => briefed.has(a.link)).map(a => a.matchedKeyword));
+  const briefedCompanies = new Set(candidates.filter(a => briefed.has(a.link, a.title)).map(a => a.matchedKeyword));
   const byCompany = (company: string) => candidates
     .filter(c => c.matchedKeyword === company && !STOCK_TICKER.test(c.title) && isKorean(c.title))
     .sort((x, y) => rankOf(y) - rankOf(x) || y.priorityScore - x.priorityScore)[0];
