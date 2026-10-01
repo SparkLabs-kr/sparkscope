@@ -37,7 +37,20 @@ export interface Speech {
  */
 export const FALLBACK_VOICE = 'ko-KR-Chirp3-HD-Charon';
 
-export type VoiceSpec = { model: string; name: string; style: string };
+/** speed — 1보다 크면 합성 뒤 ffmpeg(atempo)로 빠르게(음높이 유지). Gemini TTS엔 속도 옵션이 없다. */
+export type VoiceSpec = { model: string; name: string; style: string; speed?: number };
+
+async function speedUp(s: Speech, factor: number): Promise<Speech> {
+  const { execFile } = await import('child_process');
+  const ffmpegPath = (await import('ffmpeg-static')).default as unknown as string;
+  const wav = await new Promise<Buffer>((resolve, reject) => {
+    const p = execFile(ffmpegPath, ['-loglevel', 'error', '-f', 'wav', '-i', 'pipe:0', '-filter:a', `atempo=${factor}`,
+      '-ar', String(SAMPLE_RATE), '-ac', '1', '-c:a', 'pcm_s16le', '-f', 'wav', 'pipe:1'],
+      { encoding: 'buffer', maxBuffer: 256 * 1024 * 1024 }, (err, out) => (err ? reject(err) : resolve(out as Buffer)));
+    p.stdin!.end(s.wav);
+  });
+  return { wav, seconds: (wav.length - 44) / (2 * SAMPLE_RATE) };
+}
 
 async function callTts(text: string, gemini: boolean, v: VoiceSpec = VOICE): Promise<Speech> {
   const r = await fetch('https://texttospeech.googleapis.com/v1/text:synthesize', {
@@ -82,7 +95,10 @@ async function withRetry(text: string, gemini: boolean, v?: VoiceSpec): Promise<
 export async function synthesizeAll(texts: string[], v: VoiceSpec = VOICE): Promise<{ speeches: Speech[]; voice: string }> {
   try {
     const speeches: Speech[] = [];
-    for (const t of texts) speeches.push(await withRetry(t, true, v));
+    for (const t of texts) {
+      const sp = await withRetry(t, true, v);
+      speeches.push(v.speed && v.speed !== 1 ? await speedUp(sp, v.speed) : sp);
+    }
     return { speeches, voice: `${v.model}/${v.name}` };
   } catch (e) {
     console.error(`[tts] Gemini 음성 실패 — 전체를 ${FALLBACK_VOICE}로 다시 만듭니다:`, e);

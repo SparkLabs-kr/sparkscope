@@ -57,6 +57,37 @@ function wrap(ctx: SKRSContext2D, text: string, maxWidth: number, maxLines: numb
 export interface SlideOpts { program?: string; hostSpace?: boolean }
 const HOST_W = 340;
 
+/**
+ * 글이 칸에 다 들어가게 — 말줄임(…)으로 자르지 않는다(2026-10-01 소윤: "…으로 끊기면 안 된다").
+ * 큰 글씨부터 줄여 보고, 그래도 넘치면 문장 단위로 앞에서부터 들어가는 만큼만 쓴다.
+ */
+function fitText(ctx: SKRSContext2D, text: string, maxWidth: number, maxLines: number, sizes: number[], weight: string)
+  : { lines: string[]; size: number } {
+  const fits = (t: string, size: number) => {
+    ctx.font = `${size}px "Pretendard ${weight}"`;
+    const lines = wrap(ctx, t, maxWidth, maxLines + 1);
+    return lines.length <= maxLines && !lines.some(l => l.endsWith('…')) ? lines : null;
+  };
+  for (const size of sizes) {
+    const lines = fits(text, size);
+    if (lines) return { lines, size };
+  }
+  const size = sizes[sizes.length - 1];
+  const sentences = text.match(/[^.!?。]+[.!?。]?/g)?.map(s => s.trim()).filter(Boolean) ?? [text];
+  for (let n = sentences.length - 1; n >= 1; n--) {
+    const lines = fits(sentences.slice(0, n).join(' '), size);
+    if (lines) return { lines, size };
+  }
+  // 첫 문장조차 넘치면 어절 단위로 줄인다(말줄임표 없이).
+  const words = sentences[0].split(/\s+/);
+  for (let n = words.length - 1; n >= 1; n--) {
+    const lines = fits(words.slice(0, n).join(' ').replace(/[,·]$/, ''), size);
+    if (lines) return { lines, size };
+  }
+  ctx.font = `${size}px "Pretendard ${weight}"`;
+  return { lines: wrap(ctx, text, maxWidth, maxLines), size };
+}
+
 function base(dateLabel: string, program = '데일리 브리핑') {
   ensureFonts();
   const canvas = createCanvas(W, H);
@@ -113,7 +144,7 @@ export function itemSlide(dateLabel: string, h: BriefingHeadline, index: number,
   // 라벨 칩
   ctx.font = '26px "Pretendard Bold"';
   // 라벨 앞 이모지(📈 💼)는 Pretendard에 없어 네모로 깨진다 — 슬라이드에선 뗀다.
-  const label = h.label.replace(/^[\p{Extended_Pictographic}\uFE0F\s]+/u, '');
+  const label = h.label.replace(/^[\p{Extended_Pictographic}\p{Regional_Indicator}\uFE0F\s]+/u, ''); // 🇰🇷 국기도
   const lw = ctx.measureText(label).width + 40;
   ctx.fillStyle = C.purple;
   ctx.beginPath();
@@ -122,20 +153,21 @@ export function itemSlide(dateLabel: string, h: BriefingHeadline, index: number,
   ctx.fillStyle = C.white;
   ctx.fillText(label, 84, 305);
   // 제목
-  ctx.font = '54px "Pretendard ExtraBold"';
+  const title = fitText(ctx, h.title, textW, 3, [54, 48, 42], 'ExtraBold');
   ctx.fillStyle = C.ink;
   let y = 400;
-  for (const line of wrap(ctx, h.title, textW, 3)) {
+  for (const line of title.lines) {
     ctx.fillText(line, 64, y);
-    y += 72;
+    y += Math.round(title.size * 1.33);
   }
-  // 요약
-  ctx.font = '28px "Pretendard Regular"';
-  ctx.fillStyle = C.inkSoft;
+  // 요약 — 출처 줄(H-48) 위까지 남은 줄 수만큼
   y += 8;
-  for (const line of wrap(ctx, h.summary, textW, 2)) {
+  const room = Math.max(1, Math.min(3, Math.floor((H - 90 - y + 28) / 40)));
+  const sum = fitText(ctx, h.summary, textW, room, [28, 25], 'Regular');
+  ctx.fillStyle = C.inkSoft;
+  for (const line of sum.lines) {
     ctx.fillText(line, 64, y);
-    y += 42;
+    y += Math.round(sum.size * 1.5);
   }
   // 출처 · 진행
   ctx.font = '22px "Pretendard SemiBold"';

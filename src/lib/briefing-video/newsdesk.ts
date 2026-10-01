@@ -31,6 +31,7 @@ export const NEWSDESK_VOICE: VoiceSpec = {
   model: 'gemini-2.5-flash-tts',
   name: 'Leda',
   style: '밝고 친근한 주간 뉴스 진행자처럼, 또렷하고 경쾌하게 읽어 주세요.',
+  speed: 1.12,
 };
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -132,7 +133,8 @@ export async function buildNewsdeskVideo(opts: { outDir: string; dateKey?: strin
 
   const segments = await writeBriefingScript(snapshot, {
     intro: `안녕하세요, 클로이 뉴스데스크의 클로이입니다! ${snapshot.weekLabel}, 지난 한 주 꼭 짚어야 할 소식을 모아 왔어요.`,
-    outro: '이번 주 클로이 뉴스데스크는 여기까지입니다. 더 자세한 내용은 스파크스코프 대시보드에서 확인해 주세요. 다음 주에 또 만나요!',
+    // 2026-10-01 소윤 확정 문구
+    outro: '오늘의 위클리 브리핑은 여기까지입니다. 자세한 내용은 이메일로 보내드린 스파크스코프에서 확인해 주세요. 함께해 주셔서 감사합니다. 다음 브리핑에서 뵙겠습니다!',
   });
   const { speeches, voice } = await synthesizeAll(segments.map(s => s.text), NEWSDESK_VOICE);
   console.log(`[newsdesk] 음성 ${voice}`);
@@ -146,7 +148,10 @@ export async function buildNewsdeskVideo(opts: { outDir: string; dateKey?: strin
       : itemSlide(snapshot.weekLabel, snapshot.headlines[s.index!], s.index!, total, o),
     wav: speeches[i].wav,
     seconds: speeches[i].seconds,
-    ...(s.kind === 'intro' ? { backgroundGif: path.join(ASSETS, 'title.gif') } : { overlayGif: host }),
+    // 오프닝은 타이틀 GIF, 마무리는 서울 야경 엔딩 GIF, 소식 화면엔 손 흔드는 Claw-e.
+    ...(s.kind === 'intro' ? { backgroundGif: path.join(ASSETS, 'title.gif') }
+      : s.kind === 'outro' ? { backgroundGif: path.join(ASSETS, 'ending.gif') }
+      : { overlayGif: host }),
   }));
 
   const file = path.join(opts.outDir, `newsdesk-${snapshot.dateKey}.mp4`);
