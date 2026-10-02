@@ -1,10 +1,10 @@
 /**
  * 데일리 브리핑 추천 헤드라인 5개 + 검수 화면의 교체 후보 목록.
  *
- * 추천은 항상 5개, 칸 수를 정해 두고 칸마다 AI가 가장 중요한 기사를 고른다(2026-09-30 소윤 결정):
- *   스파크랩 소식이 있는 날  스파크랩 1 · 포트폴리오 2 · AI 1 · 스타트업계 1
- *   없는 날                  포트폴리오 2 · AI 2(국내 1 · 글로벌 1) · 스타트업계 1
- * 칸을 채울 후보가 모자라면 AI 칸으로 넘긴다. 칸 계산은 quotas(), 선정은 rankWithAI().
+ * 추천은 항상 5개, 칸 수를 정해 두고 칸마다 AI가 가장 중요한 기사를 고른다(2026-10-02 소윤 결정):
+ *   데일리  AI 트렌드 2(국내 1 · 글로벌 1) 고정 + 나머지 3칸 스파크랩(최대 1) → 포트폴리오
+ *   위클리  스파크랩·포트폴리오 우선 · AI 최소 1 · 남으면 AI → 스타트업계
+ * 칸 계산은 quotas()·weeklyQuotas(), 선정은 rankWithAI().
  *
  * 바이오는 추천에도 교체 후보에도 넣지 않는다.
  *
@@ -267,26 +267,24 @@ const GROUP_NAME: Record<Group, string> = {
 };
 
 /**
- * 칸 수(2026-09-30 소윤 결정 — 항상 5개):
- *   스파크랩 소식이 있는 날  스파크랩 1 · 포트폴리오 2 · AI 1(국내·글로벌 중 더 중요한 쪽) · 스타트업계 1
- *   없는 날                  포트폴리오 2 · AI 2(국내 1 · 글로벌 1) · 스타트업계 1
- * 후보가 모자란 칸은 AI 칸으로 넘긴다(국내·글로벌 반반 원칙 유지).
+ * 데일리 칸 수(2026-10-02 소윤 결정 — 항상 5개, 9/30 규칙을 대체):
+ *   AI 트렌드 2칸 고정(국내 1 · 글로벌 1, 한쪽이 모자라면 다른 쪽으로)
+ *   나머지 3칸은 우선순위대로 — 스파크랩(최대 1) → 포트폴리오
+ *   스타트업계(업계 뉴스) 칸은 없앴다 — "AI 트렌드가 부족하다". 위 후보가 모자랄 때만 마지막에 채운다.
  */
 function quotas(avail: Record<Group, number>): Record<Group, number> {
   const q: Record<Group, number> = { S: 0, P: 0, D: 0, G: 0, T: 0 };
-  q.S = Math.min(1, avail.S);
-  q.P = Math.min(2, avail.P);
-  q.T = Math.min(1, avail.T);
-  let ai = BRIEFING_MAX - q.S - q.P - q.T;
-  if (ai === 1) {
-    // 한 칸이면 국내·글로벌 중 하나 — 어느 쪽인지는 AI가 고른다(여기선 가능한 쪽만 열어 둔다).
-    q.D = avail.D > 0 ? 1 : 0;
-    q.G = avail.G > 0 ? 1 : 0;
-    return q; // D·G 둘 다 1이면 "둘 중 하나" — rankWithAI가 1개만 고르게 한다
-  }
-  q.D = Math.min(Math.floor(ai / 2), avail.D);
-  q.G = Math.min(ai - q.D, avail.G);
-  q.D = Math.min(ai - q.G, avail.D); // 글로벌이 모자라면 국내로
+  const AI = 2;
+  q.D = Math.min(1, avail.D);
+  q.G = Math.min(AI - q.D, avail.G);
+  q.D = Math.min(AI - q.G, avail.D); // 글로벌이 모자라면 국내로
+  let room = BRIEFING_MAX - q.D - q.G;
+  q.S = Math.min(1, avail.S, room); room -= q.S;
+  q.P = Math.min(avail.P, room); room -= q.P;
+  // 그래도 비면 AI를 더 → 마지막으로 스타트업계
+  const moreG = Math.min(room, avail.G - q.G); q.G += moreG; room -= moreG;
+  const moreD = Math.min(room, avail.D - q.D); q.D += moreD; room -= moreD;
+  q.T = Math.min(room, avail.T);
   return q;
 }
 

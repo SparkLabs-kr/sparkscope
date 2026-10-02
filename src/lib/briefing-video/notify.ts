@@ -54,31 +54,41 @@ export async function notifyBriefing(opts: { final: boolean; baseUrl: string }):
 }
 
 /**
- * 메시지 형식 — 2026-09-30 소윤 확정. 카드(connectInfo) 없이 본문 한 덩어리로:
+ * 메시지 형식 — 2026-10-02 소윤 확정. 대제목(본문) + 내용 카드(connectInfo):
  *
- *   스파크스코프 데일리 브리핑 9.30      ← 월요일은 "위클리 브리핑"
- *   1. (기사 제목)
- *   …
- *   5. (기사 제목)
- *   ▶ 영상 보기 (링크)          ← 영상이 없는 날은 이 줄이 빠진다
- *   스파크스코프 바로가기 (링크)
+ *   📰SparkScope 데일리 브리핑            ← 월요일은 "위클리 브리핑"
+ *   ┃ 10월 2일 SparkScope 데일리브리핑
+ *   ┃ 1. (기사 제목)
+ *   ┃ …
+ *   ┃ 📹 영상 보기 (링크)                 ← 영상이 없는 날은 이 줄이 빠진다
+ *   ┃ 🔗SparkScope 대시보드 바로가기 (링크)
  */
-export function briefingMessage(m: { dateKey: string; weekly?: boolean; titles: string[]; videoPage: string | null; baseUrl: string }): string {
+export interface JandiMessage { body: string; connectColor: string; connectInfo: { title: string; description: string }[] }
+
+export function briefingMessage(m: { dateKey: string; weekly?: boolean; titles: string[]; videoPage: string | null; baseUrl: string }): JandiMessage {
   const [, mm, dd] = m.dateKey.split('-').map(Number);
   const base = m.baseUrl.replace(/\/$/, '');
-  return [
-    `스파크스코프 ${m.weekly ? '위클리' : '데일리'} 브리핑 ${mm}.${dd}`,
-    ...m.titles.map((t, i) => `${i + 1}. ${t}`),
-    ...(m.videoPage ? [`[▶ 영상 보기](${m.videoPage})`] : []),
-    `[스파크스코프 바로가기](${base}/dashboard)`,
-  ].join('\n');
+  const kind = m.weekly ? '위클리' : '데일리';
+  return {
+    body: `📰SparkScope ${kind} 브리핑`,
+    connectColor: '#5046E5',
+    connectInfo: [{
+      title: `${mm}월 ${dd}일 SparkScope ${kind}브리핑`,
+      description: [
+        ...m.titles.map((t, i) => `${i + 1}. ${t}`),
+        '',
+        ...(m.videoPage ? [`[📹 영상 보기](${m.videoPage})`] : []),
+        `[🔗SparkScope 대시보드 바로가기](${base}/dashboard)`,
+      ].join('\n'),
+    }],
+  };
 }
 
-async function postJandi(url: string, body: string): Promise<void> {
+async function postJandi(url: string, msg: JandiMessage): Promise<void> {
   const r = await fetch(url, {
     method: 'POST',
     headers: { Accept: 'application/vnd.tosslab.jandi-v2+json', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ body }),
+    body: JSON.stringify(msg),
   });
   if (!r.ok) throw new Error(`잔디 전송 실패 ${r.status}: ${(await r.text()).slice(0, 200)}`);
 }
@@ -98,11 +108,13 @@ export async function sendJandiTest(baseUrl: string): Promise<void> {
     ?? (await getBriefingRecommendation().catch(() => null))?.headlines.map(h => h.title)
     ?? ['(오늘 헤드라인 없음)'];
   const video = await loadBriefingVideo(dateKey);
-  await postJandi(url, `[테스트] ${briefingMessage({
+  const msg = briefingMessage({
     dateKey,
     weekly: next.program === 'weekly',
     titles,
     videoPage: `${baseUrl.replace(/\/$/, '')}/briefing/${dateKey}`,
     baseUrl,
-  })}${video ? '' : '\n(테스트라 영상 링크는 아직 열리지 않을 수 있습니다)'}`);
+  });
+  msg.body = `[테스트] ${msg.body}${video ? '' : ' (테스트라 영상 링크는 아직 열리지 않을 수 있습니다)'}`;
+  await postJandi(url, msg);
 }
