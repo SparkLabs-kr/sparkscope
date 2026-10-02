@@ -16,6 +16,7 @@ import { OPEN_ACCESS } from '@/lib/flags';
 import { prisma } from '@/lib/prisma';
 import { resolveRole, isInternal, type Role } from '@/lib/roles';
 import { canScrap } from '@/lib/scrap';
+import { cookies } from 'next/headers';
 
 export type { Role };
 
@@ -29,10 +30,33 @@ export type SessionUser = {
   /** 화면·조회에 쓰는 회사명. companyId로 조인해 채운다. */
   companyName: string | null;
   active: boolean;
+  /** 사내 계정이 포트폴리오사 화면을 미리 보는 중이면 원래 등급. 평소엔 없다. */
+  previewOf?: Role;
 };
 
-/** 로그인한 사용자, 없으면 null. 화면이 "로그인하세요"를 직접 그릴 때 쓴다. */
+/**
+ * 포트폴리오사 화면 미리보기 — 사내 계정이 "그 회사 계정으로 로그인하면 이렇게 보인다"를 확인한다.
+ * 쿠키 하나로 켜고(/api/preview-as), 켜져 있으면 getSessionUser 가 PORTFOLIO 계정처럼 돌려준다.
+ * 그래서 화면·API 가 별도 분기 없이 실제 포트폴리오사 계정과 똑같이 동작한다.
+ * 권한이 올라가는 방향은 없다 — 사내 계정만 켤 수 있고, 켜면 등급이 내려가기만 한다.
+ */
+export const PREVIEW_COOKIE = 'sparkscope-preview-as';
+
 export async function getSessionUser(): Promise<SessionUser | null> {
+  const real = await getRealSessionUser();
+  if (!real || real.role === 'PORTFOLIO') return real;
+  let companyId: string | undefined;
+  try { companyId = cookies().get(PREVIEW_COOKIE)?.value; } catch { return real; }
+  if (!companyId) return real;
+  const company = await prisma.monitoringTarget
+    .findFirst({ where: { id: companyId, category: { startsWith: 'portfolio_company' } }, select: { name: true } })
+    .catch(() => null);
+  if (!company) return real;
+  return { ...real, role: 'PORTFOLIO', companyId, companyName: company.name, previewOf: real.role };
+}
+
+/** 미리보기를 무시한 실제 로그인 사용자 — 미리보기를 켜고 끄는 곳에서만 쓴다. */
+export async function getRealSessionUser(): Promise<SessionUser | null> {
   // 개발용 우회는 여기 한 곳에서만 본다. 이걸 빼먹으면 화면은 열려 있는데
   // 화면이 부르는 API만 401을 내서, 둘 중 하나만 막힌 것보다 나쁜 상태가 된다.
   //

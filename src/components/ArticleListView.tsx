@@ -55,10 +55,14 @@ function csvCell(v: string): string {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export function ArticleListView({ articles, canScrap = false, canBookmark = false, canReport = false, canRequestReport = false, emptyText, showSearch = false, showCategory = false, csvName = 'sparkscope', showPitchColumn = true }: {
+export function ArticleListView({ articles, canScrap = false, canBookmark = false, canReport = false, canRequestReport = false, emptyText, showSearch = false, showCategory = false, csvName = 'sparkscope', showPitchColumn = true, showInternal = true, hideCounts = false }: {
   articles: Article[];
   /** 피칭 점수 열 표시 여부. 포트폴리오사 화면은 끈다. */
   showPitchColumn?: boolean;
+  /** 중요도·상태·논조 표시 여부. 포트폴리오사 화면은 끈다. */
+  showInternal?: boolean;
+  /** 분류 버튼 옆 건수를 감춘다 — 포트폴리오사 화면은 기사 수를 보여주지 않는다. */
+  hideCounts?: boolean;
   canScrap?: boolean;
   canBookmark?: boolean;
   canReport?: boolean;
@@ -148,7 +152,7 @@ export function ArticleListView({ articles, canScrap = false, canBookmark = fals
                 aria-pressed={active}
                 className={`rounded-lg border px-3.5 py-1.5 text-sm font-bold whitespace-nowrap transition-colors ${active ? b.on : b.off}`}
               >
-                {t(b.label)} <span className="font-semibold opacity-70">{catCounts.get(b.id)}</span>
+                {t(b.label)} {!hideCounts && <span className="font-semibold opacity-70">{catCounts.get(b.id)}</span>}
               </button>
             );
           })}
@@ -187,7 +191,7 @@ export function ArticleListView({ articles, canScrap = false, canBookmark = fals
 
       {showSearch && q.trim() && (
         <div className="mb-2 text-xs text-gray-500">
-          ‘<span className="font-semibold text-gray-700">{q.trim()}</span>’ {t('검색 결과 {n}건', { n: view.length })}
+          ‘<span className="font-semibold text-gray-700">{q.trim()}</span>’ {hideCounts ? t('검색 결과') : t('검색 결과 {n}건', { n: view.length })}
         </div>
       )}
 
@@ -200,6 +204,7 @@ export function ArticleListView({ articles, canScrap = false, canBookmark = fals
         showCategoryColumn={!cat}
         showKeywordColumn={cat === 'competitor' || cat === 'industry_trend'}
         showPitchColumn={showPitchColumn}
+        showInternal={showInternal}
         emptyText={showSearch && q.trim() ? t('‘{q}’에 맞는 기사가 없습니다.', { q: q.trim() }) : emptyText}
       />
     </div>

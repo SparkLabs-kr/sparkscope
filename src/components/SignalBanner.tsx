@@ -80,7 +80,8 @@ type SocialCard =
   | { kind: 'merged'; key: string; label: string; why: string;
       variants: { source: SocialSource; tab: '인기순' | '최신순' }[] };
 
-export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
+// hidePortfolio: 포트폴리오사 화면 — 기사별 '포트폴리오 영향(회사·사유)'을 감춘다.
+export function SignalBanner({ domain, hidePortfolio = false }: { domain: 'bio' | 'ai'; hidePortfolio?: boolean }) {
   const t = useT();
   const locale = useLocale();
   // 기본은 '이번 주'다(2026-09-28 소윤 요청).
@@ -160,7 +161,7 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
             {t('이 기간에 표시할 기사가 없습니다.')}
           </div>
         ) : (
-          <Hero item={hero} locale={locale} />
+          <Hero item={hero} locale={locale} hidePortfolio={hidePortfolio} />
         )}
       </div>
 
@@ -169,6 +170,7 @@ export function SignalBanner({ domain }: { domain: 'bio' | 'ai' }) {
         <ol className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5 mt-4">
           {strip.map(it => (
             <StripCard
+              hidePortfolio={hidePortfolio}
               key={it.url}
               item={it}
               locale={locale}
@@ -336,7 +338,7 @@ function EntityCardView({ card, locale }: { card: EntityCard; locale: string }) 
 }
 
 /** 가장 중요한 한 건. 요약 첫 문단까지 펼쳐 두고, 포트폴리오 영향은 이유까지 보여준다. */
-function Hero({ item, locale }: { item: DigestItem; locale: string }) {
+function Hero({ item, locale, hidePortfolio = false }: { item: DigestItem; locale: string; hidePortfolio?: boolean }) {
   const t = useT();
   const title =
     locale === 'ko'
@@ -398,7 +400,7 @@ function Hero({ item, locale }: { item: DigestItem; locale: string }) {
         <p className="mt-2.5 text-[12.5px] text-spark-muted">{t('요약 준비 중 — 다음 조회에서 채워집니다.')}</p>
       )}
 
-      {item.portfolio && item.portfolio.length > 0 && (
+      {!hidePortfolio && item.portfolio && item.portfolio.length > 0 && (
         <div className="mt-3 pt-3 border-t border-spark-border space-y-1.5">
           {item.portfolio.slice(0, 3).map(h => (
             <div key={h.company} className="flex items-baseline flex-wrap gap-x-1.5 gap-y-0.5 text-[11.5px]">
@@ -468,8 +470,8 @@ function PostRow({ post, rank, locale }: { post: SocialPost; rank: number; local
 }
 
 /** 히어로 아래 스트립. 접혀 있다가 누르면 그 자리에서 줄 전체를 차지하며 펼쳐진다. */
-function StripCard({ item, locale, open, onToggle }: {
-  item: DigestItem; locale: string; open: boolean; onToggle: () => void;
+function StripCard({ item, locale, open, onToggle, hidePortfolio = false }: {
+  item: DigestItem; locale: string; open: boolean; onToggle: () => void; hidePortfolio?: boolean;
 }) {
   const t = useT();
   const title =
@@ -520,7 +522,7 @@ function StripCard({ item, locale, open, onToggle }: {
               <p key={k} className="text-[13px] leading-[1.78] text-spark-ink">{para}</p>
             ))}
           </div>
-          {item.portfolio && item.portfolio.length > 0 && (
+          {!hidePortfolio && item.portfolio && item.portfolio.length > 0 && (
             <div className="mt-3 pt-3 border-t border-spark-border space-y-1.5">
               {item.portfolio.map(h => (
                 <div key={h.company} className="text-[11.5px] leading-relaxed">

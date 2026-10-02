@@ -52,7 +52,7 @@ const TABS = [
 export type TabId = (typeof TABS)[number]['id'];
 
 function resolveTab(v?: string): TabId {
-  return TABS.some(t => t.id === v) ? (v as TabId) : 'sparklabs';
+  return TABS.some(t => t.id === v) ? (v as TabId) : 'portfolio';
 }
 
 // 지역(한국/대만) — 지금은 나라가 분류명 안에 들어 있다.
@@ -87,11 +87,11 @@ const REGION_LABEL: Record<RegionId, string> = {
   gv: '🌐 스파크랩 글로벌벤처스',
 };
 const REGION_VIEWS: Record<RegionId, readonly TabId[]> = {
-  kr: ['sparklabs', 'portfolio', 'competitor'],
-  tw: ['sparklabs', 'portfolio'],
+  kr: ['portfolio', 'sparklabs', 'competitor'],
+  tw: ['portfolio', 'sparklabs'],
   // 대만과 같은 이유로 업계 모니터링 탭을 만들지 않는다 — competitor 감시대상이
   // 전부 한국 AC·VC라 영구 0건 탭이 된다.
-  gv: ['sparklabs', 'portfolio'],
+  gv: ['portfolio', 'sparklabs'],
 };
 // 지사별 자사 언급을 가려내는 감시 대상 이름 — sparklabs_self는 카테고리가 하나뿐이라
 // 지사를 이 키로 가른다(taiwan-collect.ts의 TW_SELF_NAME과 반드시 같은 값이어야 한다).
@@ -105,17 +105,17 @@ const OVERSEAS_SELF_KEYWORDS = [TW_SELF_KEYWORD, ...GV_SELF_KEYWORDS];
 // 2단 탭 문구 — 같은 tab이라도 국가에 따라 라벨이 달라진다(예: '한국 업계 모니터링').
 const VIEW_LABEL: Record<RegionId, Partial<Record<TabId, string>>> = {
   kr: {
-    sparklabs: '🏢 스파크랩 직접 언급',
     portfolio: '📊 포트폴리오사',
+    sparklabs: '🏢 스파크랩 직접 언급',
     competitor: '🏁 한국 업계 모니터링',
   },
   tw: {
-    sparklabs: '🏢 스파크랩 직접 언급',
     portfolio: '📊 포트폴리오사',
+    sparklabs: '🏢 스파크랩 직접 언급',
   },
   gv: {
-    sparklabs: '🏢 스파크랩 직접 언급',
     portfolio: '📊 포트폴리오사',
+    sparklabs: '🏢 스파크랩 직접 언급',
   },
 };
 // 국가 계층 밖에 있는 탭 — 한국·대만·포폴사·AC·VC·업계동향이 전부 한 통에 들어간 원본
@@ -894,7 +894,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   // 그 국가에 없는 관점으로는 들어갈 수 없게 한다 — ?tab=competitor&country=tw 같은 URL을
   // 그대로 그리면 "대만" 탭 아래에 한국 업계 데이터가 뜬다. 수집 기사 DB는 국가 계층 밖이라 예외.
   const rawTab = resolveTab(searchParams.tab);
-  const tab: TabId = isOutside(rawTab) ? rawTab : clampView(region, rawTab);
+  let tab: TabId = isOutside(rawTab) ? rawTab : clampView(region, rawTab);
   // 대만 자사 언급은 기사가 얇다 — 1개월 창에는 0건이고 3개월에 4건, 전체 14건이다
   // (2026-09-08 실측. 기사가 6월 證交所·Google 협업 발표에 몰려 있다). 1개월만 두면
   // 탭이 항상 비어 보이므로 3개월까지는 고를 수 있게 남긴다. 1년은 여전히 감춘다 —
@@ -903,7 +903,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const range = resolveRange(searchParams);
   const data = await loadDashboardData(range.from, range.to, company, range.isDefaultRange, categoryOfRegion(region), region);
   const session = await getServerSession(authOptions);
-  const canScrap = canScrapEmail(session?.user?.email ?? null);
+  const sessionUser = await getSessionUser();
+  // 미리보기 중이면(authz.ts PREVIEW_COOKIE) role 이 PORTFOLIO — 스크랩도 실제 포트폴리오사 계정처럼 닫는다.
+  const canScrap = canScrapEmail(session?.user?.email ?? null) && sessionUser?.role !== 'PORTFOLIO';
   // 관리 화면(키워드·노이즈·검수) 권한 — 버튼 노출과 페이지 입장이 같은 조건을 봐야 한다(authz.ts canManage).
   const canManageContent = await canManage();
   const pendingSuggestionCount = canManageContent ? await prisma.noiseSuggestion.count({ where: { status: 'PENDING' } }) : 0;
@@ -913,10 +915,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
     ? await prisma.noiseReportRequest.count({ where: { status: 'PENDING' } }).catch(() => 0)
     : 0;
   const userId = (session?.user as any)?.id as string | undefined;
-  const sessionUser = await getSessionUser();
   // 사내 계정(관리자·임직원)인가 — 북마크·노이즈 신고 요청은 쓰기라 사내만 한다.
   // (해당 API 도 requireInternal 로 막혀 있어, 버튼만 보이면 눌러도 실패한다.)
   const isStaffAccount = sessionUser?.role !== 'PORTFOLIO';
+  // 포트폴리오사 화면 — 펀드·노출 순위/급증·KPI '총 수집 기사'·위기 감지·피칭, 그리고
+  // 기사별 중요도·피칭·Exit/Live·논조를 뺀다. 수집 기사 DB는 포트폴리오사 탭 아래에 바로 펼친다.
+  // 사내 계정의 미리보기(authz.ts PREVIEW_COOKIE)도 여기서는 PORTFOLIO 로 들어온다.
+  const portfolioView = !isStaffAccount;
+  // 포트폴리오사 화면엔 업계 모니터링·한국×대만 시너지 탭이 없다 — 주소로 들어와도 포트폴리오사 탭으로 돌린다.
+  // 시너지는 남의 회사 조합까지 다 보여서 뺐고, 그 회사가 낀 조합만 '우리 회사 기사만 모아보기'에 넣는다.
+  if (portfolioView && (tab === 'competitor' || tab === SYNERGY_TAB)) tab = 'portfolio';
   // 관리 화면 링크는 canManageContent(위)로 — 들어갈 수 없는 사람에게 보이면
   // "보이는데 안 되는" 상태가 되고, 그게 아예 안 보이는 것보다 나쁘다.
   const canBookmark = !!userId && isStaffAccount;
@@ -993,7 +1001,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   // 그대로 넘기면 빈 화면이 되고, DB 탭에서 국가를 누른 경우엔 그 국가의 첫 관점으로 들어간다.
   const regionHref = (r: RegionId) => {
     const params = new URLSearchParams({
-      from: range.from, to: range.to, tab: clampView(r, tab), scope,
+      // 국가 탭을 누르면 항상 포트폴리오사부터 보여준다(2026-10-02 소윤 요청).
+      from: range.from, to: range.to, tab: clampView(r, 'portfolio'), scope,
     });
     if (r !== 'kr') params.set('country', r);
     return `/dashboard?${params.toString()}`;
@@ -1058,28 +1067,28 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           </p>
         </div>
         <div data-tour="header-actions" className="flex items-center gap-2">
-          {canScrap && <Link href="/dashboard/scraps" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⭐ {tr('스크랩함')}</Link>}
+          {canScrap && !portfolioView && <Link href="/dashboard/scraps" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⭐ {tr('스크랩함')}</Link>}
           {canBookmark && <Link href="/dashboard/bookmarks" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔖 {tr('내 북마크')}</Link>}
+          {portfolioView && <Link href="/dashboard/company" className="rounded-lg border-2 border-spark-purple bg-spark-purple px-3 py-1.5 text-sm font-bold text-white shadow-sm hover:bg-spark-purple-soft transition-colors whitespace-nowrap">🏢 {tr('우리 회사 기사만 모아보기')}</Link>}
           <Link href="/dashboard/subscriptions" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">✉️ {tr('구독 설정')}</Link>
-          {canManageContent && <Link href="/digest/review" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">📤 {tr('다이제스트 검수')}</Link>}
-          {canManageContent && <Link href="/dashboard/keywords" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⚙️ {tr('키워드 관리')}</Link>}
-          {canManageContent && <Link href="/dashboard/noise-suggestions" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔍 {tr('노이즈 제안')}{(pendingSuggestionCount + pendingReportCount) > 0 ? ` (${pendingSuggestionCount + pendingReportCount})` : ''}</Link>}
+          {canManageContent && !portfolioView && <Link href="/digest/review" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">📤 {tr('다이제스트 검수')}</Link>}
+          {canManageContent && !portfolioView && <Link href="/dashboard/keywords" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⚙️ {tr('키워드 관리')}</Link>}
+          {canManageContent && !portfolioView && <Link href="/dashboard/noise-suggestions" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔍 {tr('노이즈 제안')}{(pendingSuggestionCount + pendingReportCount) > 0 ? ` (${pendingSuggestionCount + pendingReportCount})` : ''}</Link>}
         </div>
       </div>
 
       {scope === 'inter' ? (
         // 기간 선택은 InterPanel 안(국가 필터 바로 위)에서 렌더된다 — 기간·국가를 같이 고르고
         // '확인'을 눌러야 조회되는 흐름이라 두 컨트롤이 한 카드에 있어야 한다.
-        <InterPanel from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())} canScrap={canScrap} />
+        <InterPanel from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())} canScrap={canScrap && !portfolioView} portfolioView={portfolioView} />
       ) : (
       <>
       {/* 섹션 탭 — 국가(1단) × 관점(2단) 2단 계층.
           1단 탭은 아래 흰 카드와 테두리로 이어 붙여(아래쪽 border 제거 + 카드 상단 모서리만
           둥글게) 소속이 눈에 보이게 한다.
-          계층 밖 탭(시너지·수집 기사 DB)은 그 흰 카드 오른쪽 끝, 세로 구분선 뒤에 둔다 —
-          예전엔 1단 탭 줄에 나란히 뒀는데 카드 위 테두리에 딱 붙어서 어디에 속한 버튼인지
-          애매했다(2026-09-08). 카드 안에 넣으면서 "국가와 같은 층이 아니다"는 건
-          구분선과 색으로 표시한다. */}
+          계층 밖 탭 둘은 2026-10-02에 자리를 나눴다 — 수집 기사 DB는 어느 화면에서나 쓰므로
+          1단 줄 오른쪽 끝에 크게 두고, 한국 × 대만 시너지는 실제로 찾는 자리가 대만이라
+          대만 탭의 2단 줄에서만 보여준다. 둘 다 색으로 "관점 탭이 아니다"를 표시한다. */}
       <nav data-tour="intra-tabs" className="mb-6" aria-label={tr('대시보드 섹션')}>
         <div className="flex flex-wrap items-stretch gap-2 sm:flex-nowrap">
           {/* 1단 — 국가 */}
@@ -1101,6 +1110,21 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             );
           })}
           <span className="hidden flex-1 border-b border-spark-border sm:block" aria-hidden="true" />
+          {/* 수집 기사 DB — 국가 계층 밖이지만 가장 자주 쓰는 원본 뷰라 1단 줄 오른쪽 끝에
+              크게 둔다(2026-10-02 소윤 요청. 예전엔 아래 흰 카드 안에 작게 있었다). */}
+          {!portfolioView && (
+            <Link
+              href={tabHref(DB_TAB)}
+              aria-current={tab === DB_TAB ? 'page' : undefined}
+              className={`self-end mb-1 rounded-xl border-2 px-5 py-2.5 text-[15px] font-extrabold whitespace-nowrap shadow-sm transition-colors ${
+                tab === DB_TAB
+                  ? 'bg-blue-600 border-blue-600 text-white'
+                  : 'border-blue-500 bg-blue-50 text-blue-700 hover:bg-blue-100'
+              }`}
+            >
+              {tr(DB_LABEL)}
+            </Link>
+          )}
         </div>
 
         {/* 흰 카드 — 왼쪽은 2단(관점), 오른쪽은 계층 밖 탭.
@@ -1115,7 +1139,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                   : tr('한국·대만 기사가 한 통에 들어간 원본 데이터입니다.')}
               </span>
             ) : (
-              REGION_VIEWS[region].map(v => {
+              REGION_VIEWS[region].filter(v => !(portfolioView && v === 'competitor')).map(v => {
                 const active = v === tab;
                 return (
                   <Link
@@ -1134,31 +1158,23 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
               })
             )}
 
-            {/* 오른쪽 — 계층 밖 탭. 세로 구분선으로 "국가와 같은 층이 아니다"를 표시한다. */}
-            <div className="ml-auto flex items-center gap-2 sm:border-l sm:border-spark-border sm:pl-3">
+            {/* 한국 × 대만 시너지 — 대만 탭에서만 보여준다(2026-10-02 소윤 요청).
+                양국을 잇는 화면이라 어느 국가에도 속하지 않지만, 실제로 찾는 자리는
+                대만 쪽이다. 색을 달리해 2단 관점 버튼과 구분한다. */}
+            {region === 'tw' && !isOutside(tab) && !portfolioView && (
               <Link
                 href={tabHref(SYNERGY_TAB)}
-                aria-current={tab === SYNERGY_TAB ? 'page' : undefined}
-                className={`rounded-xl border-2 px-3 py-1.5 text-[13px] font-extrabold whitespace-nowrap transition-colors ${
-                  tab === SYNERGY_TAB
-                    ? 'bg-violet-600 border-violet-600 text-white shadow-sm'
-                    : 'border-violet-500 bg-violet-50 text-violet-700 hover:bg-violet-100'
-                }`}
+                className="rounded-xl border-2 border-violet-500 bg-violet-50 px-3.5 py-1.5 text-[13px] font-extrabold whitespace-nowrap text-violet-700 transition-colors hover:bg-violet-100"
               >
                 {tr(SYNERGY_LABEL)}
               </Link>
-              <Link
-                href={tabHref(DB_TAB)}
-                aria-current={tab === DB_TAB ? 'page' : undefined}
-                className={`rounded-xl border-2 px-3 py-1.5 text-[13px] font-extrabold whitespace-nowrap transition-colors ${
-                  tab === DB_TAB
-                    ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
-                    : 'border-blue-500 bg-blue-50 text-blue-700 hover:bg-blue-100'
-                }`}
-              >
-                {tr(DB_LABEL)}
-              </Link>
-            </div>
+            )}
+            {tab === SYNERGY_TAB && (
+              <span className="rounded-xl border-2 border-violet-600 bg-violet-600 px-3.5 py-1.5 text-[13px] font-extrabold whitespace-nowrap text-white shadow-sm">
+                {tr(SYNERGY_LABEL)}
+              </span>
+            )}
+
           </div>
 
           {region === 'tw' && !isOutside(tab) && (
@@ -1193,7 +1209,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
       {/* 이슈 급증 배너 + KPI — 경쟁사·시너지 탭 제외 (시너지는 기사 집계와 무관) */}
       {tab !== 'competitor' && tab !== SYNERGY_TAB && (
         <>
-          {data.spikes.length > 0 && (
+          {data.spikes.length > 0 && !portfolioView && (
             <div data-tour="spike-banner" className="mb-6 space-y-2">
               {data.spikes.map(s => <SpikeBanner key={s.company} s={s} />)}
             </div>
@@ -1208,18 +1224,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
               )}
             </div>
           )}
-          <div data-tour="kpi" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {!portfolioView && <div data-tour="kpi" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <KpiCard label={tr('총 수집 기사')} value={data.kpi.total} hint={tr('선택한 기간 내 이 지사에서 수집된 기사 수 (노이즈 제외)')} />
             <KpiCard label={tr('스파크랩 직접 언급')} value={data.kpi.sparklabsCount} hint={tr("기사 제목에 '스파크랩'이 언급된 건수")} />
             <KpiCard label={tr('포트폴리오사 노출')} value={data.kpi.portfolioCount} hint={tr('스파크랩이 투자한 포트폴리오사가 언급된 기사 건수')} />
             <KpiCard label={tr('피칭 기회')} value={data.kpi.pitchCount} hint={tr('이 지사 기사 중 AI가 기획기사 피칭 가능성을 75점 이상으로 평가한 건수')} highlight />
-          </div>
+          </div>}
         </>
       )}
 
       {/* ── 스파크랩 (가장 궁금한 정보) ── */}
       {tab === 'sparklabs' && <>
-      <SectionTitle title={`🏢 ${tr('스파크랩')}`} sub={tr('우리 자사가 어디에, 어떤 논조로 보도되는가')} dbHref={dbHref()} />
+      <SectionTitle title={`🏢 ${tr('스파크랩')}`} sub={tr('우리 자사가 어디에, 어떤 논조로 보도되는가')} dbHref={portfolioView ? undefined : dbHref()} />
       <div className="flex flex-col gap-4 mb-8">
         <div data-tour="media-panel" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
           <div className="font-bold mb-4">📰 {tr('매체별 노출 분포 (스파크랩)')} <InfoTip text={tr("선택 기간 동안 '스파크랩' 기사를 다룬 매체 분포입니다(주요 26개 매체 기준).\n어느 매체가 우리를 가장 많이 써주는지 보여줍니다.")} /></div>
@@ -1233,7 +1249,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         {/* 스파크랩 펀드 현황 — 한국 탭에만 그린다. 펀드 데이터가 한국 법인 기준이라
             대만·글로벌벤처스 탭에 그리면 한국 펀드를 그쪽 펀드인 것처럼 보여주게 된다.
             (글로벌벤처스는 그 자체가 별도 펀드라 더더욱 한국 펀드를 붙이면 안 된다.) */}
-        {region === 'kr' && data.sparkLabsFundSummary && (
+        {region === 'kr' && data.sparkLabsFundSummary && !portfolioView && (
           <div data-tour="fund-panel" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
             <div className="font-bold mb-4">🏦 {tr('스파크랩 펀드 현황')}</div>
             <div className="flex flex-wrap gap-4 mb-4">
@@ -1292,21 +1308,21 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
       {/* ── 포트폴리오사 ── */}
       {tab === 'portfolio' && <>
-      <SectionTitle title={`📊 ${tr('포트폴리오사')}`} sub={tr('어느 포트폴리오사가 활발히 노출되고, 부정 이슈는 없는가')} dbHref={dbHref()} />
+      <SectionTitle title={`📊 ${tr('포트폴리오사')}`} sub={tr('어느 포트폴리오사가 활발히 노출되고, 부정 이슈는 없는가')} dbHref={portfolioView ? undefined : dbHref()} />
 
       {/* 실시간 위기 감지 — 위기 없을 땐 '정상' 상태를 명시해 기능이 살아있음을 표시 */}
-      <div data-tour="crisis-panel" className="mb-6">
+      {!portfolioView && <div data-tour="crisis-panel" className="mb-6">
         <div className="flex items-center gap-2 mb-3">
           <span className="text-sm font-bold text-red-700">🚨 {tr('실시간 위기 감지')}</span>
           <InfoTip text={tr('최근 {days}일간 포트폴리오사별 부정 논조 기사(부정 키워드·부정 톤)를 모아, 2건 이상 급증한 회사를 감지합니다.\n원인은 AI가 실제 기사 제목에서 요약합니다.', { days: CRISIS_WINDOW_DAYS })} />
         </div>
         <CrisisPanel crises={data.crises} overview={data.crisisOverview} windowDays={CRISIS_WINDOW_DAYS} summaryThreshold={CRISIS_SUMMARY_THRESHOLD} />
-      </div>
+      </div>}
 
       {/* 긍정·부정 나란히 (대비가 한눈에) */}
       <div data-tour="pos-neg" className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-        <PortfolioPositives items={data.portfolioPositives} rangeLabel={range.label} locale={locale} dbHref={dbHref()} />
-        <PortfolioNegatives items={data.portfolioNegatives} rangeLabel={range.label} locale={locale} dbHref={dbHref()} />
+        <PortfolioPositives items={data.portfolioPositives} rangeLabel={range.label} locale={locale} dbHref={portfolioView ? undefined : dbHref()} />
+        <PortfolioNegatives items={portfolioView ? data.portfolioNegatives.map(a => ({ ...a, riskFlag: null })) : data.portfolioNegatives} rangeLabel={range.label} locale={locale} dbHref={portfolioView ? undefined : dbHref()} />
       </div>
 
       {/* 포트폴리오 TOP15 → 기획기사 피칭 (위아래 배치)
@@ -1315,6 +1331,25 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           깨졌다: 대만 포트폴리오 기사 143건 전부 pitchScore가 붙어 있고 75점 이상만
           112건이다(2026-09-22 실측). 분석 파이프라인이 그사이 대만까지 커버하게 됐다.
           카테고리를 안 가르던 쿼리도 같이 고쳤으므로 이제 대만 탭엔 대만 기사가 뜬다. */}
+      {portfolioView ? (
+        <div data-tour="article-table" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card mt-6 mb-8">
+          <div className="mb-4">
+            <div className="font-bold">🗄️ {tr('수집 기사 DB')}</div>
+            <div className="text-xs text-gray-500 mt-0.5">{tr('{range} · 분류·검색·정렬로 탐색', { range: range.label })}</div>
+          </div>
+          <ArticleListView
+            hideCounts
+            articles={articlesWithBookmark.map(({ importance, tone, pitchScore, portfolioStatus, ...a }: any) => ({ ...a, importance: null, tone: null, pitchScore: null })) as any}
+            canBookmark={canBookmark}
+            showSearch={true}
+            showCategory={true}
+            showPitchColumn={false}
+            showInternal={false}
+            csvName={tr('최근수집기사')}
+            emptyText={tr('{range} 내 기사가 없습니다.', { range: range.label })}
+          />
+        </div>
+      ) : (
       <div className="grid grid-cols-1 gap-4 mb-8">
         <div data-tour="top15" className="relative">
           <div className="absolute right-5 top-5 z-10"><DbLink href={dbHref()} label="전체 기사" /></div>
@@ -1339,6 +1374,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           )}
         </div>
       </div>
+      )}
       </>}
 
       {/* 경쟁사 모니터링 — Tier1 직접 경쟁 액셀러레이터 언급량·최근 이슈 */}

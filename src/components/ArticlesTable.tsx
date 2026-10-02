@@ -75,7 +75,8 @@ function TitleOnlyBadge({ t }: { t: Translate }) {
 
 // showPitchColumn: 피칭 점수는 본부의 영업 판단이라 포트폴리오사 화면에서는 끈다.
 // 끄지 않으면 값이 늘 '—'인 빈 칸만 남아, 무엇을 숨기고 있는지가 오히려 드러난다.
-export function ArticlesTable({ articles, canScrap = false, canBookmark = false, canReport = false, canRequestReport = false, emptyText, showCategoryColumn = true, showKeywordColumn = false, showPitchColumn = true }: { articles: Article[]; canScrap?: boolean; canBookmark?: boolean; canReport?: boolean; canRequestReport?: boolean; emptyText?: string; showCategoryColumn?: boolean; showKeywordColumn?: boolean; showPitchColumn?: boolean }) {
+// showInternal: 중요도·Exit/Live 상태·기사별 논조 점 — 우리 판단이라 포트폴리오사 화면에서는 끈다.
+export function ArticlesTable({ articles, canScrap = false, canBookmark = false, canReport = false, canRequestReport = false, emptyText, showCategoryColumn = true, showKeywordColumn = false, showPitchColumn = true, showInternal = true }: { articles: Article[]; canScrap?: boolean; canBookmark?: boolean; canReport?: boolean; canRequestReport?: boolean; emptyText?: string; showCategoryColumn?: boolean; showKeywordColumn?: boolean; showPitchColumn?: boolean; showInternal?: boolean }) {
   const t = useT();
   const locale = useLocale();
   if (articles.length === 0) {
@@ -99,11 +100,11 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
   return (
     <>
       {/* 톤 범례 */}
-      <div className="flex items-center gap-3 mb-2 text-[11px] text-gray-500">
+      {showInternal && <div className="flex items-center gap-3 mb-2 text-[11px] text-gray-500">
         <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-green-500" />{t('긍정')}</span>
         <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-red-500" />{t('부정')}</span>
         <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-gray-400" />{t('중립')}</span>
-      </div>
+      </div>}
 
       {/* 데스크톱 테이블 (md 이상) */}
       <div className="hidden md:block overflow-x-auto">
@@ -116,10 +117,10 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
               {showCategoryColumn && <th className="text-left px-3 py-2 w-24">{t('분류')}</th>}
               {showKeywordColumn && <th className="text-left px-3 py-2 w-28">{t('키워드')}</th>}
               {hasCompanyName && <th className="text-left px-3 py-2 w-28">{t('회사명')}</th>}
-              {hasCompanyName && <th className="text-left px-3 py-2 w-16">{t('상태')}</th>}
+              {hasCompanyName && showInternal && <th className="text-left px-3 py-2 w-16">{t('상태')}</th>}
               <th className="text-left px-3 py-2">{t('제목')}</th>
               <th className="text-left px-3 py-2 w-28">{t('매체')}</th>
-              <th className="text-center px-3 py-2 w-16">{t('중요도')}</th>
+              {showInternal && <th className="text-center px-3 py-2 w-16">{t('중요도')}</th>}
               {showPitchColumn && <th className="text-center px-3 py-2 w-16">{t('피칭')}</th>}
               {(canReport || canRequestReport) && <th className="text-center px-2 py-2 w-8 border-l border-spark-border" title={canReport ? t('노이즈 신고(관리자)') : t('노이즈 신고 요청')}>🚫</th>}
             </tr>
@@ -138,10 +139,10 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
                   {showCategoryColumn && <td className="px-3 py-3"><span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${cat.cls}`}>{t(cat.label)}</span></td>}
                   {showKeywordColumn && <td className="px-3 py-3 text-xs text-gray-600 whitespace-nowrap">{t(a.matchedKeyword)}</td>}
                   {hasCompanyName && <td className="px-3 py-3 text-xs font-medium text-gray-800 whitespace-nowrap">{t(a.companyName ?? a.matchedKeyword)}</td>}
-                  {hasCompanyName && <td className="px-3 py-3">{statusCls ? <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${statusCls}`}>{a.portfolioStatus}</span> : <span className="text-gray-300 text-xs">—</span>}</td>}
+                  {hasCompanyName && showInternal && <td className="px-3 py-3">{statusCls ? <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${statusCls}`}>{a.portfolioStatus}</span> : <span className="text-gray-300 text-xs">—</span>}</td>}
                   <td className="px-3 py-3">
                     <span className="flex items-center gap-2">
-                      <ToneDot tone={a.tone} />
+                      {showInternal && <ToneDot tone={a.tone} />}
                       {hasRealLink(a.link) ? (
                         <a href={a.link} target="_blank" rel="noopener noreferrer" className="hover:text-spark-purple">{articleTitle(a, locale)}</a>
                       ) : (
@@ -175,7 +176,7 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
                     )}
                   </td>
                   <td className="px-3 py-3 text-xs text-gray-600">{t(a.source)}{others.length > 0 && ` ${t('외 {n}', { n: others.length })}`}</td>
-                  <td className={`px-3 py-3 text-center text-xs ${IMP_STYLE[a.importance ?? 'LOW']}`}>{a.importance === 'HIGH' || a.importance === 'CRITICAL' ? t('높음') : a.importance === 'MEDIUM' ? t('중') : t('낮음')}</td>
+                  {showInternal && <td className={`px-3 py-3 text-center text-xs ${IMP_STYLE[a.importance ?? 'LOW']}`}>{a.importance === 'HIGH' || a.importance === 'CRITICAL' ? t('높음') : a.importance === 'MEDIUM' ? t('중') : t('낮음')}</td>}
                   {showPitchColumn && <td className="px-3 py-3 text-center text-xs font-bold text-amber-700">{a.pitchScore && a.pitchScore >= 60 ? a.pitchScore : '—'}</td>}
                   {(canReport || canRequestReport) && (
                     <td className="px-2 py-3 text-center border-l border-spark-border">
@@ -204,7 +205,7 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
                   {showCategoryColumn && <span className={`px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${cat.cls}`}>{t(cat.label)}</span>}
                   {showKeywordColumn && <span className="text-xs text-gray-600">{t(a.matchedKeyword)}</span>}
                   {a.companyName && <span className="text-xs font-medium text-gray-800">{t(a.companyName)}</span>}
-                  {statusCls && <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${statusCls}`}>{a.portfolioStatus}</span>}
+                  {showInternal && statusCls && <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${statusCls}`}>{a.portfolioStatus}</span>}
                   <span className="text-xs text-gray-500 whitespace-nowrap">{date.getMonth() + 1}/{date.getDate()}</span>
                 </div>
                 {(canScrap || canBookmark) && (
@@ -218,12 +219,12 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
               {/* 제목 */}
               {hasRealLink(a.link) ? (
                 <a href={a.link} target="_blank" rel="noopener noreferrer" className="flex items-start gap-2 text-sm font-medium text-gray-900 hover:text-spark-purple mb-2">
-                  <ToneDot tone={a.tone} />
+                  {showInternal && <ToneDot tone={a.tone} />}
                   <span className="line-clamp-2">{articleTitle(a, locale)}</span>
                 </a>
               ) : (
                 <a href={searchFallbackUrl(a.title, a.source)} target="_blank" rel="noopener noreferrer" title={t('원문 링크를 찾지 못해 검색 결과로 연결합니다.')} className="flex items-start gap-2 text-sm font-medium text-gray-900 hover:text-spark-purple mb-2">
-                  <ToneDot tone={a.tone} />
+                  {showInternal && <ToneDot tone={a.tone} />}
                   <span className="line-clamp-2">{articleTitle(a, locale)} 🔍</span>
                 </a>
               )}
@@ -258,7 +259,7 @@ export function ArticlesTable({ articles, canScrap = false, canBookmark = false,
               <div className="flex items-center justify-between gap-2 text-xs text-gray-600">
                 <span className="truncate">{t(a.source)}{others.length > 0 && ` ${t('외 {n}', { n: others.length })}`}</span>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                  {(a.importance === 'HIGH' || a.importance === 'CRITICAL') && <span className={IMP_STYLE[a.importance]}>{t('높')}</span>}
+                  {showInternal && (a.importance === 'HIGH' || a.importance === 'CRITICAL') && <span className={IMP_STYLE[a.importance]}>{t('높')}</span>}
                   {showPitchColumn && a.pitchScore && a.pitchScore >= 60 && <span className="text-amber-700 font-bold">{t('{n}점', { n: a.pitchScore })}</span>}
                   {(canReport || canRequestReport) && (
                     <span className="pl-1.5 ml-0.5 border-l border-spark-border">

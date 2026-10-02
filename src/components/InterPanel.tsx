@@ -25,6 +25,7 @@ import {
   type SectorBlock,
 } from '@/lib/inter-sample-data';
 import { InterScrapStar } from '@/components/InterScrapStar';
+import { InterCompanyMatchRow } from '@/components/InterCompanyMatch';
 import { InterBriefingModal, type BriefingPayload } from '@/components/InterBriefingModal';
 import { DateRangePicker } from '@/components/DateRangePicker';
 import { SignalBanner } from '@/components/SignalBanner';
@@ -92,9 +93,11 @@ function fmtKstTime(d: Date | string) {
   return `${String(kst.getHours()).padStart(2, '0')}:${String(kst.getMinutes()).padStart(2, '0')}`;
 }
 
+// portfolioView: 포트폴리오사 화면 — 포트폴리오 매칭(회사·사유·브리핑)과 건수 지표를 전부 빼고
+// 기사만 남긴다. 회사별 매칭은 /dashboard/company(회사별 기사 모아보기)로 옮겨 갔다.
 export function InterPanel({
-  from, to, min, max, canScrap,
-}: { from: string; to: string; min: string; max: string; canScrap: boolean }) {
+  from, to, min, max, canScrap, portfolioView = false,
+}: { from: string; to: string; min: string; max: string; canScrap: boolean; portfolioView?: boolean }) {
   const t = useT();
   const router = useRouter();
   const sp = useSearchParams();
@@ -221,7 +224,7 @@ export function InterPanel({
           따로 있을 땐 둘 다 같은 무게로 나열돼 "그래서 오늘 뭘 봐야 하나"에 답을 못 했다.
           지금은 가장 중요한 한 건을 크게 두고, 커뮤니티 랭킹을 옆에 세운다. */}
       <div data-tour="inter-now" className="mb-6">
-        <SignalBanner domain={domain} />
+        <SignalBanner domain={domain} hidePortfolio={portfolioView} />
       </div>
 
       {/* 조회 조건 — 기간·국가를 고른 뒤 '확인'을 눌러야 조회된다(클릭마다 화면이 새로 뜨지 않게) */}
@@ -259,7 +262,7 @@ export function InterPanel({
                   }`}
                 >
                   {t(c.label)}
-                  {c.id !== 'all' && n !== undefined && <span className="ml-1 opacity-70 tabular-nums">{n}</span>}
+                  {!portfolioView && c.id !== 'all' && n !== undefined && <span className="ml-1 opacity-70 tabular-nums">{n}</span>}
                 </button>
               );
             })}
@@ -290,26 +293,33 @@ export function InterPanel({
       ) : (
         <>
           {/* 헤드라인 4지표 — 매트릭스를 읽는 데 필요한 값들(총량·증감, 가장 뜨거운 칸, 포트폴리오 접점) */}
-          <div data-tour="inter-headline">
-            <HeadlineStats headline={data.matrix.headline} />
-          </div>
+          {/* 포트폴리오사 화면엔 건수 지표·매트릭스·인사이트(포트폴리오 매치 기반)를 두지 않는다 */}
+          {/* 포트폴리오사 화면엔 헤드라인 지표(포트폴리오 접점 포함)를
+              두지 않는다. 매트릭스·인사이트 패널은 남기되, 포트폴리오 매치에서 나온 부분만 뺀다. */}
+          {!portfolioView && (
+            <div data-tour="inter-headline">
+              <HeadlineStats headline={data.matrix.headline} />
+            </div>
+          )}
 
           {/* 주제×사건유형 매트릭스 + 인사이트 패널 2분할 */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
             <SectorMatrix
               matrix={data.matrix}
               canScrap={canScrap}
+              hideMatches={portfolioView}
               onSelect={topicKey => focusSector(`sec-${topicKey}`)}
             />
             <InsightPanel
               sectors={data.sectors}
               overview={data.overview}
               onSelect={focusSector}
+              hideMatches={portfolioView}
             />
           </div>
 
           {/* AI 요약 — 위 매트릭스의 숫자를 그대로 되풀이하지 않고, 그래서 뭘 해야 하는지로 마무리 */}
-          <ColoredSummaryCard summary={data.summary} overview={data.overview} />
+          <ColoredSummaryCard summary={data.summary} overview={data.overview} trendOnly={portfolioView} />
 
           {/* 분야별 카드 — 급한 순(급증→기회→주요→조용)으로 위아래 배치.
               2열로 나눠봤더니 카드마다 탭·매치 목록이 들어가 좌우로 눈이 튀어 읽기 어려웠다(2026-08-06).
@@ -339,7 +349,8 @@ export function InterPanel({
                   },
                 }}
                 highlighted={highlighted === s.id}
-                activeTab={activeSrcTab[s.id] ?? 'reason'}
+                portfolioView={portfolioView}
+                activeTab={activeSrcTab[s.id] ?? (portfolioView ? 'news' : 'reason')}
                 onTabChange={t => setActiveSrcTab(prev => ({ ...prev, [s.id]: t }))}
               />
             ))}
@@ -406,11 +417,13 @@ function SectorCard({
   highlighted,
   activeTab,
   onTabChange,
+  portfolioView = false,
 }: {
   sector: SectorBlock;
   canScrap: boolean;
   briefingCtx: BriefingCtx;
   highlighted: boolean;
+  portfolioView?: boolean;
   activeTab: CardTab;
   onTabChange: (t: CardTab) => void;
 }) {
@@ -430,9 +443,9 @@ function SectorCard({
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <div className="flex items-center gap-1.5 whitespace-nowrap">
-            <span className="text-[15px] font-bold tabular-nums text-spark-ink">
+            {!portfolioView && <span className="text-[15px] font-bold tabular-nums text-spark-ink">
               {sector.metrics.count}<span className="text-[12px] font-normal text-spark-muted">{t('건')}</span>
-            </span>
+            </span>}
             {/* comparable을 넘기지 않는다 — 섹터 증감률은 점유율 기준이라 수집량이 기간마다
                 달라도 비교가 성립한다(inter-sample-data.ts의 shareDeltaPct).
                 아래 전체 건수 카드는 원래대로 comparable을 넘긴다: 건수 총량을 수집 경계
@@ -447,21 +460,21 @@ function SectorCard({
 
       {/* 하위 탭 — 판정 근거 / 기사 / 논문 / 오피니언 */}
       <div className="mb-3 flex border-b border-spark-border">
-        <TabButton active={activeTab === 'reason'} onClick={() => onTabChange('reason')}>
+        {!portfolioView && <TabButton active={activeTab === 'reason'} onClick={() => onTabChange('reason')}>
           {t('{badge} 판정 근거', { badge: t(sector.badge.label) })}
           {sector.matches.length > 0 && <span className="ml-1 tabular-nums opacity-70">{sector.metrics.matchCount}</span>}
-        </TabButton>
+        </TabButton>}
         {SOURCE_KINDS.map(k => (
           <TabButton key={k} active={activeTab === k} onClick={() => onTabChange(k)}>
-            {t(SRC_LABEL[k])} <span className="tabular-nums opacity-70">{sector.items[k].length}</span>
+            {t(SRC_LABEL[k])} {!portfolioView && <span className="tabular-nums opacity-70">{sector.items[k].length}</span>}
           </TabButton>
         ))}
       </div>
 
-      {activeTab === 'reason' ? (
+      {activeTab === 'reason' && !portfolioView ? (
         <ReasonTab sector={sector} canScrap={canScrap} briefingCtx={briefingCtx} />
       ) : (
-        <SourceList items={sector.items[activeTab]} canScrap={canScrap} />
+        <SourceList items={sector.items[activeTab === 'reason' ? 'news' : activeTab]} canScrap={canScrap} />
       )}
     </div>
   );
@@ -486,7 +499,6 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 // 회사를 누르면 그 회사가 걸린 기사들이 펼쳐진다(어느 기사 때문에 걸렸는지 + 판정 과정).
 function ReasonTab({ sector, canScrap, briefingCtx }: { sector: SectorBlock; canScrap: boolean; briefingCtx: BriefingCtx }) {
   const t = useT();
-  const [openCo, setOpenCo] = useState<string | null>(null);
   // 브리핑 모달을 띄울 회사. 회사가 바뀌면 key로 새로 마운트돼 다시 생성된다.
   const [briefingCo, setBriefingCo] = useState<string | null>(null);
 
@@ -505,84 +517,14 @@ function ReasonTab({ sector, canScrap, briefingCtx }: { sector: SectorBlock; can
             <span className="text-spark-muted">· {t('{n}개사', { n: sector.matches.length })} · {t('회사를 누르면 연결된 기사가 열립니다')}</span>
           </div>
           <div className="flex max-h-80 flex-col gap-1.5 overflow-y-auto scroll-slim pr-1">
-            {sector.matches.map(m => {
-              const open = openCo === m.co;
-              return (
-                <div key={m.co} className={`rounded-lg border ${open ? 'border-emerald-300 bg-emerald-50/40' : 'border-spark-cream'}`}>
-                  {/* 회사 줄 — 펼치기 버튼과 '브리핑 생성'은 형제로 둔다(버튼 안에 버튼을 넣을 수 없다) */}
-                  <div className="flex items-center gap-2 px-2.5 py-2">
-                    <button
-                      type="button"
-                      onClick={() => setOpenCo(open ? null : m.co)}
-                      aria-expanded={open}
-                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                    >
-                      <span className="text-[13px] font-bold text-spark-ink">{t(m.co)}</span>
-                      <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-emerald-700">
-                        {t('기사')} {m.articles.length}
-                      </span>
-                    </button>
-                    {/* 브리핑은 포폴사 대표에게 나갈 문서라 스크랩(별표)과 같은 권한으로 제한한다 */}
-                    {canScrap && (
-                      <button
-                        type="button"
-                        onClick={() => setBriefingCo(m.co)}
-                        title={t('{co}에 보낼 브리핑을 만듭니다 — 매칭 이유 요약 + 업계 동향', { co: m.co })}
-                        className="shrink-0 rounded-md border border-emerald-300 bg-white px-2 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50"
-                      >
-                        ✉ {t('브리핑 생성')}
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setOpenCo(open ? null : m.co)}
-                      aria-expanded={open}
-                      aria-label={open ? t('기사 접기') : t('기사 펼치기')}
-                      className={`shrink-0 text-[11px] text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
-                    >
-                      ▼
-                    </button>
-                  </div>
-
-                  {!open && (
-                    <p className="px-2.5 pb-2 text-[12px] leading-relaxed text-spark-ink-soft line-clamp-2">{m.desc}</p>
-                  )}
-
-                  {open && (
-                    <div className="border-t border-emerald-200/60 px-2.5 py-2">
-                      {/* 매칭 과정 — 실제 파이프라인에 들어간 입력과 모델을 그대로 적는다 */}
-                      <p className="mb-2 rounded bg-white/70 px-2 py-1.5 text-[11px] leading-relaxed text-spark-muted">
-                        <b className="text-spark-ink-soft">{t('매칭 과정')}</b> · {t('기사 제목과 관련성 판정 사유를, 포트폴리오사의 사업 설명·섹터와 비교해 영향이 있다고 본 것만 남깁니다')}
-                        (<span className="font-mono">{m.model}</span>).
-                      </p>
-
-                      <div className="flex flex-col gap-2">
-                        {m.articles.map(a => (
-                          <div key={`${a.id}-${a.reason.slice(0, 12)}`} className="rounded border border-spark-cream bg-white px-2 py-1.5">
-                            <div className="flex items-start gap-2">
-                              <a href={a.url} target="_blank" rel="noopener noreferrer" className="group min-w-0 flex-1">
-                                <div className="text-[12px] font-semibold leading-snug text-spark-ink group-hover:text-emerald-700">{a.title}</div>
-                                <div className="mt-0.5 text-[11px] text-spark-muted">
-                                  {t(a.media)} · {a.date}
-                                  {a.eventKey && <> · {a.eventKey}</>}
-                                </div>
-                              </a>
-                              {canScrap && <InterScrapStar id={a.id} initial={a.isScrapped} />}
-                            </div>
-                            <p className="mt-1 border-t border-spark-cream pt-1 text-[11px] leading-relaxed text-spark-ink-soft">
-                              <b className="text-emerald-700">{t('왜 {co}?', { co: m.co })}</b> {a.reason}
-                            </p>
-                            <p className="mt-0.5 text-[11px] leading-relaxed text-spark-muted">
-                              <b>{t('기사 분류')}</b> {a.verdictReason}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {sector.matches.map(m => (
+              <InterCompanyMatchRow
+                key={m.co}
+                match={m}
+                canScrap={canScrap}
+                onBriefing={() => setBriefingCo(m.co)}
+              />
+            ))}
           </div>
         </div>
       ) : (
@@ -753,7 +695,7 @@ function ColoredSummaryItem({ n, k, v, chips, last }: { n: number; k: string; v:
 
 // 3줄 요약 — AI가 쓴 서술 문장은 그대로 두되, 그 밑에 실제 집계값 칩(증감률·매치 기업)을 색깔로 붙여
 // 문장이 숫자로 뒷받침된다는 걸 한눈에 보여준다.
-function ColoredSummaryCard({ summary, overview }: { summary: DomainSummary; overview: InterOverview }) {
+function ColoredSummaryCard({ summary, overview, trendOnly = false }: { summary: DomainSummary; overview: InterOverview; trendOnly?: boolean }) {
   const t = useT();
   const top = overview.topSectors[0];
   return (
@@ -762,6 +704,10 @@ function ColoredSummaryCard({ summary, overview }: { summary: DomainSummary; ove
         ✦ <span>{t('{label} 종합 요약', { label: t(summary.label) })}</span>
         <span className="ml-auto text-[11px] font-medium normal-case text-spark-muted">{t('집계값 + AI 한 줄 · {domain} 기준', { domain: t(overview.domainLabel) })}</span>
       </div>
+      {trendOnly ? (
+        // 포트폴리오사 화면 — 트렌드 한 줄만. '스파크랩의 포지션'·'액션'은 포트폴리오 매치에서 나온 내부 판단이다.
+        <ColoredSummaryItem n={1} k={t('트렌드 1줄 요약')} v={summary.trend} last />
+      ) : <>
       <ColoredSummaryItem
         n={1}
         k={t('트렌드 1줄 요약')}
@@ -780,6 +726,7 @@ function ColoredSummaryCard({ summary, overview }: { summary: DomainSummary; ove
         chips={overview.topCompanies.slice(0, 4).map(c => ({ label: `📎 ${c.name} ${c.count}`, cls: 'bg-emerald-50 text-emerald-700' }))}
       />
       <ColoredSummaryItem n={3} k={t('취해야 할 가장 중요한 액션')} v={summary.action} last />
+      </>}
       <div className="mt-2 text-[11px] text-gray-400">
         {summary.source === 'fallback'
           ? t('⚙️ 기본 요약 · AI 분석 대기 중(다음 수집 때 자동 갱신)')
@@ -896,10 +843,12 @@ function SectorMatrix({
   matrix,
   canScrap,
   onSelect,
+  hideMatches = false,
 }: {
   matrix: InterMatrix;
   canScrap: boolean;
   onSelect: (topicKey: string) => void;
+  hideMatches?: boolean;
 }) {
   const t = useT();
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -988,7 +937,7 @@ function SectorMatrix({
           </div>
           <p className="text-[12px] leading-snug text-spark-ink-soft">{active.badge.why}</p>
 
-          {active.matchedCompanies.length > 0 && (
+          {!hideMatches && active.matchedCompanies.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {active.matchedCompanies.slice(0, 5).map(co => (
                 <span key={co} className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">📎 {t(co)}</span>
@@ -1015,7 +964,7 @@ function SectorMatrix({
         </div>
       ) : (
         <p className="mt-3 text-[12px] text-spark-muted">
-          {t('칸을 누르면 그 조합의 판정 근거·포트폴리오 매치·대표 기사가 여기에 열립니다.')}
+          {hideMatches ? t('칸을 누르면 그 조합의 판정 근거와 대표 기사가 여기에 열립니다.') : t('칸을 누르면 그 조합의 판정 근거·포트폴리오 매치·대표 기사가 여기에 열립니다.')}
         </p>
       )}
 
@@ -1034,10 +983,13 @@ function InsightPanel({
   sectors,
   overview,
   onSelect,
+  hideMatches = false,
 }: {
   sectors: SectorBlock[];
   overview: InterOverview;
   onSelect: (id: string) => void;
+  /** 포트폴리오사 화면 — '우리 위치'·'액션'·'가장 많이 걸린 포트폴리오사'(전부 매치 기반)를 뺀다. */
+  hideMatches?: boolean;
 }) {
   const t = useT();
   const withData = sectors.filter(s => s.metrics.count > 0);
@@ -1072,7 +1024,7 @@ function InsightPanel({
               t('이 기간·조건에서 두드러진 분야가 없습니다.')
             )}
           </InsightRow>
-          <InsightRow k={t('우리 위치')}>
+          {!hideMatches && <InsightRow k={t('우리 위치')}>
             {topMatch && topMatch.metrics.matchCount > 0 ? (
               <>
                 {t('가장 큰 매치는')} <b className="text-spark-ink">{t(topMatch.name)}</b> — {t('매치 {n}건, {c}개사가 걸려 있습니다.', { n: topMatch.metrics.matchCount, c: topMatch.metrics.matchedCompanies.length })}
@@ -1080,7 +1032,7 @@ function InsightPanel({
             ) : (
               t('이 기간 포트폴리오와 직접 연결된 매치가 없습니다.')
             )}
-          </InsightRow>
+          </InsightRow>}
           <InsightRow k={t('놓치기 쉬운 곳')}>
             {sneaky ? (
               <>
@@ -1090,7 +1042,7 @@ function InsightPanel({
               t('눈에 띄게 예외적인 분야는 없습니다.')
             )}
           </InsightRow>
-          <InsightRow k={t('액션')}>
+          {!hideMatches && <InsightRow k={t('액션')}>
             {topMatch && topMatch.metrics.matchCount > 0 ? (
               <>
                 <b className="text-spark-ink">{t(topMatch.name)}</b> {t('매치 기업들의 최신 기사부터 확인하세요.')}{' '}
@@ -1101,11 +1053,11 @@ function InsightPanel({
             ) : (
               t('아직 특정할 액션이 없습니다 — 데이터가 더 쌓이면 갱신됩니다.')
             )}
-          </InsightRow>
+          </InsightRow>}
         </div>
       </div>
 
-      {overview.topCompanies.length > 0 && (
+      {!hideMatches && overview.topCompanies.length > 0 && (
         <div className="border-t border-spark-cream pt-3.5">
           <div className="text-[12px] font-bold text-spark-ink-soft mb-2">📎 {t('가장 많이 걸린 포트폴리오사')}</div>
           <div className="flex flex-col gap-1.5">
