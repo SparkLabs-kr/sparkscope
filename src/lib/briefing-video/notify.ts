@@ -99,12 +99,14 @@ async function postJandi(url: string, msg: JandiMessage): Promise<void> {
 }
 
 /**
- * 연결·형식 확인용 테스트 — 오늘 추천 헤드라인으로 실제와 같은 형식을 보낸다(맨 위에 [테스트] 표시).
+ * 연결·형식 확인용 테스트(데일리 방으로만) — 오늘 추천 헤드라인으로 실제와 같은 형식을 보낸다(맨 위에 [테스트] 표시).
  * 오늘 발송 기록(briefing_notified)은 남기지 않는다.
  */
 export async function sendJandiTest(baseUrl: string): Promise<void> {
-  const next = broadcastFor(); // 다음 방송(월=위클리, 수·금=데일리)의 방·형식으로
-  const url = webhookFor(next.program === 'weekly');
+  // 형식은 다음 방송(월=위클리, 수·금=데일리)을 따르되, 보내는 방은 항상 데일리 방이다 —
+  // 위클리 방은 실제 방이라 테스트 메시지를 올리면 안 된다(2026-10-02 소윤).
+  const next = broadcastFor();
+  const url = process.env.JANDI_WEBHOOK_URL;
   if (!url) throw new Error('JANDI_WEBHOOK_URL 이 설정돼 있지 않습니다(Vercel 환경변수 + 재배포 확인)');
   const dateKey = next.dateKey;
   const { getBriefingRecommendation } = await import('../sparkscope/briefing-reco');
