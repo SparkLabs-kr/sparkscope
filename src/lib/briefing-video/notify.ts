@@ -1,7 +1,8 @@
 /**
  * 브리핑 알림 — 잔디 Incoming Webhook으로 토픽에 링크를 보낸다(월·수·금 09:45 — 09:30 메일 뒤, 못 보냈으면 10:15). 월요일은 위클리, 수·금은 데일리.
  *
- * 잔디 웹훅 주소(JANDI_WEBHOOK_URL)는 토픽 관리자가 잔디 토픽 → 커넥트 → Incoming Webhook에서
+ * 잔디 웹훅 주소 — 데일리는 JANDI_WEBHOOK_URL, 위클리(월)는 JANDI_WEBHOOK_URL_WEEKLY(2026-10-02, 방을 따로 쓰려고).
+ * 위클리 주소가 비어 있으면 데일리 주소로 보낸다(안 나가는 것보다 낫다). 주소는 토픽 관리자가 잔디 토픽 → 커넥트 → Incoming Webhook에서
  * 발급한다. 주소만 있으면 누구나 그 토픽에 글을 쓸 수 있으므로 Vercel 환경변수로만 둔다.
  * 없으면 보내지 않고 기록만 남긴다(다른 파이프라인은 그대로 돈다).
  *
@@ -31,9 +32,9 @@ export async function notifyBriefing(opts: { final: boolean; baseUrl: string }):
   const weekly = (video?.program ?? snap?.program) === 'weekly';
   if (headlines.length === 0) return { status: 'nothing-to-send' };
 
-  const url = process.env.JANDI_WEBHOOK_URL;
+  const url = webhookFor(weekly);
   if (!url) {
-    console.warn('[briefing-notify] JANDI_WEBHOOK_URL 없음 — 잔디 전송 건너뜀');
+    console.warn('[briefing-notify] 잔디 웹훅 주소 없음 — 잔디 전송 건너뜀');
     return { status: 'no-webhook' };
   }
 
@@ -84,6 +85,10 @@ export function briefingMessage(m: { dateKey: string; weekly?: boolean; titles: 
   };
 }
 
+function webhookFor(weekly: boolean): string | undefined {
+  return (weekly && process.env.JANDI_WEBHOOK_URL_WEEKLY) || process.env.JANDI_WEBHOOK_URL;
+}
+
 async function postJandi(url: string, msg: JandiMessage): Promise<void> {
   const r = await fetch(url, {
     method: 'POST',
@@ -98,9 +103,9 @@ async function postJandi(url: string, msg: JandiMessage): Promise<void> {
  * 오늘 발송 기록(briefing_notified)은 남기지 않는다.
  */
 export async function sendJandiTest(baseUrl: string): Promise<void> {
-  const url = process.env.JANDI_WEBHOOK_URL;
+  const next = broadcastFor(); // 다음 방송(월=위클리, 수·금=데일리)의 방·형식으로
+  const url = webhookFor(next.program === 'weekly');
   if (!url) throw new Error('JANDI_WEBHOOK_URL 이 설정돼 있지 않습니다(Vercel 환경변수 + 재배포 확인)');
-  const next = broadcastFor(); // 다음 방송(월=위클리, 수·금=데일리) 형식으로
   const dateKey = next.dateKey;
   const { getBriefingRecommendation } = await import('../sparkscope/briefing-reco');
   const snapshot = await loadBriefingSnapshot(dateKey);

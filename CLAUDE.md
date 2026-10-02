@@ -95,7 +95,7 @@ GitHub `schedule`은 예약보다 2~3시간 늦게 시작한다(9/11~9/28 실측
 | 월·수·금 10:15 | Vercel `/api/cron/briefing-notify?final=1` | 못 보냈으면 영상 없이 헤드라인이라도 전송 |
 
 - 필요한 설정: Vercel `GITHUB_DISPATCH_TOKEN`(이 저장소 Actions 쓰기 권한 fine-grained 토큰 — 이수 관리),
-  `JANDI_WEBHOOK_URL` / GitHub 시크릿 `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`.
+  `JANDI_WEBHOOK_URL`(데일리 방), `JANDI_WEBHOOK_URL_WEEKLY`(위클리 방 — 비면 데일리 방으로) / GitHub 시크릿 `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`.
 - 토큰이 없으면 Vercel dispatch가 안 된다. 그 대비로 예비 schedule 수집이 실제로 돈 월·수·금엔
   `daily-collect.yml`의 `briefing` 작업이 이어서 브리핑 워크플로를 부른다(workflow_call). 오늘 영상이
   이미 있으면 `wait-for-briefing.ts`가 건너뛰어 두 번 만들지 않는다.
