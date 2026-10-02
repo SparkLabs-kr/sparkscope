@@ -36,7 +36,9 @@ export type FilterReason = 'exclude_word' | 'ad_noise' | 'sports_ad' | 'irreleva
 // 2026-09-28 실측 60일 11건. 제목이 "발언하는 김정관 장관", "기념촬영하는 …",
 // "키캡 굿즈 들고 찰칵…" 같은 사진 설명이고 본문이 두세 줄뿐이라, 읽는 사람에게는
 // 내용 없는 기사로 보인다(소윤 지적: "2-3줄밖에 없는 뻥기사").
-const URL_EXCLUDE = ['/sports/', '/baseball/', '/soccer/', '/game/', '/entertain/', '/photo/', '/photos/', '/issue/'];
+// 'image_popup' — 전자신문 사진 확대 창(etnews.com/tools/image_popup.html)이 기사로 수집돼, 사진 설명
+// "(왼쪽부터)노지향 … 공동대표"가 10/2 데일리 브리핑 제목으로 나갔다(2026-10-02 소윤 지적).
+const URL_EXCLUDE = ['/sports/', '/baseball/', '/soccer/', '/game/', '/entertain/', '/photo/', '/photos/', '/issue/', 'image_popup'];
 // 스포츠 전문 매체 (26개 확정 매체엔 없지만 안전망)
 const SPORTS_MEDIA = ['스포츠서울', '스포츠경향', 'OSEN', '일간스포츠', '스포츠동아', '스포츠조선', '스포탈코리아', '엑스포츠뉴스', 'MHN스포츠'];
 // 야구/스포츠·체육 용어 (제목 포함 시 제외)
@@ -71,6 +73,9 @@ export function isBlockedNoise(a: { title?: string | null; link?: string | null;
   // 이유는 "…AI 이미지 생성 기능…"처럼 "이미지"로 끝나되 실제 개조식 헤드라인인 경우까지
   // 걸러내지 않기 위함(2026-08-06, 씨엔티테크 사례).
   if (title.trim().length <= 30 && /이미지\s*$/.test(title.trim())) return true;
+  // 7) 단체 사진 설명 — "(왼쪽부터) 김○○ 대표, 박○○ 원장…", "…기념촬영을 하고 있다.", "(사진=○○)"로 끝나는 제목
+  if (/^\s*[(\[]\s*(왼쪽|오른쪽|좌|우)(부터|에서)/.test(title)) return true;
+  if (/기념\s*촬영(을)?\s*하고\s*있다\.?\s*$/.test(title) || /\(사진\s*=\s*[^)]*\)\s*$/.test(title)) return true;
 
   return false;
 }

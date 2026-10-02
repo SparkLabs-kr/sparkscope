@@ -45,6 +45,17 @@ const TREND_LABEL = '📈 이번 주 AI 트렌드';
  */
 // "상장 초기 16.98% 하락"처럼 등락률만 다룬 기사도(2026-10-01 위클리 시험에서 포트폴리오 칸에 뽑힘).
 const STOCK_TICKER = /주가|특징주|급등락|상한가|하한가|장중|시황|[‘'"]上[’'"]|[‘'"]下[’'"]|\d+(\.\d+)?%\s*(하락|상승|급락|급등)/;
+/**
+ * 업계 칸(스타트업계·국내 AI)에 올리기엔 약한 기사 — 2026-10-02 데일리 5번에 "안광현 경기대 산학협력부총장
+ * 취임"이 스타트업계 소식으로 나갔다(소윤: 오탐).
+ *  - 인사·동정(취임·선임·임명·부고): 업계 흐름이 아니라 개인 소식
+ *  - 요약이 "○○ 관련 — 매체" 기본 문구: AI가 내용을 못 읽어 대본 재료가 없는 기사
+ * 스파크랩·포트폴리오 칸에는 적용하지 않는다 — 우리 회사 대표 선임은 중요한 소식이다.
+ */
+const PERSONNEL = /취임|선임|임명|신임\s|부임|인사\]|\[인사|동정|부고|별세|영입/;
+function weakForBriefing(a: { title: string; oneLiner?: string | null }): boolean {
+  return PERSONNEL.test(a.title) || /관련\s*[—-]\s*\S+\s*$/.test(a.oneLiner ?? '');
+}
 const INTER_LABEL = '🔭 해외 트렌드 · AI';
 
 /** 교체 후보 한 줄 — 헤드라인 + 화면에 보여줄 보조 정보 */
@@ -374,7 +385,7 @@ export async function pickByTiers(w: BroadcastWindow): Promise<{ picked: Briefin
   // 국내 AI — 72시간 후보 중 AI 주제의 국내 기사(업계·경쟁사), 같은 사건 묶고 중요도 순.
   const domesticAi = buildClusteredPool(candidates.filter(a =>
     (a.category === 'industry_trend' || a.category === 'competitor')
-    && isKorean(a.title) && AI_TOPIC.test(a.title) && !STOCK_TICKER.test(a.title)));
+    && isKorean(a.title) && AI_TOPIC.test(a.title) && !STOCK_TICKER.test(a.title) && !weakForBriefing(a)));
   const D = domesticAi
     .map(a => ({ ...fromArticle(a, idByLink), label: '🇰🇷 국내 AI' }))
     .filter(fresh)
@@ -395,7 +406,7 @@ export async function pickByTiers(w: BroadcastWindow): Promise<{ picked: Briefin
 
   // 스타트업계 — 다이제스트 "스타트업계 뉴스" 섹션(국내 AI 칸과 겹치지 않게 AI 주제는 뺀다).
   const T = data.industryArticles
-    .filter(a => isKorean(a.title) && !AI_TOPIC.test(a.title) && !STOCK_TICKER.test(a.title))
+    .filter(a => isKorean(a.title) && !AI_TOPIC.test(a.title) && !STOCK_TICKER.test(a.title) && !weakForBriefing(a))
     .map(a => fromArticle(a, idByLink))
     .filter(fresh);
 
