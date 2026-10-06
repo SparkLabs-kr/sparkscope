@@ -16,8 +16,8 @@ export const EN: Record<string, string> = {
   '추천 다시 받기': 'Refresh picks',
   '저장됨 — 발송 때 이 목록으로 영상을 만듭니다.': 'Saved — the video will be built from this list at send time.',
   '아직 저장 안 됨 — 저장하지 않으면 추천 5개가 그대로 나갑니다.': 'Not saved yet — if left unsaved, the 5 picks go out as is.',
-  '추천 5개: AI 트렌드 2(국내 1·글로벌 1) 고정 + 나머지 3개는 스파크랩(최대 1) → 포트폴리오 순':
-    'Recommended 5: 2 fixed AI-trend slots (1 domestic, 1 global) + 3 by priority: SparkLabs (max 1) → portfolio',
+  '추천 5개: AI 트렌드 2개 고정(해외 우선) + 나머지 3개는 스파크랩(최대 1) → 포트폴리오 순':
+    'Recommended 5: 2 fixed AI-trend slots (global first) + 3 by priority: SparkLabs (max 1) → portfolio',
   'AI 트렌드': 'AI trends',
   '기준': 'as of',
   '추천': 'Recommended',
@@ -608,8 +608,8 @@ export const EN: Record<string, string> = {
   // ── 다이제스트 검수 ──────────────────────────────────────────────
   '월요일 위클리 브리핑 헤드라인': 'Monday weekly briefing headlines',
   '데일리 브리핑 헤드라인': 'Daily briefing headlines',
-  '위클리 5개: 지난주 화~일 기사 중 스파크랩·포트폴리오 우선, AI 최소 1개, 남으면 AI → 스타트업계':
-    'Weekly 5: from last Tue–Sun, SparkLabs & portfolio first, at least 1 AI, then AI → startup news',
+  '위클리 5개: 지난주 화~일 기사 중 AI 트렌드 2개 고정(해외 우선) + 나머지 3개는 스파크랩(최대 1) → 포트폴리오 순':
+    'Weekly 5: from last Tue–Sun, 2 fixed AI-trend slots (global first) + 3 by priority: SparkLabs (max 1) → portfolio',
   '다이제스트 검수': 'Digest review',
   '다이제스트 검수·발송': 'Digest review & send',
   '발송 예정: 매주 월·수·금 오전 9시 30분. [오늘 편집 저장]한 TOP 3·제외 기사·브리핑 헤드라인은 자동 발송에 반영되고, 실제 발송 화면을 미리 볼 수 있습니다.':

@@ -326,8 +326,8 @@ export function DigestReviewEditor({
           </p>
           <p className="text-[11px] text-gray-400 mb-2">
             {reco?.program === 'weekly'
-              ? tr('위클리 5개: 지난주 화~일 기사 중 스파크랩·포트폴리오 우선, AI 최소 1개, 남으면 AI → 스타트업계')
-              : tr('추천 5개: AI 트렌드 2(국내 1·글로벌 1) 고정 + 나머지 3개는 스파크랩(최대 1) → 포트폴리오 순')}
+              ? tr('위클리 5개: 지난주 화~일 기사 중 AI 트렌드 2개 고정(해외 우선) + 나머지 3개는 스파크랩(최대 1) → 포트폴리오 순')
+              : tr('추천 5개: AI 트렌드 2개 고정(해외 우선) + 나머지 3개는 스파크랩(최대 1) → 포트폴리오 순')}
           </p>
           <div className="space-y-2">
             {briefing.map((h, idx) => (

@@ -2,9 +2,9 @@
  * 데일리 브리핑 추천 헤드라인 5개 + 검수 화면의 교체 후보 목록.
  *
  * 추천은 항상 5개, 칸 수를 정해 두고 칸마다 AI가 가장 중요한 기사를 고른다(2026-10-02 소윤 결정):
- *   데일리  AI 트렌드 2(국내 1 · 글로벌 1) 고정 + 나머지 3칸 스파크랩(최대 1) → 포트폴리오
- *   위클리  스파크랩·포트폴리오 우선 · AI 최소 1 · 남으면 AI → 스타트업계
- * 칸 계산은 quotas()·weeklyQuotas(), 선정은 rankWithAI().
+ *   데일리·위클리 모두  AI 트렌드 2칸 고정(해외 우선) + 나머지 3칸 스파크랩(최대 1) → 포트폴리오
+ *   (2026-10-06: 위클리도 데일리와 같은 칸, AI는 해외 우선 — 국내는 해외에서도 다룰 만큼 클 때만)
+ * 칸 계산은 quotas(), 선정은 rankWithAI().
  *
  * 바이오는 추천에도 교체 후보에도 넣지 않는다.
  *
@@ -267,23 +267,19 @@ const GROUP_NAME: Record<Group, string> = {
 };
 
 /**
- * 데일리 칸 수(2026-10-02 소윤 결정 — 항상 5개, 9/30 규칙을 대체):
- *   AI 트렌드 2칸 고정(국내 1 · 글로벌 1, 한쪽이 모자라면 다른 쪽으로)
- *   나머지 3칸은 우선순위대로 — 스파크랩(최대 1) → 포트폴리오
- *   스타트업계(업계 뉴스) 칸은 없앴다 — "AI 트렌드가 부족하다". 위 후보가 모자랄 때만 마지막에 채운다.
+ * 칸 수 — 데일리·위클리 공통(2026-10-02 소윤 결정, 10-06 위클리에도 적용·해외 우선):
+ *   AI 트렌드 2칸 고정. 후보는 글로벌 AI(G)에 국내 AI(D)를 [국내] 표시로 섞어 한 그룹으로 고른다 —
+ *   웬만하면 해외(OpenAI·Anthropic 등) 소식, 국내는 해외 매체가 다룰 만큼 큰 사건일 때만(RANK_SYSTEM).
+ *   나머지 3칸은 우선순위대로 — 스파크랩(최대 1) → 포트폴리오.
+ *   그래도 비면 AI를 더 → 마지막으로 스타트업계.
  */
 function quotas(avail: Record<Group, number>): Record<Group, number> {
   const q: Record<Group, number> = { S: 0, P: 0, D: 0, G: 0, T: 0 };
-  const AI = 2;
-  q.D = Math.min(1, avail.D);
-  q.G = Math.min(AI - q.D, avail.G);
-  q.D = Math.min(AI - q.G, avail.D); // 글로벌이 모자라면 국내로
-  let room = BRIEFING_MAX - q.D - q.G;
+  q.G = Math.min(2, avail.G);
+  let room = BRIEFING_MAX - q.G;
   q.S = Math.min(1, avail.S, room); room -= q.S;
   q.P = Math.min(avail.P, room); room -= q.P;
-  // 그래도 비면 AI를 더 → 마지막으로 스타트업계
   const moreG = Math.min(room, avail.G - q.G); q.G += moreG; room -= moreG;
-  const moreD = Math.min(room, avail.D - q.D); q.D += moreD; room -= moreD;
   q.T = Math.min(room, avail.T);
   return q;
 }
@@ -296,7 +292,8 @@ const RANK_SYSTEM = `당신은 스파크랩(한국의 스타트업 액셀러레�
 - 투자 유치·인수합병·상장·대형 계약·신제품 출시·규제 변화처럼 "사건"이 있는 기사를 우선합니다.
 - 주가 등락·행사 스케치·인터뷰·칼럼은 뒤로 미룹니다.
 - 같은 사건을 다룬 기사는 그룹이 달라도 하나만 고릅니다(국내 기사와 해외 기사가 같은 사건일 수 있음).
-- "국내 AI"는 한국 기업·기관이 주인공인 AI 소식, "글로벌 AI"는 해외 기업·기관이 주인공인 AI 소식입니다.
+- "글로벌 AI" 그룹은 해외 AI 소식을 우선합니다(OpenAI·Anthropic·구글·메타·엔비디아 등). [국내] 표시 기사는
+  해외 주요 매체(로이터·블룸버그·TechCrunch 등)도 다룰 만큼 큰 사건일 때만 고르고, 아니면 해외 기사를 고르세요.
 
 JSON으로만 답하세요: {"picks": {"S": ["S0"], "P": ["P2","P0"], "D": ["D1"], "G": ["G0"], "T": ["T3"]}}
 그룹마다 요청한 개수를 정확히 지키고, 요청하지 않은 그룹은 빈 배열로 두세요.`;
@@ -308,7 +305,7 @@ async function rankWithAI(
   (Object.keys(pools) as Group[]).forEach(g => {
     if (q[g] === 0) return;
     lines.push(`\n## ${GROUP_NAME[g]} — ${aiEither && (g === 'D' || g === 'G') ? '국내·글로벌 AI 합쳐 1개' : `${q[g]}개`}`);
-    pools[g].forEach((c, i) => lines.push(`${g}${i}. ${c.title} — ${c.summary}${c.importance ? ` [${c.importance}]` : ''}`));
+    pools[g].forEach((c, i) => lines.push(`${g}${i}. ${c.label.includes('국내') ? '[국내] ' : ''}${c.title} — ${c.summary}${c.importance ? ` [${c.importance}]` : ''}`));
   });
   const resp = await openai.chat.completions.create({
     model: RANK_MODEL,
@@ -326,26 +323,6 @@ async function rankWithAI(
     }
   });
   return out;
-}
-
-/**
- * 위클리(월) 칸 수 — 스파크랩·포트폴리오 우선, AI 최소 1개, 남으면 AI → 스타트업계(2026-10-01 소윤 결정).
- * 데일리 quotas()와 같은 모양으로 돌려줘 아래 선정 과정을 그대로 쓴다.
- */
-function weeklyQuotas(n: Record<Group, number>): Record<Group, number> {
-  const q: Record<Group, number> = { S: 0, P: 0, D: 0, G: 0, T: 0 };
-  const hasAi = n.D + n.G > 0;
-  let room = BRIEFING_MAX - (hasAi ? 1 : 0);
-  q.S = Math.min(n.S, room); room -= q.S;
-  q.P = Math.min(n.P, room); room -= q.P;
-  if (hasAi) {
-    // AI 몫 = 1 + 남은 칸. 국내·글로벌이 둘 다 있으면 1칸은 "둘 중 하나"(aiEither)로 둔다.
-    let ai = 1 + Math.min(room, n.D + n.G - 1); room -= ai - 1;
-    if (ai === 1 && n.D > 0 && n.G > 0) { q.D = 1; q.G = 1; }
-    else { q.D = Math.min(n.D, Math.ceil(ai / 2)); q.G = Math.min(n.G, ai - q.D); q.D = Math.min(n.D, ai - q.G); }
-  }
-  q.T = Math.min(n.T, room);
-  return q;
 }
 
 /**
@@ -408,9 +385,11 @@ export async function pickByTiers(w: BroadcastWindow): Promise<{ picked: Briefin
     .map(a => fromArticle(a, idByLink))
     .filter(fresh);
 
-  const pools: Record<Group, BriefingCandidate[]> = { S, P, D, G, T };
-  const counts = { S: S.length, P: P.length, D: D.length, G: G.length, T: T.length };
-  const q = weekly ? weeklyQuotas(counts) : quotas(counts);
+  // AI 칸은 해외 우선 — 국내 AI는 [국내] 표시를 달아 글로벌 그룹 뒤에 붙인다(AI가 해외 매체급일 때만 고른다).
+  const GA = [...G, ...D];
+  const pools: Record<Group, BriefingCandidate[]> = { S, P, D: [], G: GA, T };
+  const counts = { S: S.length, P: P.length, D: 0, G: GA.length, T: T.length };
+  const q = quotas(counts);
   const aiEither = q.D === 1 && q.G === 1 && q.S + q.P + q.T === BRIEFING_MAX - 1;
 
   let chosen: Record<Group, BriefingCandidate[]> | null = null;
@@ -429,12 +408,17 @@ export async function pickByTiers(w: BroadcastWindow): Promise<{ picked: Briefin
   const picked: BriefingCandidate[] = [];
   const tiers: number[] = [];
   const used = new Set<string>();
+  const usedLeads = new Set<string>();
   (['S', 'P', 'D', 'G', 'T'] as Group[]).forEach(g => {
     const order = [...(chosen?.[g] ?? []), ...pools[g]];
     let n = 0;
     for (const c of order) {
       if (n >= want[g]) break;
       if (used.has(c.url)) continue;
+      // AI 칸에 같은 회사 소식이 둘 들어가지 않게("구글, 제미나이 4 발표"·"구글, 새 제미니 모델 발표" — 같은 사건).
+      const lead = g === 'G' ? c.title.split(/[,，·…\s]/)[0] : '';
+      if (lead && usedLeads.has(lead)) continue;
+      if (lead) usedLeads.add(lead);
       used.add(c.url);
       picked.push(c);
       tiers.push(GROUP_TIER[g]);
