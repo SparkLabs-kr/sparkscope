@@ -30,6 +30,21 @@ function ensureFonts() {
   fontsReady = true;
 }
 
+/**
+ * 한자 → 한글. Pretendard에는 한자 글리프가 없어 "日증시"의 日이 네모(□)로 깨졌다(2026-10-05 위클리,
+ * 소윤 지적). 신문 제목에 쓰이는 약칭 한자만 그 뜻의 한글로 바꾼다. 목록에 없는 한자는 그대로 둔다.
+ */
+const HANJA: Record<string, string> = {
+  日: '일', 美: '미', 中: '중', 韓: '한', 北: '북', 南: '남', 英: '영', 獨: '독', 佛: '불', 露: '러', 印: '인',
+  臺: '대', 台: '대', 歐: '유럽', 與: '여', 野: '야', 靑: '청', 尹: '윤', 李: '이', 文: '문', 朴: '박', 金: '김',
+  故: '고', 軍: '군', 銀: '은', 前: '전', 新: '신', 株: '주', 社: '사', 外: '외', 對: '대', 反: '반', 親: '친',
+  兆: '조', 億: '억', 萬: '만', 上: '상', 下: '하', 現: '현', 副: '부', 總: '총', 大: '대', 小: '소', 高: '고',
+  低: '저', 號: '호', 稅: '세', 法: '법', 國: '국', 政: '정', 檢: '검', 警: '경', 核: '핵', 車: '차',
+};
+export function hangulize(text: string): string {
+  return text.replace(/[\u3400-\u9FFF\uF900-\uFAFF]/g, ch => HANJA[ch] ?? ch);
+}
+
 /** 글자 단위 줄바꿈(한국어는 어절보다 글자 단위가 자연스럽게 꽉 찬다). 넘치면 마지막 줄에 …. */
 function wrap(ctx: SKRSContext2D, text: string, maxWidth: number, maxLines: number): string[] {
   const lines: string[] = [];
@@ -135,7 +150,7 @@ export function introSlide(dateLabel: string, headlines: BriefingHeadline[], o: 
     ctx.textAlign = 'left';
     ctx.fillStyle = C.ink;
     ctx.font = '30px "Pretendard SemiBold"';
-    ctx.fillText(wrap(ctx, h.title, textW, 1)[0] ?? '', 124, y);
+    ctx.fillText(wrap(ctx, hangulize(h.title), textW, 1)[0] ?? '', 124, y);
     y += 82;
   });
   return canvas.toBuffer('image/png');
@@ -160,7 +175,7 @@ export function itemSlide(dateLabel: string, h: BriefingHeadline, index: number,
   ctx.fillStyle = C.white;
   ctx.fillText(label, 84, 305);
   // 제목
-  const title = fitText(ctx, h.title, textW, 3, [54, 48, 42], 'ExtraBold');
+  const title = fitText(ctx, hangulize(h.title), textW, 3, [54, 48, 42], 'ExtraBold');
   ctx.fillStyle = C.ink;
   let y = 400;
   for (const line of title.lines) {
@@ -170,7 +185,7 @@ export function itemSlide(dateLabel: string, h: BriefingHeadline, index: number,
   // 요약 — 출처 줄(H-48) 위까지 남은 줄 수만큼
   y += 8;
   const room = Math.max(1, Math.min(3, Math.floor((H - 90 - y + 28) / 40)));
-  const sum = fitText(ctx, h.summary, textW, room, [28, 25], 'Regular');
+  const sum = fitText(ctx, hangulize(h.summary), textW, room, [28, 25], 'Regular');
   ctx.fillStyle = C.inkSoft;
   for (const line of sum.lines) {
     ctx.fillText(line, 64, y);
@@ -179,7 +194,7 @@ export function itemSlide(dateLabel: string, h: BriefingHeadline, index: number,
   // 출처 · 진행
   ctx.font = '22px "Pretendard SemiBold"';
   ctx.fillStyle = C.muted;
-  ctx.fillText(h.source, 64, H - 48);
+  ctx.fillText(hangulize(h.source), 64, H - 48);
   ctx.textAlign = 'right';
   ctx.fillText(`${index + 1} / ${total}`, W - 64 - (o.hostSpace ? HOST_W : 0), H - 48);
   ctx.textAlign = 'left';
