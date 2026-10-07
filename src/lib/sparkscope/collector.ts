@@ -12,6 +12,8 @@ import { NEGATIVE_KEYWORDS_DATA, CRISIS_KEYWORDS_DATA } from './keywords-data';
 import { scrapeArticleBody, type ScrapedBody } from './scraper';
 import { resolveGoogleNewsUrl, resolveGoogleNewsUrls } from './google-news-resolver';
 import { PINNED_COMPETITORS } from './insights';
+import { restoreTruncatedTitles } from './title-restore';
+
 
 // C 티어 폴백: 문맥어 없어도 이 키워드가 제목에 있으면 수집 (이벤트·부정 기사 누락 방지)
 const C_TIER_FALLBACK_KEYWORDS: string[] = [
@@ -295,6 +297,9 @@ export async function collectAllArticles(opts: CollectOptions = {}): Promise<Raw
   // 다 돌리면 수집이 눈에 띄게 늘어난다. 실패해도 원본 링크를 그대로 두므로 예전 동작
   // (제목 검색 폴백)으로 돌아갈 뿐, 기사가 사라지지는 않는다.
   await resolveLinksInPlace(filtered);
+  // 링크가 원문 주소로 풀린 뒤에 잘린 제목("…서울 DDP...")을 원문 og:title로 되살린다(title-restore.ts).
+  const restored = await restoreTruncatedTitles(filtered);
+  console.log(`[collector] 잘린 제목 되살림 ${restored}건`);
   return filtered;
 }
 

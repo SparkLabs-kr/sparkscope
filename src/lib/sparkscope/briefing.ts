@@ -15,6 +15,7 @@
  */
 import { prisma } from '@/lib/prisma';
 import type { AnalyzedArticle, DigestData } from './types';
+import { restoreTitle } from './title-restore';
 import type { InterDigestCard } from './inter-digest';
 
 export const BRIEFING_MAX = 5;
@@ -250,28 +251,10 @@ export function applyTop3Edits<T extends { link: string }>(
 /**
  * 잘린 제목("…서울 DDP...") 되살리기 — 수집하는 RSS가 긴 제목을 말줄임으로 잘라 보내 와서(최근 2주 기사의
  * 약 17%), 브리핑 화면·잔디에 "…"로 끝나는 제목이 나갔다(2026-10-07 소윤: "제목은 무조건 끝까지").
- * 스냅샷을 저장할 때 원문 페이지의 og:title을 읽어 원래 제목으로 바꾼다. 앞부분이 같을 때만 바꾸고
- * (엉뚱한 페이지 방지), 실패하면 그대로 둔다 — 발송을 막지 않는다.
+ * 수집 단계(title-restore.ts)에서 이미 되살리지만, 그 전에 들어온 기사·실패한 기사를 위해 스냅샷 저장 때 한 번 더.
  */
-const TRUNCATED = /(\.{2,}|…)\s*$/;
-async function fullTitle(h: BriefingHeadline): Promise<string> {
-  if (!TRUNCATED.test(h.title) || !/^https?:\/\//.test(h.url)) return h.title;
-  try {
-    const r = await fetch(h.url, { headers: { 'user-agent': 'Mozilla/5.0' }, redirect: 'follow', signal: AbortSignal.timeout(6000) });
-    const html = (await r.text()).slice(0, 200_000);
-    const m = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
-      ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
-    const decode = (s: string) => s.replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-    const og = m ? decode(m[1]).replace(/\s+[-|]\s+[^-|]{1,20}$/, '').trim() : '';
-    const head = h.title.replace(TRUNCATED, '').trim();
-    const norm = (s: string) => s.replace(/[^0-9a-zA-Z가-힣]/g, '');
-    return og && og.length > head.length && norm(og).startsWith(norm(head).slice(0, 15)) ? og : h.title;
-  } catch {
-    return h.title;
-  }
-}
 export async function completeTitles(headlines: BriefingHeadline[]): Promise<BriefingHeadline[]> {
-  return Promise.all(headlines.map(async h => ({ ...h, title: await fullTitle(h) })));
+  return Promise.all(headlines.map(async h => ({ ...h, title: await restoreTitle(h.title, h.url) })));
 }
 
 /**
