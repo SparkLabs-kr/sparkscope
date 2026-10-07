@@ -248,6 +248,33 @@ export function applyTop3Edits<T extends { link: string }>(
 // ── 발송 시점 스냅샷 ─────────────────────────────────────────────
 
 /**
+ * 잘린 제목("…서울 DDP...") 되살리기 — 수집하는 RSS가 긴 제목을 말줄임으로 잘라 보내 와서(최근 2주 기사의
+ * 약 17%), 브리핑 화면·잔디에 "…"로 끝나는 제목이 나갔다(2026-10-07 소윤: "제목은 무조건 끝까지").
+ * 스냅샷을 저장할 때 원문 페이지의 og:title을 읽어 원래 제목으로 바꾼다. 앞부분이 같을 때만 바꾸고
+ * (엉뚱한 페이지 방지), 실패하면 그대로 둔다 — 발송을 막지 않는다.
+ */
+const TRUNCATED = /(\.{2,}|…)\s*$/;
+async function fullTitle(h: BriefingHeadline): Promise<string> {
+  if (!TRUNCATED.test(h.title) || !/^https?:\/\//.test(h.url)) return h.title;
+  try {
+    const r = await fetch(h.url, { headers: { 'user-agent': 'Mozilla/5.0' }, redirect: 'follow', signal: AbortSignal.timeout(6000) });
+    const html = (await r.text()).slice(0, 200_000);
+    const m = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
+      ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
+    const decode = (s: string) => s.replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    const og = m ? decode(m[1]).replace(/\s+[-|]\s+[^-|]{1,20}$/, '').trim() : '';
+    const head = h.title.replace(TRUNCATED, '').trim();
+    const norm = (s: string) => s.replace(/[^0-9a-zA-Z가-힣]/g, '');
+    return og && og.length > head.length && norm(og).startsWith(norm(head).slice(0, 15)) ? og : h.title;
+  } catch {
+    return h.title;
+  }
+}
+export async function completeTitles(headlines: BriefingHeadline[]): Promise<BriefingHeadline[]> {
+  return Promise.all(headlines.map(async h => ({ ...h, title: await fullTitle(h) })));
+}
+
+/**
  * 발송 크론이 메일 데이터를 만든 직후 호출한다. 우선순위: 편집자 선택 → 추천(recommended) →
  * 메일 TOP3 기반 기본값. 같은 날 다시 돌면(수동 재발송 등) 덮어쓴다.
  * 추천은 호출부가 넘긴다 — briefing-reco.ts가 이 파일을 import 하므로 여기서 부르면 순환한다.
@@ -265,7 +292,7 @@ export async function publishBriefingSnapshot(
     dateKey,
     program: broadcastFor().program,
     dateLabel: data.dateLabel,
-    headlines: picks && picks.length > 0 ? picks : reco.length > 0 ? reco : defaultHeadlines(data),
+    headlines: await completeTitles(picks && picks.length > 0 ? picks : reco.length > 0 ? reco : defaultHeadlines(data)),
     source: picks && picks.length > 0 ? 'editor' : 'auto',
     computedAt: new Date().toISOString(),
   };

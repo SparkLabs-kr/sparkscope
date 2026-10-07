@@ -83,7 +83,7 @@ const HOST_W = 340;
  * 글이 칸에 다 들어가게 — 말줄임(…)으로 자르지 않는다(2026-10-01 소윤: "…으로 끊기면 안 된다").
  * 큰 글씨부터 줄여 보고, 그래도 넘치면 문장 단위로 앞에서부터 들어가는 만큼만 쓴다.
  */
-function fitText(ctx: SKRSContext2D, text: string, maxWidth: number, maxLines: number, sizes: number[], weight: string)
+function fitText(ctx: SKRSContext2D, text: string, maxWidth: number, maxLines: number, sizes: number[], weight: string, never_cut = false)
   : { lines: string[]; size: number } {
   const fits = (t: string, size: number) => {
     ctx.font = `${size}px "Pretendard ${weight}"`;
@@ -95,6 +95,10 @@ function fitText(ctx: SKRSContext2D, text: string, maxWidth: number, maxLines: n
     if (lines) return { lines, size };
   }
   const size = sizes[sizes.length - 1];
+  if (never_cut) {
+    ctx.font = `${size}px "Pretendard ${weight}"`;
+    return { lines: wrap(ctx, text, maxWidth, 99), size };
+  }
   const sentences = text.match(/[^.!?。]+[.!?。]?/g)?.map(s => s.trim()).filter(Boolean) ?? [text];
   for (let n = sentences.length - 1; n >= 1; n--) {
     const lines = fits(sentences.slice(0, n).join(' '), size);
@@ -175,7 +179,8 @@ export function itemSlide(dateLabel: string, h: BriefingHeadline, index: number,
   ctx.fillStyle = C.white;
   ctx.fillText(label, 84, 305);
   // 제목
-  const title = fitText(ctx, hangulize(h.title), textW, 3, [54, 48, 42], 'ExtraBold');
+  // 제목은 절대 자르지 않는다(2026-10-07 소윤) — 글씨를 줄여 4줄까지 쓴다.
+  const title = fitText(ctx, hangulize(h.title), textW, 4, [54, 48, 42, 38, 34], 'ExtraBold', true);
   ctx.fillStyle = C.ink;
   let y = 400;
   for (const line of title.lines) {
