@@ -15,7 +15,8 @@ import { broadcastFor, type BriefingSnapshot } from '../sparkscope/briefing';
 import { writeBriefingScript, type ScriptSegment } from './script';
 import { synthesizeAll, type VoiceSpec } from './tts';
 import { introSlide, itemSlide, outroSlide } from './slides';
-import { renderVideo, type Clip } from './render';
+import { renderVideo, silentWav, GAP_SECONDS, type Clip } from './render';
+import { NEWS_BGM, OPENING_SECONDS } from './build';
 
 const ASSETS = path.join(process.cwd(), 'assets/newsdesk');
 const PROGRAM = 'Claw-e 뉴스데스크';
@@ -57,17 +58,21 @@ export async function buildNewsdeskVideo(opts: { outDir: string; snapshot: Brief
   // 소식 화면의 Claw-e는 가만히 서 있는 그림 — 손 흔드는 GIF는 계속 움직여 정신없었다(2026-10-01 소윤).
   const o = { program: PROGRAM, hostSpace: true, hostImage: await loadImage(path.join(ASSETS, 'claw-e.png')) };
   const total = snapshot.headlines.length;
-  const clips: Clip[] = segments.map((s, i) => ({
+  const clips: Clip[] = [
+    // 오프닝 — 타이틀 GIF 위로 뉴스 배경음악만(OPENING_SECONDS), 인사 동안엔 낮게 깔았다가 줄인다.
+    { png: introSlide(label, snapshot.headlines, o), wav: silentWav(OPENING_SECONDS), seconds: OPENING_SECONDS,
+      backgroundGif: path.join(ASSETS, 'title.gif'), bgm: { file: NEWS_BGM, start: 0, volume: 0.9 } },
+    ...segments.map((s, i): Clip => ({
     png: s.kind === 'intro' ? introSlide(label, snapshot.headlines, o)
       : s.kind === 'outro' ? outroSlide(label, o)
       : itemSlide(label, snapshot.headlines[s.index!], s.index!, total, o),
     wav: speeches[i].wav,
     seconds: speeches[i].seconds,
     // 오프닝은 타이틀 GIF, 마무리는 서울 야경 엔딩 GIF.
-    ...(s.kind === 'intro' ? { backgroundGif: path.join(ASSETS, 'title.gif') }
+    ...(s.kind === 'intro' ? { backgroundGif: path.join(ASSETS, 'title.gif'), bgm: { file: NEWS_BGM, start: OPENING_SECONDS + GAP_SECONDS, volume: 0.15, fadeOut: true } }
       : s.kind === 'outro' ? { backgroundGif: path.join(ASSETS, 'ending.gif') }
       : {}),
-  }));
+  }))];
 
   const file = path.join(opts.outDir, `newsdesk-${snapshot.dateKey}.mp4`);
   const seconds = await renderVideo(clips, path.join(opts.outDir, 'work'), file);

@@ -9,8 +9,12 @@ import { getBriefingRecommendation } from '../sparkscope/briefing-reco';
 import type { AnalyzedArticle } from '../sparkscope/types';
 import { writeBriefingScript, spokenDate, type ScriptSegment } from './script';
 import { synthesizeAll } from './tts';
-import { introSlide, itemSlide, outroSlide } from './slides';
-import { renderVideo, type Clip } from './render';
+import { introSlide, itemSlide, outroSlide, openingSlide } from './slides';
+import { renderVideo, silentWav, GAP_SECONDS, type Clip } from './render';
+
+/** 오프닝 배경음악 — scripts/make-news-bgm.py로 만든 자체 제작 음원(저작권 걱정 없음). 다른 음원을 쓰려면 이 파일만 바꾸면 된다. */
+export const NEWS_BGM = path.join(process.cwd(), 'assets/briefing/news-bgm.wav');
+export const OPENING_SECONDS = 3.2;
 
 /**
  * 오늘 헤드라인 스냅샷을 새로 만든다 — 09:30 메일과 같은 재료·같은 조립(buildDigestForSend)에서
@@ -57,13 +61,18 @@ export async function buildBriefingVideo(opts: { outDir: string; prepare?: boole
   // 음성은 하나씩 — 동시에 보내면 Gemini TTS 분당 한도(429)에 걸린다(tts.ts synthesizeAll).
   const { speeches, voice } = await synthesizeAll(segments.map(s => s.text));
   console.log(`[briefing] 음성 ${voice}`);
-  const clips: Clip[] = segments.map((s, i) => ({
-    png: s.kind === 'intro' ? introSlide(dateLabel, snapshot.headlines)
-      : s.kind === 'outro' ? outroSlide(dateLabel)
-      : itemSlide(dateLabel, snapshot.headlines[s.index!], s.index!, total),
-    wav: speeches[i].wav,
-    seconds: speeches[i].seconds,
-  }));
+  const clips: Clip[] = [
+    // 오프닝 — 말 없이 뉴스 배경음악 + 타이틀 화면(OPENING_SECONDS), 이어지는 인사 동안 음악을 낮게 깔고 끝에서 줄인다.
+    { png: openingSlide(dateLabel), wav: silentWav(OPENING_SECONDS), seconds: OPENING_SECONDS, bgm: { file: NEWS_BGM, start: 0, volume: 0.9 } },
+    ...segments.map((s, i): Clip => ({
+      png: s.kind === 'intro' ? introSlide(dateLabel, snapshot.headlines)
+        : s.kind === 'outro' ? outroSlide(dateLabel)
+        : itemSlide(dateLabel, snapshot.headlines[s.index!], s.index!, total),
+      wav: speeches[i].wav,
+      seconds: speeches[i].seconds,
+      ...(s.kind === 'intro' ? { bgm: { file: NEWS_BGM, start: OPENING_SECONDS + GAP_SECONDS, volume: 0.15, fadeOut: true } } : {}),
+    })),
+  ];
 
   const file = path.join(opts.outDir, `briefing-${snapshot.dateKey || kstDateKey()}.mp4`);
   const seconds = await renderVideo(clips, path.join(opts.outDir, 'work'), file);

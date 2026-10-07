@@ -230,3 +230,44 @@ export function outroSlide(dateLabel: string, o: SlideOpts = {}): Buffer {
   ctx.textAlign = 'left';
   return canvas.toBuffer('image/png');
 }
+
+/**
+ * 오프닝 화면 — 말 없이 뉴스 배경음악만 나오는 3초짜리 타이틀(2026-10-07 소윤 요청).
+ * 대시보드 보라색 바탕에 프로그램 이름과 날짜. 위클리는 타이틀 GIF가 이 역할을 한다.
+ */
+export function openingSlide(dateLabel: string, program = '데일리 브리핑'): Buffer {
+  ensureFonts();
+  const canvas = createCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, '#3B32C8');
+  g.addColorStop(1, '#6A5CF5');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  // 오른쪽 위 사선 빛줄기 — 뉴스 타이틀 느낌만 살짝
+  ctx.save();
+  ctx.globalAlpha = 0.08;
+  ctx.fillStyle = C.white;
+  for (let i = 0; i < 6; i++) {
+    ctx.beginPath();
+    ctx.moveTo(760 + i * 90, 0); ctx.lineTo(820 + i * 90, 0); ctx.lineTo(420 + i * 90, H); ctx.lineTo(360 + i * 90, H);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.fillStyle = C.white;
+  ctx.font = '34px "Pretendard Bold"';
+  ctx.fillText('SparkScope', 96, 250);
+  ctx.font = '112px "Pretendard ExtraBold"';
+  ctx.fillText(program, 90, 380);
+  // 날짜 위 가는 선
+  ctx.globalAlpha = 0.6;
+  ctx.fillRect(96, 430, 120, 4);
+  ctx.globalAlpha = 1;
+  ctx.font = '36px "Pretendard SemiBold"';
+  ctx.fillText(dateLabel, 96, 490);
+  ctx.globalAlpha = 0.75;
+  ctx.font = '24px "Pretendard SemiBold"';
+  ctx.fillText('스파크랩 · 포트폴리오 · AI 트렌드', 96, 540);
+  ctx.globalAlpha = 1;
+  return canvas.toBuffer('image/png');
+}

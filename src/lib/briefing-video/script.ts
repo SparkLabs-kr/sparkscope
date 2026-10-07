@@ -30,7 +30,27 @@ export function spokenDate(dateKey: string): string {
   return `${m}월 ${d}일 ${wd}요일`;
 }
 
-const ORDINAL = ['첫 번째', '두 번째', '세 번째', '네 번째', '다섯 번째', '여섯 번째', '일곱 번째', '여덟 번째'];
+/**
+ * 섹션 전환 멘트 — "첫 번째 소식입니다" 순번 대신, 섹션이 바뀌는 첫 기사에만 붙인다(2026-10-07 소윤, 3분 개편안).
+ * 섹션은 헤드라인 라벨로 정한다: 스파크랩 · 국내 포트폴리오 · 해외 포트폴리오(대만·글로벌) · AI · 스타트업계.
+ */
+type Section = 'S' | 'P' | 'O' | 'A' | 'T';
+function sectionOf(h: BriefingHeadline): Section {
+  if (/스파크랩/.test(h.label)) return 'S';
+  if (/포트폴리오사 · (대만|글로벌)/.test(h.label)) return 'O';
+  if (/포트폴리오/.test(h.label)) return 'P';
+  if (/AI|트렌드|해외/.test(h.label) || h.kind === 'trend' || h.kind === 'inter') return 'A';
+  return 'T';
+}
+const SECTION_LEAD: Record<Section, [string, string]> = {
+  // [맨 처음일 때, 중간에 바뀔 때]
+  S: ['먼저 스파크랩 소식입니다.', '스파크랩 소식입니다.'],
+  P: ['먼저 포트폴리오 소식입니다.', '포트폴리오 소식입니다.'],
+  O: ['먼저 해외 포트폴리오 소식입니다.', '해외 포트폴리오 소식도 있습니다.'],
+  A: ['먼저 AI 쪽 소식입니다.', 'AI 쪽 소식입니다.'],
+  T: ['먼저 스타트업계 소식입니다.', '스타트업계 소식입니다.'],
+};
+// 스파크랩과 국내 포트폴리오는 이어서 한 덩어리로 듣기 좋아서, 스파크랩 다음 국내 포폴은 "이어서 포트폴리오 소식입니다".
 
 /**
  * 말투·구성 기준 — 2026-10-07 「3분 개편안」(소윤). 9/30 수정본 예시를 대체한다.
@@ -43,7 +63,7 @@ const STYLE_EXAMPLE = `[핵심] 오픈AI가 새 모델을 공개했는데, 성�
 [단신] ○○벤처스가 300억 원 규모의 신규 펀드를 결성했습니다.`;
 
 const SYSTEM = `당신은 VC 스파크랩의 데일리 브리핑 작가입니다. 청자는 투자심사역과 파트너입니다.
-기사마다 소리 내어 읽을 대본을 씁니다. 인사·마무리·순번 멘트는 따로 붙이니 쓰지 마세요.
+기사마다 소리 내어 읽을 대본을 씁니다. 인사·마무리·섹션 전환 멘트(\"먼저 포트폴리오 소식입니다\" 등)는 따로 붙이니 쓰지 마세요.
 
 [등급] 기사를 중요도에 따라 세 등급으로 나눕니다. 기사가 8개면 핵심 2 · 표준 3 · 단신 3, 적으면 비율대로 줄입니다(핵심은 최대 2).
  - 핵심(약 200자): ① 팩트+숫자(누가, 무엇을, 얼마에) → ② 맥락(왜 지금인가) → ③ 우리 시각(포트폴리오사·투자 테제·스타트업 생태계에 어떤 의미인지, 대상을 구체적으로) → ④ 변수(앞으로 지켜볼 것)
@@ -102,10 +122,14 @@ export async function writeBriefingScript(snapshot: BriefingSnapshot, frame?: Sc
     kind: 'intro',
     text: frame?.intro ?? `좋은 아침입니다. ${spokenDate(snapshot.dateKey)}, 스파크스코프 데일리 브리핑입니다.`,
   }];
+  let prev: Section | null = null;
   heads.forEach((h, i) => {
     // AI가 빠뜨린 항목은 요약으로라도 채운다 — 화면엔 있는데 말이 없는 슬라이드가 생기지 않게.
     const body = byIndex.get(i) || `${h.title}. ${h.summary}`;
-    segments.push({ kind: 'item', index: i, text: `${ORDINAL[i] ?? `${i + 1}번째`} 소식입니다. ${body}` });
+    const sec = sectionOf(h);
+    const lead = sec === prev ? '' : prev === 'S' && sec === 'P' ? '이어서 포트폴리오 소식입니다.' : SECTION_LEAD[sec][prev ? 1 : 0];
+    prev = sec;
+    segments.push({ kind: 'item', index: i, text: lead ? `${lead} ${body}` : body });
   });
   segments.push({
     kind: 'outro',
