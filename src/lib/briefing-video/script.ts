@@ -55,25 +55,23 @@ const SECTION_LEAD: Record<Section, [string, string]> = {
 /**
  * 말투·구성 기준 — 2026-10-07 「3분 개편안」(소윤). 9/30 수정본 예시를 대체한다.
  * 요점: 상투적인 마무리("주목할 만합니다") 대신 "그래서 누구에게 무엇이 달라지나", 기사마다 숫자,
- * 중요도에 따라 길이를 다르게(핵심 2 · 표준 3 · 단신 3, 합계 약 3분).
+ * 기사마다 4단 구조(팩트·숫자 → 맥락 → 우리 시각 → 변수). 10-07 소윤 결정으로 등급 없이 전부 핵심 길이(약 250~330자).
  * 예시는 개편안 샘플에서 사실 확인이 필요한 부분을 뺀 것 — 내용이 아니라 구조를 참고하게 한다.
  */
-const STYLE_EXAMPLE = `[핵심] 오픈AI가 새 모델을 공개했는데, 성능은 상위 모델 수준이면서 가격은 기존 모델의 절반입니다. 같은 주 앤트로픽도 더 낮은 가격의 새 모델을 내놨습니다. 두 회사가 같은 시기에 가격을 내렸다는 건 경쟁의 축이 성능에서 가격으로 옮겨가고 있다는 신호입니다. AI를 쓰는 포트폴리오사 입장에선 API 원가가 줄어 마진이 개선될 여지가 생기고, 반대로 모델 위에 기능만 얇게 얹은 서비스는 차별화 압박이 커집니다.
-[표준] 위베어소프트는 티맥스소프트와 인증서 자동화 협력에 나섰습니다. 티맥스의 공공·금융 고객망이 그대로 위베어의 영업 채널이 된다는 점이 이번 협력의 핵심입니다.
-[단신] ○○벤처스가 300억 원 규모의 신규 펀드를 결성했습니다.`;
+const STYLE_EXAMPLE = `오픈AI가 새 모델을 공개했는데, 성능은 상위 모델 수준이면서 가격은 기존 모델의 절반입니다. 같은 주 앤트로픽도 더 낮은 가격의 새 모델을 내놨습니다. 두 회사가 같은 시기에 가격을 내렸다는 건 경쟁의 축이 성능에서 가격으로 옮겨가고 있다는 신호입니다. AI를 쓰는 포트폴리오사 입장에선 API 원가가 줄어 마진이 개선될 여지가 생기고, 반대로 모델 위에 기능만 얇게 얹은 서비스는 차별화 압박이 커집니다. 다만 가격 인하가 일시적 프로모션인지, 다른 업체까지 번질지가 변수입니다.`;
 
 const SYSTEM = `당신은 VC 스파크랩의 데일리 브리핑 작가입니다. 청자는 투자심사역과 파트너입니다.
 기사마다 소리 내어 읽을 대본을 씁니다. 인사·마무리·섹션 전환 멘트(\"먼저 포트폴리오 소식입니다\" 등)는 따로 붙이니 쓰지 마세요.
 
-[등급] 기사를 중요도에 따라 세 등급으로 나눕니다. 기사가 8개면 핵심 2 · 표준 3 · 단신 3, 적으면 비율대로 줄입니다(핵심은 최대 2).
- - 핵심(약 200자): ① 팩트+숫자(누가, 무엇을, 얼마에) → ② 맥락(왜 지금인가) → ③ 우리 시각(포트폴리오사·투자 테제·스타트업 생태계에 어떤 의미인지, 대상을 구체적으로) → ④ 변수(앞으로 지켜볼 것)
- - 표준(약 100자): 팩트+숫자 → 우리 시각 또는 변수 중 하나
- - 단신(약 55자): 숫자가 들어간 한 문장. 해석은 넣지 않습니다.
- - 핵심 기준: 포트폴리오사의 큰 이벤트(M&A·투자 유치·대형 계약), 또는 투자 테제에 직접 영향을 주는 시장 변화.
- - 전체 대본(모든 기사 합계)은 약 900~1,000자.
+[구성] 모든 기사를 같은 깊이로, 기사마다 약 250~330자(4~5문장)로 씁니다(2026-10-07 소윤 — 단신 없이 전부 이 길이).
+ ① 팩트+숫자(누가, 무엇을, 얼마에) → ② 맥락(왜 지금인가, 배경·규모) → ③ 우리 시각(포트폴리오사·투자 테제·스타트업 생태계에
+ 어떤 의미인지, 대상을 구체적으로) → ④ 변수(앞으로 지켜볼 것)
+ - 본문 발췌에서 숫자·배경·일정을 최대한 끌어와 채웁니다. 재료가 정말 부족하면 짧아져도 되지만 지어내지는 마세요.
+
+ - 우리 포트폴리오사 이름을 기사에 없는데 끌어와 연결하지 마세요(기사 주인공이 포트폴리오사일 때만 그 이름을 씁니다).
 
 [필수]
- - 숫자(금액·지분·가격·비율·기간)는 원문에 있으면 반드시 넣습니다. 원문에 숫자가 없으면 그 기사는 단신이나 표준으로 내립니다.
+ - 숫자(금액·지분·가격·비율·기간·규모)는 원문에 있으면 반드시 넣습니다.
  - 제목·요약·본문 발췌에 있는 사실만 씁니다. 숫자·이름·날짜·평가·원인을 지어내지 마세요. 본문 발췌가 없으면 제목·요약 범위 안에서만 씁니다.
  - 해석에는 반드시 "누구에게"를 밝힙니다(예: "포트폴리오사 입장에선 ~", "~라는 점에서 ○○에게 유리합니다").
  - 연관된 기사가 있으면 "앞 소식과 이어서 보면 ~" 식으로 한 문장 연결합니다.
@@ -89,14 +87,40 @@ const SYSTEM = `당신은 VC 스파크랩의 데일리 브리핑 작가입니다
 [표기] 고유명사는 공식 한글 표기(티맥스소프트, 앤트로픽, 오픈AI, 오퍼스). 영문 약어는 처음 나올 때 풀어 씁니다.
 제목의 약칭 한자는 풀어서 씁니다(日증시 → 일본 증시, 美中 → 미국과 중국).
 
-아래는 등급별 예시입니다. 내용이 아니라 구조·길이·해석 방식을 참고하세요.
+아래는 예시입니다(첫 번째 길이가 기준). 내용이 아니라 구조·길이·해석 방식을 참고하세요.
 ${STYLE_EXAMPLE}
 
-JSON으로만 답하세요: {"items":[{"index":0,"tier":"핵심|표준|단신","text":"..."}, ...]}`;
+JSON으로만 답하세요: {"items":[{"index":0,"text":"..."}]}`;
 
+// 해외 트렌드 카드의 "연결된 포트폴리오사"(내부 매칭)는 넘기지 않는다 — 영상·페이지는 로그인 없이 열리는데,
+// 초안에서 "포트폴리오사 센스톤, 옥타코 등…"처럼 내부 매칭이 대본에 그대로 나왔다(2026-10-07, CLAUDE.md 공개 규칙).
 function describe(h: BriefingHeadline, i: number, body: string): string {
-  const extra = h.companies?.length ? ` / 연결된 포트폴리오사: ${h.companies.join(', ')}` : '';
-  return `${i}. [${h.label}] 제목: ${h.title} / 요약: ${h.summary} / 출처: ${h.source}${extra}${body ? `\n   본문 발췌: ${body}` : ''}`;
+  return `${i}. [${h.label}] 제목: ${h.title} / 요약: ${h.summary} / 출처: ${h.source}${body ? `\n   본문 발췌: ${body}` : ''}`;
+}
+
+/**
+ * 상투구 검사 — 금지 규칙을 줘도 "의미가 있습니다", "주목할 필요가 있습니다"가 남았다(2026-10-07 초안).
+ * 걸린 기사만 한 번 더 고쳐 쓰게 한다. 실패하면 원래 문장 그대로.
+ */
+const CLICHE = /(주목할 만합니다|주목됩니다|주목할 필요가 있습니다|의미가 있습니다|의미가 큽니다|기대됩니다|전망입니다|참고할 만합니다|시사점을 줍니다)/;
+async function rewriteCliches(byIndex: Map<number, string>): Promise<void> {
+  const bad = [...byIndex.entries()].filter(([, t]) => CLICHE.test(t));
+  if (bad.length === 0) return;
+  try {
+    const resp = await openai.chat.completions.create({
+      model: MODEL,
+      temperature: 0.2,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: '브리핑 대본에서 상투적인 해석 문장("주목할 만합니다", "의미가 있습니다", "기대됩니다", "~할 전망입니다", "참고할 만합니다" 등)만 고칩니다. 그 문장을 "누구에게 무엇이 달라지는지"(예: "포트폴리오사 입장에선 ~", "다만 ~가 변수입니다")로 바꾸고, 나머지 문장·사실·숫자는 그대로 둡니다. 새 사실을 만들지 마세요. JSON으로만: {"items":[{"index":0,"text":"..."}]}' },
+        { role: 'user', content: bad.map(([i, t]) => `${i}. ${t}`).join('\n') },
+      ],
+    });
+    const fixed = (JSON.parse(resp.choices[0]?.message?.content ?? '{}').items ?? []) as { index: number; text: string }[];
+    for (const f of fixed) if (byIndex.has(f.index) && f.text?.trim()) byIndex.set(f.index, f.text.trim());
+  } catch (e) {
+    console.warn('[script] 상투구 고쳐 쓰기 실패(원문 유지):', e);
+  }
 }
 
 /** 인사·마무리 문구 — 데일리가 기본, 뉴스데스크(newsdesk.ts)는 자기 문구를 넘긴다. */
@@ -105,18 +129,30 @@ export interface ScriptFrame { intro: string; outro: string }
 export async function writeBriefingScript(snapshot: BriefingSnapshot, frame?: ScriptFrame): Promise<ScriptSegment[]> {
   const heads = snapshot.headlines;
   // 숫자·맥락 재료 — 원문 본문 앞부분(article-text.ts). 못 읽으면 제목·요약만.
-  const bodies = await Promise.all(heads.map(h => articleExcerpt(h.url)));
-  const resp = await openai.chat.completions.create({
-    model: MODEL,
-    temperature: 0.3,
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: SYSTEM },
-      { role: 'user', content: heads.map((h, i) => describe(h, i, bodies[i])).join('\n') },
-    ],
-  });
-  const parsed = JSON.parse(resp.choices[0]?.message?.content ?? '{}') as { items?: { index: number; text: string }[] };
-  const byIndex = new Map((parsed.items ?? []).map(it => [it.index, it.text.trim()]));
+  const bodies = await Promise.all(heads.map(h => articleExcerpt(h.url, h.title)));
+  // 기사 하나씩 따로 쓴다 — 한 번에 8개를 쓰게 했더니 순번이 밀려 4번 화면에 8번 기사 대본이 붙었다(2026-10-07 초안).
+  // 다른 기사 제목은 "이어서 보면" 연결용으로만 같이 준다.
+  const others = heads.map((h, i) => `${i}. ${h.title}`).join('\n');
+  const texts = await Promise.all(heads.map(async (h, i) => {
+    try {
+      const resp = await openai.chat.completions.create({
+        model: MODEL,
+        temperature: 0.3,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: SYSTEM },
+          { role: 'user', content: `쓸 기사:\n${describe(h, i, bodies[i])}\n\n(참고 — 오늘 다른 기사 제목, 연결할 때만 쓰세요)\n${others}` },
+        ],
+      });
+      const parsed = JSON.parse(resp.choices[0]?.message?.content ?? '{}') as { items?: { text: string }[]; text?: string };
+      return (parsed.items?.[0]?.text ?? parsed.text ?? '').trim();
+    } catch (e) {
+      console.warn(`[script] ${i}번 대본 실패 — 제목·요약으로 대신:`, e);
+      return '';
+    }
+  }));
+  const byIndex = new Map(texts.map((t, i) => [i, t] as [number, string]).filter(([, t]) => t));
+  await rewriteCliches(byIndex);
 
   const segments: ScriptSegment[] = [{
     kind: 'intro',
