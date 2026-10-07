@@ -93,7 +93,7 @@ function pickBestPerStory(list: AnalyzedArticle[]): AnalyzedArticle[] {
  * 않으면 미리보기는 언제든 다시 갈라진다.
  */
 export async function loadSendArticles(): Promise<RawArticle[]> {
-    // 기존 DB의 최근 3일 분석된 기사 사용 (수집 생략)
+    // 지난 메일(전 평일 09:30) 이후 분석된 기사 사용 (수집 생략)
     // 창 시작은 검수 화면과 같은 함수(review.ts sendWindowStart) — 미리보기와 실제 메일이 갈리지 않게.
     const existing = await prisma.article.findMany({
       where: {

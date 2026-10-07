@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma';
 import { buildDigestData } from './digest';
 import { matchesAsToken, isBlockedNoise, NAME_MATCH_CATEGORIES } from './relevance';
 import { isKnownMedia } from './media';
+import { broadcastFor, SEND_KST } from './briefing';
 import type { AnalyzedArticle, Category, Importance, Tone, DigestData } from './types';
 
 const CATEGORY_PRIORITY: Record<string, number> = {
@@ -23,11 +24,17 @@ const CATEGORY_PRIORITY: Record<string, number> = {
  * 다이제스트 후보 기사 창의 시작 시각 — 검수 화면과 09:30 자동 발송(runner.ts loadSendArticles)이
  * 이 한 함수를 같이 쓴다. 예전엔 검수 화면만 "7일 전 0시부터"를 써서, 미리보기엔 있는 기사가
  * 실제 메일에선 빠졌다(2026-09-28, 9/21~22 스파크랩 기사 3건).
+ *
+ * 2026-10-07부터 메일이 월~금 매일 나가므로 "지난 메일(전 평일 09:30) 이후"만 싣는다 — 72시간 창을 쓰면
+ * 화·수 메일에 같은 기사가 겹친다(소윤 결정). 월요일 메일은 금요일 09:30 이후.
+ * "다음 메일"은 브리핑과 같은 broadcastFor()가 정한다(평일 정오 전이면 오늘, 아니면 다음 평일).
  */
 export function sendWindowStart(): Date {
-  // 지금으로부터 정확히 72시간 전. 예전 식(toLocaleString으로 KST "벽시계"를 만든 뒤 3일 빼기)은
-  // 서버가 UTC(Vercel)면 9시간이 덜 잡혀 실제로는 63시간이었다(2026-09-28 소윤 결정으로 수정).
-  return new Date(Date.now() - 72 * 60 * 60 * 1000);
+  const { dateKey } = broadcastFor();
+  const [y, m, d] = dateKey.split('-').map(Number);
+  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  const back = dow === 1 ? 3 : 1; // 월 → 지난 금, 그 밖 → 전날
+  return new Date(Date.UTC(y, m - 1, d - back, SEND_KST.h - 9, SEND_KST.m));
 }
 
 export interface ReviewArticle extends AnalyzedArticle {

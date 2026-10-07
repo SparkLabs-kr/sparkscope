@@ -67,7 +67,7 @@
   > 끝났기 때문(9/11 메일은 그날 기사 0건). 05:50 Vercel dispatch(아래)로 수집이 07시대에 끝나게 하고
   > 09:30으로 당겼다. **`GITHUB_DISPATCH_TOKEN`이 없으면 이 전제가 깨진다** — 수집이 늦게 끝나 메일에
   > 그날 기사가 빠질 수 있다. 토큰을 먼저 확인할 것.
-- 작업: DB에 있는 것만 발송, 수집 안 함 (`skipCollect=true`)
+- 작업: DB에 있는 것만 발송, 수집 안 함 (`skipCollect=true`). 기사 기간은 **지난 메일(전 평일 09:30) 이후**(`review.ts sendWindowStart`, 10-07부터 — 그 전엔 72시간)
 - 엔드포인트: `GET /api/cron/daily-send-only`
 
 **데일리 브리핑 영상 (2026-09-29~):**
