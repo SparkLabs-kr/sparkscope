@@ -8,7 +8,6 @@ import { ArticleListView } from '@/components/ArticleListView';
 import { PortfolioFilter } from '@/components/PortfolioFilter';
 import { ToneBreakdown } from '@/components/ToneBreakdown';
 import { CrisisPanel } from '@/components/CrisisPanel';
-import { TrendChart } from '@/components/TrendChart';
 import { MediaPanel } from '@/components/MediaPanel';
 import { DateRangePicker } from '@/components/DateRangePicker';
 import { getServerSession } from 'next-auth';
@@ -27,7 +26,7 @@ import { summarizeCompetitorTrend, summarizeOverallTrend, summarizeCategoryPulse
 import { CompetitorPanel, type CompetitorStatView } from '@/components/CompetitorPanel';
 import { getCompetitorFundSummaries, getSparkLabsFundSummary } from '@/lib/sparkscope/fund-db';
 import { safeArticleHref } from '@/lib/sparkscope/article-link';
-import type { SparkLabsFundSummary } from '@/lib/sparkscope/fund-db';
+import type { SparkLabsFundSummary, CompetitorFundSummary } from '@/lib/sparkscope/fund-db';
 import { RISK_FLAGS } from '@/lib/sparkscope/risk-flags';
 import { InterPanel } from '@/components/InterPanel';
 import { PortfolioTopList } from '@/components/PortfolioTopList';
@@ -199,6 +198,19 @@ function resolveRange(searchParams: { from?: string; to?: string }, defaultMonth
 // 150건의 날짜가 7/28까지 걸쳐있고 최근 3일 이내는 7건뿐이었음). guaranteeRecentDays를 주면
 // 그 기간 내 기사는 점수 무관하게 전부 먼저 포함하고, 남는 자리만 그 밖 기간에서 점수 높은
 // 순으로 채운다 — "최근"이라는 탭 이름에 맞게 최신 기사를 우선 보장한다.
+// 기사 목록에 실제로 쓰는 컬럼만. 예전엔 select 없이 풀 로우를 읽어 ourTake·oneLiner·
+// noiseReason처럼 화면에 안 나오는 컬럼까지 브라우저로 직렬화돼 넘어갔다(기사 DB 탭
+// 응답 590KB 중 304KB가 그것이었다. 2026-10-06 실측).
+// 컬럼을 여기서 빼면 기사 목록·피칭 카드에서 그 값이 사라지므로, 화면에서 안 쓰는 것이
+// 확실할 때만 뺀다.
+const LIST_SELECT = {
+  id: true, title: true, titleEn: true, titleKo: true, link: true, source: true,
+  pubDate: true, matchedKeyword: true, category: true, tone: true, riskFlag: true,
+  importance: true, pitchScore: true, pitchTopic: true, pitchTopicEn: true,
+  // ArticleListView가 '전체보기' 정렬에 쓴다 — 빼면 목록 순서가 조용히 달라진다.
+  priorityScore: true, isScrapped: true, isNoise: true,
+} as const;
+
 async function fetchRecentTabArticles(
   where: Record<string, unknown>,
   category: string,
@@ -207,7 +219,7 @@ async function fetchRecentTabArticles(
   guaranteeRecentDays?: number,
 ) {
   if (!guaranteeRecentDays) {
-    return prisma.article.findMany({ where: { ...where, category }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], take });
+    return prisma.article.findMany({ where: { ...where, category }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], take, select: LIST_SELECT });
   }
   // 선택 기간 전체 건수가 take 이내면 굳이 recent/older로 쪼개지 않고 그냥 다 가져온다.
   // 예전엔 항상 쪼개서 recentSince 경계로 나눴는데, 그 경계 계산에 KST 보정용 now(실제
@@ -219,7 +231,7 @@ async function fetchRecentTabArticles(
   // "최근 N일은 점수 무관 보장 + 나머지는 점수순" 방식을 쓴다.
   const total = await prisma.article.count({ where: { ...where, category } });
   if (total <= take) {
-    return prisma.article.findMany({ where: { ...where, category }, orderBy: [{ pubDate: 'desc' }] });
+    return prisma.article.findMany({ where: { ...where, category }, orderBy: [{ pubDate: 'desc' }], select: LIST_SELECT });
   }
   const outerPubDate = (where as { pubDate?: { gte?: Date; lte?: Date } }).pubDate;
   const recentSince = new Date(now.getTime() - guaranteeRecentDays * 24 * 60 * 60 * 1000);
@@ -228,6 +240,7 @@ async function fetchRecentTabArticles(
     where: { ...where, category, pubDate: { gte: recentGte, lte: outerPubDate?.lte } },
     orderBy: [{ pubDate: 'desc' }],
     take,
+    select: LIST_SELECT,
   });
   if (recent.length >= take) return recent;
   const olderLte = outerPubDate?.lte && outerPubDate.lte < recentSince ? outerPubDate.lte : recentSince;
@@ -235,6 +248,7 @@ async function fetchRecentTabArticles(
     where: { ...where, category, pubDate: { gte: outerPubDate?.gte, lt: olderLte } },
     orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }],
     take: take - recent.length,
+    select: LIST_SELECT,
   });
   return [...recent, ...older];
 }
@@ -295,7 +309,23 @@ async function loadDashboardData(
   // 어느 나라의 자사 언급을 볼 것인가. 포트폴리오와 달리 sparklabs_self는 카테고리가
   // 하나뿐이어서, 감시 대상(matchedKeyword)으로 한국/대만을 가른다.
   region: RegionId = 'kr',
+  // 지금 그릴 탭. 이 화면은 탭 하나만 보여주는데 예전엔 모든 탭의 데이터를 매 요청마다
+  // 전부 읽었다(쿼리 30여 개). 탭마다 실제로 쓰는 것만 읽는다 — 화면 결과는 같다.
+  tab: TabId = 'portfolio',
+  // 포트폴리오사 공개 화면은 포트폴리오사 탭 아래에 수집 기사 DB를 바로 펼치므로,
+  // 그 경우엔 portfolio 탭에서도 기사 목록이 필요하다.
+  portfolioView = false,
 ) {
+  // ── 이 탭이 실제로 쓰는 것만 읽는다 ─────────────────────────────────────
+  // 여기 조건은 아래 JSX의 `{tab === ...}` 조건과 짝이다. 한쪽만 고치면 화면이 빈다.
+  const needKpi = tab !== 'competitor' && tab !== SYNERGY_TAB;       // 상단 KPI 4칸
+  const needSpikes = needKpi;                                        // 급증 배너
+  const needArticles = tab === 'articles' || (tab === 'portfolio' && portfolioView);
+  const needPortfolio = tab === 'portfolio';                         // 위기·TOP15·피칭·긍부정
+  const needSparklabs = tab === 'sparklabs';                         // 매체 분포·톤·펀드
+  const needCompetitor = tab === 'competitor';                       // 경쟁사 패널
+  const needPulses = tab === 'articles';                             // AC·VC / 스타트업계 한 줄
+  const EMPTY: never[] = [];
   // AI가 생성한 문장(위기 원인·경쟁사 트렌드)은 사전계산된 한국어를 저장해두므로,
   // EN 화면이면 그 문장의 영어판을 채워서 읽는다(DashboardInsight JSON 안에 캐시된다).
   const insightLocale = getLocale();
@@ -354,41 +384,26 @@ async function loadDashboardData(
   const spanMs = until.getTime() - since.getTime();
   const prevUntil = new Date(since.getTime() - 1);
   const prevSince = new Date(prevUntil.getTime() - spanMs);
-  const prevPortfolioWhere = { pubDate: { gte: prevSince, lte: prevUntil }, isNoise: false, category: pfCategory };
 
   // "3년" 등 긴 기간을 고르면 직전 기간이 실제 데이터 시작일(2023.1.19) 이전까지 걸쳐서,
   // "직전 3년"이라고 표시해도 사실은 그중 데이터 있는 마지막 몇 개월만 비교하는 셈이라 오해하기
   // 쉬웠음(2026-08-06 확인). 직전 기간의 시작을 실제 데이터가 있는 시점으로 당겨서 라벨에 쓰고,
   // 그 결과 직전 기간이 원래 길이의 절반도 안 남으면 증감%는 아예 표시하지 않는다.
-  const earliestPortfolio = await prisma.article.aggregate({
-    where: { category: pfCategory, isNoise: false },
-    _min: { pubDate: true },
-  });
-  const earliestPortfolioDate = earliestPortfolio._min.pubDate;
-  const effectivePrevSince = earliestPortfolioDate && earliestPortfolioDate > prevSince ? earliestPortfolioDate : prevSince;
-  const prevSpanMs = prevUntil.getTime() - prevSince.getTime();
-  const effectivePrevSpanMs = prevUntil.getTime() - effectivePrevSince.getTime();
-  const portfolioTopHasEnoughPrevData = prevSpanMs <= 0 || effectivePrevSpanMs / prevSpanMs >= 0.5;
-
   // 급증 배너: 기간 선택과 무관하게 "최근 3일 vs 직전 60일(백필 포함)" — KST 기준
   const now = getKstNow();
   const rc = new Date(now); rc.setUTCDate(rc.getUTCDate() - 3); rc.setUTCHours(0, 0, 0, 0);
   const bl = new Date(now); bl.setUTCDate(bl.getUTCDate() - 63); bl.setUTCHours(0, 0, 0, 0);
 
   const [
-    total, sparklabsCount, portfolioCount, pitchCount, mentionCount,
-    prevPortfolioCount, prevMentionCount,
-    articles, toneGroups, pitches, trendArticles,
-    spikeRecent, spikeBaseline, crisisNeg, portfolioTargets, competitorTop,
+    total, portfolioCount, pitchCount,
+    articles, pitches,
+    spikeRecent, spikeBaseline, crisisNeg, portfolioTargets,
     competitorArticles, sparklabsMentions, portfolioTop15, portfolioNeg, sparklabsArticles, portfolioPos,
+    earliestPortfolio,
   ] = await Promise.all([
-    prisma.article.count({ where: regionWhere }),
-    prisma.article.count({ where: { ...where, category: 'sparklabs_self' } }),
-    prisma.article.count({ where: portfolioWhere }),
-    prisma.article.count({ where: { ...regionWhere, pitchScore: { gte: 75 } } }),
-    prisma.article.count({ where: { ...portfolioWhere, title: { contains: '스파크랩' } } }),
-    prisma.article.count({ where: prevPortfolioWhere }),
-    prisma.article.count({ where: { ...prevPortfolioWhere, title: { contains: '스파크랩' } } }),
+    needKpi ? prisma.article.count({ where: regionWhere }) : 0,
+    needKpi ? prisma.article.count({ where: portfolioWhere }) : 0,
+    needKpi ? prisma.article.count({ where: { ...regionWhere, pitchScore: { gte: 75 } } }) : 0,
     // "최근 수집 기사" 탭용 — 카테고리 통합 후 priorityScore로 자르면 sparklabs_self(100)·
     // portfolio_company(70)가 competitor(50)·industry_trend(40)를 밀어내 AC·VC/스타트업계
     // 필터를 눌러도 몇 건 안 보이는 문제가 있었음(industry_trend은 전체 기사의 대다수를 차지하는데도
@@ -398,14 +413,14 @@ async function loadDashboardData(
     //
     // 50으로 늘려봤다가(2026-08-14 시도) 되돌림 — AC·VC 스캔들 기사는 priorityScore가
     // 뒤집혀서 오르는 로직 때문에, 후보를 50으로 늘리면 "날짜순 전체보기"(무필터, 상위
-    // 120건)에서 AC·VC가 12행→26행으로 늘고 그만큼 포트폴리오사가 40행→25행으로 줄어드는
+    // 120건)에서 AC·VC가 12행→26행으로 늘고 그만큼 포트폴리오사가 40행→25건으로 줄어드는
     // 트레이드오프가 실측으로 확인됨. AC·VC·스타트업계 필터를 눌렀을 때 15건 제한은 남지만,
     // 기본 화면(전체보기)에서 포트폴리오사 비중을 지키는 쪽을 택함.
-    Promise.all(Object.entries({ sparklabs_self: 150, portfolio_company: 150, competitor: 15, industry_trend: 15 }).map(([category, take]) =>
-      fetchRecentTabArticles(where, category, take, now, category === 'portfolio_company' ? 3 : undefined),
-    )).then(arr => arr.flat()),
-    // 톤 분석 — 스파크랩 기준
-    prisma.article.groupBy({ by: ['tone'], where: sparklabsWhere, _count: { _all: true } }),
+    needArticles
+      ? Promise.all(Object.entries({ sparklabs_self: 150, portfolio_company: 150, competitor: 15, industry_trend: 15 }).map(([category, take]) =>
+          fetchRecentTabArticles(where, category, take, now, category === 'portfolio_company' ? 3 : undefined),
+        )).then(arr => arr.flat())
+      : EMPTY,
     // take:20이면 회사 하나가 같은 사건을 거의 동일한 제목으로 여러 매체에 실어(예: IPO
     // 뉴스가 11건 전부 pitchScore 100) 상위 20건을 독점할 수 있다. 그러면 바로 아래
     // 회사·주제별 다양성 필터(dedupedPitches)를 통과할 후보가 그 회사 1건만 남는다
@@ -415,29 +430,43 @@ async function loadDashboardData(
     // regionWhere로 지사를 가른다 — 원래 where만 써서 카테고리를 안 가렸고, 그래서 GV 탭
     // 피칭 카드에 한국 기사가 떴다(2026-09-22). 바로 위 '피칭 기회' KPI는 이미 regionWhere로
     // 갈려 있어서 숫자(GV 9건)와 아래 목록(한국 기사)이 서로 다른 것을 가리키고 있었다.
-    prisma.article.findMany({ where: { ...regionWhere, pitchScore: { gte: 60 } }, orderBy: { pitchScore: 'desc' }, take: 200 }),
-    prisma.article.findMany({ where: portfolioWhere, select: { matchedKeyword: true, pubDate: true }, take: 20000 }),
-    prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: pfCategory }, select: { id: true, title: true, titleEn: true, titleKo: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true } }),
-    prisma.article.findMany({ where: { pubDate: { gte: bl, lt: rc }, isNoise: false, category: pfCategory }, select: { matchedKeyword: true } }),
+    needPortfolio
+      ? prisma.article.findMany({ where: { ...regionWhere, pitchScore: { gte: 60 } }, orderBy: { pitchScore: 'desc' }, take: 200, select: LIST_SELECT })
+      : EMPTY,
+    needSpikes ? prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: pfCategory }, select: { id: true, title: true, titleEn: true, titleKo: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true } }) : EMPTY,
+    needSpikes ? prisma.article.findMany({ where: { pubDate: { gte: bl, lt: rc }, isNoise: false, category: pfCategory }, select: { matchedKeyword: true } }) : EMPTY,
     // 실시간 위기 감지용: 기간 선택과 무관하게 "최근 3일" 포트폴리오 부정 기사
-    prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: pfCategory, OR: negOr }, select: { id: true, title: true, titleEn: true, titleKo: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true }, take: 800 }),
+    needPortfolio ? prisma.article.findMany({ where: { pubDate: { gte: rc, lte: now }, isNoise: false, category: pfCategory, OR: negOr }, select: { id: true, title: true, titleEn: true, titleKo: true, link: true, source: true, pubDate: true, matchedKeyword: true, category: true, tone: true }, take: 800 }) : EMPTY,
     // 표시 단계 관련성 가드용: 포트폴리오 감시대상 키워드맵 (primaryKeyword → [이름·영문·보조])
     prisma.monitoringTarget.findMany({ where: { category: pfCategory, status: 'ACTIVE' }, select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true, portfolioStatus: true } }),
-    // 포트폴리오 vs 타 하우스 비교용: competitor(타 AC·VC 하우스) 노출 상위 3개 (실제 이름) — 업계 키워드 제외
-    prisma.article.groupBy({ by: ['matchedKeyword'], where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor', matchedKeyword: { notIn: INDUSTRY_TREND_KEYWORDS } }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 3 }),
     // 경쟁사 모니터링 섹션용: 기간 내 competitor 기사 전체(matchedKeyword=실제 경쟁사명별 집계)
-    prisma.article.findMany({ where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor' }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, titleEn: true, titleKo: true, source: true, pubDate: true, link: true, tone: true, matchedKeyword: true }, take: 3000 }),
+    needCompetitor ? prisma.article.findMany({ where: { pubDate: { gte: since, lte: until }, isNoise: false, category: 'competitor' }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, titleEn: true, titleKo: true, source: true, pubDate: true, link: true, tone: true, matchedKeyword: true }, take: 3000 }) : EMPTY,
     // 경쟁사 비교 기준선: 기간 내 '스파크랩' 언급 기사 수 (엔티티 자체 + 제목 언급)
-    prisma.article.count({ where: { pubDate: { gte: since, lte: until }, isNoise: false, OR: [{ category: 'sparklabs_self' }, { title: { contains: '스파크랩' } }] } }),
+    needCompetitor ? prisma.article.count({ where: { pubDate: { gte: since, lte: until }, isNoise: false, OR: [{ category: 'sparklabs_self' }, { title: { contains: '스파크랩' } }] } }) : 0,
     // 가장 많이 언급된 포트폴리오사 TOP 15 (기간 내 노출 건수) — 업계 키워드 제외
-    prisma.article.groupBy({ by: ['matchedKeyword'], where: { ...portfolioWhere, matchedKeyword: { notIn: INDUSTRY_TREND_KEYWORDS } }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 15 }),
+    needPortfolio ? prisma.article.groupBy({ by: ['matchedKeyword'], where: { ...portfolioWhere, matchedKeyword: { notIn: INDUSTRY_TREND_KEYWORDS } }, _count: { _all: true }, orderBy: { _count: { matchedKeyword: 'desc' } }, take: 15 }) : EMPTY,
     // 포트폴리오 부정 기사 (기간 내 부정 논조 — 회사·제목 확인용)
-    prisma.article.findMany({ where: { ...portfolioWhere, OR: negOr }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, titleEn: true, titleKo: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true, riskFlag: true }, take: 80 }),
-    // 스파크랩 자사 기사 (톤 분석 클릭 시 펼쳐볼 목록)
-    prisma.article.findMany({ where: sparklabsWhere, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, titleEn: true, titleKo: true, link: true, source: true, pubDate: true, tone: true, matchedKeyword: true, category: true, riskFlag: true }, take: 300 }),
+    needPortfolio ? prisma.article.findMany({ where: { ...portfolioWhere, OR: negOr }, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, titleEn: true, titleKo: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true, riskFlag: true }, take: 80 }) : EMPTY,
+    // 스파크랩 자사 기사 — 톤 분석·매체 분포에 쓰고, 상단 KPI '스파크랩 직접 언급'의
+    // 숫자도 이 목록의 길이다(그래서 KPI가 필요한 탭에서는 같이 읽어야 한다).
+    needKpi || needSparklabs
+      ? prisma.article.findMany({ where: sparklabsWhere, orderBy: { pubDate: 'desc' }, select: { id: true, title: true, titleEn: true, titleKo: true, link: true, source: true, pubDate: true, tone: true, matchedKeyword: true, category: true, riskFlag: true }, take: 300 })
+      : EMPTY,
     // 포트폴리오 긍정 하이라이트 (호재 기사)
-    prisma.article.findMany({ where: { ...portfolioWhere, OR: posOr }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], select: { id: true, title: true, titleEn: true, titleKo: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true }, take: 120 }),
+    needPortfolio ? prisma.article.findMany({ where: { ...portfolioWhere, OR: posOr }, orderBy: [{ priorityScore: 'desc' }, { pubDate: 'desc' }], select: { id: true, title: true, titleEn: true, titleKo: true, link: true, source: true, pubDate: true, matchedKeyword: true, tone: true }, take: 120 }) : EMPTY,
+    // "3년" 등 긴 기간을 고르면 직전 기간이 실제 데이터 시작일(2023.1.19) 이전까지 걸쳐서,
+    // "직전 3년"이라고 표시해도 사실은 그중 데이터 있는 마지막 몇 개월만 비교하는 셈이라 오해하기
+    // 쉬웠음(2026-08-06 확인). 직전 기간의 시작을 실제 데이터가 있는 시점으로 당겨서 라벨에 쓰고,
+    // 그 결과 직전 기간이 원래 길이의 절반도 안 남으면 증감%는 아예 표시하지 않는다.
+    // (TOP15 증감 라벨에만 쓰므로 포트폴리오사 탭에서만 읽는다.)
+    needPortfolio ? prisma.article.aggregate({ where: { category: pfCategory, isNoise: false }, _min: { pubDate: true } }) : null,
   ]);
+
+  const earliestPortfolioDate = earliestPortfolio?._min.pubDate ?? null;
+  const effectivePrevSince = earliestPortfolioDate && earliestPortfolioDate > prevSince ? earliestPortfolioDate : prevSince;
+  const prevSpanMs = prevUntil.getTime() - prevSince.getTime();
+  const effectivePrevSpanMs = prevUntil.getTime() - effectivePrevSince.getTime();
+  const portfolioTopHasEnoughPrevData = prevSpanMs <= 0 || effectivePrevSpanMs / prevSpanMs >= 0.5;
 
   // TOP15 증감%(같은 길이 직전 기간 대비) — TOP15 회사로만 범위 좁혀 추가 조회
   const top15Keywords = portfolioTop15.map(g => g.matchedKeyword);
@@ -468,10 +497,18 @@ async function loadDashboardData(
   // 경쟁사 모니터링 통계: DB에 실제 수집된 경쟁사(matchedKeyword)별 노출량·TOP3 기사·부정 기사.
   // (주가 기사 등 competitor 카테고리 노이즈는 지금은 그대로 — 추후 프롬프트 튜닝에서 정리)
   // 경쟁사 영문명 (카드 부제로 표시) — DB의 감시대상 정보에서 가져온다
-  const competitorTargets = await prisma.monitoringTarget.findMany({
-    where: { category: 'competitor' },
-    select: { primaryKeyword: true, englishName: true },
-  });
+  // 경쟁사 영문명·자사 감시대상·마지막 수집시각은 서로 의존하지 않는다 — 예전엔 함수
+  // 곳곳에서 따로 await 해 왕복을 3번 썼다. 한 번에 묶는다(2026-10-06).
+  const [competitorTargets, sparklabsTargets, lastCollectLog] = await Promise.all([
+    needCompetitor
+      ? prisma.monitoringTarget.findMany({ where: { category: 'competitor' }, select: { primaryKeyword: true, englishName: true } })
+      : EMPTY,
+    prisma.monitoringTarget.findMany({
+      where: { category: 'sparklabs_self', status: 'ACTIVE' },
+      select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true },
+    }),
+    prisma.runLog.findFirst({ where: { runType: 'daily-collect', status: 'SUCCESS' }, orderBy: { finishedAt: 'desc' }, select: { finishedAt: true } }),
+  ]);
   // EN 화면에서는 등록된 영문명을 회사 이름 자리에 그대로 쓴다(없으면 한국어 이름).
   // 등록된 영문명 → 사전(en.ts) → 한국어 원문 순서로 고른다. matchedKeyword가 primaryKeyword와
   // 다르게 잡히는 경우(보조키워드로 매칭)에도 사전이 받아주도록 t()를 마지막에 둔다.
@@ -519,7 +556,8 @@ async function loadDashboardData(
   // 대시보드 AI 요약(위기 원인·경쟁사 트렌드) 사전계산 배치가 오늘(KST) 정상 실행됐는지 —
   // 이 값 하나로 두 섹션(경쟁사 트렌드/아래 위기 카드) 모두 "사전계산 신뢰 여부"를 판단한다.
   // 배치가 안 돌았으면(크론 실패) 예전처럼 그 자리에서 실시간 AI 호출로 자동 대체한다.
-  const batchFresh = await wasInsightsBatchFreshToday();
+  // 사전계산 결과를 실제로 읽는 탭(경쟁사 트렌드·위기 원인·카테고리 펄스)에서만 확인한다.
+  const batchFresh = (needCompetitor || needPortfolio || needPulses) ? await wasInsightsBatchFreshToday() : false;
 
   // AI 트렌드 요약(대시보드 상위 10곳 + 고정 12개 카드) — 기본 기간(최근 3개월)일 때만
   // 사전계산 결과를 쓴다. 사용자가 기간을 직접 고르면(비기본 범위) 그 조합은 크론이 미리
@@ -537,7 +575,12 @@ async function loadDashboardData(
   const periodPhrase = periodDays >= 300 ? `${Math.round(periodDays / 365)}년간`
     : periodDays >= 25 ? `${Math.round(periodDays / 30)}개월간`
     : `${periodDays}일간`;
-  if (isDefaultRange && batchFresh) {
+  if (!needCompetitor) {
+    // 경쟁사 패널을 안 그리는 탭에서는 요약 자체가 쓰이지 않는다(실시간 LLM 폴백도 돌면 안 된다).
+    overallTrend = null;
+    companyTrends = [];
+    pinnedCompanyTrends = [];
+  } else if (isDefaultRange && batchFresh) {
     const pre = await getPrecomputedCompetitorInsights(insightLocale);
     overallTrend = pre.overall?.lines ?? null;
     companyTrends = competitorAggs.map(c => pre.byCompany.get(c.name)?.points ?? null);
@@ -566,7 +609,11 @@ async function loadDashboardData(
   // AC·VC(경쟁사)/스타트업계(업계동향) "지금 흐름" 한 줄 — 포트폴리오 급증 배너 옆에 나란히 표시.
   // 급증 배너와 같은 "최근 3일" 창(rc~now)을 그대로 써서 두 배너의 시점이 어긋나 보이지 않게 한다.
   let categoryPulses: Map<string, string>;
-  if (batchFresh) {
+  if (!needPulses) {
+    // 기사 DB 탭에서만 쓰는 배너다. 다른 탭에서 돌리면 사전계산이 없을 때 실시간 LLM
+    // 폴백까지 타서, 화면에 나오지도 않는 문장을 만드느라 기다리게 된다.
+    categoryPulses = new Map();
+  } else if (batchFresh) {
     const pre = await getPrecomputedCategoryPulses(insightLocale);
     categoryPulses = new Map([...pre].map(([k, v]) => [k, v.line]));
   } else {
@@ -585,8 +632,9 @@ async function loadDashboardData(
   }
 
   const [fundSummaries, sparkLabsFundSummary] = await Promise.all([
-    getCompetitorFundSummaries(pinnedAggs.map(c => c.name)),
-    getSparkLabsFundSummary(),
+    needCompetitor ? getCompetitorFundSummaries(pinnedAggs.map(c => c.name)) : new Map<string, CompetitorFundSummary>(),
+    // 스파크랩 펀드 현황 표는 스파크랩 탭(한국)에만 그린다.
+    needSparklabs ? getSparkLabsFundSummary() : null,
   ]);
   const competitors: CompetitorStatView[] = competitorAggs.map(({ titles, ...c }, i) => ({
     ...c,
@@ -609,10 +657,6 @@ async function loadDashboardData(
     portfolioKeyMap.set(t.primaryKeyword, Array.from(new Set(keys)));
   }
   // 스파크랩 자사 키워드맵 — sparklabs_self도 강한 식별자(토큰)로 오매칭(예: '스파크랩' 키워드에 걸린 야구 기사) 제거
-  const sparklabsTargets = await prisma.monitoringTarget.findMany({
-    where: { category: 'sparklabs_self', status: 'ACTIVE' },
-    select: { primaryKeyword: true, name: true, englishName: true, helperKeywords: true },
-  });
   const sparklabsKeyMap = new Map<string, string[]>();
   for (const t of sparklabsTargets) {
     const keys = [t.primaryKeyword, t.name, t.englishName, ...(t.helperKeywords ?? '').split(',')]
@@ -650,8 +694,6 @@ async function loadDashboardData(
       return true;
     });
 
-  const mentionRate = portfolioCount > 0 ? Math.round((mentionCount / portfolioCount) * 100) : 0;
-  const prevMentionRate = prevPortfolioCount > 0 ? Math.round((prevMentionCount / prevPortfolioCount) * 100) : 0;
 
   // 위기 카드: 최근 3일 부정 기사로 감지(항상 실시간) 후, 회사별 AI 원인요약 문장만 주입.
   // 원인 문장은 사전계산(daily-collect 크론) 결과를 우선 쓰고, 아래 3가지 경우로 나뉜다.
@@ -693,11 +735,13 @@ async function loadDashboardData(
       })()
     : undefined;
   let companyArticles: typeof cleanedArticles = [];
-  if (company) {
+  // 회사 필터 결과는 기사 DB 탭에서만 그린다.
+  if (company && needArticles) {
     const rows = await prisma.article.findMany({
       where: { pubDate: { gte: since, lte: until }, isNoise: false, category: pfCategory, matchedKeyword: company },
       orderBy: [{ pubDate: 'desc' }],
       take: 300,
+      select: LIST_SELECT,
     });
     const keys = portfolioKeyMap.get(company) ?? [company];
     companyArticles = rows.filter(notNoise).filter(a => keys.some(k => matchesAsToken(a.title, k)));
@@ -772,16 +816,11 @@ async function loadDashboardData(
     return true;
   });
 
-  const lastCollectLog = await prisma.runLog.findFirst({
-    where: { runType: 'daily-collect', status: 'SUCCESS' },
-    orderBy: { finishedAt: 'desc' },
-    select: { finishedAt: true },
-  });
   const lastCollectTime = lastCollectLog?.finishedAt;
 
   return {
     range: { from, to },
-    kpi: { total, sparklabsCount: sparklabsCountFiltered, portfolioCount, pitchCount, mentionRate, mentionDelta: mentionRate - prevMentionRate },
+    kpi: { total, sparklabsCount: sparklabsCountFiltered, portfolioCount, pitchCount },
     articles: enrichedArticles,
     portfolioNames,
     selectedCompany: company,
@@ -790,7 +829,6 @@ async function loadDashboardData(
     // 매체별 노출 분포 — 아래 톤 분석(toneArticles)과 반드시 같은 범위로 집계해야
     // "매체별 합계"와 "톤 분석 총합"이 서로 어긋나지 않는다. (passesName 제목-토큰 재검증 없음)
     sources: sourcesFromArticles(sparklabsArticles),
-    tones: toneGroups.map(t => ({ tone: t.tone ?? 'NEUTRAL', count: t._count._all })),
     pitches: dedupedPitches,
     crises,
     crisisOverview,
@@ -799,11 +837,6 @@ async function loadDashboardData(
       nameOf: c => portfolioNameOf.get(c) ?? c,
     }),
     categoryPulses,
-    trendData: buildTrendData(trendArticles, since, until),
-    compare: {
-      sparkCount: portfolioCount,
-      houses: competitorTop.map(g => ({ name: g.matchedKeyword, count: g._count._all })),
-    },
     competitors,
     pinnedCompetitors,
     overallTrend,
@@ -848,39 +881,6 @@ function sourcesFromArticles(articles: { source: string; tone: string | null }[]
     .sort((a, b) => b.count - a.count);
 }
 
-function buildTrendData(records: { matchedKeyword: string; pubDate: Date }[], since: Date, until: Date) {
-  const counts = new Map<string, number>();
-  records.forEach(r => counts.set(r.matchedKeyword, (counts.get(r.matchedKeyword) ?? 0) + 1));
-  // 정렬 기준: 선택 기간 내 회사별 누적 기사(노출) 건수 내림차순 → 상위 TREND_TOP_N개사
-  const topN = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, TREND_TOP_N).map(([k]) => k);
-
-  const dayCount = Math.round((until.getTime() - since.getTime()) / 86400000);
-  const byMonth = dayCount > 92; // 긴 기간은 월 단위 버킷
-
-  const key = (d: Date) => byMonth ? `${d.getFullYear()}.${d.getMonth() + 1}` : `${d.getMonth() + 1}/${d.getDate()}`;
-
-  const labels: string[] = [];
-  const cur = new Date(since); cur.setHours(0, 0, 0, 0);
-  const end = new Date(until); end.setHours(0, 0, 0, 0);
-  let guard = 0;
-  while (cur <= end && guard < 800) {
-    const k = key(cur);
-    if (labels[labels.length - 1] !== k) labels.push(k);
-    cur.setDate(cur.getDate() + 1);
-    guard++;
-  }
-
-  const datasets = topN.map(name => {
-    const bucket = new Map<string, number>();
-    records.filter(r => r.matchedKeyword === name).forEach(r => {
-      const k = key(new Date(r.pubDate));
-      bucket.set(k, (bucket.get(k) ?? 0) + 1);
-    });
-    return { label: name, data: labels.map(l => bucket.get(l) ?? 0) };
-  });
-
-  return { labels, datasets };
-}
 
 export default async function DashboardPage({ searchParams }: { searchParams: { from?: string; to?: string; company?: string; tab?: string; scope?: string; domain?: string; country?: string; exit?: string } }) {
   const tr = getT();
@@ -901,38 +901,46 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   // 그 위 구간은 수집 자체가 안 돼 있어 눌러도 늘어나지 않는다.
   const isTwSelf = region === 'tw' && tab === 'sparklabs';
   const range = resolveRange(searchParams);
-  const data = await loadDashboardData(range.from, range.to, company, range.isDefaultRange, categoryOfRegion(region), region);
-  const session = await getServerSession(authOptions);
-  const sessionUser = await getSessionUser();
+  // 세션·권한을 데이터 조회보다 먼저 푼다 — loadDashboardData가 "어느 탭을, 어떤 화면으로
+  // 그릴지"를 알아야 그 탭에 필요한 쿼리만 돌 수 있기 때문이다(2026-10-06 성능 작업).
+  // 예전엔 데이터를 먼저 다 읽고 그 뒤에 tab을 포트폴리오사로 되돌렸다.
+  const [session, sessionUser] = await Promise.all([getServerSession(authOptions), getSessionUser()]);
   // 미리보기 중이면(authz.ts PREVIEW_COOKIE) role 이 PORTFOLIO — 스크랩도 실제 포트폴리오사 계정처럼 닫는다.
   const canScrap = canScrapEmail(session?.user?.email ?? null) && sessionUser?.role !== 'PORTFOLIO';
   // 관리 화면(키워드·노이즈·검수) 권한 — 버튼 노출과 페이지 입장이 같은 조건을 봐야 한다(authz.ts canManage).
   const canManageContent = await canManage();
-  const pendingSuggestionCount = canManageContent ? await prisma.noiseSuggestion.count({ where: { status: 'PENDING' } }) : 0;
+  const userId = (session?.user as any)?.id as string | undefined;
+  // 헤더 배지 2개와 북마크 목록은 서로 의존하지 않는다 — 한 번에 읽는다(2026-10-06).
   // .catch(() => 0): NoiseReportRequest 테이블이 아직 DB에 반영 안 됐어도(prisma db push 전) 대시보드가
   // 죽지 않도록 방어 — 반영 전엔 그냥 0건으로 표시된다.
-  const pendingReportCount = canManageContent
-    ? await prisma.noiseReportRequest.count({ where: { status: 'PENDING' } }).catch(() => 0)
-    : 0;
-  const userId = (session?.user as any)?.id as string | undefined;
+  const [pendingSuggestionCount, pendingReportCount, bookmarkRows] = await Promise.all([
+    canManageContent ? prisma.noiseSuggestion.count({ where: { status: 'PENDING' } }) : 0,
+    canManageContent ? prisma.noiseReportRequest.count({ where: { status: 'PENDING' } }).catch(() => 0) : 0,
+    userId ? prisma.bookmark.findMany({ where: { userId }, select: { articleId: true } }) : [],
+  ]);
   // 사내 계정(관리자·임직원)인가 — 북마크·노이즈 신고 요청은 쓰기라 사내만 한다.
   // (해당 API 도 requireInternal 로 막혀 있어, 버튼만 보이면 눌러도 실패한다.)
   const isStaffAccount = sessionUser?.role !== 'PORTFOLIO';
-  // 포트폴리오사 화면 — 펀드·노출 순위/급증·KPI '총 수집 기사'·위기 감지·피칭, 그리고
-  // 기사별 중요도·피칭·Exit/Live·논조를 뺀다. 수집 기사 DB는 포트폴리오사 탭 아래에 바로 펼친다.
+  // 공개 화면 — 사내가 아닌 로그인 사용자(포트폴리오사 등)는 모두 같은 화면을 본다(2026-10-07 소윤 결정).
+  // Intra는 국가·관점 탭 없이 "스파크랩 직접 언급(한국·대만·글로벌벤처스) → 수집 기사 DB" 한 장이다.
+  // 포트폴리오사 분석(위기·TOP15·피칭·긍부정 하이라이트)·펀드·KPI·업계 모니터링·시너지는 없다.
   // 사내 계정의 미리보기(authz.ts PREVIEW_COOKIE)도 여기서는 PORTFOLIO 로 들어온다.
   const portfolioView = !isStaffAccount;
-  // 포트폴리오사 화면엔 업계 모니터링·한국×대만 시너지 탭이 없다 — 주소로 들어와도 포트폴리오사 탭으로 돌린다.
-  // 시너지는 남의 회사 조합까지 다 보여서 뺐고, 그 회사가 낀 조합만 '우리 회사 기사만 모아보기'에 넣는다.
-  if (portfolioView && (tab === 'competitor' || tab === SYNERGY_TAB)) tab = 'portfolio';
+  // 공개 화면은 기사 목록만 읽으면 된다(포트폴리오 분석 쿼리를 돌리지 않는다).
+  if (portfolioView) tab = DB_TAB;
+  const [data, ...publicSelf] = await Promise.all([
+    loadDashboardData(range.from, range.to, company, range.isDefaultRange, categoryOfRegion(region), region, tab, portfolioView),
+    // 공개 화면의 스파크랩 직접 언급 — 지사 세 곳을 한 화면에 나란히 그린다.
+    ...(portfolioView
+      ? REGIONS.map(r => loadDashboardData(range.from, range.to, undefined, range.isDefaultRange, r.category as PortfolioCategory, r.id, 'sparklabs', true))
+      : []),
+  ]);
   // 관리 화면 링크는 canManageContent(위)로 — 들어갈 수 없는 사람에게 보이면
   // "보이는데 안 되는" 상태가 되고, 그게 아예 안 보이는 것보다 나쁘다.
   const canBookmark = !!userId && isStaffAccount;
   // 관리자는 즉시 처리(NoiseReportButton)가 있으니, 신고 "요청" 버튼은 로그인한 비관리자에게만.
   const canRequestReport = canBookmark && !canManageContent;
-  const bookmarkedIds = userId
-    ? new Set((await prisma.bookmark.findMany({ where: { userId }, select: { articleId: true } })).map(b => b.articleId))
-    : new Set<string>();
+  const bookmarkedIds = new Set(bookmarkRows.map(b => b.articleId));
   const articlesWithBookmark = data.articles.map(a => ({ ...a, isBookmarked: bookmarkedIds.has(a.id) }));
   const companyArticlesWithBookmark = data.companyArticles.map(a => ({ ...a, isBookmarked: bookmarkedIds.has(a.id) }));
 
@@ -942,6 +950,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   // ensureArticleKo가 원문이 한국어인 기사를 걸러내므로, 국내만 보는 화면에서는 호출이 0건이다.
   const translatableGroups = () => [
     articlesWithBookmark,
+    ...publicSelf.map(d => d.toneArticles),
     companyArticlesWithBookmark,
     data.pitches,
     data.toneArticles,
@@ -1069,7 +1078,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         <div data-tour="header-actions" className="flex items-center gap-2">
           {canScrap && !portfolioView && <Link href="/dashboard/scraps" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⭐ {tr('스크랩함')}</Link>}
           {canBookmark && <Link href="/dashboard/bookmarks" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">🔖 {tr('내 북마크')}</Link>}
-          {portfolioView && <Link href="/dashboard/company" className="rounded-lg border-2 border-spark-purple bg-spark-purple px-3 py-1.5 text-sm font-bold text-white shadow-sm hover:bg-spark-purple-soft transition-colors whitespace-nowrap">🏢 {tr('우리 회사 기사만 모아보기')}</Link>}
           <Link href="/dashboard/subscriptions" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">✉️ {tr('구독 설정')}</Link>
           {canManageContent && !portfolioView && <Link href="/digest/review" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">📤 {tr('다이제스트 검수')}</Link>}
           {canManageContent && !portfolioView && <Link href="/dashboard/keywords" className="rounded-lg border border-spark-border bg-white px-3 py-1.5 text-sm font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple transition-colors whitespace-nowrap">⚙️ {tr('키워드 관리')}</Link>}
@@ -1081,6 +1089,56 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
         // 기간 선택은 InterPanel 안(국가 필터 바로 위)에서 렌더된다 — 기간·국가를 같이 고르고
         // '확인'을 눌러야 조회되는 흐름이라 두 컨트롤이 한 카드에 있어야 한다.
         <InterPanel from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())} canScrap={canScrap && !portfolioView} portfolioView={portfolioView} />
+      ) : portfolioView ? (
+      // ── 공개 화면 Intra ── 탭 없이 한 장: 스파크랩 직접 언급(지사 세 곳) → 수집 기사 DB
+      <>
+        <div data-tour="date-range" className="mb-6">
+          <DateRangePicker
+            key={`${range.from}_${range.to}`}
+            from={range.from} to={range.to} min={MIN_DATE} max={fmt(getKstNow())}
+            tab="portfolio"
+          />
+        </div>
+
+        <SectionTitle title={`🏢 ${tr('스파크랩 직접 언급')}`} sub={tr('스파크랩이 어디에, 어떤 논조로 보도되는가')} />
+        <div className="flex flex-col gap-6 mb-8">
+          {REGIONS.map((r, i) => {
+            const d = publicSelf[i];
+            // 대만·글로벌벤처스는 그 기간 기사가 없으면 통째로 뺀다(빈 카드만 남으므로). 한국은 항상 그린다.
+            if (r.id !== 'kr' && d.toneArticles.length === 0) return null;
+            return (
+              <section key={r.id}>
+                <div className="mb-3 text-[15px] font-extrabold text-spark-ink">{tr(REGION_LABEL[r.id])}</div>
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                  <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
+                    <div className="font-bold mb-4">📰 {tr('매체별 노출 분포')}</div>
+                    <MediaPanel data={d.sources} defaultCount={8} />
+                  </div>
+                  <div className="bg-white p-5 rounded-2xl border border-spark-border shadow-card">
+                    <div className="font-bold mb-4">💬 {tr('톤 분석')}</div>
+                    <ToneBreakdown articles={d.toneArticles as any} />
+                  </div>
+                </div>
+              </section>
+            );
+          })}
+        </div>
+
+        <SectionTitle title={`🗄️ ${tr('수집 기사 DB')}`} sub={tr('{range} · 분류·검색·정렬로 탐색', { range: range.label })} />
+        <div data-tour="article-table" className="bg-white p-5 rounded-2xl border border-spark-border shadow-card mb-8">
+          <ArticleListView
+            hideCounts
+            articles={articlesWithBookmark.map(({ importance, tone, pitchScore, portfolioStatus, ...a }: any) => ({ ...a, importance: null, tone: null, pitchScore: null })) as any}
+            canBookmark={canBookmark}
+            showSearch={true}
+            showCategory={true}
+            showPitchColumn={false}
+            showInternal={false}
+            csvName={tr('최근수집기사')}
+            emptyText={tr('{range} 내 기사가 없습니다.', { range: range.label })}
+          />
+        </div>
+      </>
       ) : (
       <>
       {/* 섹션 탭 — 국가(1단) × 관점(2단) 2단 계층.
@@ -1177,7 +1235,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
 
           </div>
 
-          {region === 'tw' && !isOutside(tab) && (
+          {region === 'tw' && !isOutside(tab) && !portfolioView && (
             <p className="mt-2 text-[11px] text-spark-muted">
               {tr('대만 업계 모니터링은 감시 대상(AC·VC·업계 키워드)이 아직 전부 한국 기준이라 준비 중입니다.')}
             </p>

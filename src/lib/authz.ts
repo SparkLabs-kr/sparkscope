@@ -35,9 +35,10 @@ export type SessionUser = {
 };
 
 /**
- * 포트폴리오사 화면 미리보기 — 사내 계정이 "그 회사 계정으로 로그인하면 이렇게 보인다"를 확인한다.
+ * 공개 화면 미리보기 — 사내 계정이 "외부 사용자(포트폴리오사 등)로 로그인하면 이렇게 보인다"를 확인한다.
  * 쿠키 하나로 켜고(/api/preview-as), 켜져 있으면 getSessionUser 가 PORTFOLIO 계정처럼 돌려준다.
- * 그래서 화면·API 가 별도 분기 없이 실제 포트폴리오사 계정과 똑같이 동작한다.
+ * 그래서 화면·API 가 별도 분기 없이 실제 외부 계정과 똑같이 동작한다.
+ * 공개 화면은 회사와 무관하게 모두 같으므로(2026-10-07) 회사는 고르지 않는다.
  * 권한이 올라가는 방향은 없다 — 사내 계정만 켤 수 있고, 켜면 등급이 내려가기만 한다.
  */
 export const PREVIEW_COOKIE = 'sparkscope-preview-as';
@@ -45,14 +46,10 @@ export const PREVIEW_COOKIE = 'sparkscope-preview-as';
 export async function getSessionUser(): Promise<SessionUser | null> {
   const real = await getRealSessionUser();
   if (!real || real.role === 'PORTFOLIO') return real;
-  let companyId: string | undefined;
-  try { companyId = cookies().get(PREVIEW_COOKIE)?.value; } catch { return real; }
-  if (!companyId) return real;
-  const company = await prisma.monitoringTarget
-    .findFirst({ where: { id: companyId, category: { startsWith: 'portfolio_company' } }, select: { name: true } })
-    .catch(() => null);
-  if (!company) return real;
-  return { ...real, role: 'PORTFOLIO', companyId, companyName: company.name, previewOf: real.role };
+  let on: string | undefined;
+  try { on = cookies().get(PREVIEW_COOKIE)?.value; } catch { return real; }
+  if (!on) return real;
+  return { ...real, role: 'PORTFOLIO', companyId: null, companyName: null, previewOf: real.role };
 }
 
 /** 미리보기를 무시한 실제 로그인 사용자 — 미리보기를 켜고 끄는 곳에서만 쓴다. */

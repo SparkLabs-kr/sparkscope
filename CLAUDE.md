@@ -62,7 +62,7 @@
 
 **발송:**
 - Vercel Cron: `vercel.json`
-- 일정: 월·수·금 **09:30 KST (UTC 00:30)** (2026-10-01 소윤 결정)
+- 일정: **월~금 매일** 09:30 KST (UTC 00:30) (2026-10-01 09:30으로, 10-07 화·목 추가 — 소윤 결정)
   > 9/11~9/30엔 10:30이었다. 수집(GitHub Actions `schedule`)이 2~3시간씩 늦게 시작해 09:15~10:29에
   > 끝났기 때문(9/11 메일은 그날 기사 0건). 05:50 Vercel dispatch(아래)로 수집이 07시대에 끝나게 하고
   > 09:30으로 당겼다. **`GITHUB_DISPATCH_TOKEN`이 없으면 이 전제가 깨진다** — 수집이 늦게 끝나 메일에
@@ -76,23 +76,26 @@ GitHub `schedule`은 예약보다 2~3시간 늦게 시작한다(9/11~9/28 실측
 그래서 **"언제"는 Vercel 크론, "무엇을"은 GitHub Actions**로 나눴다 — Vercel이 제시각에
 `/api/cron/dispatch`로 workflow_dispatch를 걸면 곧바로 시작한다.
 
-월요일은 **위클리(Claw-e 뉴스데스크)만**, 수·금은 **데일리만** 나간다(2026-10-01 소윤 결정). 무엇을 언제 내보낼지는
-`briefing.ts broadcastFor()` 한 곳이 정한다.
+월요일은 **위클리(Claw-e 뉴스데스크)**, 화~금은 **매일 데일리**가 나간다(2026-10-07 소윤 결정). 다이제스트 메일도 월~금 매일.
+무엇을 언제 내보낼지는 `briefing.ts broadcastFor()` 한 곳이 정한다.
 
-| 방송 | 기사 기간 | 선정 |
+| 방송 | 기사 기간 | 선정(8개) |
 |---|---|---|
 | 월 위클리 | 지난주 화 00:00 ~ 일 24:00 | 데일리와 같은 칸(최근 브리핑 제외 없음) |
-| 수 데일리 | 월 09:30(지난 메일) 이후 | AI 트렌드 2 고정(해외 우선, 국내는 해외 매체급일 때만) + 스파크랩(최대 1) → 포트폴리오로 3칸 |
-| 금 데일리 | 수 09:30 이후 | 같음 |
+| 화~금 데일리 | 전날 09:30(지난 메일) 이후 | AI 트렌드 3 고정(해외 우선, 국내는 해외 매체급일 때만) + 스파크랩(최대 1, 한국·대만·GV) · 국내 포폴 · 해외 포폴(대만·GV) — 스파크랩 있으면 2:2, 없으면 3:2. 모자라면 다른 포폴 → AI → 스타트업계 |
+
+- **중복 금지**: 데일리는 지난 7일 브리핑에 나간 기사(주소·제목 기준)와 그 회사 기사를 다시 넣지 않는다 — 스파크랩 포함.
+- 해외 포폴 제목은 한국어 번역(`titleKo`)으로 나간다. 대만·GV 수집(`gv-collect`·`taiwan-collect`)은 매일 05:20·05:40.
 
 | KST | 담당 | 작업 |
 |---|---|---|
+| 매일 05:20·05:40 | Vercel `/api/cron/gv-collect` · `taiwan-collect` | 해외 포트폴리오 수집 |
 | 매일 05:50 | Vercel → `daily-collect.yml` | 수집. 06:13 `schedule`은 예비 — 이미 돌았으면 `collect-guard.ts`가 건너뜀 |
 | 월 08:30 | Vercel → `daily-briefing.yml` | 위클리 영상(오늘 수집 완료를 09:25까지 기다림) |
-| 월·수·금 09:30 | Vercel `/api/cron/daily-send-only` | 메일 발송 + 브리핑 헤드라인 스냅샷 확정(영상이 이미 있으면 안 건드림) |
-| 수·금 09:32 | Vercel → `daily-briefing.yml` | 데일리 영상(메일 발송을 10:05까지 기다림) |
-| 월·수·금 09:45 | Vercel `/api/cron/briefing-notify` | 잔디 전송(영상 있을 때) — 월 "위클리 브리핑", 수·금 "데일리 브리핑" |
-| 월·수·금 10:15 | Vercel `/api/cron/briefing-notify?final=1` | 못 보냈으면 영상 없이 헤드라인이라도 전송 |
+| 월~금 09:30 | Vercel `/api/cron/daily-send-only` | 메일 발송 + 브리핑 헤드라인 스냅샷 확정(영상이 이미 있으면 안 건드림) |
+| 화~금 09:32 | Vercel → `daily-briefing.yml` | 데일리 영상(메일 발송을 10:05까지 기다림) |
+| 월~금 09:45 | Vercel `/api/cron/briefing-notify` | 잔디 전송(영상 있을 때) — 월 위클리 방, 화~금 데일리 방 |
+| 월~금 10:15 | Vercel `/api/cron/briefing-notify?final=1` | 못 보냈으면 영상 없이 헤드라인이라도 전송 |
 
 - 필요한 설정: Vercel `GITHUB_DISPATCH_TOKEN`(이 저장소 Actions 쓰기 권한 fine-grained 토큰 — 이수 관리),
   `JANDI_WEBHOOK_URL`(데일리 방), `JANDI_WEBHOOK_URL_WEEKLY`(위클리 방 — 비면 데일리 방으로) / GitHub 시크릿 `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`.

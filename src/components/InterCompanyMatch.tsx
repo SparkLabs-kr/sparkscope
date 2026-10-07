@@ -3,9 +3,8 @@ import { useT } from '@/lib/i18n/client';
 
 // Inter 포트폴리오 매칭 — 회사 한 곳의 줄(대표 근거 + 펼치면 연결된 기사·"왜 이 회사?").
 //
-// Inter 탭의 '판정 근거' 탭(InterPanel ReasonTab)과 회사별 기사 모아보기(/dashboard/company)가
-// 같은 컴포넌트를 쓴다. 매칭 사유는 크론(inter-portfolio-match.ts)이 이미 써 둔 문장을 읽기만
-// 하므로, 어느 화면에서 열어도 AI를 다시 부르지 않는다.
+// Inter 탭의 '판정 근거' 탭(InterPanel ReasonTab)에서 쓴다(사내 화면 전용). 매칭 사유는
+// 크론(inter-portfolio-match.ts)이 이미 써 둔 문장을 읽기만 하므로 AI를 다시 부르지 않는다.
 
 import { useState } from 'react';
 import type { PortfolioMatch } from '@/lib/inter-sample-data';

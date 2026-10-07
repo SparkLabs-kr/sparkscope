@@ -32,7 +32,7 @@ const CATS: [string, string][] = [
 const CAT_LABEL: Record<string, string> = Object.fromEntries(CATS);
 
 /** 추천 기사 표시 — 어느 칸으로 뽑혔는지. 칸 정의는 briefing-reco.ts(서버 전용이라 여기선 이름만 복사). */
-const SLOT_NAME = ['', '스파크랩', '포트폴리오', 'AI 국내', 'AI 글로벌', '스타트업계'];
+const SLOT_NAME = ['', '스파크랩', '국내 포트폴리오', '해외 포트폴리오', 'AI 트렌드', '스타트업계'];
 function TierBadge({ tier }: { tier: number }) {
   return <span className="mr-1 rounded bg-spark-light-purple/40 px-1 text-[10px] font-bold text-spark-purple align-middle">추천·{SLOT_NAME[tier] ?? ''}</span>;
 }
@@ -326,8 +326,8 @@ export function DigestReviewEditor({
           </p>
           <p className="text-[11px] text-gray-400 mb-2">
             {reco?.program === 'weekly'
-              ? tr('위클리 5개: 지난주 화~일 기사 중 AI 트렌드 2개 고정(해외 우선) + 나머지 3개는 스파크랩(최대 1) → 포트폴리오 순')
-              : tr('추천 5개: AI 트렌드 2개 고정(해외 우선) + 나머지 3개는 스파크랩(최대 1) → 포트폴리오 순')}
+              ? tr('위클리 8개: 지난주 화~일 기사 중 데일리와 같은 칸(AI 3 고정 + 스파크랩·국내·해외 포트폴리오)')
+              : tr('추천 8개: AI 트렌드 3개 고정(해외 우선) + 스파크랩(최대 1) · 국내 포트폴리오 · 해외 포트폴리오(대만·GV) — 스파크랩 있으면 2:2, 없으면 3:2. 지난 브리핑에 나간 기사는 제외')}
           </p>
           <div className="space-y-2">
             {briefing.map((h, idx) => (

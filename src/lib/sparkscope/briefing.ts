@@ -18,7 +18,7 @@ import type { AnalyzedArticle, DigestData } from './types';
 import { restoreTitle } from './title-restore';
 import type { InterDigestCard } from './inter-digest';
 
-export const BRIEFING_MAX = 5;
+export const BRIEFING_MAX = 8; // 2026-10-07 5 → 8 (AI 3 고정 + 스파크랩·포트폴리오 5)
 /** 자동 선정일 때 해외 카드를 몇 개까지 넣을지 — 국내 TOP3 뒤를 채운다. */
 const DEFAULT_INTER_SLOTS = 2;
 
@@ -64,9 +64,9 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 // ── 방송 일정과 기사 기간 (2026-10-01 소윤 결정) ─────────────────────
 //
-//   월 09:30 메일 · 09:45 잔디 — 위클리(Claw-e 뉴스데스크)만. 지난주 화 00:00 ~ 일 24:00 기사에서 5개
-//   수 09:30 메일 · 09:45 잔디 — 데일리만. 월 09:30(지난 메일) 이후 기사에서 5개
-//   금 09:30 메일 · 09:45 잔디 — 데일리만. 수 09:30 이후 기사에서 5개
+//   월    09:30 메일 · 09:45 잔디 — 위클리(Claw-e 뉴스데스크). 지난주 화 00:00 ~ 일 24:00 기사에서 8개
+//   화~금 09:30 메일 · 09:45 잔디 — 데일리. 전날 09:30(지난 메일) 이후 기사에서 8개   (2026-10-07 소윤 결정)
+//   지난 7일 브리핑에 나간 기사는 데일리에 다시 넣지 않는다(briefing-reco recentlyBriefed).
 //
 // 검수 화면·추천·영상·메일 크론이 모두 이 함수 하나로 "다음 방송"을 정한다.
 
@@ -99,7 +99,7 @@ export function broadcastFor(now: Date = new Date()): BroadcastWindow {
   let offset = 0;
   for (; offset < 7; offset++) {
     const dow = (k.getUTCDay() + offset) % 7;
-    if ([1, 3, 5].includes(dow) && (offset > 0 || k.getUTCHours() < 12)) break;
+    if (dow >= 1 && dow <= 5 && (offset > 0 || k.getUTCHours() < 12)) break;
   }
   const dateKey = kstDateKey(new Date(now.getTime() + offset * 864e5));
   const dow = (k.getUTCDay() + offset) % 7;
@@ -109,7 +109,7 @@ export function broadcastFor(now: Date = new Date()): BroadcastWindow {
     const until = kstAt(dateKey, 0, 0);       // 월요일 0시(= 일요일 끝)
     return { program: 'weekly', dateKey, since, until, label: `${md(since)}부터 ${md(new Date(until.getTime() - 1))}까지` };
   }
-  const since = kstAt(dateKey, SEND_KST.h, SEND_KST.m, -2); // 수→월, 금→수 09:30
+  const since = kstAt(dateKey, SEND_KST.h, SEND_KST.m, -1); // 전날 09:30(화→월, 수→화 …)
   return { program: 'daily', dateKey, since, label: `${md(since)} 오후부터` };
 }
 

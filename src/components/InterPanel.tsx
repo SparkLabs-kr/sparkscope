@@ -94,7 +94,7 @@ function fmtKstTime(d: Date | string) {
 }
 
 // portfolioView: 포트폴리오사 화면 — 포트폴리오 매칭(회사·사유·브리핑)과 건수 지표를 전부 빼고
-// 기사만 남긴다. 회사별 매칭은 /dashboard/company(회사별 기사 모아보기)로 옮겨 갔다.
+// 기사만 남긴다(공개 화면 — 누구나 같은 화면을 보므로 특정 회사 매칭을 보여 줄 자리가 없다).
 export function InterPanel({
   from, to, min, max, canScrap, portfolioView = false,
 }: { from: string; to: string; min: string; max: string; canScrap: boolean; portfolioView?: boolean }) {

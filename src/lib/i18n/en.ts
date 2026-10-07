@@ -16,8 +16,8 @@ export const EN: Record<string, string> = {
   '추천 다시 받기': 'Refresh picks',
   '저장됨 — 발송 때 이 목록으로 영상을 만듭니다.': 'Saved — the video will be built from this list at send time.',
   '아직 저장 안 됨 — 저장하지 않으면 추천 5개가 그대로 나갑니다.': 'Not saved yet — if left unsaved, the 5 picks go out as is.',
-  '추천 5개: AI 트렌드 2개 고정(해외 우선) + 나머지 3개는 스파크랩(최대 1) → 포트폴리오 순':
-    'Recommended 5: 2 fixed AI-trend slots (global first) + 3 by priority: SparkLabs (max 1) → portfolio',
+  '추천 8개: AI 트렌드 3개 고정(해외 우선) + 스파크랩(최대 1) · 국내 포트폴리오 · 해외 포트폴리오(대만·GV) — 스파크랩 있으면 2:2, 없으면 3:2. 지난 브리핑에 나간 기사는 제외':
+    'Recommended 8: 3 fixed AI-trend slots (global first) + SparkLabs (max 1) · domestic portfolio · overseas portfolio (Taiwan·GV) — 2:2 with SparkLabs, else 3:2. Items from past briefings are excluded',
   'AI 트렌드': 'AI trends',
   '기준': 'as of',
   '추천': 'Recommended',
@@ -608,8 +608,8 @@ export const EN: Record<string, string> = {
   // ── 다이제스트 검수 ──────────────────────────────────────────────
   '월요일 위클리 브리핑 헤드라인': 'Monday weekly briefing headlines',
   '데일리 브리핑 헤드라인': 'Daily briefing headlines',
-  '위클리 5개: 지난주 화~일 기사 중 AI 트렌드 2개 고정(해외 우선) + 나머지 3개는 스파크랩(최대 1) → 포트폴리오 순':
-    'Weekly 5: from last Tue–Sun, 2 fixed AI-trend slots (global first) + 3 by priority: SparkLabs (max 1) → portfolio',
+  '위클리 8개: 지난주 화~일 기사 중 데일리와 같은 칸(AI 3 고정 + 스파크랩·국내·해외 포트폴리오)':
+    'Weekly 8: from last Tue–Sun, same slots as daily (3 AI + SparkLabs · domestic · overseas portfolio)',
   '다이제스트 검수': 'Digest review',
   '다이제스트 검수·발송': 'Digest review & send',
   '발송 예정: 매주 월·수·금 오전 9시 30분. [오늘 편집 저장]한 TOP 3·제외 기사·브리핑 헤드라인은 자동 발송에 반영되고, 실제 발송 화면을 미리 볼 수 있습니다.':
@@ -1443,4 +1443,12 @@ export const EN: Record<string, string> = {
   '왜 함께인가': 'Why together',
   '이렇게 협업해 볼 수 있어요': 'How you could work together',
   '칸을 누르면 그 조합의 판정 근거와 대표 기사가 여기에 열립니다.': 'Click a cell to see the reasoning and key articles for that combination here.',
+  '공개 화면 미리보기': 'Public view preview',
+  '사내가 아닌 계정으로 로그인하면 보이는 화면입니다': 'this is what non-staff accounts see',
+  '공개 화면으로 보기': 'View public screen',
+  '스파크랩이 어디에, 어떤 논조로 보도되는가 — 한국·대만·글로벌벤처스': 'Where and how SparkLabs is covered — Korea, Taiwan, Global Ventures',
+  '매체별 노출 분포': 'Coverage by outlet',
+  '톤 분석': 'Tone analysis',
+  '수집 기사 DB': 'Article database',
+  '스파크랩이 어디에, 어떤 논조로 보도되는가': 'Where and how SparkLabs is covered',
 };

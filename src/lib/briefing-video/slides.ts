@@ -138,24 +138,30 @@ function base(dateLabel: string, program = '데일리 브리핑') {
 export function introSlide(dateLabel: string, headlines: BriefingHeadline[], o: SlideOpts = {}): Buffer {
   const { canvas, ctx } = base(dateLabel, o.program);
   const textW = W - 200 - (o.hostSpace ? HOST_W : 0);
-  ctx.font = '64px "Pretendard ExtraBold"';
+  // 8개(2026-10-07~)가 한 화면에 들어가게 줄 간격을 개수에 맞춘다. 제목은 자르지 않고 글씨를 줄인다.
+  const n = headlines.length;
+  const top = n > 5 ? 230 : 270;
+  const step = Math.min(82, Math.floor((H - 50 - top) / Math.max(1, n)) + 4);
+  ctx.font = `${n > 5 ? 52 : 64}px "Pretendard ExtraBold"`;
   ctx.fillStyle = C.ink;
-  ctx.fillText(o.hostSpace ? '이번 주 헤드라인' : '오늘의 헤드라인', 64, 190);
-  let y = 270;
+  ctx.fillText(o.hostSpace ? '이번 주 헤드라인' : '오늘의 헤드라인', 64, n > 5 ? 165 : 190);
+  let y = top;
+  const r = n > 5 ? 16 : 20;
   headlines.forEach((h, i) => {
     ctx.fillStyle = C.purple;
     ctx.beginPath();
-    ctx.arc(84, y - 12, 20, 0, Math.PI * 2);
+    ctx.arc(84, y - 10, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = C.white;
-    ctx.font = '22px "Pretendard Bold"';
+    ctx.font = `${n > 5 ? 18 : 22}px "Pretendard Bold"`;
     ctx.textAlign = 'center';
-    ctx.fillText(String(i + 1), 84, y - 4);
+    ctx.fillText(String(i + 1), 84, y - 3);
     ctx.textAlign = 'left';
     ctx.fillStyle = C.ink;
-    ctx.font = '30px "Pretendard SemiBold"';
-    ctx.fillText(wrap(ctx, hangulize(h.title), textW, 1)[0] ?? '', 124, y);
-    y += 82;
+    const sizes = n > 5 ? [26, 24, 22, 20, 18] : [30, 27, 24, 21, 18];
+    const t = fitText(ctx, hangulize(h.title), textW, 1, sizes, 'SemiBold', true);
+    ctx.fillText(t.lines.join(' '), 124, y);
+    y += step;
   });
   return canvas.toBuffer('image/png');
 }

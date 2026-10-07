@@ -8,8 +8,6 @@ import { SignOutButton } from '@/components/SignOutButton';
 import { ScrollTopButton } from '@/components/ScrollTopButton';
 import { DashboardTutorial } from '@/components/DashboardTutorial';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
-import { PreviewAsPicker } from '@/components/PreviewAsPicker';
-import { prisma } from '@/lib/prisma';
 import { getT, getLocale } from '@/lib/i18n/server';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -40,25 +38,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
     ? await countPending().catch(() => ({ pending: 0, unnotified: 0 }))
     : { pending: 0, unnotified: 0 };
   const t = getT();
-  // 포트폴리오사 화면 미리보기 — 사내 계정에게만 회사 목록을 준다(authz.ts PREVIEW_COOKIE).
+  // 공개 화면 미리보기(authz.ts PREVIEW_COOKIE) — 사내 계정만 켤 수 있다.
   const previewing = !!user.previewOf;
-  const previewCompanies = user.role !== 'PORTFOLIO' || previewing
-    ? (await prisma.monitoringTarget.findMany({
-        where: { category: { startsWith: 'portfolio_company' }, status: 'ACTIVE' },
-        select: { id: true, name: true, category: true },
-        orderBy: { name: 'asc' },
-      }).catch(() => [])).map(c => ({
-        id: c.id,
-        label: `${c.name} · ${c.category.endsWith('_tw') ? '대만' : c.category.endsWith('_gv') ? '글로벌벤처스' : '한국'}`,
-      }))
-    : [];
+  const canPreview = user.role !== 'PORTFOLIO';
 
   return (
     <div className="min-h-screen bg-spark-cream">
       {previewing && (
         <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 bg-amber-400 px-4 py-2 text-[13px] font-semibold text-amber-950">
-          <span>👁 {t('포트폴리오사 화면 미리보기')} — <b>{user.companyName}</b> {t('계정으로 로그인하면 보이는 화면입니다')}</span>
-          <PreviewAsPicker companies={previewCompanies} selected={user.companyId ?? undefined} label={t('다른 회사로 보기')} />
+          <span>👁 {t('공개 화면 미리보기')} — {t('사내가 아닌 계정으로 로그인하면 보이는 화면입니다')}</span>
           <a href="/api/preview-as?off=1" className="rounded-md bg-amber-950 px-2.5 py-1 text-[12px] font-bold text-amber-50 hover:bg-amber-900">{t('미리보기 끝내기')}</a>
         </div>
       )}
@@ -88,8 +76,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
           )}
         </div>
         <div className="flex items-center gap-3 text-sm text-spark-muted">
-          {!previewing && previewCompanies.length > 0 && (
-            <PreviewAsPicker companies={previewCompanies} label={t('👁 포트폴리오사 화면으로 보기')} />
+          {canPreview && (
+            <a href="/api/preview-as" className="rounded-md border border-spark-border bg-white px-2.5 py-1 text-[12px] font-semibold text-spark-ink-soft hover:border-spark-purple/40 hover:text-spark-purple whitespace-nowrap">
+              👁 {t('공개 화면으로 보기')}
+            </a>
           )}
           <LanguageSwitcher />
           {/* 지금 내가 무엇을 할 수 있는 상태인지 한눈에 보이게 한다.

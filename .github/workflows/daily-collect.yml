@@ -104,6 +104,6 @@ jobs:
   # 05:50 dispatch 수집이 돈 날은 여기서 부르지 않는다(3시간 넘게 기다리게 되므로) — 그날은 Vercel dispatch 담당.
   briefing:
     needs: collect
-    if: github.event_name == 'schedule' && needs.collect.outputs.ran == 'true' && contains(fromJSON('["1","3","5"]'), needs.collect.outputs.dow)
+    if: github.event_name == 'schedule' && needs.collect.outputs.ran == 'true' && contains(fromJSON('["1","2","3","4","5"]'), needs.collect.outputs.dow)
     uses: ./.github/workflows/daily-briefing.yml
     secrets: inherit

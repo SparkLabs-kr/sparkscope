@@ -29,7 +29,7 @@ export function spokenDate(dateKey: string): string {
   return `${m}월 ${d}일 ${wd}요일`;
 }
 
-const ORDINAL = ['첫 번째', '두 번째', '세 번째', '네 번째', '다섯 번째'];
+const ORDINAL = ['첫 번째', '두 번째', '세 번째', '네 번째', '다섯 번째', '여섯 번째', '일곱 번째', '여덟 번째'];
 
 /**
  * 말투 기준 — 2026-09-30 소윤 두 번째 수정본(9/30 원고를 직접 다듬은 것).

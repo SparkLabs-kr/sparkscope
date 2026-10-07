@@ -35,6 +35,8 @@ export interface ReviewArticle extends AnalyzedArticle {
   isScrapped: boolean;
   /** EN 화면용 번역 제목. 발송되는 메일 본문은 항상 원문(title)을 쓴다. */
   titleEn?: string | null;
+  /** 원문이 한국어가 아닐 때(대만·GV) 한국어 번역 제목 */
+  titleKo?: string | null;
 }
 
 export interface ReviewOverrides {
@@ -57,6 +59,7 @@ function toReviewArticle(a: ArticleRow): ReviewArticle {
     isScrapped: a.isScrapped,
     title: a.title,
     titleEn: a.titleEn,
+    titleKo: a.titleKo,
     link: a.link,
     source: a.source,
     pubDate: a.pubDate,
