@@ -3,7 +3,7 @@
  *
  * 기사 선정은 데일리와 같은 곳(briefing-reco.ts)에서 한다 — 월요일 방송은 broadcastFor()가
  * program='weekly'로 잡고, 지난주 화 00:00 ~ 일 24:00 기사에서 스파크랩·포트폴리오 우선,
- * AI 최소 1개, 남으면 AI → 스타트업계 순으로 5개를 고른다(2026-10-01 소윤 결정).
+ * 데일리와 같은 8칸으로 고른다(2026-10-07~). 대신 기사당 대본을 줄여 전체 3분 30초~4분, 최대 5분에 맞춘다(10-08 소윤).
  * 그래서 검수 화면의 [바꾸기]·저장도 데일리와 똑같이 먹고, 스냅샷·영상 기록·잔디 전송도 같은 길로 간다.
  *
  * 이 파일은 화면·목소리만 다르다 — 데일리와 같은 슬라이드(slides.ts)에 오른쪽 아래 Claw-e(정지 그림),
@@ -50,6 +50,8 @@ export async function buildNewsdeskVideo(opts: { outDir: string; snapshot: Brief
   const segments = await writeBriefingScript(snapshot, {
     intro: `안녕하세요, 클로이 뉴스데스크의 클로이입니다! ${label}, 지난 한 주 꼭 짚어야 할 소식을 모아 왔어요.`,
     // 2026-10-01 소윤 확정 문구
+    // Leda 1.12배속은 1초에 약 8자 — 기사당 170~210자(≈25초) × 8 + 인사·마무리 ≈ 3분 50초.
+    length: '위의 250~330자 대신, 이번엔 기사마다 약 170~210자(3문장)로 씁니다: ① 팩트+숫자 → ② 누구에게 어떤 의미인지 → ③ 지켜볼 변수. 맥락 설명은 한 구절로 줄이세요.',
     outro: '오늘의 위클리 브리핑은 여기까지입니다. 자세한 내용은 이메일로 보내드린 스파크스코프에서 확인해 주세요. 함께해 주셔서 감사합니다. 다음 브리핑에서 뵙겠습니다!',
   });
   const { speeches, voice } = await synthesizeAll(segments.map(s => s.text), NEWSDESK_VOICE);
@@ -77,5 +79,6 @@ export async function buildNewsdeskVideo(opts: { outDir: string; snapshot: Brief
   const file = path.join(opts.outDir, `newsdesk-${snapshot.dateKey}.mp4`);
   const seconds = await renderVideo(clips, path.join(opts.outDir, 'work'), file);
   console.log(`[newsdesk] 영상 ${seconds.toFixed(1)}초 → ${file}`);
+  if (seconds > 300) console.warn(`[newsdesk] 5분 초과(${Math.round(seconds)}초) — 기사당 길이 지시를 더 줄여야 함`);
   return { snapshot, segments, file, seconds };
 }

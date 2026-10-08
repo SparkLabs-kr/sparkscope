@@ -134,7 +134,12 @@ function aboutHeadline(text: string, h: BriefingHeadline): boolean {
 }
 
 /** 인사·마무리 문구 — 데일리가 기본, 뉴스데스크(newsdesk.ts)는 자기 문구를 넘긴다. */
-export interface ScriptFrame { intro: string; outro: string }
+export interface ScriptFrame {
+  intro: string;
+  outro: string;
+  /** 기사별 길이 지시를 바꿀 때(위클리 — 8개 전체 3분 30초~4분, 최대 5분, 2026-10-08 소윤) */
+  length?: string;
+}
 
 export async function writeBriefingScript(snapshot: BriefingSnapshot, frame?: ScriptFrame): Promise<ScriptSegment[]> {
   const heads = snapshot.headlines;
@@ -150,7 +155,7 @@ export async function writeBriefingScript(snapshot: BriefingSnapshot, frame?: Sc
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: SYSTEM },
-        { role: 'user', content: `이 기사 하나만 씁니다. 다른 기사 내용을 섞지 마세요.\n${describe(h, i, bodies[i])}` },
+        { role: 'user', content: `이 기사 하나만 씁니다. 다른 기사 내용을 섞지 마세요.${frame?.length ? `\n[길이] ${frame.length}` : ''}\n${describe(h, i, bodies[i])}` },
       ],
     });
     const parsed = JSON.parse(resp.choices[0]?.message?.content ?? '{}') as { items?: { text: string }[]; text?: string };
