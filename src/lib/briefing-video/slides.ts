@@ -42,6 +42,8 @@ const HANJA: Record<string, string> = {
   低: '저', 號: '호', 稅: '세', 法: '법', 國: '국', 政: '정', 檢: '검', 警: '경', 核: '핵', 車: '차',
 };
 export function hangulize(text: string): string {
+  // Pretendard에 없는 문장부호도 네모로 깨진다 — "연계∙∙∙경진"(U+2219, 10-08 방송). 비슷한 글리프로 바꾼다.
+  text = text.replace(/[∙•‧⋅・]/g, '·').replace(/[⋯]/g, '…').replace(/[“”〝〞]/g, '"').replace(/[‘’]/g, "'").replace(/\u00a0/g, ' ');
   return text.replace(/[\u3400-\u9FFF\uF900-\uFAFF]/g, ch => HANJA[ch] ?? ch);
 }
 

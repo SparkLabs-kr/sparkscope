@@ -95,7 +95,7 @@ JSON으로만 답하세요: {"items":[{"index":0,"text":"..."}]}`;
 // 해외 트렌드 카드의 "연결된 포트폴리오사"(내부 매칭)는 넘기지 않는다 — 영상·페이지는 로그인 없이 열리는데,
 // 초안에서 "포트폴리오사 센스톤, 옥타코 등…"처럼 내부 매칭이 대본에 그대로 나왔다(2026-10-07, CLAUDE.md 공개 규칙).
 function describe(h: BriefingHeadline, i: number, body: string): string {
-  return `${i}. [${h.label}] 제목: ${h.title} / 요약: ${h.summary} / 출처: ${h.source}${body ? `\n   본문 발췌: ${body}` : ''}`;
+  return `[${h.label}] 제목: ${h.title} / 요약: ${h.summary} / 출처: ${h.source}${body ? `\n   본문 발췌: ${body}` : ''}`;
 }
 
 /**
@@ -123,6 +123,15 @@ async function rewriteCliches(byIndex: Map<number, string>): Promise<void> {
   }
 }
 
+/** 대본이 그 헤드라인 이야기인가 — 제목의 고유명사(앞쪽 낱말) 중 하나라도 대본에 나와야 한다. */
+function aboutHeadline(text: string, h: BriefingHeadline): boolean {
+  const words = h.title.replace(/\[[^\]]*\]/g, ' ').replace(/[^0-9a-zA-Z가-힣\s]/g, ' ').split(/\s+/)
+    .filter(w => (/[가-힣]/.test(w) ? w.length >= 2 : w.length >= 3)).slice(0, 4);
+  if (words.length === 0) return true;
+  const stem = (w: string) => w.replace(/(은|는|이|가|을|를|의|에|와|과|로|도)$/, '');
+  return words.some(w => text.includes(stem(w)));
+}
+
 /** 인사·마무리 문구 — 데일리가 기본, 뉴스데스크(newsdesk.ts)는 자기 문구를 넘긴다. */
 export interface ScriptFrame { intro: string; outro: string }
 
@@ -131,25 +140,32 @@ export async function writeBriefingScript(snapshot: BriefingSnapshot, frame?: Sc
   // 숫자·맥락 재료 — 원문 본문 앞부분(article-text.ts). 못 읽으면 제목·요약만.
   const bodies = await Promise.all(heads.map(h => articleExcerpt(h.url, h.title)));
   // 기사 하나씩 따로 쓴다 — 한 번에 8개를 쓰게 했더니 순번이 밀려 4번 화면에 8번 기사 대본이 붙었다(2026-10-07 초안).
-  // 다른 기사 제목은 "이어서 보면" 연결용으로만 같이 준다.
-  const others = heads.map((h, i) => `${i}. ${h.title}`).join('\n');
+  // 다른 기사 목록은 주지 않는다 — 번호 붙은 목록을 같이 줬더니 "4. 원소프트다임…"처럼 엉뚱한 기사를 썼다(10-08 방송 사고).
+  // 쓴 대본에 그 기사의 핵심 낱말이 없으면 한 번 더 쓰고, 그래도 아니면 제목·요약으로 대신한다.
+  const writeOne = async (h: BriefingHeadline, i: number): Promise<string> => {
+    const resp = await openai.chat.completions.create({
+      model: MODEL,
+      temperature: 0.3,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: SYSTEM },
+        { role: 'user', content: `이 기사 하나만 씁니다. 다른 기사 내용을 섞지 마세요.\n${describe(h, i, bodies[i])}` },
+      ],
+    });
+    const parsed = JSON.parse(resp.choices[0]?.message?.content ?? '{}') as { items?: { text: string }[]; text?: string };
+    return (parsed.items?.[0]?.text ?? parsed.text ?? '').trim().replace(/^\s*\d+\s*[.)]\s*/, '');
+  };
   const texts = await Promise.all(heads.map(async (h, i) => {
-    try {
-      const resp = await openai.chat.completions.create({
-        model: MODEL,
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: SYSTEM },
-          { role: 'user', content: `쓸 기사:\n${describe(h, i, bodies[i])}\n\n(참고 — 오늘 다른 기사 제목, 연결할 때만 쓰세요)\n${others}` },
-        ],
-      });
-      const parsed = JSON.parse(resp.choices[0]?.message?.content ?? '{}') as { items?: { text: string }[]; text?: string };
-      return (parsed.items?.[0]?.text ?? parsed.text ?? '').trim();
-    } catch (e) {
-      console.warn(`[script] ${i}번 대본 실패 — 제목·요약으로 대신:`, e);
-      return '';
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const t = await writeOne(h, i);
+        if (t && aboutHeadline(t, h)) return t;
+        console.warn(`[script] ${i}번 대본이 제목과 안 맞음 — 다시 씀(${attempt + 1}/2)`);
+      } catch (e) {
+        console.warn(`[script] ${i}번 대본 실패:`, e);
+      }
     }
+    return '';
   }));
   const byIndex = new Map(texts.map((t, i) => [i, t] as [number, string]).filter(([, t]) => t));
   await rewriteCliches(byIndex);

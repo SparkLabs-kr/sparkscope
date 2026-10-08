@@ -32,27 +32,28 @@ function bodyRegion(html: string): string {
 }
 
 /** 제목의 핵심 낱말(회사·고유명사)이 본문에 2개 이상 나오는가 — 엉뚱한 기사를 대본 재료로 쓰지 않게. */
-function matchesTitle(text: string, title: string): boolean {
+function matchesTitle(text: string, title: string, strict = false): boolean {
   const words = [...new Set(title.replace(/[^0-9a-zA-Z가-힣\s]/g, ' ').split(/\s+/)
     .filter(w => (/[가-힣]/.test(w) ? w.length >= 2 : w.length >= 3)))];
   if (words.length === 0) return true;
   const hit = words.filter(w => text.includes(w)).length;
-  return hit >= Math.min(2, words.length);
+  // 다른 매체에서 찾은 기사는 같은 회사의 다른 소식일 수 있어(스파크랩 기사는 매일 여러 건) 낱말 절반 이상이 맞아야 한다.
+  return hit >= (strict ? Math.max(2, Math.ceil(words.length / 2)) : Math.min(2, words.length));
 }
 
 /** 한 페이지에서 본문 문단을 읽는다. 150자 미만이면(로그인·구독 벽, 자바스크립트로만 그리는 페이지) 실패로 본다. */
-async function readPage(url: string, max: number, title = ''): Promise<string> {
+async function readPage(url: string, max: number, title = '', strict = false): Promise<string> {
   if (!/^https?:\/\//.test(url)) return '';
   try {
     const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0' }, redirect: 'follow', signal: AbortSignal.timeout(7000) });
     const full = (await r.text()).slice(0, 600_000);
-    return extract(bodyRegion(full), max, title) || extract(full, max, title);
+    return extract(bodyRegion(full), max, title, strict) || extract(full, max, title, strict);
   } catch {
     return '';
   }
 }
 
-function extract(html: string, max: number, title: string): string {
+function extract(html: string, max: number, title: string, strict: boolean): string {
   {
     const paras = [...html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)].map(m => strip(m[1]));
     // <p>가 없는 CMS(줄바꿈 <br>만 쓰는 곳)는 영역 텍스트 전체를 쓴다
@@ -63,7 +64,7 @@ function extract(html: string, max: number, title: string): string {
       out += (out ? ' ' : '') + p;
     }
     if (out.length < 150) return '';
-    return !title || matchesTitle(out, title) ? out.slice(0, max) : '';
+    return !title || matchesTitle(out, title, strict) ? out.slice(0, max) : '';
   }
 }
 
@@ -84,7 +85,7 @@ async function otherCoverage(title: string, max: number): Promise<string> {
       const real = await resolveGoogleNewsUrl(g).catch(() => null);
       if (!real || WALLED.test(real)) continue;
       tried++;
-      const text = await readPage(real, max, title);
+      const text = await readPage(real, max, title, true);
       if (text) return text;
     }
   } catch { /* 검색 실패 — 빈 문자열 */ }
