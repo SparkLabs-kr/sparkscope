@@ -237,7 +237,8 @@ export function outroSlide(dateLabel: string, o: SlideOpts = {}): Buffer {
  * 오프닝 화면 — 말 없이 뉴스 배경음악만 나오는 3초짜리 타이틀(2026-10-07 소윤 요청).
  * 대시보드 보라색 바탕에 프로그램 이름과 날짜. 위클리는 타이틀 GIF가 이 역할을 한다.
  */
-export function openingSlide(dateLabel: string, program = '데일리 브리핑'): Buffer {
+/** 타이틀 화면. 썸네일은 저장소가 JPEG만 받아서 mime을 넘길 수 있게 했다(기본 PNG — 영상 프레임용). */
+export function openingSlide(dateLabel: string, program = '데일리 브리핑', mime: 'image/png' | 'image/jpeg' = 'image/png'): Buffer {
   ensureFonts();
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
@@ -271,5 +272,5 @@ export function openingSlide(dateLabel: string, program = '데일리 브리핑')
   ctx.font = '24px "Pretendard SemiBold"';
   ctx.fillText('스파크랩 · 포트폴리오 · AI 트렌드', 96, 540);
   ctx.globalAlpha = 1;
-  return canvas.toBuffer('image/png');
+  return mime === 'image/jpeg' ? canvas.toBuffer('image/jpeg', 0.92) : canvas.toBuffer('image/png');
 }

@@ -53,16 +53,16 @@ export async function publishBriefingVideo(built: BuiltBriefing): Promise<string
   // 메일은 이 주소를 고정해서 쓰므로(digest.ts renderBriefingLink) 같은 이름으로 덮어쓴다.
   const { openingSlide } = await import('./slides');
   const { spokenDate } = await import('./script');
-  const thumbPath = `${built.snapshot.dateKey}/thumb.png`;
+  const thumbPath = `${built.snapshot.dateKey}/thumb.jpg`;
   const tr = await fetch(`${base}/storage/v1/object/${BUCKET}/${thumbPath}`, {
     method: 'POST',
     headers: {
       ...(key.startsWith('sb_') ? {} : { Authorization: `Bearer ${key}` }),
       apikey: key,
-      'content-type': 'image/png',
+      'content-type': 'image/jpeg', // 버킷이 PNG를 받지 않는다(2026-10-13 워크플로 실패)
       'x-upsert': 'true',
     },
-    body: new Uint8Array(openingSlide(spokenDate(built.snapshot.dateKey))),
+    body: new Uint8Array(openingSlide(spokenDate(built.snapshot.dateKey), undefined, 'image/jpeg')),
   });
   if (!tr.ok) throw new Error(`썸네일 업로드 실패 ${tr.status}: ${(await tr.text()).slice(0, 300)}`);
 
