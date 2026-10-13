@@ -316,14 +316,15 @@ ${SIGNAL_EMAIL_CSS}
 function renderBriefingLink(date: Date, base: string, token: string): string {
   const dateKey = new Date(date.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
   const url = `${base}/briefing/${dateKey}?s=${escape(token)}`;
-  // 썸네일 이미지 하나가 곧 링크다 — 버튼·문구 없이 영상 첫 장면을 보여 준다.
-  // 썸네일은 사이트 공개 폴더의 고정 이미지(public/briefing/daily-thumb.jpg)를 쓴다 — 영상과 무관하게 바로 열린다.
-  const thumb = `${base}/briefing/daily-thumb.jpg`;
+  // 썸네일은 사이트 공개 폴더의 고정 이미지(public/briefing/daily-thumb.png)를 쓴다 — 영상과 무관하게 바로 열린다.
+  const thumb = `${base}/briefing/daily-thumb.png`;
   return `
   <div class="section" style="text-align:center">
+    <div style="font-size:16px;font-weight:700;color:#1A1A2E;margin:0 0 12px">🎬 오늘의 브리핑 영상</div>
     <a href="${url}" style="text-decoration:none;display:block">
       <img src="${thumb}" alt="오늘의 브리핑 영상 보기" width="600" style="display:block;width:100%;max-width:600px;height:auto;border:0;border-radius:12px;margin:0 auto">
     </a>
+    <a href="${url}" style="display:inline-block;margin:16px 0 0;padding:12px 28px;background:#6D4AFF;color:#FFFFFF;text-decoration:none;font-weight:700;font-size:15px;border-radius:8px">영상 바로 보기</a>
   </div>`;
 }
 
