@@ -317,8 +317,8 @@ function renderBriefingLink(date: Date, base: string, token: string): string {
   const dateKey = new Date(date.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
   const url = `${base}/briefing/${dateKey}?s=${escape(token)}`;
   // 썸네일 이미지 하나가 곧 링크다 — 버튼·문구 없이 영상 첫 장면을 보여 준다.
-  // 썸네일은 영상 워크플로가 저장소(Supabase Storage)에 같이 올린다 — 메일은 영상보다 먼저 나가므로 주소만 고정해 둔다.
-  const thumb = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''}/storage/v1/object/public/briefings/${dateKey}/thumb.jpg`;
+  // 썸네일은 사이트 공개 폴더의 고정 이미지(public/briefing/daily-thumb.jpg)를 쓴다 — 영상과 무관하게 바로 열린다.
+  const thumb = `${base}/briefing/daily-thumb.jpg`;
   return `
   <div class="section" style="text-align:center">
     <a href="${url}" style="text-decoration:none;display:block">

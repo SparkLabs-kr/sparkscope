@@ -49,24 +49,6 @@ export async function publishBriefingVideo(built: BuiltBriefing): Promise<string
     body: await readFile(built.file),
   });
   if (!r.ok) throw new Error(`스토리지 업로드 실패 ${r.status}: ${(await r.text()).slice(0, 300)}`);
-  // 메일 썸네일 — 영상의 첫 장면(타이틀 화면)과 같은 그림. 워크플로(Actions)에서 그려야 글꼴이 나온다.
-  // 메일은 이 주소를 고정해서 쓰므로(digest.ts renderBriefingLink) 같은 이름으로 덮어쓴다.
-  const { openingSlide } = await import('./slides');
-  const { spokenDate } = await import('./script');
-  const thumbPath = `${built.snapshot.dateKey}/thumb.jpg`;
-  const tr = await fetch(`${base}/storage/v1/object/${BUCKET}/${thumbPath}`, {
-    method: 'POST',
-    headers: {
-      ...(key.startsWith('sb_') ? {} : { Authorization: `Bearer ${key}` }),
-      apikey: key,
-      'content-type': 'image/jpeg', // 버킷이 PNG를 받지 않는다(2026-10-13 워크플로 실패)
-      'x-upsert': 'true',
-    },
-    body: new Uint8Array(openingSlide(spokenDate(built.snapshot.dateKey), undefined, 'image/jpeg')),
-  });
-  // 썸네일 실패가 영상·대본 기록까지 막으면 안 된다 — 영상이 새것으로 바뀌고 기록은 옛것으로 남는 상태가 생긴다.
-  if (!tr.ok) console.error(`[publish] 썸네일 업로드 실패 ${tr.status} — 영상 기록은 저장합니다: ${(await tr.text()).slice(0, 200)}`);
-
   // 덮어쓴 뒤 CDN 캐시가 옛 영상을 주지 않게 버전 쿼리를 붙인다.
   const url = `${base}/storage/v1/object/public/${BUCKET}/${objectPath}?v=${Date.now()}`;
 
