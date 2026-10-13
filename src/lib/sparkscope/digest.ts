@@ -319,12 +319,12 @@ function renderBriefingLink(date: Date, base: string, token: string): string {
   // 썸네일은 사이트 공개 폴더의 고정 이미지(public/briefing/daily-thumb.png)를 쓴다 — 영상과 무관하게 바로 열린다.
   const thumb = `${base}/briefing/daily-thumb.png`;
   return `
-  <div class="section" style="text-align:center">
-    <div style="font-size:16px;font-weight:700;color:#1A1A2E;margin:0 0 12px">🎬 오늘의 브리핑 영상</div>
+  <div class="section" style="text-align:left">
+    <div style="font-size:16px;font-weight:700;color:#1A1A2E;margin:0 0 12px;text-align:left">🎬 오늘의 브리핑 영상</div>
     <a href="${url}" style="text-decoration:none;display:block">
-      <img src="${thumb}" alt="오늘의 브리핑 영상 보기" width="600" style="display:block;width:100%;max-width:600px;height:auto;border:0;border-radius:12px;margin:0 auto">
+      <img src="${thumb}" alt="오늘의 브리핑 영상 보기" width="600" style="display:block;width:100%;max-width:600px;height:auto;border:0;border-radius:12px">
     </a>
-    <a href="${url}" style="display:inline-block;margin:16px 0 0;padding:12px 28px;background:#6D4AFF;color:#FFFFFF;text-decoration:none;font-weight:700;font-size:15px;border-radius:8px">영상 바로 보기</a>
+    <a href="${url}" style="display:block;width:100%;box-sizing:border-box;margin-top:14px;padding:15px 20px;background:#5046E5;color:#FFFFFF !important;text-decoration:none;border-radius:8px;font-size:14px;font-weight:700;text-align:center">영상 바로 보기</a>
   </div>`;
 }
 
