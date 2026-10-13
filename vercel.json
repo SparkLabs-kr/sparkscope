@@ -4,8 +4,24 @@
   ],
   "crons": [
     {
-      "path": "/api/cron/daily-send-only",
+      "path": "/api/cron/daily-send-only?hold=1",
       "schedule": "30 0 * * 1-5"
+    },
+    {
+      "path": "/api/cron/daily-send-only?hold=1",
+      "schedule": "40 0 * * 1-5"
+    },
+    {
+      "path": "/api/cron/daily-send-only?hold=1",
+      "schedule": "45 0 * * 1-5"
+    },
+    {
+      "path": "/api/cron/daily-send-only?hold=1",
+      "schedule": "50 0 * * 1-5"
+    },
+    {
+      "path": "/api/cron/daily-send-only?hold=1",
+      "schedule": "55 0 * * 1-5"
     },
     {
       "path": "/api/cron/gv-collect",

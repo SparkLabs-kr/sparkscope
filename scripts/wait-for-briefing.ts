@@ -11,7 +11,7 @@
  */
 import { appendFileSync } from 'fs';
 import { prisma } from '../src/lib/prisma';
-import { broadcastFor, kstDateKey } from '../src/lib/sparkscope/briefing';
+import { broadcastFor, kstDateKey, loadBriefingSnapshot } from '../src/lib/sparkscope/briefing';
 
 function out(skip: boolean) {
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `skip=${skip}\n`);
@@ -27,14 +27,15 @@ function out(skip: boolean) {
     return;
   }
   const deadline = weekly ? 9 * 60 + 25 : 10 * 60 + 5;
-  const what = weekly ? '오늘 수집 완료' : '오늘 메일 발송';
+  const what = weekly ? '오늘 수집 완료' : '오늘 헤드라인 스냅샷';
   for (;;) {
     const k = new Date(Date.now() + 9 * 3600e3);
     const todayStartUtc = new Date(Date.UTC(k.getUTCFullYear(), k.getUTCMonth(), k.getUTCDate()) - 9 * 3600e3);
     const ready = weekly
       ? (await prisma.runLog.count({ where: { runType: 'daily-collect', status: 'SUCCESS', startedAt: { gte: todayStartUtc } } })) > 0
         && (await prisma.runLog.count({ where: { runType: 'daily-collect', status: 'RUNNING', startedAt: { gte: new Date(Date.now() - 3 * 3600e3) } } })) === 0
-      : (await prisma.runLog.count({ where: { runType: 'daily-send', status: 'SUCCESS', startedAt: { gte: todayStartUtc } } })) > 0;
+      // 데일리: 오늘 헤드라인 스냅샷이 생기면 바로 만든다. 메일은 영상이 끝난 뒤에 나간다(10시 전).
+      : !!(await loadBriefingSnapshot(dateKey));
     if (ready) { console.log(`${what} 확인 — ${weekly ? '위클리' : '데일리'} 제작 시작`); break; }
     if (k.getUTCHours() * 60 + k.getUTCMinutes() >= deadline) {
       console.warn(`마감 시각 지남(${what} 기록 없음) — 있는 데이터로 제작`);

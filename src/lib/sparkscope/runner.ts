@@ -36,6 +36,7 @@ export interface RunOptions {
   baseUrl?: string;          // 대시보드 링크 도메인
   dryRun?: boolean;          // 외부 호출 없이 시뮬레이션
   skipCollect?: boolean;     // true면 수집 건너뛰고 기존 데이터로 발송만 (발송 전용 모드)
+  holdUntilVideo?: boolean;  // true면 오늘 영상이 완성되기 전에는 메일을 보내지 않는다(영상 → 메일 순서, 10시 전 발송)
 }
 
 // 실행 중 크래시(타임아웃·강제종료 등)로 죽으면 RunLog가 RUNNING 상태로 영원히 남는다 —
@@ -481,6 +482,9 @@ export async function runDailyDigest(opts: RunOptions = {}) {
     // 8. 메일 발송 — 발송 직전 발신 도메인 인증 여부 확인(미인증이면 전원 발송 스킵, 담당자 알림)
     let mailResult: any = null;
     let skipped: string | undefined;
+    // 영상이 먼저 — holdUntilVideo면 오늘 영상이 없을 때 발송만 미룬다(헤드라인 스냅샷은 위에서 이미 저장됨).
+    const holdNow = !!opts.holdUntilVideo && !(await loadBriefingVideo(kstDateKey()).catch(() => null));
+    if (holdNow) skipped = 'waiting-for-video';
     // BCC는 DIGEST_BCC가 명시적으로 설정된 경우에만. (TEST_RECIPIENT로 폴백하면 중복 수신 위험)
     const bcc = opts.bcc ?? process.env.DIGEST_BCC ?? undefined;
     // 2026-07-17은 발송 중단
@@ -489,7 +493,7 @@ export async function runDailyDigest(opts: RunOptions = {}) {
       skipped = 'scheduled_pause_2026_07_17';
       await prisma.digest.update({ where: { id: digestRecord.id }, data: { errorMsg: '2026-07-17 발송 중단' } });
       console.log('[runner] 2026-07-17 발송 중단');
-    } else if (opts.send && !opts.dryRun) {
+    } else if (opts.send && !opts.dryRun && !holdNow) {
       const domain = await isSendDomainVerified();
       if (!domain.verified) {
         // 미인증: 전원 발송 스킵 + 담당자(BCC/테스트 수신자)에게 최선노력 알림
