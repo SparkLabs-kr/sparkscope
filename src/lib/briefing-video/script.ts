@@ -201,9 +201,13 @@ export async function writeBriefingScript(snapshot: BriefingSnapshot, frame?: Sc
     text: frame?.intro ?? `좋은 아침입니다. ${spokenDate(snapshot.dateKey)}, 스파크스코프 데일리 브리핑입니다.`,
   }];
   let prev: Section | null = null;
+  const usedStarts = new Set<string>();
   heads.forEach((h, i) => {
     // AI가 빠뜨린 항목은 요약으로라도 채운다 — 화면엔 있는데 말이 없는 슬라이드가 생기지 않게.
-    const body = byIndex.get(i) || `${h.title}. ${h.summary}`;
+    let body = byIndex.get(i) || `${h.title}. ${h.summary}`;
+    // 같은 문장으로 시작하는 대본이 두 칸에 들어가면 뒤 칸은 제목·요약으로 대신한다(2026-10-13 대조에서 발견).
+    if (usedStarts.has(body.slice(0, 80))) body = `${h.title}. ${h.summary}`;
+    usedStarts.add(body.slice(0, 80));
     const sec = sectionOf(h);
     const lead = sec === prev ? '' : prev === 'S' && sec === 'P' ? '이어서 포트폴리오 소식입니다.' : SECTION_LEAD[sec][prev ? 1 : 0];
     prev = sec;
