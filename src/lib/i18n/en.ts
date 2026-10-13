@@ -11,6 +11,7 @@ export const EN: Record<string, string> = {
   // ── 데일리 브리핑 헤드라인 (2026-09-28) ─────────────────────────
   '추천 계산 중…': 'Computing picks…',
   '잔디 연결 테스트': 'Test JANDI',
+  'SparkScope 본부별 참여 현황': 'SparkScope Team Engagement',
   '잔디로 테스트 메시지를 보냈습니다. 토픽을 확인해 주세요.': 'Test message sent to JANDI. Check the topic.',
   '잔디 전송 실패': 'JANDI send failed',
   '추천 다시 받기': 'Refresh picks',

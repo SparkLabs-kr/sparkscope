@@ -104,7 +104,7 @@ function describe(h: BriefingHeadline, i: number, body: string): string {
  * 걸린 기사만 한 번 더 고쳐 쓰게 한다. 실패하면 원래 문장 그대로.
  */
 const CLICHE = /(주목할 만합니다|주목됩니다|주목할 필요가 있습니다|의미가 있습니다|의미가 큽니다|기대됩니다|전망입니다|참고할 만합니다|시사점을 줍니다)/;
-async function rewriteCliches(byIndex: Map<number, string>): Promise<void> {
+async function rewriteCliches(byIndex: Map<number, string>, heads: BriefingHeadline[]): Promise<void> {
   const bad = [...byIndex.entries()].filter(([, t]) => CLICHE.test(t));
   if (bad.length === 0) return;
   try {
@@ -118,19 +118,31 @@ async function rewriteCliches(byIndex: Map<number, string>): Promise<void> {
       ],
     });
     const fixed = (JSON.parse(resp.choices[0]?.message?.content ?? '{}').items ?? []) as { index: number; text: string }[];
-    for (const f of fixed) if (byIndex.has(f.index) && f.text?.trim()) byIndex.set(f.index, f.text.trim());
+    // 모델이 준 번호를 믿지 않는다 — 고쳐 쓴 문장이 그 번호의 기사 이야기일 때만 적용한다.
+    // 2026-10-13 사고: 번호가 한 칸 어긋난 고쳐 쓰기가 다른 기사 대본을 덮어 써서 밀림·중복이 생겼다.
+    for (const f of fixed) {
+      const h = heads[f.index];
+      if (byIndex.has(f.index) && h && f.text?.trim() && aboutHeadline(f.text, h)) byIndex.set(f.index, f.text.trim());
+    }
   } catch (e) {
     console.warn('[script] 상투구 고쳐 쓰기 실패(원문 유지):', e);
   }
 }
 
-/** 대본이 그 헤드라인 이야기인가 — 제목의 고유명사(앞쪽 낱말) 중 하나라도 대본에 나와야 한다. */
-function aboutHeadline(text: string, h: BriefingHeadline): boolean {
+/**
+ * 대본(또는 원문 본문)이 그 헤드라인 이야기인가.
+ * 2026-10-13 사고: 제목 낱말 하나가 전체 글에 우연히 들어 있다는 이유로 다른 기사 대본이 통과했다.
+ * 그래서 앞부분(150자)에 제목의 낱말 중 하나가 **반드시** 나와야 한다.
+ * 제목 앞쪽 낱말만 보면 "부산영화제·무대서·소개된"처럼 일반 낱말뿐인 제목에서 정상 본문까지 버린다
+ * (2026-10-13 비마이프렌즈 — 원문이 맞는데 제목만 읽는 대본이 됐다). 그래서 제목 전체 낱말을 본다.
+ */
+export function aboutHeadline(text: string, h: BriefingHeadline): boolean {
   const words = h.title.replace(/\[[^\]]*\]/g, ' ').replace(/[^0-9a-zA-Z가-힣\s]/g, ' ').split(/\s+/)
-    .filter(w => (/[가-힣]/.test(w) ? w.length >= 2 : w.length >= 3)).slice(0, 4);
+    .filter(w => (/[가-힣]/.test(w) ? w.length >= 2 : w.length >= 3));
   if (words.length === 0) return true;
   const stem = (w: string) => w.replace(/(은|는|이|가|을|를|의|에|와|과|로|도)$/, '');
-  return words.some(w => text.includes(stem(w)));
+  const head = text.slice(0, 150).toLowerCase();
+  return words.some(w => head.includes(stem(w).toLowerCase()));
 }
 
 /** 인사·마무리 문구 — 데일리가 기본, 뉴스데스크(newsdesk.ts)는 자기 문구를 넘긴다. */
@@ -144,7 +156,15 @@ export interface ScriptFrame {
 export async function writeBriefingScript(snapshot: BriefingSnapshot, frame?: ScriptFrame): Promise<ScriptSegment[]> {
   const heads = snapshot.headlines;
   // 숫자·맥락 재료 — 원문 본문 앞부분(article-text.ts). 못 읽으면 제목·요약만.
-  const bodies = await Promise.all(heads.map(h => articleExcerpt(h.url, h.title)));
+  // 본문이 제목과 다른 기사이면(원문 주소가 엉뚱한 페이지로 풀린 경우) 버리고 제목·요약만 쓴다.
+  const bodies = await Promise.all(heads.map(async h => {
+    const b = await articleExcerpt(h.url, h.title);
+    if (b && !aboutHeadline(b, h)) {
+      console.warn(`[script] 원문이 제목과 다름 — 본문 버림: ${h.title.slice(0, 30)}`);
+      return '';
+    }
+    return b;
+  }));
   // 기사 하나씩 따로 쓴다 — 한 번에 8개를 쓰게 했더니 순번이 밀려 4번 화면에 8번 기사 대본이 붙었다(2026-10-07 초안).
   // 다른 기사 목록은 주지 않는다 — 번호 붙은 목록을 같이 줬더니 "4. 원소프트다임…"처럼 엉뚱한 기사를 썼다(10-08 방송 사고).
   // 쓴 대본에 그 기사의 핵심 낱말이 없으면 한 번 더 쓰고, 그래도 아니면 제목·요약으로 대신한다.
@@ -174,7 +194,7 @@ export async function writeBriefingScript(snapshot: BriefingSnapshot, frame?: Sc
     return '';
   }));
   const byIndex = new Map(texts.map((t, i) => [i, t] as [number, string]).filter(([, t]) => t));
-  await rewriteCliches(byIndex);
+  await rewriteCliches(byIndex, heads);
 
   const segments: ScriptSegment[] = [{
     kind: 'intro',
@@ -194,4 +214,28 @@ export async function writeBriefingScript(snapshot: BriefingSnapshot, frame?: Sc
     text: frame?.outro ?? '오늘 준비한 브리핑은 여기까지입니다. 더 자세한 내용은 스파크스코프 대시보드에서 확인해 주세요!',
   });
   return segments;
+}
+
+/**
+ * 영상을 만들기 전 최종 대조 — 화면 제목과 말이 같은 기사를 가리키는지, 같은 기사가 두 번 나가지 않는지 본다.
+ * 어긋나는 칸이 하나라도 있으면 문제 목록을 돌려준다(build.ts가 발행을 멈춘다).
+ */
+export function checkAlignment(segments: ScriptSegment[], headlines: BriefingHeadline[]): string[] {
+  const problems: string[] = [];
+  const seen = new Map<number, number>();
+  const texts = new Map<string, number>();
+  for (const s of segments) {
+    if (s.kind !== 'item') continue;
+    const i = s.index!;
+    seen.set(i, (seen.get(i) ?? 0) + 1);
+    const h = headlines[i];
+    if (!h || !aboutHeadline(s.text, h)) problems.push(`${i}번 칸 대본이 제목과 다른 기사: ${h?.title.slice(0, 30) ?? '(없음)'}`);
+    const key = s.text.slice(0, 80);
+    if (texts.has(key)) problems.push(`${i}번 칸 대본이 ${texts.get(key)}번 칸과 같은 문장으로 시작`);
+    else texts.set(key, i);
+  }
+  headlines.forEach((h, i) => {
+    if ((seen.get(i) ?? 0) !== 1) problems.push(`${i}번 기사(${h.title.slice(0, 30)})의 대본이 ${seen.get(i) ?? 0}개`);
+  });
+  return problems;
 }

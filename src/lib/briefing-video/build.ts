@@ -7,7 +7,7 @@ import { loadSendArticles, buildDigestForSend } from '../sparkscope/runner';
 import { publishBriefingSnapshot, loadBriefingSnapshot, kstDateKey, type BriefingSnapshot } from '../sparkscope/briefing';
 import { getBriefingRecommendation } from '../sparkscope/briefing-reco';
 import type { AnalyzedArticle } from '../sparkscope/types';
-import { writeBriefingScript, spokenDate, type ScriptSegment } from './script';
+import { writeBriefingScript, checkAlignment, spokenDate, type ScriptSegment } from './script';
 import { synthesizeAll } from './tts';
 import { introSlide, itemSlide, outroSlide, openingSlide } from './slides';
 import { renderVideo, silentWav, GAP_SECONDS, type Clip } from './render';
@@ -41,10 +41,27 @@ export interface BuiltBriefing {
   seconds: number;
 }
 
+/**
+ * 같은 기사를 두 번 싣지 않는다 — 주소가 같거나, 제목 앞부분(한글·영문·숫자만)이 같으면 뒤의 것을 뺀다.
+ * 2026-10-13 사고: 화웨이·밀레니얼웍스가 헤드라인에 두 번씩 들어가 영상에도 두 번 나갔다.
+ */
+export function dedupeHeadlines<T extends { url: string; title: string }>(hs: T[]): T[] {
+  const urls = new Set<string>();
+  const titles = new Set<string>();
+  return hs.filter(h => {
+    const t = h.title.replace(/\[[^\]]*\]/g, '').replace(/[^0-9a-zA-Z가-힣]/g, '').toLowerCase().slice(0, 20);
+    if (urls.has(h.url) || (t && titles.has(t))) return false;
+    urls.add(h.url);
+    if (t) titles.add(t);
+    return true;
+  });
+}
+
 export async function buildBriefingVideo(opts: { outDir: string; prepare?: boolean }): Promise<BuiltBriefing> {
-  const snapshot = opts.prepare
+  const loaded = opts.prepare
     ? await prepareSnapshot()
     : (await loadBriefingSnapshot()) ?? (await prepareSnapshot());
+  const snapshot = { ...loaded, headlines: dedupeHeadlines(loaded.headlines) };
   if (snapshot.headlines.length === 0) throw new Error('헤드라인이 없습니다 — 영상을 만들 수 없음');
   console.log(`[briefing] ${snapshot.program ?? 'daily'} 헤드라인 ${snapshot.headlines.length}건 (${snapshot.source})`);
   // 월요일은 위클리(Claw-e 뉴스데스크) — 같은 스냅샷을 다른 화면·목소리로.
@@ -55,6 +72,11 @@ export async function buildBriefingVideo(opts: { outDir: string; prepare?: boole
 
   const segments = await writeBriefingScript(snapshot);
   console.log(`[briefing] 대본 ${segments.reduce((n, s) => n + s.text.length, 0)}자`);
+  // 화면과 말이 어긋나면 영상을 만들지 않는다 — 잘못된 영상이 잔디·브리핑 페이지로 나가는 것을 막는다.
+  const problems = checkAlignment(segments, snapshot.headlines);
+  if (problems.length > 0) {
+    throw new Error(`대본·화면 대조 실패 — 발행 중단:\n${problems.join('\n')}`);
+  }
 
   const dateLabel = spokenDate(snapshot.dateKey);
   const total = snapshot.headlines.length;

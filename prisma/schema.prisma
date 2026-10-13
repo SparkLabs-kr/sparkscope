@@ -537,6 +537,9 @@ model DigestSubscriber {
   email String  @unique
   name  String?
 
+  // 소속 부서(시트 '부서' 열). 본부 집계는 src/app/api/briefing/stats/route.ts 의 매핑으로 한다.
+  department String?
+
   // 섹션별 수신 여부 — 전부 기본 true라서 시드 직후엔 지금 나가는 메일과 내용이 같다.
   // 나중에 섹션이 늘어도 default(true)면 기존 구독자에게 자동으로 보이므로,
   // "새 섹션이 아무에게도 안 보이는" 사고가 나지 않는다.
@@ -558,4 +561,18 @@ model DigestSubscriber {
   updatedAt DateTime @updatedAt
 
   @@index([active])
+}
+
+// 브리핑 영상 시청 이벤트. 메일 링크의 token이 맞으면 구독자와 연결하고, 없으면 익명(visitorId만).
+// 구독자 연결은 문자열 참조만 둔다 — 구독자 행을 지워도 집계 기록이 같이 사라지지 않게.
+model BriefingView {
+  id           String   @id @default(cuid())
+  dateKey      String   // 브리핑 날짜 (2026-10-12)
+  event        String   // open / play / half / complete
+  visitorId    String?  // 익명 재방문 구분용 브라우저 값
+  subscriberId String?  // DigestSubscriber.id (토큰이 맞을 때만)
+  createdAt    DateTime @default(now())
+
+  @@index([dateKey, event])
+  @@index([subscriberId])
 }

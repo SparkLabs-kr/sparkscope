@@ -16,6 +16,29 @@ export const VOICE = {
 } as const;
 const SAMPLE_RATE = 24000;
 
+/**
+ * WAV의 실제 재생 길이(초). 44바이트 헤더를 가정하면 헤더가 더 긴 응답에서 길이가 조금씩 부풀고,
+ * 장면이 쌓일수록 화면이 음성보다 늦게 넘어간다(2026-10-13 싱크 어긋남). 그래서 data 청크 크기로 잰다.
+ */
+export function wavSeconds(wav: Buffer): number {
+  let rate = SAMPLE_RATE, channels = 1, bits = 16;
+  let pos = 12;
+  while (pos + 8 <= wav.length) {
+    const id = wav.toString('ascii', pos, pos + 4);
+    const size = wav.readUInt32LE(pos + 4);
+    if (id === 'fmt ') {
+      channels = wav.readUInt16LE(pos + 10);
+      rate = wav.readUInt32LE(pos + 12);
+      bits = wav.readUInt16LE(pos + 22);
+    } else if (id === 'data') {
+      const bytes = Math.min(size, wav.length - (pos + 8));
+      return bytes / (rate * channels * (bits / 8));
+    }
+    pos += 8 + size + (size % 2);
+  }
+  return (wav.length - 44) / (2 * SAMPLE_RATE); // 청크를 못 찾으면 옛 방식
+}
+
 let auth: GoogleAuth | null = null;
 async function token(): Promise<string> {
   auth ??= new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
@@ -49,7 +72,7 @@ async function speedUp(s: Speech, factor: number): Promise<Speech> {
       { encoding: 'buffer', maxBuffer: 256 * 1024 * 1024 }, (err, out) => (err ? reject(err) : resolve(out as Buffer)));
     p.stdin!.end(s.wav);
   });
-  return { wav, seconds: (wav.length - 44) / (2 * SAMPLE_RATE) };
+  return { wav, seconds: wavSeconds(wav) };
 }
 
 async function callTts(text: string, gemini: boolean, v: VoiceSpec = VOICE): Promise<Speech> {
@@ -72,7 +95,7 @@ async function callTts(text: string, gemini: boolean, v: VoiceSpec = VOICE): Pro
   if (!r.ok) throw Object.assign(new Error(`TTS ${r.status}: ${JSON.stringify(j).slice(0, 300)}`), { status: r.status });
   const wav = Buffer.from(j.audioContent, 'base64');
   // LINEAR16 응답은 44바이트 WAV 헤더 + 16비트 모노 PCM
-  return { wav, seconds: (wav.length - 44) / (2 * SAMPLE_RATE) };
+  return { wav, seconds: wavSeconds(wav) };
 }
 
 async function withRetry(text: string, gemini: boolean, v?: VoiceSpec): Promise<Speech> {

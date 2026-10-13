@@ -24,13 +24,20 @@ const INDUSTRY_LIMIT = 5;
 // 이메일 CTA 기본 도메인 (링크가 실제로 열리도록 프로덕션 URL 우선)
 const DEFAULT_BASE_URL = 'https://sparkscope.vercel.app';
 
-// 정치 기사 제외 + 중복 제거(제목 정규화/URL) + 같은 사건 클러스터링 → 대표 기사만 남긴 배열.
+// 주가·시세 기사 — 메일에 싣지 않는다(2026-10-13 결정: 10/13 메일에 스카이랩스 주가 기사가 TOP3로 나갔다).
+// 영상 추천의 STOCK_TICKER(briefing-reco.ts)와 같은 취지지만, 메일은 아예 뺀다.
+const STOCK_NEWS = /주가|특징주|급등락|상한가|하한가|장중|시황|\d+(\.\d+)?%\s*(하락|상승|급락|급등)|[▲▼↑↓]\s*\d+(\.\d+)?%|\d{1,3}(,\d{3})+원/;
+export function isStockNews(title: string): boolean {
+  return STOCK_NEWS.test(title);
+}
+
+// 정치 기사·주가 기사 제외 + 중복 제거(제목 정규화/URL) + 같은 사건 클러스터링 → 대표 기사만 남긴 배열.
 // TOP3 후보 산정과 카테고리별 섹션 구성 양쪽에서 공유한다.
 export function buildClusteredPool(articles: AnalyzedArticle[]): AnalyzedArticle[] {
-  // 정치 기사 제외 + 중복 제거(제목 정규화/URL). 대표는 우선순위 상위 1건.
+  // 정치 기사·주가 기사 제외 + 중복 제거(제목 정규화/URL). 대표는 우선순위 상위 1건.
   const seenKey = new Set<string>();
   const exactDeduped = [...articles]
-    .filter(a => !isPolitical(a.title))
+    .filter(a => !isPolitical(a.title) && !isStockNews(a.title))
     .sort((a, b) => b.priorityScore - a.priorityScore)
     .filter(a => {
       const tk = normalizeTitleKey(a.title);
@@ -275,7 +282,8 @@ ${SIGNAL_EMAIL_CSS}
     ${data.industryArticles.map(a => renderArticle(a, {})).join('\n')}
   </div>` : ''}
 
-  ${renderSubscriptionSection(prefs, base, opts.subscriberToken)}
+  ${opts.subscriberToken ? renderBriefingLink(data.date, base, opts.subscriberToken) : ''}
+
 
   <div class="footer">
     <div class="footer-cta-text">INTRA(스파크랩 내부 생태계)부터 INTER(글로벌 시장)까지, 아래 대시보드에서 확인하실 수 있습니다.</div>
@@ -300,6 +308,25 @@ ${SIGNAL_EMAIL_CSS}
  * 표를 쓰는 이유는 Outlook이 flex·grid를 지원하지 않아서다. 칸 너비는 퍼센트로
  * 두어 좁은 화면에서도 두 열이 유지된다.
  */
+/**
+ * 오늘 브리핑 영상 링크 — 구독자 토큰을 붙여서 사람별 시청을 잴 수 있게 한다.
+ * 날짜는 발송 시각의 한국 날짜(09:30 발송이므로 그날 브리핑 키와 맞는다).
+ * 영상은 09:32 이후에 올라가므로, 메일을 연 시점에 영상이 없으면 페이지가 404가 된다 — 그때는 잔디 링크를 쓴다.
+ */
+function renderBriefingLink(date: Date, base: string, token: string): string {
+  const dateKey = new Date(date.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  const url = `${base}/briefing/${dateKey}?s=${escape(token)}`;
+  // 썸네일 이미지 하나가 곧 링크다 — 버튼·문구 없이 영상 첫 장면을 보여 준다.
+  // 썸네일은 영상 워크플로가 저장소(Supabase Storage)에 같이 올린다 — 메일은 영상보다 먼저 나가므로 주소만 고정해 둔다.
+  const thumb = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''}/storage/v1/object/public/briefings/${dateKey}/thumb.png`;
+  return `
+  <div class="section" style="text-align:center">
+    <a href="${url}" style="text-decoration:none;display:block">
+      <img src="${thumb}" alt="오늘의 브리핑 영상 보기" width="600" style="display:block;width:100%;max-width:600px;height:auto;border:0;border-radius:12px;margin:0 auto">
+    </a>
+  </div>`;
+}
+
 function renderSubscriptionSection(prefs: SectionPrefs, base: string, token?: string): string {
   // 토큰이 없으면 로그인해서 바꾸는 화면으로 보낸다.
   //

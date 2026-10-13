@@ -8,6 +8,7 @@
  * 방법이 없다. 그 상태를 끊는 유일한 방법이 서버가 쿠키를 지우는 것이다.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { PREVIEW_COOKIE } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 
@@ -31,6 +32,8 @@ function clearAll(req: NextRequest) {
     res.cookies.set(name, '', { path: '/', maxAge: 0, httpOnly: true, sameSite: 'lax' });
     res.cookies.set(name, '', { path: '/', maxAge: 0, httpOnly: true, sameSite: 'lax', secure: true });
   }
+  // 공개 화면 미리보기 쿠키도 같이 지운다 — 남아 있으면 다음 로그인이 미리보기 상태로 판정된다.
+  res.cookies.delete(PREVIEW_COOKIE);
   return res;
 }
 

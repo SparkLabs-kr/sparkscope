@@ -3,16 +3,24 @@
 import { notFound } from 'next/navigation';
 import { loadBriefingVideo } from '@/lib/briefing-video/publish';
 import { spokenDate } from '@/lib/briefing-video/script';
+import BriefingTracker from '@/components/BriefingTracker';
 
 export const dynamic = 'force-dynamic';
 
-export default async function BriefingPage({ params }: { params: { date: string } }) {
+export default async function BriefingPage({
+  params,
+  searchParams,
+}: {
+  params: { date: string };
+  searchParams: { s?: string };
+}) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(params.date)) notFound();
   const video = await loadBriefingVideo(params.date);
   if (!video) notFound();
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-6">
+      <BriefingTracker dateKey={video.dateKey} token={searchParams.s} />
       <div className="text-sm font-semibold text-spark-purple">SparkScope 데일리 브리핑</div>
       <h1 className="mt-1 text-2xl font-bold text-spark-ink">{spokenDate(video.dateKey)}</h1>
       <video src={video.url} controls playsInline preload="metadata" className="mt-4 w-full rounded-xl bg-black aspect-video" />
