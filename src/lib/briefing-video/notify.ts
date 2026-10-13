@@ -25,11 +25,11 @@ export async function notifyBriefing(opts: { final: boolean; baseUrl: string }):
   const done = await prisma.dashboardInsight.findUnique({ where: { kind_key: { kind: KIND_NOTIFIED, key: dateKey } } });
   if (done) return { status: 'already-sent' };
 
+  // 영상이 없으면 잔디에 아무것도 보내지 않는다 — 영상 없이 나가는 알림은 오류다(2026-10-13 결정). final 여부와 무관하게 막는다.
   const video = await loadBriefingVideo(dateKey);
-  if (!video && !opts.final) return { status: 'waiting-for-video' };
-  const snap = video ? null : await loadBriefingSnapshot(dateKey);
-  const headlines = video?.headlines ?? snap?.headlines ?? [];
-  const weekly = (video?.program ?? snap?.program) === 'weekly';
+  if (!video) return { status: 'waiting-for-video' };
+  const headlines = video.headlines;
+  const weekly = video.program === 'weekly';
   if (headlines.length === 0) return { status: 'nothing-to-send' };
 
   const url = webhookFor(weekly);
@@ -42,16 +42,16 @@ export async function notifyBriefing(opts: { final: boolean; baseUrl: string }):
     dateKey,
     weekly,
     titles: headlines.map(h => h.title),
-    videoPage: video ? `${opts.baseUrl.replace(/\/$/, '')}/briefing/${dateKey}` : null,
+    videoPage: `${opts.baseUrl.replace(/\/$/, '')}/briefing/${dateKey}`,
     baseUrl: opts.baseUrl,
   }));
 
   await prisma.dashboardInsight.upsert({
     where: { kind_key: { kind: KIND_NOTIFIED, key: dateKey } },
-    create: { kind: KIND_NOTIFIED, key: dateKey, value: JSON.stringify({ at: new Date().toISOString(), withVideo: !!video }) },
+    create: { kind: KIND_NOTIFIED, key: dateKey, value: JSON.stringify({ at: new Date().toISOString(), withVideo: true }) },
     update: {},
   });
-  return { status: 'sent', withVideo: !!video };
+  return { status: 'sent', withVideo: true };
 }
 
 /**
