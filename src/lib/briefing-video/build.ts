@@ -10,7 +10,7 @@ import type { AnalyzedArticle } from '../sparkscope/types';
 import { writeBriefingScript, checkAlignment, spokenDate, type ScriptSegment } from './script';
 import { synthesizeAll } from './tts';
 import { introSlide, itemSlide, outroSlide, openingSlide } from './slides';
-import { renderVideo, silentWav, GAP_SECONDS, type Clip } from './render';
+import { renderVideo, probeSeconds, silentWav, GAP_SECONDS, type Clip } from './render';
 
 /** 오프닝 배경음악 — scripts/make-news-bgm.py로 만든 자체 제작 음원(저작권 걱정 없음). 다른 음원을 쓰려면 이 파일만 바꾸면 된다. */
 export const NEWS_BGM = path.join(process.cwd(), 'assets/briefing/news-bgm.wav');
@@ -98,6 +98,12 @@ export async function buildBriefingVideo(opts: { outDir: string; prepare?: boole
 
   const file = path.join(opts.outDir, `briefing-${snapshot.dateKey || kstDateKey()}.mp4`);
   const seconds = await renderVideo(clips, path.join(opts.outDir, 'work'), file);
+  // 싱크 확인 — 완성 파일 길이가 장면 길이 합과 1초 넘게 다르면 화면과 음성이 어긋난 것이므로 발행을 막는다.
+  const actual = await probeSeconds(file);
+  if (Math.abs(actual - seconds) > 1) {
+    throw new Error(`영상 길이 불일치 — 장면 합 ${seconds.toFixed(2)}초 · 파일 ${actual.toFixed(2)}초. 싱크가 깨졌으니 발행하지 않습니다.`);
+  }
+  console.log(`[briefing] 싱크 확인 통과 — 파일 ${actual.toFixed(2)}초`);
   console.log(`[briefing] 영상 ${seconds.toFixed(1)}초 → ${file}`);
   return { snapshot, segments, file, seconds };
 }

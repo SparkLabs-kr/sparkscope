@@ -96,3 +96,17 @@ export async function renderVideo(clips: Clip[], workDirIn: string, outFileIn: s
   await ffmpeg(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', '-movflags', '+faststart', outFile]);
   return total;
 }
+
+/** 완성된 mp4의 실제 길이(초). 장면 길이 합과 어긋나면 싱크가 깨진 것이므로 발행 전에 막는다. */
+export async function probeSeconds(file: string): Promise<number> {
+  if (!ffmpegPath) throw new Error('ffmpeg-static 바이너리를 찾지 못했습니다');
+  let err = '';
+  try {
+    await run(ffmpegPath, ['-hide_banner', '-i', file], { maxBuffer: 1024 * 1024 });
+  } catch (e: any) {
+    err = String(e?.stderr ?? '');
+  }
+  const m = err.match(/Duration: (\d+):(\d+):([\d.]+)/);
+  if (!m) throw new Error('mp4 길이를 읽지 못했습니다');
+  return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+}
