@@ -1,0 +1,31 @@
+name: Publish Prebuilt Briefing Video
+
+# 이미 만들어 둔 영상(publish-prebuilt/<날짜>/)을 올린다. 영상을 새로 만들지 않는다(승인된 파일 그대로).
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: '브리핑 날짜 (예: 2026-10-13)'
+        required: true
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
+      POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      TZ: Asia/Seoul
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Publish
+        run: npx tsx scripts/publish-prebuilt.ts "${{ inputs.date }}"
