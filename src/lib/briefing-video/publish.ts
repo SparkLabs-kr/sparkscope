@@ -64,7 +64,8 @@ export async function publishBriefingVideo(built: BuiltBriefing): Promise<string
     },
     body: new Uint8Array(openingSlide(spokenDate(built.snapshot.dateKey), undefined, 'image/jpeg')),
   });
-  if (!tr.ok) throw new Error(`썸네일 업로드 실패 ${tr.status}: ${(await tr.text()).slice(0, 300)}`);
+  // 썸네일 실패가 영상·대본 기록까지 막으면 안 된다 — 영상이 새것으로 바뀌고 기록은 옛것으로 남는 상태가 생긴다.
+  if (!tr.ok) console.error(`[publish] 썸네일 업로드 실패 ${tr.status} — 영상 기록은 저장합니다: ${(await tr.text()).slice(0, 200)}`);
 
   // 덮어쓴 뒤 CDN 캐시가 옛 영상을 주지 않게 버전 쿼리를 붙인다.
   const url = `${base}/storage/v1/object/public/${BUCKET}/${objectPath}?v=${Date.now()}`;
