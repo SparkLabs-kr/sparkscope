@@ -2,6 +2,7 @@
 // token이 DigestSubscriber 와 맞으면 그 구독자로 연결하고, 안 맞거나 없으면 익명으로 남긴다.
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getRealSessionUser } from '@/lib/authz';
 
 export const runtime = 'nodejs';
 
@@ -24,10 +25,17 @@ export async function POST(req: Request) {
   const visitorId = typeof body?.visitorId === 'string' && body.visitorId.length <= 64 ? body.visitorId : null;
   const token = typeof body?.token === 'string' && body.token.length <= 64 ? body.token : '';
 
+  // 개인 식별: 메일 토큰이 있으면 그 구독자, 없으면 회사 구글 계정으로 로그인한 사람의 이메일로 찾는다.
   let subscriberId: string | null = null;
   if (token) {
     const sub = await prisma.digestSubscriber.findUnique({ where: { token }, select: { id: true } }).catch(() => null);
     subscriberId = sub?.id ?? null;
+  } else {
+    const me = await getRealSessionUser().catch(() => null);
+    if (me?.email) {
+      const sub = await prisma.digestSubscriber.findUnique({ where: { email: me.email.toLowerCase() }, select: { id: true } }).catch(() => null);
+      subscriberId = sub?.id ?? null;
+    }
   }
 
   await prisma.briefingView.create({ data: { dateKey, event, visitorId, subscriberId } });
