@@ -83,7 +83,7 @@ export async function summarizeCompetitorTrend(
 
   try {
     const resp = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-opus-5-5',
       max_tokens: 400,
       system: COMPANY_TREND_SYSTEM,
       messages: [{
@@ -144,7 +144,7 @@ export async function summarizeOverallTrend(
 
   try {
     const resp = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-opus-5-5',
       max_tokens: 600,
       system: OVERALL_SYSTEM,
       messages: [{
@@ -204,7 +204,7 @@ export async function summarizeCategoryPulse(
 
   try {
     const resp = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-opus-5-5',
       max_tokens: 200,
       system: CATEGORY_PULSE_SYSTEM,
       messages: [{
