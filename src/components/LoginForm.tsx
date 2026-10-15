@@ -135,7 +135,7 @@ function LoginFormInner({ googleEnabled }: { googleEnabled: boolean }) {
             <button
               type="button"
               disabled={submitting}
-              onClick={() => googleSignIn('/login/admin-check')}
+              onClick={() => googleSignIn(callbackUrl ? `/login/admin-check?next=${encodeURIComponent(callbackUrl)}` : '/login/admin-check')}
               className="w-full flex items-center gap-3 text-left px-4 py-3.5 rounded-xl border border-spark-purple bg-spark-light-purple hover:opacity-90 transition disabled:opacity-50 group"
             >
               <span className="flex-none w-8 h-8 rounded-lg bg-white grid place-items-center shadow-sm">

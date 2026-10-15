@@ -16,11 +16,13 @@ import { getSessionUser } from '@/lib/authz';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export default async function AdminCheckPage() {
+export default async function AdminCheckPage({ searchParams }: { searchParams: { next?: string } }) {
   const user = await getSessionUser();
   // 로그인이 아예 안 된 채로 이 주소를 직접 열면 로그인 화면으로.
   if (!user) redirect('/login');
-  if (user.role === 'ADMIN') redirect('/dashboard');
+  // 로그인 전에 보던 곳(next)으로 돌려보낸다. 바깥 주소로 튀지 않도록 같은 사이트 경로만 허용.
+  const next = searchParams.next && searchParams.next.startsWith('/') && !searchParams.next.startsWith('//') ? searchParams.next : null;
+  if (user.role === 'ADMIN') redirect(next ?? '/dashboard');
 
   // 포트폴리오사가 이 주소를 직접 열었다면 자기 화면으로 보낸다 —
   // "관리자 권한 없음"이라고 알려 줄 이유가 없다(있지도 않은 길이다).
