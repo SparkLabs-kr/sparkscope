@@ -32,7 +32,7 @@ const DEFAULT_BASE_URL = 'https://sparkscope.vercel.app';
 
 // 주가·시세 기사 — 메일에 싣지 않는다(2026-10-13 결정: 10/13 메일에 스카이랩스 주가 기사가 TOP3로 나갔다).
 // 영상 추천의 STOCK_TICKER(briefing-reco.ts)와 같은 취지지만, 메일은 아예 뺀다.
-const STOCK_NEWS = /주가|특징주|급등락|상한가|하한가|장중|시황|\d+(\.\d+)?%\s*(하락|상승|급락|급등)|[▲▼↑↓]\s*\d+(\.\d+)?%|\d{1,3}(,\d{3})+원/;
+const STOCK_NEWS = /주가|특징주|급등락|상한가|하한가|장중|시황|주주|지분율|지분\s?(\d|감소|증가|매각|매입|취득|변동|보유)|보유\s?비율|최대주주|주식\s?(보유|매각|매수|매도|등락)|\d+(\.\d+)?%\s*(하락|상승|급락|급등)|[▲▼↑↓]\s*\d+(\.\d+)?%|\d{1,3}(,\d{3})+원/;
 export function isStockNews(title: string): boolean {
   return STOCK_NEWS.test(title);
 }

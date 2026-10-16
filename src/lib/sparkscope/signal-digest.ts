@@ -171,9 +171,12 @@ export async function attachAiSignals<T extends {
   bioSignals?: SignalFeed | null;
 }>(data: T): Promise<T> {
   const { buildSignalFeed } = await import('./signal-feed');
+  // 포트폴리오 소식이 적은 날은 AI 트렌드를 늘린다(메일 전용 — 파트너 발행은 runner에서 5건으로 자른다).
+  const portfolioCount = (data as any).portfolioArticles?.length ?? 0;
+  const aiCount = portfolioCount < 4 ? 8 : 5;
   const load = async (domain: 'ai' | 'bio') => {
     try {
-      return await buildSignalFeed(domain);
+      return await buildSignalFeed(domain, domain === 'ai' ? aiCount : undefined);
     } catch (e: any) {
       console.error(`[Signal] ${domain} 트렌드 블록 생성 실패 — 그 섹션 없이 발송합니다: ${e?.message}`);
       return null;

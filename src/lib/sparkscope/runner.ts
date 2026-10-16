@@ -448,7 +448,7 @@ export async function runDailyDigest(opts: RunOptions = {}) {
     const data = await buildDigestForSend(analyzed);
     // 파트너(블루사이트)가 읽어 갈 수 있게 같은 TOP 5를 DB에 물질화한다.
     // 메일에 들어간 것과 같은 객체라 둘이 갈리지 않는다. 실패해도 발송은 계속한다.
-    await publishSignalFeed(data.aiSignals).catch(e =>
+    await publishSignalFeed(data.aiSignals ? { ...data.aiSignals, items: data.aiSignals.items.slice(0, 5) } : data.aiSignals).catch(e =>
       console.error('[runner] AI 시그널 발행 실패(무시):', e));
     // 데일리 브리핑 영상의 재료 — 메일과 같은 data에서 헤드라인 5개를 뽑아 저장한다.
     // 실제 발송하는 실행에서만(수집 전용 실행이 그날 스냅샷을 덮어쓰지 않게). 실패해도 발송은 계속한다.

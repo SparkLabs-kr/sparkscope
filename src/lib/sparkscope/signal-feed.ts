@@ -144,7 +144,7 @@ async function newsCandidates(domain: NewsDomain): Promise<Candidate[]> {
  *    창업자 관련 비공개 정보라 파트너 배너에 나가면 안 된다. 메일에서도 포트폴리오
  *    연결은 바로 위 '글로벌 트렌드 × 포트폴리오' 섹션의 몫이다.
  */
-export async function buildSignalFeed(domain: NewsDomain = 'ai'): Promise<SignalFeed> {
+export async function buildSignalFeed(domain: NewsDomain = 'ai', n: number = TOP_N): Promise<SignalFeed> {
   const news = await newsCandidates(domain)
     .catch(e => { console.error(`[signal-feed] ${domain} 뉴스 실패:`, e); return [] as Candidate[]; });
 
@@ -158,7 +158,7 @@ export async function buildSignalFeed(domain: NewsDomain = 'ai'): Promise<Signal
   // 그것을 여기서 한 번 더 섞으면 두 화면이 갈리기만 하고 더 나아지지 않는다.
   // "오늘의 시그널에서 가장 크게 박힌 기사"가 메일 1번이어야 한다.
   const items = news
-    .slice(0, TOP_N)
+    .slice(0, n)
     .map(({ score, ...rest }, i) => ({ rank: i + 1, ...rest }));
 
   return { domain, generatedAt: new Date().toISOString(), items };
