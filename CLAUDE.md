@@ -18,9 +18,9 @@
 - ❌ force push 절대 금지
 - ❌ main에서 직접 작업 금지 (반드시 자신의 브랜치에서 PR로)
 
-### 원격 저장소 — `SparkLabs-kr/sparkscope` 한 곳
+### 원격 저장소 — `Sparklabs-AI-Org/sparkscope_` 한 곳
 
-운영 저장소는 `SparkLabs-kr/sparkscope`(remote 이름 `origin`) **하나뿐**이다.
+운영 저장소는 `Sparklabs-AI-Org/sparkscope_`(remote 이름 `origin`, 2026-10-16 조직 이관) **하나뿐**이다.
 
 - ✅ "main에 푸시"는 `git push origin main` 하나로 끝난다. fast-forward로만 진행한다(`--force` 금지).
   > 2026-08-06~08-07, 한때 `Sparklabs-AI-Org/SparkScope`로 이전했다가 두 저장소가 서로 갈라져

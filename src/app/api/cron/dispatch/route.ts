@@ -11,7 +11,7 @@ import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
-const REPO = 'SparkLabs-kr/sparkscope';
+const REPO = 'Sparklabs-AI-Org/sparkscope_';
 // 실행을 허용하는 워크플로만 — 쿼리로 아무 워크플로나 돌릴 수 없게.
 const ALLOWED = new Set(['daily-collect.yml', 'daily-briefing.yml']);
 
