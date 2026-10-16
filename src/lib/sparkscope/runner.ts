@@ -126,7 +126,11 @@ export async function loadSendArticles(): Promise<RawArticle[]> {
       orderBy: { priorityScore: 'desc' },
       take: 500,
     });
-  return existing as any;
+  // 엑싯(Exit·Written-off)한 포트폴리오사 표시 — 메일 TOP3에서 빼고, 포트폴리오 섹션은 뒤로 민다(digest.ts).
+  const exitNames = new Set((await prisma.monitoringTarget.findMany({
+    where: { portfolioStatus: { in: ['Exit', 'Written-off'] } }, select: { name: true },
+  })).map(t => t.name));
+  return existing.map((a: any) => ({ ...a, isExit: exitNames.has(a.matchedKeyword) })) as any;
 }
 
 /**

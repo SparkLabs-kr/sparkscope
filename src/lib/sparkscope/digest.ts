@@ -17,6 +17,12 @@ import { ALL_SECTIONS, SECTIONS, type SectionPrefs } from './subscription';
 
 const TOP_3_LIMIT = 3;
 const PORTFOLIO_LIMIT = 8;
+const MAX_EXIT_PORTFOLIO = 2; // 엑싯 회사 기사는 포트폴리오 섹션에 최대 2건
+// 엑싯 회사라도 이런 성과 기사는 TOP3에 넣는다(투자유치·서비스 런칭·성과 발표).
+const ACHIEVEMENT = /투자\s?유치|시리즈\s?[A-Z]|펀딩|출시|런칭|론칭|서비스\s?(개시|오픈)|수상|선정|달성|돌파|상장|인수|계약|MOU|협약/;
+export function isAchievement(title: string): boolean {
+  return ACHIEVEMENT.test(title);
+}
 const SPARKLABS_LIMIT = 5;
 const COMPETITOR_LIMIT = 5;
 const INDUSTRY_LIMIT = 5;
@@ -73,6 +79,8 @@ const TOP_3_CATEGORIES = new Set(['sparklabs_self', 'portfolio_company', 'compet
 export function rankTop3Pool(sorted: AnalyzedArticle[], scrappedLinks?: Set<string>): AnalyzedArticle[] {
   const rankedForTop3 = sorted
     .filter(a => TOP_3_CATEGORIES.has(a.category))
+    // 엑싯 회사 기사는 TOP3에서 뺀다 — 단 투자유치·런칭·성과 발표는 예외로 넣는다.
+    .filter(a => !(a as any).isExit || isAchievement(a.title))
     .sort((a, b) => {
       // [1] 본부 스크랩 우선
       const sa = scrappedLinks?.has(a.link) ? 1 : 0;
@@ -116,7 +124,10 @@ export function buildDigestData(
   const sorted = buildClusteredPool(articles);
 
   const sparklabsArticles = sorted.filter(a => a.category === 'sparklabs_self').slice(0, SPARKLABS_LIMIT);
-  const portfolioArticles = dedupeByCompany(sorted.filter(a => a.category === 'portfolio_company')).slice(0, PORTFOLIO_LIMIT);
+  // 포트폴리오: 엑싯 회사 기사는 뒤로 밀고 최대 2건만 — 나머지 자리는 투자 중인 회사 기사로 채운다.
+  const portfolioPool = sorted.filter(a => a.category === 'portfolio_company');
+  const liveFirst = [...portfolioPool.filter(a => !(a as any).isExit), ...portfolioPool.filter(a => (a as any).isExit).slice(0, MAX_EXIT_PORTFOLIO)];
+  const portfolioArticles = dedupeByCompany(liveFirst).slice(0, PORTFOLIO_LIMIT);
   // 경쟁사(투자사)는 matchedKeyword가 투자사명 자체라 포트폴리오처럼 회사당 대표 1건만 —
   // 클러스터링이 놓친 같은 사건(제목에 투자사명이 다르게 표기되는 등)이 겹쳐 보이지 않도록
   // 하는 2차 안전망(2026-08-06, 에이티넘인베스트먼트/모드하우스 건이 매체별로 다른
