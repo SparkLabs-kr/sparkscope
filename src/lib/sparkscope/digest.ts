@@ -317,7 +317,9 @@ function renderBriefingLink(date: Date, base: string, token: string): string {
   const dateKey = new Date(date.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
   const url = `${base}/briefing/${dateKey}?s=${escape(token)}`;
   // 썸네일은 사이트 공개 폴더의 고정 이미지(public/briefing/daily-thumb.png)를 쓴다 — 영상과 무관하게 바로 열린다.
-  const thumb = `${base}/briefing/daily-thumb.png`;
+  // 월요일은 위클리(뉴스데스크) 썸네일, 화~금은 데일리 썸네일 — 요일은 브리핑 날짜 기준.
+  const isMonday = new Date(`${dateKey}T00:00:00Z`).getUTCDay() === 1;
+  const thumb = `${base}/briefing/${isMonday ? 'weekly-thumb.png' : 'daily-thumb.png'}`;
   return `
   <div class="section" style="text-align:left">
     <div style="font-size:16px;font-weight:700;color:#1A1A2E;margin:0 0 12px;text-align:left">🎬 오늘의 브리핑 영상</div>
