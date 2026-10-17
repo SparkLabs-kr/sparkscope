@@ -124,7 +124,7 @@ export function buildDigestContextMap(targets: DigestGuardTarget[]): Map<string,
  * 다시 검사한다(대시보드가 렌더할 때마다 isBlockedNoise를 재검사하는 것과 동일한 원리, 2026-08-06).
  */
 export function passesDigestGuard(
-  a: { title: string; link?: string | null; source?: string | null; category: string; matchedKeyword: string },
+  a: { title: string; link?: string | null; source?: string | null; category: string; matchedKeyword: string; relatedCompanies?: unknown },
   keyMap: Map<string, string[]>,
   contextMap?: Map<string, string[]>,
 ): boolean {
@@ -136,12 +136,19 @@ export function passesDigestGuard(
   // 통과했던(제목엔 투자사명이 없는) 정상 기사까지 여기서 다시 걸러지는 문제가 생긴다.
   if (NAME_MATCH_CATEGORIES.has(a.category) && a.category !== 'competitor') {
     const keys = keyMap.get(a.matchedKeyword) ?? [a.matchedKeyword];
-    if (!keys.some(k => matchesAsToken(a.title, k))) return false;
+    // 제목 우선. 제목에 이름이 없어도 본문 분석에서 그 회사가 관련 회사로 확인됐으면 통과시킨다(2026-10-17 소윤·이수 결정 —
+    // 본문에서 스파크랩·포트폴리오사를 다룬 기사를 놓치지 않기 위해). 문맥어 검사는 그대로 적용한다.
+    const related = Array.isArray(a.relatedCompanies)
+      ? (a.relatedCompanies as string[])
+      : (typeof a.relatedCompanies === 'string' ? (() => { try { return JSON.parse(a.relatedCompanies as string) as string[]; } catch { return []; } })() : []);
+    const inTitle = keys.some(k => matchesAsToken(a.title, k));
+    const inBody = related.some(r => keys.includes(r) || keys.some(k => matchesAsToken(r, k)));
+    if (!inTitle && !inBody) return false;
     // 문맥어 재검사 — 회사명(특히 영문명)이 흔한 단어라 이름만으로는 무관한 기사에도 걸릴 수
     // 있는데, 지금까지는 이 재검사가 여기 없어서 놓쳤다. 문맥어가 등록된 대상만 검사(없으면
     // 스킵 — 수집 시점 필터와 동일 원칙).
     const contextWords = contextMap?.get(a.matchedKeyword);
-    if (contextWords && contextWords.length > 0 && !contextWords.some(w => matchesAsToken(a.title, w))) {
+    if (contextWords && contextWords.length > 0 && !contextWords.some(w => matchesAsToken(a.title, w)) && !(inBody && !inTitle)) {
       return false;
     }
   }
